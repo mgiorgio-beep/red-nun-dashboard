@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Edit Specials — Red Nun</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Fredericka+the+Great&family=Rock+Salt&family=Amatic+SC:wght@700&display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:'Aldenburg';src:url('/staff/static/fonts/aldenburg-demo.otf') format('opentype');font-display:swap}
+@font-face{font-family:'Blzee';src:url('/staff/static/fonts/blzee.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Coalhand Luke';src:url('/staff/static/fonts/coalhand-luke.ttf') format('truetype');font-display:swap}
+:root{--bg:#0C0C0E;--card:#151518;--red:#9B1B1B;--gold:#D4A843;--green:#22C55E;--blue:#3B82F6;--t1:#E8E8E8;--t2:#999;--t3:#666;--border:#2A2A2E}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--t1);-webkit-font-smoothing:antialiased;padding-top:env(safe-area-inset-top);overscroll-behavior-y:contain}
+
+.header{background:linear-gradient(135deg,#1a0505,var(--red),#1a0505);padding:12px 20px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:2px solid var(--gold);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{background:var(--bg);border:2px solid var(--gold);border-radius:6px;padding:4px 10px;font-family:Oswald,sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--gold)}
+.h-center{text-align:center;flex:1}
+.h-title{font-family:Oswald,sans-serif;font-size:18px;font-weight:600;letter-spacing:3px;color:#fff}
+.h-sub{font-size:10px;color:rgba(255,255,255,.5)}
+.h-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:6px 10px;color:#fff;font-size:11px;font-family:Oswald,sans-serif;letter-spacing:1px;cursor:pointer;text-decoration:none}
+
+.container{max-width:600px;margin:0 auto;padding:16px;padding-bottom:200px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+.card-title{font-family:Oswald,sans-serif;font-size:15px;font-weight:600;letter-spacing:2px;color:var(--gold);margin-bottom:12px}
+
+.field{margin-bottom:12px}
+.field label{display:block;font-family:Oswald,sans-serif;font-size:11px;color:var(--t3);letter-spacing:1px;margin-bottom:4px}
+.field input,.field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;color:var(--t1);font-family:'IBM Plex Sans',sans-serif;font-size:14px}
+.field input:focus,.field textarea:focus{border-color:var(--gold);outline:none}
+.field input::placeholder,.field textarea::placeholder{color:var(--t3)}
+.field textarea{resize:vertical;min-height:40px}
+
+.item-card{background:#111114;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;position:relative}
+.item-card.dragging{opacity:.5;border-color:var(--gold)}
+.item-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.item-num{font-family:Oswald,sans-serif;font-size:20px;font-weight:700;color:var(--gold);width:28px;flex-shrink:0}
+.item-del{margin-left:auto;background:none;border:1px solid #e53e3e33;border-radius:5px;color:#e53e3e;padding:4px 10px;font-family:Oswald,sans-serif;font-size:11px;cursor:pointer;letter-spacing:1px}
+.item-del:active{background:#e53e3e22}
+.item-row{display:flex;gap:8px;margin-bottom:6px}
+.item-row .field{flex:1;margin-bottom:0}
+.item-row .field.small{max-width:100px}
+
+.color-row{display:flex;gap:6px;margin-top:4px}
+.color-dot{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.color-dot:active{transform:scale(.9)}
+.color-dot.active{border-color:#fff;box-shadow:0 0 8px rgba(255,255,255,.3)}
+.color-dot.c-white{background:#f0ece2}
+.color-dot.c-yellow{background:#f5e6a3}
+.color-dot.c-blue{background:#9ec5e8}
+.color-dot.c-pink{background:#e8a0a0}
+.color-dot.c-green{background:#a8d5a2}
+
+/* iOS-style 86 toggle */
+.toggle-86{display:flex;align-items:center;gap:8px;margin-left:auto}
+.toggle-86 .t-label{font-family:Oswald,sans-serif;font-size:11px;color:var(--t3);letter-spacing:1px}
+.toggle-86 .t-label.active{color:#e53e3e}
+.ios-switch{position:relative;width:44px;height:26px;flex-shrink:0}
+.ios-switch input{opacity:0;width:0;height:0}
+.ios-switch .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#39393d;border-radius:26px;transition:.3s}
+.ios-switch .slider::before{content:'';position:absolute;height:22px;width:22px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.ios-switch input:checked+.slider{background:#e53e3e}
+.ios-switch input:checked+.slider::before{transform:translateX(18px)}
+.item-card.eighty-sixed{opacity:.45;border-color:#e53e3e33}
+
+/* Pull-to-refresh */
+.ptr-indicator{position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(-60px);z-index:200;background:var(--card);border:1px solid var(--border);border-radius:0 0 10px 10px;padding:8px 18px;font-family:Oswald,sans-serif;font-size:12px;color:var(--t2);letter-spacing:1px;transition:transform .25s;white-space:nowrap;-webkit-user-select:none;user-select:none}
+.ptr-indicator.refreshing{color:var(--green)}
+
+.add-btn{width:100%;padding:14px;border-radius:8px;border:2px dashed var(--border);background:transparent;color:var(--t2);font-family:Oswald,sans-serif;font-size:14px;font-weight:600;letter-spacing:2px;cursor:pointer;transition:all .15s}
+.add-btn:hover{border-color:var(--gold);color:var(--gold)}
+.add-btn:active{transform:scale(.98)}
+
+.save-bar{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(transparent,var(--bg) 20%);padding:20px 16px;padding-bottom:calc(36px + env(safe-area-inset-bottom));z-index:50}
+.save-bar-inner{display:flex;gap:8px;max-width:600px;margin:0 auto}
+.save-btn{flex:1;padding:14px;border-radius:8px;border:none;font-family:Oswald,sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .15s}
+.save-btn:active{transform:scale(.97)}
+.save-btn.primary{background:var(--green);color:#000}
+.save-btn.secondary{background:var(--card);color:var(--gold);border:1px solid var(--gold)}
+
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(100px);background:#1a1a2e;border:1px solid var(--gold);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;color:var(--gold);z-index:999;transition:transform .3s;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.success{border-color:var(--green);color:var(--green)}
+.toast.error{border-color:#e53e3e;color:#e53e3e}
+
+.preview-link{display:block;text-align:center;margin-top:8px;color:var(--blue);font-size:12px;text-decoration:none}
+
+.font-select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;color:var(--t1);font-family:'IBM Plex Sans',sans-serif;font-size:14px;-webkit-appearance:auto;appearance:auto}
+.font-select:focus{border-color:var(--gold);outline:none}
+.font-select option{font-size:16px;padding:4px}
+.section-colors{display:flex;gap:6px;align-items:center}
+.section-colors .color-dot{width:22px;height:22px}
+.sync-btn{width:100%;padding:12px;border-radius:8px;border:2px solid #FF6600;background:transparent;color:#FF6600;font-family:Oswald,sans-serif;font-size:13px;font-weight:600;letter-spacing:2px;cursor:pointer;margin-bottom:8px;transition:all .15s}
+.sync-btn:hover{background:rgba(255,102,0,.08)}
+.sync-btn:active{transform:scale(.98)}
+.sync-btn:disabled{opacity:.5;cursor:default}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:500px;width:100%;max-height:80vh;overflow-y:auto;padding:20px}
+.modal-title{font-family:Oswald,sans-serif;font-size:16px;font-weight:600;letter-spacing:2px;color:var(--gold);margin-bottom:16px}
+.modal-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.modal-item input[type=checkbox]{width:18px;height:18px;flex-shrink:0;accent-color:var(--gold)}
+.modal-item label{flex:1;font-size:13px;color:var(--t1)}
+.modal-item .tag{font-family:Oswald,sans-serif;font-size:10px;letter-spacing:1px;padding:2px 6px;border-radius:4px;flex-shrink:0;margin-right:4px}
+.tag-soup{background:rgba(245,158,11,.13);color:#f59e0b}
+.tag-app{background:rgba(34,197,94,.13);color:#22c55e}
+.tag-item{background:rgba(59,130,246,.13);color:#3b82f6}
+.modal-btns{display:flex;gap:8px;margin-top:16px}
+.modal-btns button{flex:1;padding:12px;border-radius:8px;border:none;font-family:Oswald,sans-serif;font-size:14px;font-weight:600;letter-spacing:1px;cursor:pointer}
+.modal-cancel{background:var(--bg);color:var(--t2);border:1px solid var(--border) !important}
+.modal-import{background:#FF6600;color:#fff}
+
+.tv-power-btn{flex:1;padding:14px;border-radius:8px;border:none;font-family:Oswald,sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .15s}
+.tv-power-btn:active{transform:scale(.97)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">RED NUN</div>
+  <div class="h-center">
+    <div class="h-title">SPECIALS</div>
+    <div class="h-sub">Chalkboard Editor</div>
+  </div>
+  <a class="h-btn" href="/staff/specials" target="_blank">&#128065; VIEW</a>
+</div>
+
+<div class="container">
+
+  <div class="card">
+    <div class="card-title">BOARD SETTINGS</div>
+    <div class="field">
+      <label>TITLE</label>
+      <input type="text" id="board-title" placeholder="Today's Specials">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <span style="font-family:Oswald,sans-serif;font-size:10px;color:var(--t3);letter-spacing:1px">COLOR</span>
+        <div class="section-colors" id="title-colors"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>BOARD FONT</label>
+      <select class="font-select" id="board-font" onchange="updateFontPreview()">
+        <option value="Fredericka the Great">Fredericka the Great</option>
+        <option value="Rock Salt">Rock Salt</option>
+        <option value="Amatic SC">Amatic SC</option>
+        <option value="Aldenburg">Aldenburg</option>
+        <option value="Blzee">Blzee</option>
+        <option value="Coalhand Luke">Coalhand Luke</option>
+      </select>
+      <div id="font-preview" style="margin-top:6px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:18px;color:var(--t1);min-height:36px;font-family:'Fredericka the Great',cursive">Today's Specials</div>
+    </div>
+    <div class="field">
+      <label>FOOTER TEXT</label>
+      <input type="text" id="board-footer" placeholder="Ask your server about our cocktail menu!">
+    </div>
+  </div>
+
+  <div class="card" id="soup-card">
+    <div style="display:flex;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">&#127836; TODAY'S SOUP</div>
+      <div class="section-colors" id="soup-colors" style="margin-left:auto;margin-right:12px"></div>
+      <div class="toggle-86" style="margin-left:0">
+        <span class="t-label" id="soup-86-label">86</span>
+        <label class="ios-switch"><input type="checkbox" id="soup-86" onchange="toggle86Section('soup')"><span class="slider"></span></label>
+      </div>
+    </div>
+    <div class="item-row">
+      <div class="field"><label>SOUP NAME</label><input type="text" id="soup-name" placeholder="New England Clam Chowder" spellcheck="true"></div>
+    </div>
+    <div class="item-row">
+      <div class="field"><label>DESCRIPTION</label><input type="text" id="soup-desc" placeholder="Creamy, with fresh littlenecks" spellcheck="true"></div>
+      <div class="field small"><label>PRICE</label><input type="text" id="soup-price" placeholder="$8"></div>
+    </div>
+  </div>
+
+  <div class="card" id="app-card">
+    <div style="display:flex;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">&#127869; FEATURED APPETIZER</div>
+      <div class="section-colors" id="app-colors" style="margin-left:auto;margin-right:12px"></div>
+      <div class="toggle-86" style="margin-left:0">
+        <span class="t-label" id="app-86-label">86</span>
+        <label class="ios-switch"><input type="checkbox" id="app-86" onchange="toggle86Section('app')"><span class="slider"></span></label>
+      </div>
+    </div>
+    <div class="item-row">
+      <div class="field"><label>APP NAME</label><input type="text" id="app-name" placeholder="Fried Calamari" spellcheck="true"></div>
+    </div>
+    <div class="item-row">
+      <div class="field"><label>DESCRIPTION</label><input type="text" id="app-desc" placeholder="With cherry peppers & marinara" spellcheck="true"></div>
+      <div class="field small"><label>PRICE</label><input type="text" id="app-price" placeholder="$14"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">SPECIALS</div>
+    <div id="items-list"></div>
+    <button class="sync-btn" id="sync-toast-btn" onclick="syncFromToast()">&#x1F504; SYNC FROM TOAST</button>
+    <button class="add-btn" onclick="addItem()">+ ADD ITEM</button>
+    <a class="preview-link" href="/staff/specials" target="_blank">Open full-screen preview &#8594;</a>
+  </div>
+
+  <div class="card" style="border-color:#333">
+    <div class="card-title">&#128250; SPECIALS TVs</div>
+    <div id="tv-list"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="tv-power-btn" onclick="tvActionAll('on')" style="background:#22c55e;color:#000">&#9889; ALL ON</button>
+      <button class="tv-power-btn" onclick="tvActionAll('off')" style="background:#ef4444;color:#fff">&#127769; ALL OFF</button>
+      <button class="tv-power-btn" onclick="tvActionAll('reload')" style="background:#3b82f6;color:#fff">&#128260; RELOAD ALL</button>
+    </div>
+    <div id="tv-msg" style="text-align:center;font-size:12px;color:var(--t3);min-height:18px;margin-top:8px"></div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="sync-modal">
+  <div class="modal">
+    <div class="modal-title">Import Specials from Toast?</div>
+    <div id="sync-items"></div>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeSyncModal()">CANCEL</button>
+      <button class="modal-import" onclick="importSyncItems()">IMPORT SELECTED</button>
+    </div>
+  </div>
+</div>
+
+<div class="save-bar">
+  <div class="save-bar-inner">
+    <button class="save-btn secondary" onclick="clearAll()">CLEAR ALL</button>
+    <button class="save-btn primary" onclick="saveSpecials()">&#128190; SAVE & PUBLISH</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="ptr-indicator" id="ptr">&#8595; Pull to refresh</div>
+
+<script>
+var data = {{ data|safe }};
+var items = data.items || [];
+
+function toast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.className = 'toast'; }, 2500);
+}
+
+function init() {
+  document.getElementById('board-title').value = data.title || "Today's Specials";
+  document.getElementById('board-footer').value = data.footer || '';
+  // Soup
+  var soup = data.soup || {};
+  document.getElementById('soup-name').value = soup.name || '';
+  document.getElementById('soup-desc').value = soup.desc || '';
+  document.getElementById('soup-price').value = soup.price || '';
+  document.getElementById('soup-86').checked = !!soup.eightySixed;
+  if (soup.eightySixed) toggle86Section('soup');
+  // Appetizer
+  var app = data.appetizer || {};
+  document.getElementById('app-name').value = app.name || '';
+  document.getElementById('app-desc').value = app.desc || '';
+  document.getElementById('app-price').value = app.price || '';
+  document.getElementById('app-86').checked = !!app.eightySixed;
+  if (app.eightySixed) toggle86Section('app');
+  // Font
+  document.getElementById('board-font').value = data.font || 'Fredericka the Great';
+  updateFontPreview();
+  // Section colors
+  renderSectionColors('title-colors', 'title');
+  renderSectionColors('soup-colors', 'soup');
+  renderSectionColors('app-colors', 'app');
+  renderItems();
+}
+
+function renderItems() {
+  var el = document.getElementById('items-list');
+  if (!items.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">No items yet. Tap + ADD ITEM to start.</div>';
+    return;
+  }
+  var h = '';
+  items.forEach(function(item, i) {
+    var is86 = item.eightySixed ? ' eighty-sixed' : '';
+    h += '<div class="item-card' + is86 + '" id="item-' + i + '">';
+    h += '<div class="item-header"><span class="item-num">' + (i+1) + '</span>';
+    h += '<div class="toggle-86"><span class="t-label' + (item.eightySixed ? ' active' : '') + '">86</span>';
+    h += '<label class="ios-switch"><input type="checkbox"' + (item.eightySixed ? ' checked' : '') + ' onchange="toggle86Item(' + i + ',this.checked)"><span class="slider"></span></label></div>';
+    h += '<button class="item-del" onclick="removeItem(' + i + ')">&#10005; DELETE</button></div>';
+
+    h += '<div class="item-row">';
+    h += '<div class="field"><label>NAME</label><input type="text" data-i="' + i + '" data-f="name" value="' + escAttr(item.name || '') + '" placeholder="Lobster Roll" spellcheck="true"></div>';
+    h += '</div>';
+
+    h += '<div class="item-row">';
+    h += '<div class="field"><label>DESCRIPTION</label><input type="text" data-i="' + i + '" data-f="desc" value="' + escAttr(item.desc || '') + '" placeholder="Fresh Maine lobster, drawn butter" spellcheck="true"></div>';
+    h += '<div class="field small"><label>PRICE</label><input type="text" data-i="' + i + '" data-f="price" value="' + escAttr(item.price || '') + '" placeholder="$24"></div>';
+    h += '</div>';
+
+    h += '<div style="margin-top:4px"><label style="font-family:Oswald;font-size:10px;color:var(--t3);letter-spacing:1px">CHALK COLOR</label>';
+    h += '<div class="color-row">';
+    var colors = ['white','yellow','blue','pink','green'];
+    colors.forEach(function(c) {
+      var active = (item.color || 'white') === c ? ' active' : '';
+      h += '<div class="color-dot c-' + c + active + '" onclick="setColor(' + i + ',\'' + c + '\')"></div>';
+    });
+    h += '</div></div>';
+
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
+function escAttr(s) {
+  return s.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;');
+}
+
+function addItem() {
+  items.push({name: '', desc: '', price: '', color: 'white'});
+  renderItems();
+  // Focus the new item's name field
+  setTimeout(function() {
+    var el = document.querySelector('[data-i="' + (items.length-1) + '"][data-f="name"]');
+    if (el) el.focus();
+  }, 100);
+}
+
+function removeItem(idx) {
+  var name = items[idx].name || 'Item ' + (idx+1);
+  if (confirm('Delete "' + name + '"?')) {
+    items.splice(idx, 1);
+    renderItems();
+  }
+}
+
+function setColor(idx, color) {
+  readFromDom();
+  items[idx].color = color;
+  renderItems();
+}
+
+function toggle86Item(idx, checked) {
+  readFromDom();
+  items[idx].eightySixed = checked;
+  renderItems();
+  saveSpecials();
+}
+
+function toggle86Section(section) {
+  var cardId = section + '-card';
+  var checkId = section + '-86';
+  var labelId = section + '-86-label';
+  var checked = document.getElementById(checkId).checked;
+  var card = document.getElementById(cardId);
+  var label = document.getElementById(labelId);
+  if (checked) {
+    card.style.opacity = '.45';
+    label.classList.add('active');
+  } else {
+    card.style.opacity = '1';
+    label.classList.remove('active');
+  }
+  saveSpecials();
+}
+
+function clearAll() {
+  if (confirm('Clear all specials? This will publish a blank board.')) {
+    items = [];
+    document.getElementById('soup-name').value = '';
+    document.getElementById('soup-desc').value = '';
+    document.getElementById('soup-price').value = '';
+    document.getElementById('soup-86').checked = false;
+    document.getElementById('app-name').value = '';
+    document.getElementById('app-desc').value = '';
+    document.getElementById('app-price').value = '';
+    document.getElementById('app-86').checked = false;
+    renderItems();
+    saveSpecials();
+  }
+}
+
+function readFromDom() {
+  document.querySelectorAll('[data-i][data-f]').forEach(function(el) {
+    var i = parseInt(el.getAttribute('data-i'));
+    var f = el.getAttribute('data-f');
+    if (items[i]) items[i][f] = el.value;
+  });
+}
+
+function saveSpecials() {
+  readFromDom();
+  var payload = {
+    title: document.getElementById('board-title').value.trim() || "Today's Specials",
+    footer: document.getElementById('board-footer').value.trim(),
+    font: document.getElementById('board-font').value || 'Fredericka the Great',
+    titleColor: data.titleColor || 'white',
+    soupColor: data.soupColor || 'white',
+    appColor: data.appColor || 'white',
+    soup: {
+      name: document.getElementById('soup-name').value.trim(),
+      desc: document.getElementById('soup-desc').value.trim(),
+      price: document.getElementById('soup-price').value.trim(),
+      eightySixed: document.getElementById('soup-86').checked
+    },
+    appetizer: {
+      name: document.getElementById('app-name').value.trim(),
+      desc: document.getElementById('app-desc').value.trim(),
+      price: document.getElementById('app-price').value.trim(),
+      eightySixed: document.getElementById('app-86').checked
+    },
+    items: items.filter(function(it) { return it.name && it.name.trim(); })
+  };
+
+  fetch('/staff/api/board', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(r) {
+    if (r.ok) {
+      toast('Published! TVs updating...', 'success');
+      data = payload;
+      items = payload.items;
+      fetch('/staff/api/board/reload', {method:'POST'}).catch(function(){});
+    } else {
+      toast('Save failed', 'error');
+    }
+  })
+  .catch(function(){ toast('Save failed', 'error'); });
+}
+
+// ── Section Color Pickers ─────────────────────────────────
+var SECTION_COLORS = ['white','yellow','blue','pink','green'];
+
+function renderSectionColors(containerId, section) {
+  var el = document.getElementById(containerId);
+  var current = data[section + 'Color'] || 'white';
+  var h = '';
+  SECTION_COLORS.forEach(function(c) {
+    var active = current === c ? ' active' : '';
+    h += '<div class="color-dot c-' + c + active + '" onclick="setSectionColor(\'' + section + '\',\'' + c + '\',\'' + containerId + '\')"></div>';
+  });
+  el.innerHTML = h;
+}
+
+function setSectionColor(section, color, containerId) {
+  data[section + 'Color'] = color;
+  renderSectionColors(containerId, section);
+}
+
+function updateFontPreview() {
+  var font = document.getElementById('board-font').value;
+  var preview = document.getElementById('font-preview');
+  preview.style.fontFamily = "'" + font + "',cursive";
+}
+
+// ── Sync from Toast ──────────────────────────────────────
+
+function syncFromToast() {
+  var btn = document.getElementById('sync-toast-btn');
+  btn.textContent = '\u21BB Syncing...';
+  btn.disabled = true;
+  fetch('/staff/api/board/sync-toast', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({location: 'chatham'})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    btn.innerHTML = '&#x1F504; SYNC FROM TOAST';
+    btn.disabled = false;
+    if (!d.ok) {
+      toast(d.error || 'Could not connect to Toast \u2014 try again', 'error');
+      return;
+    }
+    showSyncModal(d);
+  })
+  .catch(function() {
+    btn.innerHTML = '&#x1F504; SYNC FROM TOAST';
+    btn.disabled = false;
+    toast('Could not connect to Toast \u2014 try again', 'error');
+  });
+}
+
+function showSyncModal(d) {
+  var list = document.getElementById('sync-items');
+  var h = '';
+  var idx = 0;
+  var _syncData = d;
+
+  if (d.soup && d.soup.name) {
+    h += '<div class="modal-item"><input type="checkbox" checked id="sync-' + idx + '" data-type="soup">';
+    h += '<label for="sync-' + idx + '"><span class="tag tag-soup">SOUP</span> ' + escAttr(d.soup.name) + '</label></div>';
+    idx++;
+  }
+  if (d.appetizer && d.appetizer.name) {
+    var priceStr = d.appetizer.price ? ' \u2014 ' + d.appetizer.price : '';
+    h += '<div class="modal-item"><input type="checkbox" checked id="sync-' + idx + '" data-type="appetizer">';
+    h += '<label for="sync-' + idx + '"><span class="tag tag-app">APP</span> ' + escAttr(d.appetizer.name) + priceStr + '</label></div>';
+    idx++;
+  }
+  (d.items || []).forEach(function(item, i) {
+    var priceStr = item.price ? ' \u2014 ' + item.price : '';
+    var descStr = item.desc ? ' (' + item.desc + ')' : '';
+    h += '<div class="modal-item"><input type="checkbox" checked id="sync-' + idx + '" data-type="item" data-idx="' + i + '">';
+    h += '<label for="sync-' + idx + '"><span class="tag tag-item">SPECIAL</span> ' + escAttr(item.name) + descStr + priceStr + '</label></div>';
+    idx++;
+  });
+
+  if (!h) {
+    toast('No specials found in Toast', 'error');
+    return;
+  }
+
+  list.innerHTML = h;
+  document.getElementById('sync-modal')._data = _syncData;
+  document.getElementById('sync-modal').classList.add('show');
+}
+
+function closeSyncModal() {
+  document.getElementById('sync-modal').classList.remove('show');
+}
+
+function importSyncItems() {
+  var modal = document.getElementById('sync-modal');
+  var d = modal._data;
+  var checkboxes = modal.querySelectorAll('input[type=checkbox]');
+  readFromDom();
+
+  checkboxes.forEach(function(cb) {
+    if (!cb.checked) return;
+    var type = cb.getAttribute('data-type');
+    if (type === 'soup' && d.soup) {
+      document.getElementById('soup-name').value = d.soup.name;
+      document.getElementById('soup-desc').value = d.soup.desc || '';
+    } else if (type === 'appetizer' && d.appetizer) {
+      document.getElementById('app-name').value = d.appetizer.name;
+      document.getElementById('app-desc').value = d.appetizer.desc || '';
+      document.getElementById('app-price').value = d.appetizer.price || '';
+    } else if (type === 'item') {
+      var idx = parseInt(cb.getAttribute('data-idx'));
+      var item = d.items[idx];
+      if (item) items.push({name: item.name, desc: item.desc || '', price: item.price || '', color: item.color || 'white'});
+    }
+  });
+
+  renderItems();
+  closeSyncModal();
+  toast('Imported specials from Toast', 'success');
+}
+
+// ── TV Power Control ──────────────────────────────────────
+
+function renderTVList(results) {
+  var el = document.getElementById('tv-list');
+  if (!results || !results.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--t3);text-align:center;padding:8px">No TVs configured</div>';
+    return;
+  }
+  var h = '';
+  results.forEach(function(tv) {
+    var color = tv.screen === 'on' ? '#22c55e' : (tv.screen === 'off' ? '#64748b' : '#94a3b8');
+    var label = tv.screen === 'on' ? 'On' : (tv.screen === 'off' ? 'Off' : '?');
+    h += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">';
+    h += '<div style="width:8px;height:8px;border-radius:50%;background:' + color + ';flex-shrink:0"></div>';
+    h += '<span style="font-family:Oswald,sans-serif;font-size:13px;font-weight:600;letter-spacing:1px;flex:1">' + tv.name + '</span>';
+    h += '<span style="font-size:11px;color:var(--t3)">' + tv.ip + ' &middot; ' + label + '</span>';
+    h += '<button onclick="tvAction(\'reload\',\'' + tv.ip + '\')" style="background:var(--blue);color:#fff;border:none;border-radius:4px;padding:4px 8px;font-family:Oswald;font-size:10px;letter-spacing:1px;cursor:pointer">RELOAD</button>';
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
+async function tvAction(action, ip) {
+  var msgEl = document.getElementById('tv-msg');
+  var labels = {on:'Turning on...', off:'Turning off...', reload:'Reloading...'};
+  msgEl.textContent = labels[action] || action;
+  msgEl.style.color = '#94a3b8';
+  try {
+    var url = '/staff/api/tv-power/' + action;
+    if (ip) url += '?ip=' + ip;
+    var res = await fetch(url, { method: 'POST' });
+    var d = await res.json();
+    if (d.ok) {
+      var msgs = {on:'Turned on', off:'Turned off', reload:'Reloading ~10 sec'};
+      msgEl.textContent = msgs[action];
+      msgEl.style.color = action === 'off' ? '#f87171' : '#22c55e';
+      pollTVStatus();
+    } else {
+      msgEl.textContent = d.error || 'Failed';
+      msgEl.style.color = '#f87171';
+    }
+  } catch (e) {
+    msgEl.textContent = 'Could not reach server';
+    msgEl.style.color = '#f87171';
+  }
+}
+
+function tvActionAll(action) { tvAction(action); }
+
+async function pollTVStatus() {
+  try {
+    var res = await fetch('/staff/api/tv-power/status');
+    var d = await res.json();
+    if (d.ok) renderTVList(d.results);
+  } catch (e) { /* silent */ }
+}
+
+pollTVStatus();
+setInterval(pollTVStatus, 30000);
+
+// ── Pull-to-refresh ──────────────────────────────────────
+(function() {
+  var ptr = document.getElementById('ptr');
+  var startY = 0, dist = 0, pulling = false, refreshing = false, threshold = 70;
+
+  function atTop() {
+    return (window.pageYOffset || document.documentElement.scrollTop || 0) <= 0;
+  }
+
+  document.addEventListener('touchstart', function(e) {
+    if (!refreshing && atTop()) {
+      startY = e.touches[0].pageY;
+      pulling = true;
+      dist = 0;
+    }
+  }, {passive: true});
+
+  document.addEventListener('touchmove', function(e) {
+    if (!pulling || refreshing) return;
+    dist = e.touches[0].pageY - startY;
+    if (dist > 10 && atTop()) {
+      e.preventDefault();
+      var clamped = Math.min(dist, 150);
+      ptr.style.transform = 'translateX(-50%) translateY(' + (clamped - 60) + 'px)';
+      ptr.style.transition = 'none';
+      ptr.textContent = dist > threshold ? '\u2191 Release to refresh' : '\u2193 Pull to refresh';
+    } else {
+      ptr.style.transform = '';
+      ptr.style.transition = '';
+    }
+  }, {passive: false});
+
+  document.addEventListener('touchend', function() {
+    if (!pulling || refreshing) return;
+    pulling = false;
+    ptr.style.transition = 'transform .25s';
+    if (dist > threshold) {
+      refreshing = true;
+      ptr.textContent = 'Refreshing...';
+      ptr.classList.add('refreshing');
+      ptr.style.transform = 'translateX(-50%) translateY(0)';
+      fetch('/staff/api/board').then(function(r){ return r.json(); }).then(function(d) {
+        data = d;
+        items = d.items || [];
+        init();
+        toast('Refreshed!', 'success');
+      }).catch(function(){ toast('Refresh failed', 'error'); })
+      .finally(function() {
+        setTimeout(function(){
+          ptr.style.transform = '';
+          ptr.classList.remove('refreshing');
+          refreshing = false;
+        }, 500);
+      });
+    } else {
+      ptr.style.transform = '';
+    }
+    dist = 0;
+  });
+})();
+
+init();
+
+
+</script>
+</body>
+</html>

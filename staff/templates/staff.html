@@ -1,0 +1,2661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="RN Staff">
+<meta name="theme-color" content="#9B1B1B">
+<link rel="manifest" href="/staff/static/staff-manifest.json">
+<link rel="apple-touch-icon" sizes="180x180" href="/staff/static/staff-apple-touch-icon.png">
+<title>RN Staff</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════ */
+/* iOS SYSTEM SHELL                                    */
+/* ═══════════════════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+body{background:#F2F2F7;color:#1C1C1E}
+body.dark-tab{background:#1C1C1E;color:#F2F2F7}
+
+#status-bar-spacer{height:env(safe-area-inset-top);background:#9B1B1B}
+body.dark-tab #status-bar-spacer{background:#1C1C1E}
+
+#app-header{
+    background:#9B1B1B;color:#fff;
+    padding:10px 16px;
+    display:flex;align-items:center;justify-content:space-between;
+    font-size:17px;font-weight:600;
+    position:relative;z-index:50;
+}
+body.dark-tab #app-header{background:#1C1C1E;border-bottom:0.5px solid rgba(255,255,255,0.1)}
+#header-title{font-weight:600}
+#header-location{font-size:11px;font-weight:500;letter-spacing:0.5px;opacity:0.8}
+
+/* Panels */
+.panel{display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;height:calc(100vh - env(safe-area-inset-top) - 47px - 64px - env(safe-area-inset-bottom));padding-bottom:20px}
+.panel.active{display:block}
+
+/* Bottom nav */
+#bottom-nav{
+    position:fixed;bottom:0;left:0;right:0;
+    height:calc(64px + env(safe-area-inset-bottom));
+    padding-bottom:env(safe-area-inset-bottom);
+    background:rgba(242,242,247,0.92);
+    -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+    border-top:0.5px solid rgba(0,0,0,0.2);
+    display:flex;z-index:100;
+}
+body.dark-tab #bottom-nav{
+    background:rgba(28,28,30,0.92);
+    border-top-color:rgba(255,255,255,0.1);
+}
+.nav-tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    background:none;border:none;color:#8E8E93;
+    font-size:10px;font-weight:500;
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;padding-top:8px;
+}
+.nav-tab.active{color:#9B1B1B}
+body.dark-tab .nav-tab.active{color:#FF6B6B}
+.nav-tab svg{width:24px;height:24px}
+
+/* Overlay + Drawers */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;opacity:0;transition:opacity 0.28s;pointer-events:none}
+.overlay.visible{opacity:1;pointer-events:auto}
+.drawer{
+    position:fixed;bottom:0;left:0;right:0;
+    background:#fff;border-radius:12px 12px 0 0;
+    z-index:201;transform:translateY(100%);
+    transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);
+    padding-bottom:env(safe-area-inset-bottom);
+    max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+}
+.drawer.open{transform:translateY(0)}
+.drawer.dark{background:#2C2C2E;color:#F2F2F7}
+.drawer-handle{width:36px;height:4px;background:#C7C7CC;border-radius:2px;margin:8px auto 4px;display:block}
+.drawer.dark .drawer-handle{background:#48484A}
+.drawer-title{padding:12px 16px 8px;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+.drawer-cancel{color:#007AFF;font-size:15px;font-weight:500;background:none;border:none;cursor:pointer;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center}
+
+/* Toast */
+#toast{
+    position:fixed;top:calc(env(safe-area-inset-top) + 60px);
+    left:16px;right:16px;
+    background:#34C759;color:white;border-radius:12px;
+    padding:14px 16px;font-size:15px;font-weight:600;text-align:center;
+    z-index:300;box-shadow:0 4px 24px rgba(0,0,0,0.2);
+    opacity:0;transform:translateY(-8px);
+    transition:opacity 0.2s,transform 0.2s;pointer-events:none;
+}
+#toast.show{opacity:1;transform:translateY(0)}
+
+/* ═══════════════════════════════════════════════════ */
+/* SPORTS GUIDE CSS (copied verbatim from guide)       */
+/* ═══════════════════════════════════════════════════ */
+:root{
+    --bg:#F0F0F0;--card:#FFFFFF;--red:#C41E2A;--red-dark:#8B1A1A;
+    --navy:#1B2838;--gold:#C89B3C;--gold-light:rgba(200,155,60,0.1);
+    --green:#1B7340;--live-green:#00C853;
+    --text:#1A1A1A;--text2:#5A5A5A;--text3:#9A9A9A;--border:#E5E5E5;
+}
+#panel-tvs{background:var(--bg)}
+#panel-tvs .content{max-width:700px;margin:0 auto;padding:8px 6px}
+.section{margin-bottom:16px}
+.sec-head{
+    display:flex;align-items:center;gap:8px;
+    padding:10px 12px;background:var(--navy);color:#fff;
+    border-radius:10px 10px 0 0;
+    cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;
+}
+.sec-logo{width:20px;height:20px;object-fit:contain}
+.sec-title{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+.sec-head-fav{background:linear-gradient(135deg,#B8860B,#DAA520)}
+.sec-head-stream{background:linear-gradient(135deg,#1a3a5c,#2563EB)}
+
+.game-table{width:100%;background:var(--card);border-radius:0 0 10px 10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.game-table table{width:100%;border-collapse:collapse}
+.game-table th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);padding:7px 6px;text-align:left;border-bottom:2px solid var(--border);background:#FAFAFA}
+.game-table th.ch-col{text-align:center;width:70px}
+.game-table th.time-col{width:70px}
+.game-table th.score-col{text-align:center;width:36px;padding:8px 2px}
+.game-table th.vs-col{width:30px}
+.game-table td{padding:10px 6px;font-size:14px;vertical-align:middle;border-bottom:1px solid #F2F2F2}
+.game-table tr:last-child td{border-bottom:none}
+
+.td-time{font-weight:600;color:var(--text2);font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.td-team{display:flex;align-items:center;gap:6px}
+.td-team img{width:16px;height:16px;object-fit:contain;border-radius:4px;flex-shrink:0}
+.td-team span{font-weight:600;font-size:14px}
+.td-vs{font-size:11px;color:var(--text3);text-align:center;font-weight:700;letter-spacing:1px}
+.td-ch{text-align:center}
+.ch-net{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase}
+.ch-num{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:var(--red);line-height:1}
+.ch-badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700}
+.ch-app{font-size:10px;color:var(--text3);margin-top:2px}
+.ch-multi{margin-top:4px;padding-top:4px;border-top:1px solid var(--border)}
+
+.td-score{text-align:center;font-variant-numeric:tabular-nums;width:36px;padding:8px 2px!important}
+.score-num{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--text)}
+.score-pre{font-size:13px;color:var(--text3)}
+.score-winner{color:var(--text)}
+.score-loser{color:var(--text3)}
+
+.live-badge{display:inline-flex;align-items:center;gap:5px;background:#E8F5E9;color:#2E7D32;font-size:11px;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px}
+.live-dot{width:10px;height:10px;background:var(--live-green);border-radius:50%;animation:livePulse 1.5s infinite}
+@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.8)}}
+
+tr.fav-row{background:linear-gradient(90deg,rgba(200,155,60,0.1),transparent)}
+tr.fav-row td:first-child{border-left:3px solid var(--gold)}
+.td-event{font-weight:600;font-size:13px}
+.td-detail{font-size:13px;color:var(--text2)}
+.td-odds{text-align:center}
+.odds-spread{font-size:11px;font-weight:600;color:var(--text);white-space:nowrap}
+.odds-ou{font-size:9px;color:var(--text3);margin-top:1px}
+@media(max-width:768px){.odds-col,.td-odds{display:none!important}}
+
+tr.game-final td{opacity:0.4}
+.drag-handle{opacity:0.6;margin-right:8px;font-size:18px;vertical-align:middle;cursor:grab}
+.section.sortable-ghost{opacity:0.3}
+.drag-toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1B2838;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity 0.3s}
+.drag-toast.show{opacity:1}
+
+/* Staff TV hint bar */
+.tv-hint{
+    background:var(--navy);color:rgba(255,255,255,0.7);
+    padding:10px 16px;font-size:12px;font-weight:600;letter-spacing:0.5px;
+    display:flex;align-items:center;justify-content:space-between;
+    max-width:700px;margin:0 auto 4px;border-radius:8px;
+}
+.tv-hint .manage-btn{color:#fff;font-size:12px;font-weight:600;cursor:pointer;background:none;border:none;min-height:44px;display:flex;align-items:center}
+.tv-hint .manage-btn:active{opacity:0.6}
+
+/* Tappable game rows */
+.game-data.tappable{cursor:pointer}
+.game-data.tappable:active{background:rgba(0,0,0,0.04)}
+
+/* Dark mode for TVs panel (auto 7pm-6am) */
+#panel-tvs.dark-mobile{
+    --bg:#0C0C0E;--card:#1A1A1E;--text:#F0F0F0;--text2:#A0A0A0;--text3:#606060;--border:#2A2A2E;--navy:#0D1520;
+}
+#panel-tvs.dark-mobile .sec-head{background:#0D1520}
+#panel-tvs.dark-mobile .game-table th{background:#151518;color:#606060;border-bottom-color:#2A2A2E}
+#panel-tvs.dark-mobile .game-table td{border-bottom-color:#222226}
+#panel-tvs.dark-mobile .ch-num{color:#D4A843}
+#panel-tvs.dark-mobile .td-vs{color:#505050}
+#panel-tvs.dark-mobile .td-time{color:#909090}
+#panel-tvs.dark-mobile tr.fav-row{background:linear-gradient(90deg,rgba(200,155,60,0.15),transparent)}
+#panel-tvs.dark-mobile .game-table{box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+#panel-tvs.dark-mobile .score-winner{color:#F0F0F0}
+#panel-tvs.dark-mobile .score-loser{color:#606060}
+#panel-tvs.dark-mobile .score-num{color:#F0F0F0}
+#panel-tvs.dark-mobile .live-badge{background:#1B3A1B;color:#4ADE80}
+#panel-tvs.dark-mobile tr.game-final td{opacity:0.3}
+#panel-tvs.dark-mobile .tv-hint{background:#0D1520}
+#panel-tvs.dark-mobile .stale-banner{background:#3D2E00;color:#FFD060}
+
+/* TV drawer */
+.tv-btn-list{padding:0 16px 16px}
+.tv-btn{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 16px;background:#F2F2F7;border:none;border-radius:10px;
+    cursor:pointer;width:100%;margin-bottom:8px;
+    font-size:15px;font-weight:500;font-family:-apple-system,sans-serif;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+}
+.tv-btn:active{background:#E5E5EA}
+.tv-btn.selected{background:#34C759;color:#fff}
+.tv-btn.selected .tv-ch{color:rgba(255,255,255,0.85)}
+.tv-btn .tv-ch{font-size:13px;color:#8E8E93}
+.drawer-done-bar{position:sticky;bottom:0;padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #E5E5EA}
+.drawer-done-btn{width:100%;padding:14px;background:#34C759;color:#fff;border:none;border-radius:12px;font-size:17px;font-weight:600;cursor:pointer;font-family:-apple-system,sans-serif}
+.drawer-done-btn:active{opacity:0.8}
+.drawer-done-btn:disabled{background:#C7C7CC;cursor:default}
+
+/* Drawer game info */
+.drawer-game-info{padding:8px 16px 16px;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600}
+
+/* TV Config (Manage TVs drawer) */
+.tv-config-card{background:#F2F2F7;border-radius:10px;padding:14px 16px;margin-bottom:8px}
+.tv-config-card label{font-size:15px;font-weight:600;display:block;margin-bottom:8px}
+.tv-config-card .tv-ip-row{display:flex;gap:8px}
+.tv-config-card .tv-ip-row input{flex:1}
+.tv-config-card input{width:100%;padding:10px 12px;border:1px solid #D1D1D6;border-radius:8px;font-size:14px;font-family:-apple-system,sans-serif;background:#fff;margin-bottom:0}
+.tv-config-card input:focus{outline:2px solid #007AFF;border-color:transparent}
+.tv-config-card input::placeholder{color:#C7C7CC}
+.tv-ip-label{font-size:11px;color:#8E8E93;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;margin-top:8px}
+.tv-config-save{width:100%;padding:14px;background:#9B1B1B;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;margin:12px 0 8px}
+.tv-config-save:active{opacity:0.8}
+
+/* Roku indicator dot */
+.roku-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#6D28D9;margin-left:6px;vertical-align:middle}
+.tv-btn .roku-label{font-size:10px;color:#6D28D9;font-weight:600;margin-left:4px}
+
+/* ═══════════════════════════════════════════════════ */
+/* SPECIALS TAB (dark)                                 */
+/* ═══════════════════════════════════════════════════ */
+#panel-specials{background:#1C1C1E;padding:0 16px}
+.spec-section-label{font-size:13px;color:#6C6C70;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:24px 0 8px}
+.spec-section-label:first-child{padding-top:16px}
+.spec-card{background:#2C2C2E;border-radius:12px;padding:14px 16px;margin-bottom:8px}
+.spec-input{
+    width:100%;background:#3A3A3C;border:none;border-radius:8px;
+    padding:12px 14px;color:#F2F2F7;font-size:15px;
+    font-family:-apple-system,sans-serif;outline:none;
+}
+.spec-input::placeholder{color:#636366}
+.spec-input:focus{outline:2px solid #9B1B1B}
+.spec-row{display:flex;gap:8px;margin-top:8px}
+.spec-row .spec-input{flex:1}
+.spec-row .spec-price{flex:0 0 90px}
+.spec-item{position:relative}
+.spec-item .spec-del{
+    position:absolute;top:8px;right:8px;width:28px;height:28px;
+    border-radius:50%;background:#FF3B30;color:#fff;border:none;
+    font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.spec-add-btn{
+    width:100%;background:none;border:1px dashed #48484A;border-radius:10px;
+    padding:14px;color:#8E8E93;font-size:14px;font-weight:500;cursor:pointer;
+    font-family:-apple-system,sans-serif;margin-bottom:8px;
+}
+.spec-add-btn:active{background:#2C2C2E}
+.spec-save-btn{
+    width:100%;background:#9B1B1B;border:none;color:#fff;border-radius:10px;
+    padding:16px;font-size:17px;font-weight:600;cursor:pointer;
+    font-family:-apple-system,sans-serif;margin-top:16px;
+}
+.spec-save-btn:active{opacity:0.8}
+.spec-link{display:block;text-align:center;color:#007AFF;font-size:14px;margin:12px 0 24px;cursor:pointer;text-decoration:none}
+
+/* Specials board power toggle */
+.spec-power-card{background:#2C2C2E;border-radius:12px;padding:14px 16px;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.spec-power-label{font-size:15px;font-weight:500;color:#F2F2F7}
+.ios-toggle{position:relative;width:51px;height:31px;background:#3A3A3C;border-radius:16px;border:none;cursor:pointer;transition:background 0.2s;flex-shrink:0}
+.ios-toggle.on{background:#34C759}
+.ios-toggle::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;background:#fff;border-radius:50%;transition:transform 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+.ios-toggle.on::after{transform:translateX(20px)}
+
+/* ═══════════════════════════════════════════════════ */
+/* VENUE TAB (dark)                                    */
+/* ═══════════════════════════════════════════════════ */
+#panel-venue{background:#1C1C1E;padding:0 16px}
+#pull-indicator{text-align:center;color:#8E8E93;font-size:13px;padding:0;height:0;overflow:hidden;transition:height .2s,padding .2s}
+#pull-indicator.visible{height:36px;padding:8px 0}
+.segmented{display:flex;background:#3A3A3C;border-radius:8px;padding:2px;margin:16px 0}
+.seg-btn{flex:1;padding:8px 0;border:none;border-radius:6px;background:none;color:#8E8E93;font-size:13px;font-weight:500;cursor:pointer;font-family:-apple-system,sans-serif;text-align:center;min-height:36px}
+.seg-btn.active{background:#fff;color:#1C1C1E;box-shadow:0 1px 4px rgba(0,0,0,0.2)}
+
+.venue-sub{display:none}
+.venue-sub.active{display:block}
+
+.venue-section-label{font-size:13px;color:#6C6C70;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:20px 0 8px}
+
+/* Scenes grid */
+.scenes-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.scene-btn{
+    background:#2C2C2E;border:2px solid transparent;border-radius:12px;
+    padding:16px 14px;text-align:left;cursor:pointer;
+    font-family:-apple-system,sans-serif;color:#F2F2F7;
+}
+.scene-btn:active{opacity:0.8}
+.scene-btn.active{border-color:#9B1B1B}
+.scene-btn .scene-name{font-size:15px;font-weight:600}
+.scene-btn.active .scene-name{color:#FF6B6B}
+.scene-btn .scene-desc{font-size:11px;color:#8E8E93;margin-top:4px}
+
+/* Light zone card */
+.zone-card{background:#2C2C2E;border-radius:12px;padding:16px;margin-bottom:8px}
+.zone-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.zone-name{font-size:15px;font-weight:600;color:#F2F2F7}
+.zone-pct{font-size:15px;font-weight:600;color:#F2F2F7;margin-right:12px}
+.zone-slider{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:#3A3A3C;border-radius:3px;outline:none;margin-bottom:12px}
+.zone-slider::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);cursor:pointer}
+.quick-levels{display:flex;gap:6px}
+.ql-btn{
+    flex:1;padding:8px 0;border:1px solid #48484A;border-radius:8px;
+    background:none;color:#8E8E93;font-size:12px;font-weight:600;
+    cursor:pointer;font-family:-apple-system,sans-serif;min-height:36px;
+}
+.ql-btn:active,.ql-btn.active{background:#FFD60A;color:#1C1C1E;border-color:#FFD60A}
+
+/* Thermostat card */
+.thermo-card{background:#2C2C2E;border-radius:12px;padding:20px;margin-bottom:8px;text-align:center}
+.thermo-loc{font-size:12px;font-weight:600;color:#34C759;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:8px}
+.thermo-temp{font-size:72px;font-weight:200;color:#F2F2F7;line-height:1;margin:8px 0}
+.thermo-status{font-size:13px;color:#8E8E93;margin-bottom:16px}
+.thermo-controls{display:flex;align-items:center;justify-content:center;gap:24px}
+.thermo-btn{
+    width:56px;height:56px;border-radius:14px;border:1px solid #48484A;
+    background:#2C2C2E;color:#F2F2F7;font-size:28px;font-weight:300;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+    font-family:-apple-system,sans-serif;
+}
+.thermo-btn:active{background:#3A3A3C}
+.thermo-setpoint{font-size:24px;font-weight:600;color:#F2F2F7;min-width:48px;text-align:center}
+.thermo-disabled{opacity:0.4;pointer-events:none}
+
+/* Music */
+.music-card{background:linear-gradient(145deg,#2C2C2E 0%,#1C1C1E 100%);border-radius:16px;padding:20px;margin-bottom:4px;border:1px solid #3A3A3C}
+.music-art-wrap{width:50%;aspect-ratio:1;border-radius:12px;background:linear-gradient(135deg,#9B1B1B,#3A1515);margin-bottom:16px;overflow:hidden;position:relative;box-shadow:0 8px 24px rgba(0,0,0,0.4);margin-left:auto;margin-right:auto}
+.music-art-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+.music-info{text-align:center;margin-bottom:14px}
+.music-title{font-size:18px;font-weight:700;color:#F2F2F7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.music-artist{font-size:14px;color:#AEAEB2;margin-top:3px}
+.music-source{font-size:11px;color:#636366;margin-top:4px;text-transform:uppercase;letter-spacing:0.5px}
+.music-controls{display:flex;align-items:center;justify-content:center;gap:32px;margin-bottom:18px}
+.music-btn{width:44px;height:44px;border-radius:50%;border:none;background:none;color:#AEAEB2;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s;padding:0}
+.music-btn:active{color:#fff}
+.music-btn svg{width:22px;height:22px;fill:currentColor}
+.music-btn.play{width:60px;height:60px;background:#F2F2F7;color:#1C1C1E;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+.music-btn.play:active{background:#D1D1D6}
+.music-btn.play svg{width:28px;height:28px;fill:currentColor;margin-left:3px}
+.music-zone{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;padding:8px 16px;background:#2C2C2E;border-radius:10px;cursor:pointer;border:1px solid #3A3A3C}
+.music-zone svg{width:16px;height:16px;fill:#AEAEB2;flex-shrink:0}
+.music-zone-name{font-size:13px;color:#AEAEB2;font-weight:500}
+.music-vol-row{display:flex;align-items:center;gap:10px}
+.music-vol-icon{color:#636366;font-size:14px;flex-shrink:0}
+.music-volume{flex:1;height:4px;-webkit-appearance:none;appearance:none;background:#3A3A3C;border-radius:2px;outline:none}
+.music-volume::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);cursor:pointer}
+.music-volume::-webkit-slider-runnable-track{border-radius:2px}
+.svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.svc-item{display:flex;align-items:center;gap:10px;background:#2C2C2E;border-radius:12px;padding:14px;cursor:pointer;border:1px solid #3A3A3C;transition:border-color .15s,background .15s}
+.svc-item:active{background:#3A3A3C}
+.svc-item.linked{border-color:#3A3A3C}
+.svc-item .svc-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.svc-item .svc-detail{flex:1;min-width:0}
+.svc-item .svc-name{font-size:13px;font-weight:600;color:#F2F2F7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.svc-item .svc-status{font-size:10px;color:#636366;margin-top:1px}
+.svc-item.linked .svc-status{color:#30D158}
+.svc-item:not(.linked) .svc-name{color:#8E8E93}
+.fav-item{display:flex;flex-direction:column;align-items:center;gap:8px;background:#2C2C2E;border-radius:12px;padding:14px 8px;cursor:pointer;border:1px solid transparent;transition:all .15s;text-align:center;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.fav-item:active{background:#3A3A3C}
+.fav-item.active{border-color:#9B1B1B;background:rgba(155,27,27,0.1)}
+.fav-icon{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#9B1B1B,#6B0F0F);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.fav-detail{min-width:0;width:100%}
+.fav-name{font-size:13px;font-weight:500;color:#F2F2F7;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.fav-service{font-size:10px;color:#636366;margin-top:2px}
+.browse-item{display:flex;align-items:center;gap:12px;background:#2C2C2E;border-radius:12px;padding:12px 14px;cursor:pointer;border:1px solid #3A3A3C;transition:background .1s}
+.browse-item:active{background:#3A3A3C}
+.browse-art{width:48px;height:48px;border-radius:8px;background:#3A3A3C;flex-shrink:0;object-fit:cover}
+.browse-info{flex:1;min-width:0}
+.browse-title{font-size:14px;font-weight:500;color:#F2F2F7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.browse-arrow{color:#48484A;font-size:18px;flex-shrink:0}
+
+.stale-banner{background:#FFF3CD;color:#856404;padding:10px 16px;text-align:center;font-size:12px;font-weight:600;max-width:700px;margin:8px auto 0;border-radius:8px}
+
+/* WHAT'S ON + ALL OFF buttons */
+.wo-btn,.alloff-btn{font-size:10px;font-weight:700;padding:4px 10px;border-radius:12px;border:none;cursor:pointer;letter-spacing:.5px;font-family:-apple-system,sans-serif}
+.wo-btn{background:#007AFF;color:#fff}
+.alloff-btn{background:#FF3B30;color:#fff;margin-left:6px}
+
+/* TV badges on game rows */
+.tv-on-badges{display:flex;flex-wrap:wrap;gap:2px;margin-top:2px}
+.tv-on-badge{font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:#34C759;color:#fff;white-space:nowrap;line-height:1.2}
+.tv-at-badge{background:#FF9500}
+
+/* What's On overlay */
+.wo-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.92);z-index:200;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.wo-overlay.visible{display:block}
+.wo-header{padding:env(safe-area-inset-top) 16px 12px;padding-top:calc(env(safe-area-inset-top) + 12px);background:#1C1C1E;position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center}
+.wo-title{color:#fff;font-size:20px;font-weight:700;font-family:'Barlow Condensed',sans-serif}
+.wo-close{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:16px;font-weight:600;cursor:pointer;font-family:-apple-system,sans-serif;padding:8px 20px;border-radius:20px;letter-spacing:.5px}
+.wo-close:active{background:rgba(255,255,255,.25)}
+.wo-cards{padding:12px 16px 100px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.wo-card{background:#2C2C2E;border-radius:12px;padding:12px;min-height:80px}
+.wo-tv-name{color:#8E8E93;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.wo-channel{color:#fff;font-size:22px;font-weight:700;margin-top:4px;font-family:'Barlow Condensed',sans-serif}
+.wo-game{color:#AEAEB2;font-size:11px;margin-top:2px}
+.wo-off{color:#48484A}
+.wo-alloff{display:block;width:calc(100% - 32px);margin:0 auto;padding:14px;border-radius:12px;background:#FF3B30;color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer;font-family:-apple-system,sans-serif;position:fixed;bottom:calc(env(safe-area-inset-bottom,20px) + 10px);left:16px;right:16px;z-index:201}
+.wo-card{cursor:pointer;transition:background .15s}
+.wo-card:active{background:#3A3A3C}
+.wo-card.wo-no-dtv{opacity:.5;cursor:default}
+.wo-yttv-btn{display:inline-block;margin-top:6px;padding:4px 10px;background:#FF0000;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;font-family:-apple-system,sans-serif;letter-spacing:.3px}
+.wo-yttv-btn:active{opacity:.8}
+.yttv-ch-btn{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#2C2C2E;border:none;border-radius:10px;cursor:pointer;width:100%;margin-bottom:6px;font-size:14px;font-weight:500;font-family:-apple-system,sans-serif;color:#fff;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.yttv-ch-btn:active{background:#3A3A3C}
+.yttv-ch-label{font-size:11px;color:#8E8E93}
+.yttv-empty{color:#8E8E93;font-size:13px;padding:20px 16px;text-align:center}
+.yttv-cookies-section{padding:16px;border-top:1px solid #3A3A3C;margin-top:8px}
+.yttv-cookies-input{width:100%;padding:10px 12px;border:1px solid #48484A;border-radius:8px;font-size:14px;font-family:-apple-system,sans-serif;background:#1C1C1E;color:#fff;margin:6px 0;box-sizing:border-box}
+.yttv-cookies-input::placeholder{color:#636366}
+.yttv-cookies-save{width:100%;padding:12px;background:#34C759;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px}
+.yttv-cookies-save:active{opacity:.8}
+
+/* DTV Remote Panel */
+.dtv-remote{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:210;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.dtv-remote.visible{display:flex}
+.dtv-remote-body{background:linear-gradient(180deg,#1a1d24,#12141a,#0e1016);border-radius:24px;padding:22px 20px 26px;width:calc(100% - 24px);max-width:400px;margin:calc(env(safe-area-inset-top,20px) + 8px) auto 40px;border:1px solid #2a2d35;box-shadow:0 4px 30px rgba(0,0,0,.5)}
+.dtv-remote-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.dtv-remote-name{color:#8E8E93;font-size:16px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.dtv-remote-done{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:17px;font-weight:600;cursor:pointer;padding:10px 24px;border-radius:22px;letter-spacing:.5px}
+.dtv-remote-done:active{background:rgba(255,255,255,.25)}
+.dtv-close-hint{text-align:center;color:#555;font-size:12px;margin-top:16px;letter-spacing:.3px}
+/* Channel bar */
+.dtv-ch-bar{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:16px;background:rgba(0,0,0,.3);border-radius:12px;padding:14px}
+.dtv-ch-num{font-family:'Barlow Condensed',sans-serif;font-size:44px;font-weight:700;color:#fff;letter-spacing:4px;min-width:100px;text-align:center}
+.dtv-ch-num.empty{color:#48484A;font-size:34px}
+.dtv-ch-num .dtv-ch-cursor{animation:blink 1s step-end infinite;border-right:2px solid #007AFF;padding-right:2px}
+@keyframes blink{50%{border-color:transparent}}
+.dtv-tune-btn{background:#34C759;border:none;border-radius:10px;padding:12px 22px;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:#fff;letter-spacing:1px;cursor:pointer}
+.dtv-tune-btn:active{background:#2db84e;transform:scale(.95)}
+/* Top row buttons */
+.dtv-top-row{display:flex;justify-content:center;gap:6px;margin-bottom:14px}
+.dtv-sm{height:42px;border-radius:8px;border:1px solid #333;background:#1a1d24;color:#8E8E93;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 14px;-webkit-tap-highlight-color:transparent;-webkit-user-select:none}
+.dtv-sm:active{background:#333;transform:scale(.90)}
+.dtv-sm.pwr{color:#FF3B30;border-color:rgba(255,59,48,.3);font-size:18px}
+/* D-pad */
+.dtv-dpad{display:grid;grid-template-columns:64px 64px 64px;grid-template-rows:64px 64px 64px;gap:4px;justify-content:center;margin:0 auto 14px}
+.dk{border-radius:12px;border:1px solid #2a2d35;background:#1a1d24;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;color:#8E8E93;-webkit-user-select:none}
+.dk:active{background:#333;transform:scale(.90)}
+.dk.blank{visibility:hidden}
+.dk.sel{border-radius:50%;background:linear-gradient(135deg,#2563EB,#1d4ed8);border:2px solid #60a5fa;color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:1px}
+/* Mid row: ch rocker + transport */
+.dtv-mid-row{display:flex;justify-content:center;align-items:center;gap:14px;margin-bottom:14px}
+.ch-rocker{display:flex;flex-direction:column;gap:4px}
+.ch-rock{width:56px;height:40px;border-radius:8px;border:1px solid #2a2d35;background:#1a1d24;color:#8E8E93;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-user-select:none}
+.ch-rock:active{background:#333;transform:scale(.90)}
+.dtv-transport{display:flex;gap:5px}
+.tr-btn{width:44px;height:40px;border-radius:8px;border:1px solid #2a2d35;background:#1a1d24;color:#8E8E93;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-user-select:none}
+.tr-btn:active{background:#333;transform:scale(.90)}
+.tr-btn.rec{color:#FF3B30}
+/* Numpad */
+.dtv-numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:280px;margin:0 auto 12px}
+.nk{height:54px;border-radius:10px;border:1px solid #2a2d35;background:#1a1d24;color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:600;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-user-select:none}
+.nk:active{background:#333;transform:scale(.92)}
+.nk.fn{font-size:14px;color:#8E8E93}
+/* Bottom row */
+.dtv-bot-row{display:flex;justify-content:center;gap:6px;margin-bottom:16px}
+/* Power row */
+.dtv-power-row{display:flex;gap:10px;justify-content:center}
+.dtv-pwr-btn{width:100px;height:46px;border-radius:12px;border:none;font-size:13px;font-weight:700;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;letter-spacing:.5px}
+.dtv-pwr-on{background:#34C759}
+.dtv-pwr-off{background:#FF3B30}
+.dtv-pwr-btn:active{opacity:.7}
+
+/* Auto-tune button in drawer */
+.at-btn{flex:0 0 44px!important;font-size:16px;background:#FF9500!important;color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.at-btn.at-cancel{background:#FF3B30!important}
+.tv-btn-row{display:flex;gap:6px;align-items:stretch}
+.tv-btn-row .tv-btn{flex:1}
+
+/* Warning overlay */
+.warn-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:300;display:none;align-items:center;justify-content:center}
+.warn-overlay.visible{display:flex}
+.warn-box{background:#fff;border-radius:14px;padding:24px;max-width:280px;text-align:center}
+.warn-title{font-size:17px;font-weight:600;margin-bottom:8px}
+.warn-text{font-size:13px;color:#8E8E93;margin-bottom:16px;line-height:1.4}
+.warn-btn{display:block;width:100%;padding:12px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;font-family:-apple-system,sans-serif;margin-top:8px}
+.warn-btn-ok{background:#007AFF;color:#fff}
+.warn-btn-cancel{background:#F2F2F7;color:#007AFF}
+</style>
+</head>
+<body>
+<div id="status-bar-spacer"></div>
+
+<!-- Header -->
+<div id="app-header">
+    <span id="header-title">TVs</span>
+    <span id="header-location">CHATHAM</span>
+</div>
+
+<!-- ═══ TVs Panel ═══ -->
+<div id="panel-tvs" class="panel active">
+{% if stale %}
+<div class="stale-banner">&#9888; Guide may be outdated — last updated {{ data.updated_at[:10] if data else 'never' }}</div>
+{% endif %}
+{% if data %}
+<div class="tv-hint">
+    <span>TAP A GAME TO TUNE A TV</span>
+    <div style="display:flex;align-items:center">
+        <button class="wo-btn" onclick="showWhatsOn()">WHAT'S ON</button>
+        <button class="alloff-btn" onclick="allTvsOff()">ALL OFF</button>
+        <button class="manage-btn" onclick="showManageWarning()" style="margin-left:6px">MANAGE TVs ›</button>
+    </div>
+</div>
+<div class="content">
+    <div id="sections-container">
+    {% for section in data.sections %}
+    <div class="section" data-section="{{ section.name }}">
+        <div class="sec-head{% if section.name|lower == 'favorites' %} sec-head-fav{% endif %}{% if section.name|lower == 'streaming' %} sec-head-stream{% endif %}">
+            <span class="drag-handle">☰</span>
+            <img class="sec-logo" src="" data-league="{{ section.name }}" onerror="this.style.display='none'" style="display:none">
+            {% if section.name|lower == 'favorites' %}<span style="font-size:14px">⭐</span>{% endif %}
+            <span class="sec-title">{% if section.name|lower == 'favorites' %}Local Games{% else %}{{ section.name|upper }}{% endif %}</span>
+        </div>
+        <div class="game-table"><table>
+            <tr>
+                <th class="time-col">Time</th>
+                {% if section.name|lower in ['golf', 'nascar auto racing', 'olympics', 'other sports'] %}
+                <th>Event</th><th>Detail</th>
+                {% else %}
+                <th>Away</th><th class="score-col"></th><th class="vs-col"></th><th class="score-col"></th><th>Home</th><th class="odds-col">Line</th>
+                {% endif %}
+                <th class="ch-col">Ch</th>
+            </tr>
+            {% for game in section.games %}
+            <tr class="game-data{% if game.is_favorite %} fav-row{% endif %}"
+                data-away="{{ game.event }}" data-home="{{ game.detail }}"
+                data-time="{{ game.time }}" data-sport="{{ section.name }}"
+                data-channels='{{ game.channels|tojson if game.channels else "[]" }}'
+                data-streaming='{{ game.streaming|tojson if game.streaming else "null" }}'
+                data-start-ts="{{ game.start_ts|default(0) }}">
+                <td class="td-time"><span class="game-time-text">{{ game.time }}</span></td>
+                {% if section.name|lower in ['golf', 'nascar auto racing', 'olympics', 'other sports'] %}
+                <td class="td-event">{{ game.event }}</td>
+                <td class="td-detail">{{ game.sport if game.sport else game.detail }}</td>
+                {% else %}
+                <td><div class="td-team" data-team="{{ game.event }}"><span>{{ game.event }}</span></div></td>
+                <td class="td-score td-score-away"><span class="score-pre"></span></td>
+                <td class="td-vs">VS</td>
+                <td class="td-score td-score-home"><span class="score-pre"></span></td>
+                <td><div class="td-team" data-team="{{ game.detail }}"><span>{{ game.detail }}</span></div></td>
+                <td class="td-odds"></td>
+                {% endif %}
+                <td class="td-ch">
+                    {% if game.streaming %}
+                    <span class="ch-badge" style="background:{{ game.streaming.color }};color:#fff">{{ game.streaming.display }}</span>
+                    <div class="ch-app">{{ game.streaming.app }}</div>
+                    {% else %}
+                    {% for ch in game.channels %}
+                    <div{% if loop.index > 1 %} class="ch-multi"{% endif %}>
+                        <div class="ch-net">{{ ch.name }}</div>
+                        <div class="ch-num">{{ ch.drtv }}</div>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table></div>
+    </div>
+    {% endfor %}
+    </div>
+</div>
+{% else %}
+<div style="text-align:center;padding:80px 20px;color:var(--text2)">
+    <h2 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;color:var(--text);margin-bottom:8px">Guide Unavailable</h2>
+    <p>Sports guide updates daily at 5:00 AM.</p>
+</div>
+{% endif %}
+</div>
+
+<!-- ═══ Specials Panel ═══ -->
+<div id="panel-specials" class="panel" style="padding:0;margin:0;height:calc(100vh - 120px);">
+    <iframe src="/staff/specials/edit"
+            style="width:100%;height:100%;border:none;display:block;"
+            id="specials-iframe">
+    </iframe>
+</div>
+
+<!-- ═══ Venue Panel ═══ -->
+<div id="panel-venue" class="panel">
+    <div id="pull-indicator">↓ Pull to refresh</div>
+    <div class="segmented">
+        <button class="seg-btn active" onclick="switchVenueSub('music',this)">🎵 Music</button>
+        <button class="seg-btn" onclick="switchVenueSub('temp',this)">🌡 Temp</button>
+        <button class="seg-btn disabled" style="opacity:0.4;pointer-events:none">💡 Lights</button>
+    </div>
+
+    <!-- Lights -->
+    <div class="venue-sub" id="sub-lights">
+        <div class="venue-section-label">Scenes</div>
+        <div class="scenes-grid">
+            <button class="scene-btn" data-scene="open" onclick="setScene('open')">
+                <div class="scene-name">☀️ Open</div>
+                <div class="scene-desc">Full bright, all zones 100%</div>
+            </button>
+            <button class="scene-btn" data-scene="dinner" onclick="setScene('dinner')">
+                <div class="scene-name">🍽 Dinner</div>
+                <div class="scene-desc">Bar 75%, Dining 50%</div>
+            </button>
+            <button class="scene-btn" data-scene="late" onclick="setScene('late')">
+                <div class="scene-name">🌙 Late Night</div>
+                <div class="scene-desc">Bar 50%, Dining 25%</div>
+            </button>
+            <button class="scene-btn" data-scene="closed" onclick="setScene('closed')">
+                <div class="scene-name">🔒 Closed</div>
+                <div class="scene-desc">All off</div>
+            </button>
+        </div>
+
+        <div id="light-zones"></div>
+    </div>
+
+    <!-- Temp -->
+    <div class="venue-sub" id="sub-temp">
+        <div id="thermo-chatham"></div>
+        <div class="thermo-card thermo-disabled" style="margin-top:16px">
+            <div class="thermo-loc" style="color:#8E8E93">DENNIS PORT</div>
+            <div class="thermo-temp" style="font-size:48px;color:#48484A">--°</div>
+            <div class="thermo-status">Coming soon</div>
+        </div>
+    </div>
+
+    <!-- Music -->
+    <div class="venue-sub active" id="sub-music">
+        <div class="music-card">
+            <div class="music-art-wrap"><img id="sonos-art" src="" alt=""></div>
+            <div class="music-info">
+                <div class="music-title" id="sonos-track">—</div>
+                <div class="music-artist" id="sonos-artist"></div>
+                <div class="music-source" id="sonos-source"></div>
+            </div>
+            <div class="music-controls">
+                <button class="music-btn" onclick="sonosPrev()"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+                <button class="music-btn play" id="sonos-playpause" onclick="sonosToggle()"><svg id="sonos-play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+                <button class="music-btn" onclick="sonosNext()"><svg viewBox="0 0 24 24"><path d="M16 18h2V6h-2zm-8.5-6l8.5 6V6z" transform="scale(-1,1) translate(-24,0)"/></svg></button>
+            </div>
+            <div class="music-vol-row">
+                <button id="sonos-mute-btn" onclick="sonosMute()" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center"><svg id="sonos-mute-icon" style="width:18px;height:18px;fill:#636366" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg></button>
+                <input type="range" class="music-volume" id="sonos-volume" min="0" max="100" value="50" oninput="sonosVolume(this.value)">
+                <svg style="width:16px;height:16px;fill:#636366;flex-shrink:0" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+            </div>
+            <div class="music-zone" id="sonos-zone" onclick="sonosShowZones()">
+                <svg viewBox="0 0 24 24"><path d="M12 3C7.03 3 3 7.03 3 12s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7zm0-12c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 8c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+                <span class="music-zone-name" id="sonos-zone-name">Dining Room</span>
+            </div>
+        </div>
+        <div class="venue-section-label" style="margin-top:16px">Browse</div>
+        <div id="sonos-services" class="svc-grid"></div>
+
+        <div class="venue-section-label" style="margin-top:20px">Favorites</div>
+        <div id="sonos-favorites" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-bottom:80px"></div>
+
+        <!-- Browse overlay -->
+        <div id="sonos-browse-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#1C1C1E;z-index:200;overflow:hidden">
+            <div id="sonos-browse-header" style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #2C2C2E;background:#1C1C1E;margin-top:44px">
+                <button id="sonos-browse-back" onclick="sonosBrowseBack()" style="background:none;border:none;color:#F2F2F7;font-size:18px;font-weight:600;padding:8px;cursor:pointer">‹ Back</button>
+                <div id="sonos-browse-title" style="flex:1;text-align:center;color:#F2F2F7;font-weight:600;font-size:15px"></div>
+                <button onclick="sonosBrowseClose()" style="background:none;border:none;color:#F2F2F7;font-size:14px;padding:8px;cursor:pointer">Close</button>
+            </div>
+            <div id="sonos-browse-list" style="padding:8px 16px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;-webkit-overflow-scrolling:touch;position:absolute;top:96px;left:0;right:0;bottom:0"></div>
+        </div>
+
+        <!-- Link overlay -->
+        <div id="sonos-link-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:210;display:none;align-items:center;justify-content:center">
+            <div style="background:#2C2C2E;border-radius:16px;padding:24px;margin:20px;max-width:340px;text-align:center">
+                <div style="font-size:17px;font-weight:600;color:#F2F2F7;margin-bottom:8px" id="link-service-name"></div>
+                <div style="font-size:13px;color:#8E8E93;margin-bottom:16px">Open the link below, sign in, and authorize access. Then tap "Done" below.</div>
+                <a id="link-auth-url" href="#" target="_blank" style="display:block;background:#9B1B1B;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:600;margin-bottom:12px">Open Authorization</a>
+                <div style="display:flex;gap:10px;justify-content:center">
+                    <button onclick="sonosLinkComplete()" style="flex:1;padding:12px;border-radius:10px;border:none;background:#30D158;color:#fff;font-size:15px;font-weight:600;cursor:pointer">Done</button>
+                    <button onclick="sonosLinkCancel()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #48484A;background:none;color:#8E8E93;font-size:15px;cursor:pointer">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom nav -->
+<nav id="bottom-nav">
+    <button class="nav-tab active" data-tab="tvs" onclick="switchTab('tvs')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span>TVs</span>
+    </button>
+    <button class="nav-tab" data-tab="specials" onclick="switchTab('specials')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.27 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>
+        <span>Specials</span>
+    </button>
+    <button class="nav-tab" data-tab="venue" onclick="switchTab('venue')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Venue</span>
+    </button>
+</nav>
+
+<!-- Overlay -->
+<div id="overlay" class="overlay" onclick="closeDrawers()"></div>
+
+<!-- What's On overlay -->
+<div id="wo-overlay" class="wo-overlay">
+    <div class="wo-header">
+        <span class="wo-title">WHAT'S ON</span>
+        <button class="wo-close" onclick="closeWhatsOn()">✕ Close</button>
+    </div>
+    <div class="wo-cards" id="wo-cards"></div>
+    <button class="wo-alloff" onclick="allTvsOff()">ALL OFF — Power Down All TVs</button>
+</div>
+
+<!-- DTV Remote -->
+<div id="dtv-remote" class="dtv-remote" onclick="if(event.target===this)closeDtvRemote()">
+    <div class="dtv-remote-body">
+        <div class="dtv-remote-header">
+            <span class="dtv-remote-name" id="dtv-remote-name"></span>
+            <button class="dtv-remote-done" onclick="closeDtvRemote()">✕ Close</button>
+        </div>
+
+        <!-- Channel display + TUNE -->
+        <div class="dtv-ch-bar">
+            <div class="dtv-ch-num" id="dtv-ch-display"><span class="dtv-ch-cursor"></span></div>
+            <button class="dtv-tune-btn" onclick="dtvEnter()">TUNE</button>
+        </div>
+
+        <!-- Top row: Power, Guide, Menu, List, Exit -->
+        <div class="dtv-top-row">
+            <button class="dtv-sm pwr" onclick="dtvKey('power')">&#x23FB;</button>
+            <button class="dtv-sm" onclick="dtvKey('guide')">GUIDE</button>
+            <button class="dtv-sm" onclick="dtvKey('menu')">MENU</button>
+            <button class="dtv-sm" onclick="dtvKey('list')">LIST</button>
+            <button class="dtv-sm" onclick="dtvKey('exit')">EXIT</button>
+        </div>
+
+        <!-- D-pad -->
+        <div class="dtv-dpad">
+            <div class="dk blank"></div>
+            <div class="dk" onclick="dtvKey('up')">&#9650;</div>
+            <div class="dk blank"></div>
+            <div class="dk" onclick="dtvKey('left')">&#9668;</div>
+            <div class="dk sel" onclick="dtvKey('select')">OK</div>
+            <div class="dk" onclick="dtvKey('right')">&#9658;</div>
+            <div class="dk blank"></div>
+            <div class="dk" onclick="dtvKey('down')">&#9660;</div>
+            <div class="dk blank"></div>
+        </div>
+
+        <!-- CH rocker + Transport + Replay/Advance -->
+        <div class="dtv-mid-row">
+            <div class="ch-rocker">
+                <button class="ch-rock" onclick="dtvKey('chanup')">CH &#9650;</button>
+                <button class="ch-rock" onclick="dtvKey('chandown')">CH &#9660;</button>
+            </div>
+            <div class="dtv-transport">
+                <button class="tr-btn" onclick="dtvKey('rew')">&#9194;</button>
+                <button class="tr-btn" onclick="dtvKey('play')">&#9654;</button>
+                <button class="tr-btn" onclick="dtvKey('pause')">&#9208;</button>
+                <button class="tr-btn" onclick="dtvKey('ffwd')">&#9193;</button>
+                <button class="tr-btn rec" onclick="dtvKey('record')">&#9679;</button>
+            </div>
+            <div class="ch-rocker">
+                <button class="ch-rock" onclick="dtvKey('replay')">&#8634;</button>
+                <button class="ch-rock" onclick="dtvKey('advance')">&#8635;</button>
+            </div>
+        </div>
+
+        <!-- Numpad -->
+        <div class="dtv-numpad">
+            <div class="nk" onclick="dtvDigit('1')">1</div>
+            <div class="nk" onclick="dtvDigit('2')">2</div>
+            <div class="nk" onclick="dtvDigit('3')">3</div>
+            <div class="nk" onclick="dtvDigit('4')">4</div>
+            <div class="nk" onclick="dtvDigit('5')">5</div>
+            <div class="nk" onclick="dtvDigit('6')">6</div>
+            <div class="nk" onclick="dtvDigit('7')">7</div>
+            <div class="nk" onclick="dtvDigit('8')">8</div>
+            <div class="nk" onclick="dtvDigit('9')">9</div>
+            <div class="nk fn" onclick="dtvClear()">CLR</div>
+            <div class="nk" onclick="dtvDigit('0')">0</div>
+            <div class="nk fn" onclick="dtvEnter()">ENTER</div>
+        </div>
+
+        <!-- Bottom row: Prev, Info, Active, Back -->
+        <div class="dtv-bot-row">
+            <button class="dtv-sm" onclick="dtvKey('prev')">PREV</button>
+            <button class="dtv-sm" onclick="dtvKey('info')">INFO</button>
+            <button class="dtv-sm" onclick="dtvKey('active')">ACTIVE</button>
+            <button class="dtv-sm" onclick="dtvKey('back')">BACK</button>
+        </div>
+
+        <!-- Power On/Off -->
+        <div class="dtv-power-row">
+            <button class="dtv-pwr-btn dtv-pwr-on" onclick="dtvPowerOn()">TV ON</button>
+            <button class="dtv-pwr-btn dtv-pwr-off" onclick="dtvPowerOff()">TV OFF</button>
+        </div>
+
+        <div class="dtv-close-hint">Tap outside to close</div>
+    </div>
+</div>
+
+<!-- Warning overlay -->
+<div id="warn-overlay" class="warn-overlay">
+    <div class="warn-box">
+        <div class="warn-title">Advanced Settings</div>
+        <div class="warn-text">These settings control TV receiver and Roku IP addresses. Don't change them unless you know what you're doing.</div>
+        <button class="warn-btn warn-btn-ok" onclick="proceedManageTVs()">I Understand</button>
+        <button class="warn-btn warn-btn-cancel" onclick="closeWarning()">Cancel</button>
+    </div>
+</div>
+
+<!-- Drawer: Put On TV -->
+<div id="drawer-put-on-tv" class="drawer">
+    <span class="drawer-handle"></span>
+    <div class="drawer-title">
+        <span>Put On TV</span>
+        <button class="drawer-cancel" onclick="closeDrawers()">Cancel</button>
+    </div>
+    <div class="drawer-game-info" id="drawer-game-label"></div>
+    <div class="tv-btn-list" id="drawer-tv-list"></div>
+    <div class="drawer-done-bar" id="drawer-done-bar" style="display:none">
+        <button class="drawer-done-btn" id="drawer-done-btn" disabled onclick="tuneDoneSelected()">Done</button>
+    </div>
+</div>
+
+<!-- Drawer: Manage TVs -->
+<div id="drawer-manage-tvs" class="drawer">
+    <span class="drawer-handle"></span>
+    <div class="drawer-title">
+        <span>Manage TVs</span>
+        <button class="drawer-cancel" onclick="closeDrawers()">Done</button>
+    </div>
+    <div style="padding:0 16px 16px" id="manage-tv-list"></div>
+</div>
+
+<!-- Drawer: YouTube TV Channel Picker -->
+<div id="drawer-yttv" class="drawer dark">
+    <span class="drawer-handle"></span>
+    <div class="drawer-title">
+        <span style="color:#FF0000">YouTube TV</span>
+        <button class="drawer-cancel" onclick="closeDrawers()">Cancel</button>
+    </div>
+    <div id="yttv-tv-label" style="padding:0 16px 8px;font-size:12px;color:#8E8E93"></div>
+    <div style="padding:0 16px 16px" id="yttv-channel-list"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+(function(){
+// ═══════════════════════════════════════════════════
+// GLOBALS
+// ═══════════════════════════════════════════════════
+var TAB_TITLES = {tvs:'TVs', specials:'Specials', venue:'Venue'};
+var tvList = [];
+var lightsData = null;
+
+// ═══════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════
+function switchTab(tabId) {
+    document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active')});
+    document.querySelectorAll('.nav-tab').forEach(function(t){t.classList.remove('active')});
+    document.getElementById('panel-'+tabId).classList.add('active');
+    document.querySelector('[data-tab="'+tabId+'"]').classList.add('active');
+    document.getElementById('header-title').textContent = TAB_TITLES[tabId];
+    document.body.className = (tabId !== 'tvs') ? 'dark-tab' : '';
+    if(tabId === 'venue') loadVenueData();
+    try { localStorage.setItem('rn_staff_tab', tabId); } catch(e){}
+}
+window.switchTab = switchTab;
+try { var _savedTab = localStorage.getItem('rn_staff_tab'); if(_savedTab && document.getElementById('panel-'+_savedTab)) switchTab(_savedTab); } catch(e){}
+
+// Pull-to-refresh on venue panel
+(function(){
+    var panel = document.getElementById('panel-venue');
+    var indicator = document.getElementById('pull-indicator');
+    var startY = 0, pulling = false;
+    panel.addEventListener('touchstart', function(e){
+        if(panel.scrollTop === 0) { startY = e.touches[0].clientY; pulling = true; }
+    }, {passive:true});
+    panel.addEventListener('touchmove', function(e){
+        if(!pulling) return;
+        var dy = e.touches[0].clientY - startY;
+        if(dy > 50) { indicator.classList.add('visible'); indicator.textContent = '↑ Release to refresh'; }
+        else if(dy > 0) { indicator.classList.add('visible'); indicator.textContent = '↓ Pull to refresh'; }
+        else { indicator.classList.remove('visible'); }
+    }, {passive:true});
+    panel.addEventListener('touchend', function(){
+        if(!pulling) return;
+        pulling = false;
+        if(indicator.classList.contains('visible') && indicator.textContent.indexOf('Release') >= 0) {
+            indicator.textContent = 'Refreshing…';
+            loadSonos();
+            loadSonosFavorites();
+            loadSonosServices();
+            setTimeout(function(){ indicator.classList.remove('visible'); }, 1200);
+        } else {
+            indicator.classList.remove('visible');
+        }
+    }, {passive:true});
+})();
+
+// ═══════════════════════════════════════════════════
+// DRAWERS
+// ═══════════════════════════════════════════════════
+function openDrawer(id) {
+    document.getElementById('overlay').classList.add('visible');
+    var d = document.getElementById(id);
+    d.style.display = 'block';
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ d.classList.add('open'); }); });
+}
+function closeDrawers() {
+    document.querySelectorAll('.drawer').forEach(function(d){d.classList.remove('open')});
+    document.getElementById('overlay').classList.remove('visible');
+    setTimeout(function(){
+        document.querySelectorAll('.drawer').forEach(function(d){ if(!d.classList.contains('open')) d.style.display=''; });
+    }, 300);
+}
+window.openDrawer = openDrawer;
+window.closeDrawers = closeDrawers;
+
+// ═══════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════
+function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 2800);
+}
+window.showToast = showToast;
+
+// ═══════════════════════════════════════════════════
+// TV LIST + ROKU APPS
+// ═══════════════════════════════════════════════════
+var rokuAppIds = {};
+var autotunes = [];
+var yttvChannels = {};
+fetch('/staff/api/tvs').then(function(r){return r.json()}).then(function(data){
+    tvList = data;
+    updateBadges();
+}).catch(function(){});
+fetch('/staff/api/roku/apps').then(function(r){return r.json()}).then(function(data){
+    rokuAppIds = data;
+}).catch(function(){});
+fetch('/staff/api/yttv/channels').then(function(r){return r.json()}).then(function(data){
+    yttvChannels = data.channels || {};
+}).catch(function(){});
+function loadAutotunes() {
+    fetch('/staff/api/autotune').then(function(r){return r.json()}).then(function(data){
+        autotunes = data;
+        updateBadges();
+    }).catch(function(){});
+}
+loadAutotunes();
+setInterval(function(){ loadAutotunes(); }, 30000);
+setInterval(function(){
+    fetch('/staff/api/tvs').then(function(r){return r.json()}).then(function(data){
+        tvList = data; updateBadges();
+    }).catch(function(){});
+}, 30000);
+
+// ═══════════════════════════════════════════════════
+// GAME ROW TAP → TUNE TV DRAWER (multi-select)
+// ═══════════════════════════════════════════════════
+var selectedTVs = [];
+var drawerTuneCtx = {};  // stash channels/streaming/label for DONE button
+
+function updateDoneBtn() {
+    var bar = document.getElementById('drawer-done-bar');
+    var btn = document.getElementById('drawer-done-btn');
+    if(selectedTVs.length > 0) {
+        bar.style.display = '';
+        btn.disabled = false;
+        btn.textContent = selectedTVs.length === 1 ? 'Tune 1 TV' : 'Tune ' + selectedTVs.length + ' TVs';
+    } else {
+        btn.disabled = true;
+        btn.textContent = 'Done';
+    }
+}
+
+window.tuneDoneSelected = function() {
+    var ctx = drawerTuneCtx;
+    var count = selectedTVs.length;
+    var chDisplay = ctx.chName ? ctx.chName + ' ' + ctx.ch : (ctx.streaming ? ctx.streaming.display : '');
+    closeDrawers();
+    showToast('Tuning ' + count + ' TV' + (count > 1 ? 's' : '') + ' \u2192 ' + chDisplay);
+    selectedTVs.forEach(function(tv){
+        tuneTV(tv, ctx.ch, ctx.chName, ctx.streaming, true);
+    });
+    selectedTVs = [];
+};
+
+document.querySelectorAll('.game-data').forEach(function(row){
+    row.classList.add('tappable');
+    row.addEventListener('click', function(){
+        if(row.classList.contains('game-final')) return;
+        var away = row.getAttribute('data-away') || '';
+        var home = row.getAttribute('data-home') || '';
+        var channels = [];
+        try { channels = JSON.parse(row.getAttribute('data-channels') || '[]'); } catch(e){}
+        var streaming = null;
+        try { streaming = JSON.parse(row.getAttribute('data-streaming') || 'null'); } catch(e){}
+        var startTs = parseInt(row.getAttribute('data-start-ts') || '0');
+        var gameId = makeGameId(row);
+
+        var label = away + ' vs ' + home;
+        var chText = '';
+        if(channels.length > 0 && channels[0].drtv) {
+            chText = channels.map(function(c){return c.name + ' ' + c.drtv}).join(', ');
+        } else if(streaming) {
+            chText = streaming.display + (streaming.app ? ' · ' + streaming.app : '');
+        }
+
+        var isStreamingOnly = (!channels.length || !channels[0].drtv) && streaming;
+        var isFuture = startTs && startTs > Math.floor(Date.now()/1000);
+
+        // Stash context for DONE button
+        selectedTVs = [];
+        drawerTuneCtx = {
+            ch: channels.length > 0 ? channels[0].drtv : '',
+            chName: channels.length > 0 ? channels[0].name : '',
+            streaming: streaming,
+            label: label
+        };
+
+        document.getElementById('drawer-game-label').innerHTML =
+            '<div><div style="font-weight:600">'+label+'</div>' +
+            (chText ? '<div style="font-size:12px;color:#8E8E93;margin-top:2px">'+chText+'</div>' : '') +
+            '</div>';
+
+        var list = document.getElementById('drawer-tv-list');
+        list.innerHTML = '';
+
+        // Show DONE bar, reset state
+        var doneBar = document.getElementById('drawer-done-bar');
+        doneBar.style.display = '';
+        updateDoneBtn();
+
+        tvList.forEach(function(tv){
+            var btn = document.createElement('button');
+            btn.className = 'tv-btn';
+            var hasRoku = !!tv.roku_ip;
+            var hasDtv = !!tv.dtv_ip;
+            var rokuBadge = hasRoku ? '<span class="roku-dot"></span>' : '';
+            btn.innerHTML = '<span>'+tv.name+rokuBadge+'</span><span class="tv-ch">'+(tv.channel || 'Off')+'</span>';
+
+            // Grey out non-Roku TVs for streaming-only games
+            if(isStreamingOnly && !hasRoku) {
+                btn.disabled = true;
+                btn.style.opacity = '0.35';
+                btn.style.cursor = 'default';
+            }
+
+            // Toggle-select on tap
+            btn.onclick = function(){
+                if(btn.disabled) return;
+                var idx = -1;
+                for(var i = 0; i < selectedTVs.length; i++) {
+                    if(selectedTVs[i].id === tv.id) { idx = i; break; }
+                }
+                if(idx >= 0) {
+                    selectedTVs.splice(idx, 1);
+                    btn.classList.remove('selected');
+                } else {
+                    selectedTVs.push(tv);
+                    btn.classList.add('selected');
+                }
+                updateDoneBtn();
+            };
+
+            // Wrap in a row with auto-tune button for future games
+            if(isFuture && !btn.disabled) {
+                var wrapper = document.createElement('div');
+                wrapper.className = 'tv-btn-row';
+                wrapper.appendChild(btn);
+                var isScheduled = hasAutotune(tv.id, gameId);
+                var atBtn = document.createElement('button');
+                atBtn.className = 'at-btn' + (isScheduled ? ' at-cancel' : '');
+                atBtn.textContent = isScheduled ? '✕' : '\u23F0';
+                atBtn.onclick = function(e){
+                    e.stopPropagation();
+                    if(hasAutotune(tv.id, gameId)) {
+                        cancelAutotune(tv.id, gameId);
+                        closeDrawers();
+                    } else {
+                        var ch = channels.length > 0 ? channels[0].drtv : '';
+                        var isStreamOnly = isStreamingOnly;
+                        scheduleAutotune(tv, gameId, ch || '', startTs, label, !!isStreamOnly, isStreamOnly ? (streaming.display || '') : '');
+                        closeDrawers();
+                    }
+                };
+                wrapper.appendChild(atBtn);
+                list.appendChild(wrapper);
+            } else {
+                list.appendChild(btn);
+            }
+        });
+
+        openDrawer('drawer-put-on-tv');
+    });
+});
+
+// ═══════════════════════════════════════════════════
+// TUNE TV — Paired DirecTV + Roku control
+// ═══════════════════════════════════════════════════
+function tuneTV(tv, channelNum, channelName, streaming, silent) {
+    // Auto-wake TV before any tuning (Roku or Samsung)
+    if(tv.roku_ip) {
+        fetch('/staff/api/roku/command', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({roku_ip: tv.roku_ip, command: 'power_on'})
+        }).catch(function(){});
+    } else if(tv.samsung_ip) {
+        fetch('/staff/api/samsung/command', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({samsung_ip: tv.samsung_ip, command: 'power_on'})
+        }).catch(function(){});
+    }
+
+    // Case 1: DTV channel — tune the DirecTV box
+    if(channelNum && tv.dtv_ip) {
+        if(!silent) showToast('Tuning ' + tv.name + ' → ' + (channelName || 'ch ' + channelNum));
+        fetch('/staff/api/dtv/tune', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({dtv_ip: tv.dtv_ip, channel: channelNum})
+        }).then(function(r){ return r.json(); })
+        .then(function(d){
+            if(d.status === 'ok') {
+                tv.channel = channelNum;
+                updateBadges();
+                // Switch to HDMI1 input for DirecTV (Roku or Samsung)
+                if(tv.roku_ip) {
+                    var hdmiCmd = {roku_ip: tv.roku_ip, command: 'hdmi1'};
+                    var hdmiOpts = {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hdmiCmd)};
+                    fetch('/staff/api/roku/command', hdmiOpts).catch(function(){});
+                    setTimeout(function(){
+                        fetch('/staff/api/roku/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hdmiCmd)}).catch(function(){});
+                    }, 5000);
+                } else if(tv.samsung_ip) {
+                    var sCmd = {samsung_ip: tv.samsung_ip, command: 'hdmi1'};
+                    var sOpts = {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sCmd)};
+                    fetch('/staff/api/samsung/command', sOpts).catch(function(){});
+                    setTimeout(function(){
+                        fetch('/staff/api/samsung/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sCmd)}).catch(function(){});
+                    }, 5000);
+                }
+            } else {
+                showToast('Tune failed: ' + (d.message || 'unknown'));
+            }
+        }).catch(function(){ showToast('Tune failed — network error'); });
+    }
+    // Case 2: Streaming game — launch app on Roku
+    else if(streaming && tv.roku_ip) {
+        var appName = streaming.app || streaming.display || '';
+        var appId = rokuAppIds[appName] || rokuAppIds[streaming.display] || '';
+        if(appId) {
+            if(!silent) showToast('Launching ' + streaming.display + ' on ' + tv.name);
+            tv.channel = streaming.display || appName;
+            fetch('/staff/api/roku/command', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({roku_ip: tv.roku_ip, command: 'launch_app', app_id: appId})
+            }).then(function(r){ return r.json(); })
+            .then(function(d){
+                if(d.status !== 'ok') showToast('Launch failed');
+                else updateBadges();
+            }).catch(function(){ showToast('Launch failed — network error'); });
+        } else {
+            showToast('No app mapping for ' + (streaming.display || 'this service'));
+        }
+    }
+    // Case 3: Streaming game but TV has no Roku
+    else if(streaming && !tv.roku_ip) {
+        showToast(tv.name + ' has no Roku — pick a Roku TV');
+    }
+    // Case 4: No channel info at all
+    else if(!channelNum && !streaming) {
+        showToast('No channel info for this game');
+    }
+    // Case 5: Has channel but no DTV IP configured
+    else {
+        showToast(tv.name + ' — no DirecTV IP configured');
+    }
+}
+
+// ═══════════════════════════════════════════════════
+// MANAGE TVs — IP Configuration
+// ═══════════════════════════════════════════════════
+function openManageTVs() {
+    var list = document.getElementById('manage-tv-list');
+    list.innerHTML = '';
+    tvList.forEach(function(tv){
+        var card = document.createElement('div');
+        card.className = 'tv-config-card';
+        card.innerHTML =
+            '<label>' + tv.name + '</label>' +
+            '<div class="tv-ip-label">DirecTV Receiver IP</div>' +
+            '<input type="text" inputmode="decimal" placeholder="e.g. 192.168.1.101" value="' + (tv.dtv_ip || '') + '" data-id="' + tv.id + '" data-field="dtv_ip">' +
+            '<div class="tv-ip-label">Roku TV IP <span style="color:#C7C7CC;font-weight:400">(if Roku)</span></div>' +
+            '<input type="text" inputmode="decimal" placeholder="e.g. 192.168.1.201" value="' + (tv.roku_ip || '') + '" data-id="' + tv.id + '" data-field="roku_ip">' +
+            '<div class="tv-ip-label">Samsung TV IP <span style="color:#C7C7CC;font-weight:400">(if Samsung)</span></div>' +
+            '<input type="text" inputmode="decimal" placeholder="e.g. 192.168.1.201" value="' + (tv.samsung_ip || '') + '" data-id="' + tv.id + '" data-field="samsung_ip">';
+        list.appendChild(card);
+    });
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'tv-config-save';
+    saveBtn.textContent = 'Save';
+    saveBtn.onclick = saveTVConfig;
+    list.appendChild(saveBtn);
+    openDrawer('drawer-manage-tvs');
+}
+
+function saveTVConfig() {
+    var inputs = document.querySelectorAll('#manage-tv-list input');
+    inputs.forEach(function(inp){
+        var id = inp.getAttribute('data-id');
+        var field = inp.getAttribute('data-field');
+        var tv = tvList.find(function(t){ return t.id === id; });
+        if(tv) tv[field] = inp.value.trim();
+    });
+    fetch('/staff/api/tvs', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(tvList)
+    }).then(function(r){ return r.json(); })
+    .then(function(d){
+        if(d.status === 'ok') { showToast('TVs saved'); closeDrawers(); }
+        else showToast('Save failed');
+    }).catch(function(){ showToast('Save failed'); });
+}
+window.saveTVConfig = saveTVConfig;
+
+// ═══════════════════════════════════════════════════
+// WHAT'S ON OVERLAY
+// ═══════════════════════════════════════════════════
+function showWhatsOn() {
+    var cards = document.getElementById('wo-cards');
+    cards.innerHTML = '';
+    tvList.forEach(function(tv){
+        var card = document.createElement('div');
+        var hasDtv = !!tv.dtv_ip;
+        card.className = 'wo-card' + (hasDtv ? '' : ' wo-no-dtv');
+        var ch = tv.channel || '';
+        var gameName = ch ? findGameForChannel(ch) : '';
+        card.innerHTML =
+            '<div class="wo-tv-name">'+tv.name+'</div>' +
+            '<div class="wo-channel '+(ch ? '' : 'wo-off')+'">'+(ch || 'OFF')+'</div>' +
+            (gameName ? '<div class="wo-game">'+gameName+'</div>' : '') +
+            (hasDtv ? '<div style="color:#007AFF;font-size:10px;margin-top:6px;font-weight:600">TAP FOR REMOTE</div>' : '');
+        if(hasDtv) {
+            (function(t){ card.onclick = function(){ openDtvRemote(t); }; })(tv);
+        }
+        // YouTube TV button for Roku TVs
+        if(tv.roku_ip) {
+            var ytBtn = document.createElement('button');
+            ytBtn.className = 'wo-yttv-btn';
+            ytBtn.textContent = 'YouTube TV';
+            (function(t){
+                ytBtn.onclick = function(e){
+                    e.stopPropagation();
+                    openYttvPicker(t);
+                };
+            })(tv);
+            card.appendChild(ytBtn);
+        }
+        cards.appendChild(card);
+    });
+    document.getElementById('wo-overlay').classList.add('visible');
+}
+function closeWhatsOn() {
+    document.getElementById('wo-overlay').classList.remove('visible');
+}
+window.showWhatsOn = showWhatsOn;
+window.closeWhatsOn = closeWhatsOn;
+
+// ═══════════════════════════════════════════════════
+// YOUTUBE TV CHANNEL PICKER
+// ═══════════════════════════════════════════════════
+function openYttvPicker(tv) {
+    document.getElementById('yttv-tv-label').textContent = tv.name;
+    var list = document.getElementById('yttv-channel-list');
+    list.innerHTML = '';
+
+    // "Just launch" button (no deep link)
+    var launchBtn = document.createElement('button');
+    launchBtn.className = 'yttv-ch-btn';
+    launchBtn.style.background = '#FF0000';
+    launchBtn.innerHTML = '<span>Launch YouTube TV</span><span class="yttv-ch-label">home screen</span>';
+    launchBtn.onclick = function(){ launchYttv(tv, '', 'YouTube TV'); };
+    list.appendChild(launchBtn);
+
+    // Channel buttons
+    var names = Object.keys(yttvChannels);
+    names.sort();
+    names.forEach(function(name){
+        var btn = document.createElement('button');
+        btn.className = 'yttv-ch-btn';
+        btn.innerHTML = '<span>'+name+'</span><span class="yttv-ch-label">'+yttvChannels[name]+'</span>';
+        btn.onclick = function(){ launchYttv(tv, yttvChannels[name], name); };
+        list.appendChild(btn);
+    });
+
+    if(names.length === 0) {
+        var empty = document.createElement('div');
+        empty.className = 'yttv-empty';
+        empty.textContent = 'No channels configured yet. Add one below.';
+        list.appendChild(empty);
+    }
+
+    // Add channel section
+    var addSec = document.createElement('div');
+    addSec.className = 'yttv-cookies-section';
+    addSec.innerHTML = '<div style="font-size:11px;color:#8E8E93;font-weight:600;text-transform:uppercase;letter-spacing:.3px">Add / Update Channel</div>' +
+        '<div style="font-size:11px;color:#636366;margin-top:4px">Go to tv.youtube.com/live, click a channel, copy the URL</div>' +
+        '<input class="yttv-cookies-input" id="yttv-add-name" placeholder="Channel name (e.g. ESPN)" style="min-height:auto;padding:10px 12px;resize:none">' +
+        '<input class="yttv-cookies-input" id="yttv-add-url" placeholder="Paste URL from tv.youtube.com/watch/..." style="min-height:auto;padding:10px 12px;resize:none">' +
+        '<button class="yttv-cookies-save" onclick="saveYttvChannel()">Add Channel</button>';
+    list.appendChild(addSec);
+
+    closeWhatsOn();
+    openDrawer('drawer-yttv');
+}
+
+function launchYttv(tv, videoId, label) {
+    closeDrawers();
+    var appId = rokuAppIds['YouTube TV'] || '195316';
+    var msg = videoId ? ('Tuning ' + tv.name + ' \u2192 ' + label) : ('Launching YouTube TV on ' + tv.name);
+    showToast(msg);
+
+    // Wake TV
+    fetch('/staff/api/roku/command', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({roku_ip: tv.roku_ip, command: 'power_on'})
+    }).catch(function(){});
+
+    // Launch with optional deep link
+    var launchBody = {roku_ip: tv.roku_ip, command: 'launch_app', app_id: appId};
+    if(videoId) {
+        launchBody.content_id = videoId;
+        launchBody.media_type = 'live';
+    }
+    fetch('/staff/api/roku/command', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(launchBody)
+    }).then(function(r){ return r.json(); })
+    .then(function(d){
+        if(d.status === 'ok') {
+            tv.channel = label || 'YouTube TV';
+            updateBadges();
+        } else {
+            showToast('Launch failed');
+        }
+    }).catch(function(){ showToast('Launch failed \u2014 network error'); });
+}
+
+window.saveYttvChannel = function(){
+    var name = document.getElementById('yttv-add-name').value.trim();
+    var url = document.getElementById('yttv-add-url').value.trim();
+    if(!name) { showToast('Enter channel name'); return; }
+    if(!url) { showToast('Paste the URL'); return; }
+    fetch('/staff/api/yttv/channels', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, url: url})
+    }).then(function(r){ return r.json(); })
+    .then(function(d){
+        if(d.ok) {
+            yttvChannels = d.channels;
+            showToast(name + ' saved');
+            document.getElementById('yttv-add-name').value = '';
+            document.getElementById('yttv-add-url').value = '';
+        } else {
+            showToast(d.error || 'Failed');
+        }
+    }).catch(function(){ showToast('Save failed'); });
+};
+
+// ═══════════════════════════════════════════════════
+// DTV REMOTE
+// ═══════════════════════════════════════════════════
+var dtvRemoteTv = null;
+var dtvChBuffer = '';
+
+function openDtvRemote(tv) {
+    dtvRemoteTv = tv;
+    dtvChBuffer = '';
+    document.getElementById('dtv-remote-name').textContent = tv.name;
+    updateDtvDisplay();
+    document.getElementById('dtv-remote').classList.add('visible');
+}
+function closeDtvRemote() {
+    document.getElementById('dtv-remote').classList.remove('visible');
+    dtvRemoteTv = null;
+    dtvChBuffer = '';
+    // Refresh What's On cards to show updated channels
+    showWhatsOn();
+}
+function updateDtvDisplay() {
+    var el = document.getElementById('dtv-ch-display');
+    if(dtvChBuffer) {
+        el.className = 'dtv-ch-num';
+        el.innerHTML = dtvChBuffer + '<span class="dtv-ch-cursor"></span>';
+    } else {
+        el.className = 'dtv-ch-num empty';
+        el.innerHTML = '---';
+    }
+}
+function dtvDigit(d) {
+    if(dtvChBuffer.length >= 4) return;
+    dtvChBuffer += d;
+    updateDtvDisplay();
+}
+function dtvClear() {
+    dtvChBuffer = '';
+    updateDtvDisplay();
+}
+function dtvEnter() {
+    if(!dtvChBuffer || !dtvRemoteTv) return;
+    var ch = dtvChBuffer;
+    var tv = dtvRemoteTv;
+    showToast('Tuning ' + tv.name + ' → ch ' + ch);
+    // Wake TV first (Roku or Samsung)
+    if(tv.roku_ip) {
+        fetch('/staff/api/roku/command', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({roku_ip: tv.roku_ip, command: 'power_on'})
+        }).catch(function(){});
+    } else if(tv.samsung_ip) {
+        fetch('/staff/api/samsung/command', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({samsung_ip: tv.samsung_ip, command: 'power_on'})
+        }).catch(function(){});
+    }
+    fetch('/staff/api/dtv/tune', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({dtv_ip: tv.dtv_ip, channel: ch})
+    }).then(function(r){ return r.json(); })
+    .then(function(d){
+        if(d.status === 'ok') {
+            tv.channel = ch;
+            updateBadges();
+            if(tv.roku_ip) {
+                var hdmiCmd = {roku_ip: tv.roku_ip, command: 'hdmi1'};
+                fetch('/staff/api/roku/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hdmiCmd)}).catch(function(){});
+                setTimeout(function(){
+                    fetch('/staff/api/roku/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hdmiCmd)}).catch(function(){});
+                }, 5000);
+            } else if(tv.samsung_ip) {
+                var sCmd = {samsung_ip: tv.samsung_ip, command: 'hdmi1'};
+                fetch('/staff/api/samsung/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sCmd)}).catch(function(){});
+                setTimeout(function(){
+                    fetch('/staff/api/samsung/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sCmd)}).catch(function(){});
+                }, 5000);
+            }
+        } else {
+            showToast('Tune failed: ' + (d.message || 'unknown'));
+        }
+    }).catch(function(){ showToast('Tune failed — network error'); });
+    dtvChBuffer = '';
+    updateDtvDisplay();
+}
+function dtvKey(key) {
+    if(!dtvRemoteTv) return;
+    fetch('/staff/api/dtv/key', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({dtv_ip: dtvRemoteTv.dtv_ip, key: key})
+    }).catch(function(){});
+}
+function dtvPowerOn() {
+    if(!dtvRemoteTv) return;
+    if(dtvRemoteTv.roku_ip) {
+        fetch('/staff/api/roku/command', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({roku_ip: dtvRemoteTv.roku_ip, command: 'power_on'})
+        }).catch(function(){});
+    } else if(dtvRemoteTv.samsung_ip) {
+        fetch('/staff/api/samsung/command', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({samsung_ip: dtvRemoteTv.samsung_ip, command: 'power_on'})
+        }).catch(function(){});
+    }
+    showToast(dtvRemoteTv.name + ' powering on');
+}
+function dtvPowerOff() {
+    if(!dtvRemoteTv) return;
+    if(dtvRemoteTv.roku_ip) {
+        fetch('/staff/api/roku/command', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({roku_ip: dtvRemoteTv.roku_ip, command: 'power_off'})
+        }).then(function(){
+            dtvRemoteTv.channel = '';
+            updateBadges();
+        }).catch(function(){});
+    } else if(dtvRemoteTv.samsung_ip) {
+        fetch('/staff/api/samsung/command', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({samsung_ip: dtvRemoteTv.samsung_ip, command: 'power_off'})
+        }).then(function(){
+            dtvRemoteTv.channel = '';
+            updateBadges();
+        }).catch(function(){});
+    }
+    showToast(dtvRemoteTv.name + ' powering off');
+}
+window.openDtvRemote = openDtvRemote;
+window.closeDtvRemote = closeDtvRemote;
+window.dtvDigit = dtvDigit;
+window.dtvClear = dtvClear;
+window.dtvEnter = dtvEnter;
+window.dtvKey = dtvKey;
+window.dtvPowerOn = dtvPowerOn;
+window.dtvPowerOff = dtvPowerOff;
+
+function findGameForChannel(ch) {
+    var chStr = String(ch);
+    var rows = document.querySelectorAll('.game-data');
+    for(var i = 0; i < rows.length; i++) {
+        var channels = [];
+        try { channels = JSON.parse(rows[i].getAttribute('data-channels') || '[]'); } catch(e){}
+        for(var j = 0; j < channels.length; j++) {
+            if(String(channels[j].drtv) === chStr || String(channels[j].name) === chStr) {
+                return (rows[i].getAttribute('data-away') || '') + ' vs ' + (rows[i].getAttribute('data-home') || '');
+            }
+        }
+        // Check streaming match
+        var streaming = null;
+        try { streaming = JSON.parse(rows[i].getAttribute('data-streaming') || 'null'); } catch(e){}
+        if(streaming && (chStr === streaming.display || chStr === streaming.app)) {
+            return (rows[i].getAttribute('data-away') || '') + ' vs ' + (rows[i].getAttribute('data-home') || '');
+        }
+    }
+    return '';
+}
+
+// ═══════════════════════════════════════════════════
+// ALL OFF — Power down all Roku TVs
+// ═══════════════════════════════════════════════════
+function allTvsOff() {
+    if(!confirm('Power off ALL TVs?')) return;
+    var count = 0;
+    tvList.forEach(function(tv){
+        if(tv.roku_ip) {
+            count++;
+            fetch('/staff/api/roku/command', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({roku_ip: tv.roku_ip, command: 'power_off'})
+            }).catch(function(){});
+            tv.channel = '';
+        } else if(tv.samsung_ip) {
+            count++;
+            fetch('/staff/api/samsung/command', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({samsung_ip: tv.samsung_ip, command: 'power_off'})
+            }).catch(function(){});
+            tv.channel = '';
+        }
+    });
+    // Persist cleared channels to server
+    fetch('/staff/api/tvs', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(tvList)
+    }).catch(function(){});
+    showToast(count + ' TVs powering off');
+    closeWhatsOn();
+    updateBadges();
+}
+window.allTvsOff = allTvsOff;
+
+// ═══════════════════════════════════════════════════
+// TV BADGES ON GAME ROWS
+// ═══════════════════════════════════════════════════
+function makeGameId(row) {
+    var away = row.getAttribute('data-away') || '';
+    var home = row.getAttribute('data-home') || '';
+    var ts = row.getAttribute('data-start-ts') || '0';
+    return away + '_vs_' + home + '_' + ts;
+}
+function updateBadges() {
+    document.querySelectorAll('.tv-on-badges').forEach(function(b){ b.remove(); });
+    document.querySelectorAll('.game-data').forEach(function(row){
+        var channels = [];
+        try { channels = JSON.parse(row.getAttribute('data-channels') || '[]'); } catch(e){}
+        var streaming = null;
+        try { streaming = JSON.parse(row.getAttribute('data-streaming') || 'null'); } catch(e){}
+        var gameId = makeGameId(row);
+        var startTs = parseInt(row.getAttribute('data-start-ts') || '0');
+        var now = Math.floor(Date.now()/1000);
+        var isFuture = startTs && startTs > now;
+        var isFinal = row.classList.contains('game-final');
+        var matchedTvs = [];
+        if(!isFuture && !isFinal) {
+            tvList.forEach(function(tv){
+                if(!tv.channel) return;
+                for(var i = 0; i < channels.length; i++) {
+                    if(String(channels[i].drtv) === String(tv.channel)) {
+                        matchedTvs.push(tv.name);
+                        return;
+                    }
+                }
+                if(streaming && (tv.channel === streaming.display || tv.channel === streaming.app)) {
+                    matchedTvs.push(tv.name);
+                }
+            });
+        }
+        var atTvs = [];
+        autotunes.forEach(function(at){
+            if(at.game_id === gameId && !at.fired) atTvs.push(at.tv_name);
+        });
+        if(matchedTvs.length > 0 || atTvs.length > 0) {
+            var chCell = row.querySelector('.td-ch');
+            if(chCell) {
+                var div = document.createElement('div');
+                div.className = 'tv-on-badges';
+                matchedTvs.forEach(function(name){
+                    var badge = document.createElement('span');
+                    badge.className = 'tv-on-badge';
+                    badge.textContent = name;
+                    div.appendChild(badge);
+                });
+                atTvs.forEach(function(name){
+                    if(matchedTvs.indexOf(name) !== -1) return;
+                    var badge = document.createElement('span');
+                    badge.className = 'tv-on-badge tv-at-badge';
+                    badge.textContent = name + ' \u23F0';
+                    div.appendChild(badge);
+                });
+                chCell.appendChild(div);
+            }
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════════
+// AUTO-TUNE SCHEDULING
+// ═══════════════════════════════════════════════════
+function hasAutotune(tvId, gameId) {
+    return autotunes.some(function(at){
+        return at.tv_id === tvId && at.game_id === gameId && !at.fired;
+    });
+}
+function scheduleAutotune(tv, gameId, channel, startTs, gameLabel, isStream, streamName) {
+    fetch('/staff/api/autotune', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            tv_id: tv.id, game_id: gameId, channel: channel,
+            start_ts: startTs, game_label: gameLabel, tv_name: tv.name,
+            is_stream: isStream || false, stream_name: streamName || ''
+        })
+    }).then(function(r){return r.json()}).then(function(d){
+        if(d.ok) { showToast('Auto-tune set: ' + tv.name + ' at game time'); loadAutotunes(); }
+    }).catch(function(){ showToast('Failed to schedule'); });
+}
+function cancelAutotune(tvId, gameId) {
+    fetch('/staff/api/autotune', {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tv_id: tvId, game_id: gameId})
+    }).then(function(r){return r.json()}).then(function(d){
+        if(d.ok) { showToast('Auto-tune cancelled'); loadAutotunes(); }
+    }).catch(function(){ showToast('Failed to cancel'); });
+}
+
+// ═══════════════════════════════════════════════════
+// MANAGE TVs — with warning
+// ═══════════════════════════════════════════════════
+function showManageWarning() {
+    document.getElementById('warn-overlay').classList.add('visible');
+}
+function proceedManageTVs() {
+    document.getElementById('warn-overlay').classList.remove('visible');
+    openManageTVs();
+}
+function closeWarning() {
+    document.getElementById('warn-overlay').classList.remove('visible');
+}
+window.openManageTVs = openManageTVs;
+window.showManageWarning = showManageWarning;
+window.proceedManageTVs = proceedManageTVs;
+window.closeWarning = closeWarning;
+
+// ═══════════════════════════════════════════════════
+// TEAM LOGO ENGINE (from sports guide)
+// ═══════════════════════════════════════════════════
+var PRO={
+    "hawks":"nba/500/atl","celtics":"nba/500/bos","nets":"nba/500/bkn","hornets":"nba/500/cha",
+    "bulls":"nba/500/chi","cavaliers":"nba/500/cle","cavs":"nba/500/cle",
+    "mavericks":"nba/500/dal","mavs":"nba/500/dal","nuggets":"nba/500/den",
+    "pistons":"nba/500/det","warriors":"nba/500/gs","rockets":"nba/500/hou","pacers":"nba/500/ind",
+    "clippers":"nba/500/lac","lakers":"nba/500/lal","grizzlies":"nba/500/mem","heat":"nba/500/mia",
+    "bucks":"nba/500/mil","timberwolves":"nba/500/min","pelicans":"nba/500/no","knicks":"nba/500/ny",
+    "thunder":"nba/500/okc","magic":"nba/500/orl","76ers":"nba/500/phi","suns":"nba/500/phx",
+    "trail blazers":"nba/500/por","blazers":"nba/500/por","kings":"nba/500/sac","spurs":"nba/500/sa",
+    "raptors":"nba/500/tor","jazz":"nba/500/utah","wizards":"nba/500/wsh",
+    "diamondbacks":"mlb/500/ari","d-backs":"mlb/500/ari","braves":"mlb/500/atl","orioles":"mlb/500/bal",
+    "red sox":"mlb/500/bos","cubs":"mlb/500/chc","white sox":"mlb/500/chw","reds":"mlb/500/cin",
+    "guardians":"mlb/500/cle","rockies":"mlb/500/col","tigers":"mlb/500/det","astros":"mlb/500/hou",
+    "royals":"mlb/500/kc","angels":"mlb/500/laa","dodgers":"mlb/500/lad","marlins":"mlb/500/mia",
+    "brewers":"mlb/500/mil","twins":"mlb/500/min","mets":"mlb/500/nym","yankees":"mlb/500/nyy",
+    "athletics":"mlb/500/oak","phillies":"mlb/500/phi","pirates":"mlb/500/pit","padres":"mlb/500/sd",
+    "giants":"mlb/500/sf","mariners":"mlb/500/sea","cardinals":"mlb/500/stl","rays":"mlb/500/tb",
+    "rangers":"mlb/500/tex","blue jays":"mlb/500/tor","nationals":"mlb/500/wsh",
+    "ducks":"nhl/500/ana","coyotes":"nhl/500/ari","bruins":"nhl/500/bos","sabres":"nhl/500/buf",
+    "flames":"nhl/500/cgy","hurricanes":"nhl/500/car","blackhawks":"nhl/500/chi","avalanche":"nhl/500/col",
+    "blue jackets":"nhl/500/cbj","stars":"nhl/500/dal","red wings":"nhl/500/det","oilers":"nhl/500/edm",
+    "panthers":"nhl/500/fla","kraken":"nhl/500/sea","wild":"nhl/500/min","canadiens":"nhl/500/mtl",
+    "predators":"nhl/500/nsh","devils":"nhl/500/njd","islanders":"nhl/500/nyi",
+    "senators":"nhl/500/ott","flyers":"nhl/500/phi","penguins":"nhl/500/pit","sharks":"nhl/500/sj",
+    "blues":"nhl/500/stl","lightning":"nhl/500/tb","maple leafs":"nhl/500/tor","canucks":"nhl/500/van",
+    "golden knights":"nhl/500/vgk","capitals":"nhl/500/wsh","jets":"nhl/500/wpg",
+    "falcons":"nfl/500/atl","ravens":"nfl/500/bal","bills":"nfl/500/buf","bears":"nfl/500/chi",
+    "bengals":"nfl/500/cin","browns":"nfl/500/cle","cowboys":"nfl/500/dal","broncos":"nfl/500/den",
+    "lions":"nfl/500/det","packers":"nfl/500/gb","texans":"nfl/500/hou","colts":"nfl/500/ind",
+    "jaguars":"nfl/500/jax","chiefs":"nfl/500/kc","chargers":"nfl/500/lac","rams":"nfl/500/lar",
+    "dolphins":"nfl/500/mia","vikings":"nfl/500/min","patriots":"nfl/500/ne","saints":"nfl/500/no",
+    "commanders":"nfl/500/wsh","eagles":"nfl/500/phi","steelers":"nfl/500/pit","49ers":"nfl/500/sf",
+    "seahawks":"nfl/500/sea","buccaneers":"nfl/500/tb","titans":"nfl/500/ten"
+};
+var NCAA={
+    "alabama":333,"arizona":12,"arizona st":9,"arkansas":8,"auburn":2,"baylor":239,
+    "boston college":103,"boston col.":103,"byu":252,"cal":25,"charlotte":2429,
+    "cincinnati":2132,"clemson":228,"colorado":38,"uconn":41,"creighton":156,
+    "dartmouth":159,"delaware":48,"duke":150,"e. illinois":2197,"florida":57,
+    "florida atlantic":2226,"florida int.":2229,"florida int":2229,"florida st":52,
+    "georgetown":46,"georgia":61,"georgia tech":59,"gonzaga":2250,"harvard":108,
+    "high point":2314,"houston":248,"illinois":356,"indiana":84,"iowa":2294,"iowa st":66,
+    "iowa state":66,"jacksonville st":55,"kansas":2305,"kansas st":2306,"kentucky":96,
+    "lsu":99,"louisville":97,"marquette":269,"maryland":120,"memphis":235,
+    "miami":2390,"michigan":130,"michigan st":127,"michigan state":127,"minnesota":135,
+    "mississippi st":344,"missouri":142,"nc state":152,"nebraska":158,"north carolina":153,
+    "northwestern":77,"notre dame":87,"ohio st":194,"ohio state":194,"oklahoma":201,
+    "oklahoma st":197,"ole miss":145,"oregon":2483,"oregon st":204,"penn st":213,
+    "penn state":213,"pittsburgh":221,"presbyterian":2506,"providence":2507,
+    "purdue":2509,"rice":242,"rutgers":164,"sam houston":2534,"sam houston state":2534,
+    "seton hall":2550,"smu":2567,"south carolina":2579,"southern illinois":79,
+    "st. john's":2599,"st. mary's":2608,"stanford":24,"syracuse":183,"tcu":2628,
+    "temple":218,"tennessee":2633,"texas":251,"texas a&m":245,"texas tech":2641,
+    "tulane":2655,"ucf":2116,"ucla":26,"umass":113,"unc":153,"unlv":2439,"usc":30,
+    "utsa":2636,"vanderbilt":238,"villanova":222,"virginia":258,"virginia tech":259,
+    "wake forest":154,"washington":264,"washington st":265,"west virginia":277,
+    "wichita st":2724,"wichita state":2724,"wisconsin":275,"xavier":2752,
+    "bradley":71,"abilene christian":2000,"colorado st":36
+};
+var LEAGUE_LOGOS={
+    "mlb baseball":"https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png",
+    "nba basketball":"https://a.espncdn.com/i/teamlogos/leagues/500/nba.png",
+    "nhl hockey":"https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png",
+    "ncaa hockey":"https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-hockey.png",
+    "nfl football":"https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png",
+    "ncaa basketball":"https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-basketball.png",
+    "ncaa baseball":"https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-baseball.png",
+    "ncaa football":"https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png",
+    "nbagl basketball":"https://a.espncdn.com/i/teamlogos/leagues/500/nba.png",
+    "golf":"https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-golf.png",
+    "nascar auto racing":"https://a.espncdn.com/i/teamlogos/leagues/500/nascar.png",
+    "softball":"https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-softball.png",
+    "soccer":"https://a.espncdn.com/i/teamlogos/leagues/500/mls.png",
+    "boxing":"https://a.espncdn.com/i/teamlogos/leagues/500/pbc.png"
+};
+
+function findLogo(text, isNcaa){
+    var t=text.toLowerCase().replace(/^\(w\)/,'').replace(/^ncaa[a-z]*:\s*/i,'').replace(/^\(\d+\)/,'').trim();
+    if(isNcaa){
+        var keys=Object.keys(NCAA).sort(function(a,b){return b.length-a.length});
+        for(var i=0;i<keys.length;i++){
+            if(NCAA[keys[i]]&&t.indexOf(keys[i])!==-1)
+                return "https://a.espncdn.com/i/teamlogos/ncaa/500/"+NCAA[keys[i]]+".png";
+        }
+        return null;
+    }
+    for(var name in PRO){
+        if(t.indexOf(name)!==-1)
+            return "https://a.espncdn.com/i/teamlogos/"+PRO[name]+".png";
+    }
+    return null;
+}
+function mkImg(url){
+    var img=document.createElement('img');
+    img.src=url;img.loading='lazy';
+    img.style.cssText='width:16px;height:16px;object-fit:contain;border-radius:4px;flex-shrink:0';
+    img.onerror=function(){this.style.display='none'};
+    return img;
+}
+
+// Strip NCAA: prefixes
+document.querySelectorAll('.td-team span').forEach(function(el){
+    el.textContent = el.textContent.replace(/^\(W\)NCAA:\s*/i, '').replace(/^NCAA:\s*/i, '');
+});
+
+// Apply league logos
+document.querySelectorAll('.sec-logo').forEach(function(el){
+    var name=el.getAttribute('data-league').toLowerCase();
+    for(var k in LEAGUE_LOGOS){
+        if(name.indexOf(k)!==-1||k.indexOf(name.replace(/[^a-z ]/g,' ').trim())!==-1){
+            el.src=LEAGUE_LOGOS[k];el.style.display='';break;
+        }
+    }
+});
+
+// Apply team logos
+document.querySelectorAll('.td-team').forEach(function(el){
+    var text=el.getAttribute('data-team')||el.textContent.trim();
+    var sec=el.closest('[data-section]');
+    var secName=sec?sec.getAttribute('data-section').toLowerCase():'';
+    var isNcaa=secName.indexOf('ncaa')!==-1||secName.indexOf('softball')!==-1;
+    var url=findLogo(text,isNcaa);
+    if(url)el.insertBefore(mkImg(url),el.firstChild);
+});
+
+// ═══════════════════════════════════════════════════
+// ESPN LIVE SCORES ENGINE (from sports guide)
+// ═══════════════════════════════════════════════════
+var GUIDE_DATE=(function(){
+    var el=document.querySelector('.tv-hint');
+    // Parse from Jinja data
+    var dateStr = '{{ data.date if data else "" }}';
+    var m=dateStr.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+    if(!m)return '';
+    var month=m[1].padStart(2,'0');
+    var day=m[2].padStart(2,'0');
+    var year=m[3]?m[3]:'';
+    if(year.length===2) year='20'+year;
+    if(!year) year=String(new Date().getFullYear());
+    return year+month+day;
+})();
+
+var ESPN_MAP=[
+    {match:'nba basketball',sport:'basketball',league:'nba'},
+    {match:'mlb baseball',sport:'baseball',league:'mlb'},
+    {match:'nhl hockey',sport:'hockey',league:'nhl'},
+    {match:'hockey',sport:'hockey',league:'nhl'},
+    {match:'nfl football',sport:'football',league:'nfl'},
+    {match:'ncaa basketball',sub:'women',sport:'basketball',league:'womens-college-basketball'},
+    {match:'ncaa basketball',sport:'basketball',league:'mens-college-basketball'},
+    {match:'ncaa football',sport:'football',league:'college-football'},
+    {match:'ncaa hockey',sport:'hockey',league:'mens-college-hockey'},
+    {match:'ncaa baseball',sport:'baseball',league:'college-baseball'},
+    {match:'softball',sport:'baseball',league:'college-softball'},
+    {match:'nbagl basketball',sport:'basketball',league:'nba-development'}
+];
+function findEspnLeague(secName){
+    var s=secName.toLowerCase().replace(/[^a-z ]/g,' ');
+    for(var i=0;i<ESPN_MAP.length;i++){
+        var m=ESPN_MAP[i];
+        if(s.indexOf(m.match)!==-1){
+            if(m.sub&&s.indexOf(m.sub)===-1) continue;
+            return {sport:m.sport,league:m.league};
+        }
+    }
+    return null;
+}
+
+function normTeam(t){
+    return t.toLowerCase().replace(/^\(w\)ncaa:\s*/,'').replace(/^ncaa:\s*/,'')
+        .replace(/^\(\d+\)/,'').replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function teamWordMatch(guideTeam, espnTeam){
+    if(espnTeam.indexOf(guideTeam)!==-1||guideTeam.indexOf(espnTeam)!==-1) return true;
+    return guideTeam.split(' ').some(function(w){return w.length>2&&espnTeam.indexOf(w)!==-1});
+}
+function matchGame(espnGame, awayText, homeText){
+    var ea=normTeam(espnGame.away);
+    var eh=normTeam(espnGame.home);
+    var ga=normTeam(awayText);
+    var gh=normTeam(homeText);
+    // Standard match: away vs away, home vs home
+    if(teamWordMatch(ga,ea)&&teamWordMatch(gh,eh)) return true;
+    // Tournament-style: away is generic label, both teams in home field ("TeamA v TeamB")
+    var combo=normTeam(homeText);
+    var vParts=combo.split(/ v /);
+    if(vParts.length===2){
+        var t1=vParts[0].trim(), t2=vParts[1].trim();
+        if((teamWordMatch(t1,ea)&&teamWordMatch(t2,eh))||(teamWordMatch(t1,eh)&&teamWordMatch(t2,ea))) return true;
+    }
+    return false;
+}
+
+function fetchScores(){
+    var sections=document.querySelectorAll('[data-section]');
+    var fetched={};
+    sections.forEach(function(sec){
+        var secName=sec.getAttribute('data-section').toLowerCase();
+        var espn=findEspnLeague(secName);
+        if(!espn)return;
+        var key=espn.sport+'/'+espn.league;
+        if(fetched[key])return;
+        fetched[key]=true;
+        var grp='';
+        if(espn.league==='mens-college-basketball'||espn.league==='womens-college-basketball') grp='&groups=50';
+        var url='https://site.api.espn.com/apis/site/v2/sports/'+espn.sport+'/'+espn.league+'/scoreboard?dates='+GUIDE_DATE+'&limit=300'+grp;
+        fetch(url).then(function(r){return r.json()}).then(function(data){
+            if(!data.events)return;
+            var games=data.events.map(function(ev){
+                var comp=ev.competitions[0];
+                var away=comp.competitors.find(function(c){return c.homeAway==='away'});
+                var home=comp.competitors.find(function(c){return c.homeAway==='home'});
+                return {
+                    away:away?away.team.displayName:'',
+                    home:home?home.team.displayName:'',
+                    awayScore:away?away.score:'',
+                    homeScore:home?home.score:'',
+                    status:ev.status.type.name,
+                    statusDetail:ev.status.type.shortDetail||ev.status.type.detail||''
+                };
+            });
+            var matchingSections=[];
+            document.querySelectorAll('[data-section]').forEach(function(s){
+                var sn=s.getAttribute('data-section').toLowerCase();
+                var e2=findEspnLeague(sn);
+                if(e2&&e2.sport===espn.sport&&e2.league===espn.league) matchingSections.push(sn);
+            });
+            matchingSections.push('favorites');
+            matchingSections.forEach(function(ms){
+                updateRows(ms,JSON.parse(JSON.stringify(games)));
+            });
+        }).catch(function(){});
+    });
+}
+
+function updateRows(secName,espnGames){
+    var ns=secName.toLowerCase().replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+    document.querySelectorAll('[data-section]').forEach(function(sec){
+        var sn=sec.getAttribute('data-section').toLowerCase().replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+        if(sn.indexOf(ns)===-1&&ns.indexOf(sn)===-1)return;
+        sec.querySelectorAll('.game-data').forEach(function(row){
+            var away=row.getAttribute('data-away')||'';
+            var home=row.getAttribute('data-home')||'';
+            if(!away||!home)return;
+            for(var i=0;i<espnGames.length;i++){
+                var eg=espnGames[i];
+                if(matchGame(eg,away,home)){
+                    var awayScoreCell=row.querySelector('.td-score-away');
+                    var homeScoreCell=row.querySelector('.td-score-home');
+                    var timeCell=row.querySelector('.game-time-text');
+                    if(awayScoreCell&&homeScoreCell){
+                        var aScore=parseInt(eg.awayScore)||0;
+                        var hScore=parseInt(eg.homeScore)||0;
+                        if(eg.status==='STATUS_FINAL'){
+                            var aw=aScore>=hScore?'score-winner':'score-loser';
+                            var hw=hScore>=aScore?'score-winner':'score-loser';
+                            awayScoreCell.innerHTML='<span class="score-num '+aw+'">'+eg.awayScore+'</span>';
+                            homeScoreCell.innerHTML='<span class="score-num '+hw+'">'+eg.homeScore+'</span>';
+                            row.classList.add('game-final');
+                        } else if(eg.status==='STATUS_SCHEDULED'||eg.status==='STATUS_POSTPONED'){
+                            awayScoreCell.innerHTML='';
+                            homeScoreCell.innerHTML='';
+                        } else {
+                            awayScoreCell.innerHTML='<span class="score-num">'+eg.awayScore+'</span>';
+                            homeScoreCell.innerHTML='<span class="score-num">'+eg.homeScore+'</span>';
+                            if(timeCell){
+                                var detail=eg.statusDetail||'LIVE';
+                                timeCell.innerHTML='<span class="live-badge"><span class="live-dot"></span>'+detail+'</span>';
+                            }
+                        }
+                    }
+                    espnGames.splice(i,1);
+                    break;
+                }
+            }
+        });
+    });
+}
+
+fetchScores();
+setInterval(fetchScores, 45000);
+
+// ═══════════════════════════════════════════════════
+// DARK MODE (TVs panel only, 7pm-6am)
+// ═══════════════════════════════════════════════════
+function checkDarkMode(){
+    var hour = new Date().getHours();
+    var isDark = hour < 6 || hour >= 19;
+    var panel = document.getElementById('panel-tvs');
+    if(isDark) panel.classList.add('dark-mobile');
+    else panel.classList.remove('dark-mobile');
+}
+checkDarkMode();
+setInterval(checkDarkMode, 300000);
+
+// ═══════════════════════════════════════════════════
+// SORTABLE (from sports guide)
+// ═══════════════════════════════════════════════════
+window.Sortable = {
+    create: function(el, opts) {
+        if(!el) return;
+        var dragged = null;
+        var placeholder = document.createElement('div');
+        placeholder.style.cssText = 'height:4px;background:#C41E2A;margin:4px 0;border-radius:2px;transition:all 0.2s';
+        var items = function(){ return Array.from(el.querySelectorAll(':scope > .section')); };
+        var holdTimer = null;
+        var holdReady = false;
+        el.addEventListener('pointerdown', function(e) {
+            var handle = e.target.closest('.sec-head');
+            if(!handle) return;
+            holdReady = false;
+            var startX = e.clientX, startY = e.clientY;
+            holdTimer = setTimeout(function(){
+                holdReady = true;
+                dragged = handle.closest('.section');
+                if(!dragged) return;
+                dragged.style.outline = '2px solid #C41E2A';
+                if(navigator.vibrate) navigator.vibrate(30);
+            }, 500);
+            function onEarlyMove(e2) {
+                if(Math.abs(e2.clientX - startX) > 10 || Math.abs(e2.clientY - startY) > 10) {
+                    clearTimeout(holdTimer);
+                    holdTimer = null;
+                    document.removeEventListener('pointermove', onEarlyMove);
+                }
+            }
+            document.addEventListener('pointermove', onEarlyMove);
+            function onUp2() {
+                clearTimeout(holdTimer);
+                document.removeEventListener('pointermove', onEarlyMove);
+                document.removeEventListener('pointerup', onUp2);
+                if(dragged) dragged.style.outline = '';
+                if(!holdReady) { dragged = null; return; }
+                // Start drag mode
+                var rect = dragged.getBoundingClientRect();
+                dragged.style.outline = '';
+                dragged.style.opacity = '0.3';
+                var clone = dragged.cloneNode(true);
+                clone.style.cssText = 'position:fixed;left:'+rect.left+'px;top:'+rect.top+'px;width:'+rect.width+'px;z-index:9999;pointer-events:none;opacity:0.9;box-shadow:0 8px 24px rgba(0,0,0,0.2);transform:scale(1.02);transition:none;';
+                document.body.appendChild(clone);
+                function onMove(e3) {
+                    e3.preventDefault();
+                    clone.style.top = (e3.clientY - rect.height/2) + 'px';
+                    var siblings = items();
+                    var inserted = false;
+                    for(var i=0; i<siblings.length; i++) {
+                        var s = siblings[i];
+                        if(s === dragged) continue;
+                        var r = s.getBoundingClientRect();
+                        if(e3.clientY < r.top + r.height/2) {
+                            el.insertBefore(placeholder, s);
+                            inserted = true;
+                            break;
+                        }
+                    }
+                    if(!inserted) el.appendChild(placeholder);
+                }
+                function onDrop() {
+                    document.removeEventListener('pointermove', onMove);
+                    document.removeEventListener('pointerup', onDrop);
+                    clone.remove();
+                    dragged.style.opacity = '';
+                    if(placeholder.parentNode) {
+                        el.insertBefore(dragged, placeholder);
+                        placeholder.remove();
+                    }
+                    if(opts.onEnd) opts.onEnd();
+                    dragged = null;
+                }
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onDrop);
+            }
+            document.addEventListener('pointerup', onUp2);
+        });
+    }
+};
+
+(function(){
+    var container = document.getElementById('sections-container');
+    if(!container) return;
+    var toast = document.createElement('div');
+    toast.className = 'drag-toast';
+    document.body.appendChild(toast);
+    function dToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(function(){ toast.classList.remove('show'); }, 2000);
+    }
+    Sortable.create(container, {
+        animation: 200,
+        handle: '.sec-head',
+        onEnd: function() {
+            var order = [];
+            container.querySelectorAll('.section').forEach(function(c) {
+                var name = c.getAttribute('data-section');
+                if(name) order.push(name);
+            });
+            fetch('/sports/api/section-order', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({order: order})
+            }).then(function(r) {
+                if(r.ok) dToast('✓ Order saved');
+            }).catch(function(){});
+        }
+    });
+})();
+
+// ═══════════════════════════════════════════════════
+// VENUE TAB
+// ═══════════════════════════════════════════════════
+function switchVenueSub(sub, btn) {
+    document.querySelectorAll('.venue-sub').forEach(function(s){s.classList.remove('active')});
+    document.querySelectorAll('.seg-btn').forEach(function(b){b.classList.remove('active')});
+    document.getElementById('sub-'+sub).classList.add('active');
+    btn.classList.add('active');
+    if(sub === 'temp') loadThermostat();
+    if(sub === 'music') loadSonos();
+}
+window.switchVenueSub = switchVenueSub;
+
+function loadVenueData() {
+    loadLights();
+    loadThermostat();
+    loadSonos();
+}
+
+// ── Sonos ──
+var _sonosPlaying = false;
+var _sonosPollTimer = null;
+var _sonosVolTimer = null;
+var _sonosFavs = [];
+var _sonosStation = '';
+
+function _updateSonosUI(d) {
+    _sonosPlaying = d.playing;
+    document.getElementById('sonos-track').textContent = d.track || '—';
+    document.getElementById('sonos-artist').textContent = d.artist || '';
+    var art = document.getElementById('sonos-art');
+    if(d.art_url) { art.src = d.art_url; art.style.display = 'block'; }
+    else { art.style.display = 'none'; }
+    document.getElementById('sonos-play-icon').innerHTML = d.playing ? '<path d="M6 19h4V5H6zm8-14v14h4V5z"/>' : '<path d="M8 5v14l11-7z"/>';
+    var src = '';
+    if(d.service) src = d.service;
+    if(d.station) src += (src ? ' \u00b7 ' : '') + d.station;
+    document.getElementById('sonos-source').textContent = src;
+    _sonosStation = d.station || '';
+    _highlightActiveFav();
+}
+
+function _highlightActiveFav() {
+    document.querySelectorAll('.fav-item').forEach(function(el){
+        el.classList.toggle('active', el.getAttribute('data-title') === _sonosStation);
+    });
+}
+
+function loadSonos() {
+    fetch('/staff/api/sonos/status').then(function(r){return r.json()}).then(function(d){
+        if(d.error) {
+            document.getElementById('sonos-track').textContent = 'Speaker offline';
+            document.getElementById('sonos-artist').textContent = '';
+            document.getElementById('sonos-source').textContent = '';
+            document.getElementById('sonos-art').style.display = 'none';
+            return;
+        }
+        _updateSonosUI(d);
+        document.getElementById('sonos-volume').value = d.volume;
+    }).catch(function(){
+        document.getElementById('sonos-track').textContent = 'Connection error';
+        document.getElementById('sonos-artist').textContent = '';
+        document.getElementById('sonos-source').textContent = '';
+    });
+    loadSonosFavorites();
+    loadSonosServices();
+    // Start polling if music tab is active
+    clearInterval(_sonosPollTimer);
+    _sonosPollTimer = setInterval(function(){
+        var musicTab = document.getElementById('sub-music');
+        if(musicTab && musicTab.classList.contains('active')) loadSonos_poll();
+        else clearInterval(_sonosPollTimer);
+    }, 5000);
+}
+
+function loadSonos_poll() {
+    fetch('/staff/api/sonos/status').then(function(r){return r.json()}).then(function(d){
+        if(d.error) return;
+        _updateSonosUI(d);
+        if(!document.getElementById('sonos-volume').matches(':active'))
+            document.getElementById('sonos-volume').value = d.volume;
+    }).catch(function(){});
+}
+
+function loadSonosFavorites() {
+    fetch('/staff/api/sonos/favorites').then(function(r){return r.json()}).then(function(d){
+        _sonosFavs = d.favorites || [];
+        var container = document.getElementById('sonos-favorites');
+        container.innerHTML = '';
+        _sonosFavs.forEach(function(fav, i){
+            var div = document.createElement('div');
+            div.className = 'fav-item';
+            div.setAttribute('data-title', fav.title);
+            div.setAttribute('data-idx', i);
+            var icon = SVC_ICONS[fav.service] || '🎵';
+            var color = SVC_COLORS[fav.service] || '#9B1B1B';
+            div.innerHTML =
+                '<div class="fav-icon" style="background:'+color+'30">'+icon+'</div>' +
+                '<div class="fav-detail"><div class="fav-name">'+fav.title+'</div>' +
+                (fav.service ? '<div class="fav-service">'+fav.service+'</div>' : '') +
+                '</div>';
+            div.onclick = function(){ sonosPlayFav(i); };
+            container.appendChild(div);
+        });
+        _highlightActiveFav();
+        _initFavDrag(container);
+    }).catch(function(){});
+}
+
+var _favDragActive = false;
+function _initFavDrag(container) {
+    var holdTimer = null, dragged = null, clone = null, placeholder = null;
+    container.addEventListener('click', function(e) {
+        if(_favDragActive) { e.stopPropagation(); e.preventDefault(); _favDragActive = false; return; }
+    }, true);
+    container.addEventListener('pointerdown', function(e) {
+        var item = e.target.closest('.fav-item');
+        if(!item) return;
+        var startX = e.clientX, startY = e.clientY;
+        holdTimer = setTimeout(function(){
+            _favDragActive = true;
+            dragged = item;
+            dragged.style.opacity = '0.3';
+            if(navigator.vibrate) navigator.vibrate(30);
+            placeholder = document.createElement('div');
+            placeholder.style.cssText = 'height:4px;background:#9B1B1B;border-radius:2px;margin:4px 0';
+            var rect = dragged.getBoundingClientRect();
+            clone = dragged.cloneNode(true);
+            clone.style.cssText = 'position:fixed;left:'+rect.left+'px;top:'+rect.top+'px;width:'+rect.width+'px;z-index:9999;pointer-events:none;opacity:0.9;box-shadow:0 8px 24px rgba(0,0,0,0.3);transform:scale(1.02)';
+            document.body.appendChild(clone);
+            function onMove(e2) {
+                e2.preventDefault();
+                clone.style.top = (e2.clientY - rect.height/2) + 'px';
+                var kids = Array.from(container.querySelectorAll('.fav-item'));
+                var inserted = false;
+                for(var i=0;i<kids.length;i++){
+                    if(kids[i]===dragged) continue;
+                    var r = kids[i].getBoundingClientRect();
+                    if(e2.clientY < r.top + r.height/2){ container.insertBefore(placeholder, kids[i]); inserted=true; break; }
+                }
+                if(!inserted) container.appendChild(placeholder);
+            }
+            function onDrop() {
+                document.removeEventListener('pointermove', onMove);
+                document.removeEventListener('pointerup', onDrop);
+                if(clone) clone.remove();
+                if(dragged) dragged.style.opacity = '';
+                if(placeholder && placeholder.parentNode) {
+                    container.insertBefore(dragged, placeholder);
+                    placeholder.remove();
+                }
+                // Save new order
+                var order = Array.from(container.querySelectorAll('.fav-item')).map(function(el){ return el.getAttribute('data-title'); });
+                // Update _sonosFavs to match new order
+                var favMap = {};
+                _sonosFavs.forEach(function(f){ favMap[f.title] = f; });
+                _sonosFavs = order.map(function(t){ return favMap[t]; }).filter(Boolean);
+                // Re-bind click handlers
+                container.querySelectorAll('.fav-item').forEach(function(el, i){
+                    el.onclick = function(){ sonosPlayFav(i); };
+                });
+                fetch('/staff/api/sonos/favorites/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order:order})}).catch(function(){});
+                dragged = null; clone = null; placeholder = null;
+            }
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onDrop);
+        }, 500);
+        function onEarlyMove(e2) {
+            if(Math.abs(e2.clientX-startX)>10 || Math.abs(e2.clientY-startY)>10) {
+                clearTimeout(holdTimer); holdTimer=null;
+                document.removeEventListener('pointermove', onEarlyMove);
+            }
+        }
+        document.addEventListener('pointermove', onEarlyMove);
+        function onEarlyUp() {
+            clearTimeout(holdTimer);
+            document.removeEventListener('pointermove', onEarlyMove);
+            document.removeEventListener('pointerup', onEarlyUp);
+        }
+        document.addEventListener('pointerup', onEarlyUp);
+    });
+}
+
+function sonosPlayFav(idx) {
+    var fav = _sonosFavs[idx];
+    if(!fav) return;
+    if(!confirm('Play "' + fav.title + '"?')) return;
+    document.querySelectorAll('.fav-item').forEach(function(el){ el.classList.remove('active'); });
+    document.querySelectorAll('.fav-item')[idx].classList.add('active');
+    fetch('/staff/api/sonos/favorite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uri:fav.uri,meta:fav.meta})})
+    .then(function(){ setTimeout(loadSonos, 1500); })
+    .catch(function(){});
+}
+window.sonosPlayFav = sonosPlayFav;
+
+function sonosToggle() {
+    var url = _sonosPlaying ? '/staff/api/sonos/pause' : '/staff/api/sonos/play';
+    fetch(url, {method:'POST'}).then(function(){
+        _sonosPlaying = !_sonosPlaying;
+        document.getElementById('sonos-play-icon').innerHTML = _sonosPlaying ? '<path d="M6 19h4V5H6zm8-14v14h4V5z"/>' : '<path d="M8 5v14l11-7z"/>';
+        setTimeout(loadSonos, 500);
+    }).catch(function(){});
+}
+window.sonosToggle = sonosToggle;
+
+function sonosNext() {
+    fetch('/staff/api/sonos/next',{method:'POST'}).then(function(){ setTimeout(loadSonos, 500); }).catch(function(){});
+}
+window.sonosNext = sonosNext;
+
+function sonosPrev() {
+    fetch('/staff/api/sonos/prev',{method:'POST'}).then(function(){ setTimeout(loadSonos, 500); }).catch(function(){});
+}
+window.sonosPrev = sonosPrev;
+
+function sonosVolume(val) {
+    clearTimeout(_sonosVolTimer);
+    _sonosVolTimer = setTimeout(function(){
+        fetch('/staff/api/sonos/volume',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({volume:parseInt(val)})}).catch(function(){});
+    }, 300);
+}
+window.sonosVolume = sonosVolume;
+
+var _sonosMuted = false;
+function sonosMute() {
+    fetch('/staff/api/sonos/mute',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+        _sonosMuted = d.muted;
+        _updateMuteIcon();
+    }).catch(function(){});
+}
+window.sonosMute = sonosMute;
+
+function _updateMuteIcon() {
+    var icon = document.getElementById('sonos-mute-icon');
+    if(_sonosMuted) {
+        icon.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
+        icon.style.fill = '#AEAEB2';
+    } else {
+        icon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3z"/>';
+        icon.style.fill = '#636366';
+    }
+}
+
+function sonosShowZones() {
+    fetch('/staff/api/sonos/zones').then(function(r){return r.json()}).then(function(d){
+        if(d.error || !d.zones || d.zones.length === 0) return;
+        var html = d.zones.map(function(z){
+            var active = z.ip === _sonosCurrentZoneIp;
+            return '<div onclick="sonosSetZone(\''+z.ip+'\',\''+z.name+'\')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:'+(active?'#3A3A3C':'#2C2C2E')+';border-radius:10px;cursor:pointer;border:1px solid '+(active?'#9B1B1B':'#3A3A3C')+'"><span style="color:#F2F2F7;font-size:15px;font-weight:500">'+z.name+'</span><span style="color:#8E8E93;font-size:13px">Vol '+z.volume+'</span></div>';
+        }).join('');
+        var overlay = document.createElement('div');
+        overlay.id = 'sonos-zone-picker';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:210;display:flex;align-items:center;justify-content:center';
+        overlay.innerHTML = '<div style="background:#1C1C1E;border-radius:16px;padding:20px;margin:20px;width:100%;max-width:340px"><div style="font-size:17px;font-weight:600;color:#F2F2F7;text-align:center;margin-bottom:16px">Select Speaker</div><div style="display:flex;flex-direction:column;gap:8px">'+html+'</div><button onclick="document.getElementById(\'sonos-zone-picker\').remove()" style="width:100%;margin-top:16px;padding:14px;border-radius:10px;border:none;background:#2C2C2E;color:#AEAEB2;font-size:15px;cursor:pointer">Cancel</button></div>';
+        overlay.onclick = function(e){ if(e.target === overlay) overlay.remove(); };
+        document.body.appendChild(overlay);
+    }).catch(function(){});
+}
+window.sonosShowZones = sonosShowZones;
+
+var _sonosCurrentZoneIp = '10.1.10.242';
+function sonosSetZone(ip, name) {
+    fetch('/staff/api/sonos/zone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip:ip})})
+    .then(function(r){return r.json()}).then(function(d){
+        if(d.ok) {
+            _sonosCurrentZoneIp = ip;
+            document.getElementById('sonos-zone-name').textContent = name;
+            var picker = document.getElementById('sonos-zone-picker');
+            if(picker) picker.remove();
+            loadSonos();
+        }
+    }).catch(function(){});
+}
+window.sonosSetZone = sonosSetZone;
+
+// ── Sonos Services & Browse ──
+var _sonosLinkingService = '';
+var _browseStack = [];  // [{service, id, title}]
+
+var SVC_ICONS = {'Spotify':'🟢','Pandora':'🔵','Apple Music':'🍎','Amazon Music':'🟠'};
+var SVC_COLORS = {'Spotify':'#1DB954','Pandora':'#224099','Apple Music':'#FC3C44','Amazon Music':'#25D1DA'};
+function loadSonosServices() {
+    fetch('/staff/api/sonos/services').then(function(r){return r.json()}).then(function(d){
+        var container = document.getElementById('sonos-services');
+        container.innerHTML = '';
+        (d.services || []).forEach(function(svc){
+            var div = document.createElement('div');
+            var color = SVC_COLORS[svc.name] || '#9B1B1B';
+            div.className = 'svc-item' + (svc.linked ? ' linked' : '');
+            div.innerHTML =
+                '<div class="svc-icon" style="background:'+color+'20;color:'+color+'">'+
+                (SVC_ICONS[svc.name]||'🎵')+'</div>' +
+                '<div class="svc-detail"><div class="svc-name">'+svc.name+'</div>' +
+                '<div class="svc-status">'+(svc.linked ? 'Connected' : 'Tap to link')+'</div></div>';
+            div.onclick = svc.linked ? function(){ sonosBrowseOpen(svc.name); } : function(){ sonosLinkStart(svc.name); };
+            container.appendChild(div);
+        });
+    }).catch(function(){});
+}
+
+function sonosLinkStart(name) {
+    _sonosLinkingService = name;
+    fetch('/staff/api/sonos/link/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service:name})})
+    .then(function(r){return r.json()}).then(function(d){
+        if(d.error) { showToast('Link error: '+d.error); return; }
+        document.getElementById('link-service-name').textContent = 'Link '+name;
+        document.getElementById('link-auth-url').href = d.url;
+        var overlay = document.getElementById('sonos-link-overlay');
+        overlay.style.display = 'flex';
+    }).catch(function(){ showToast('Link failed'); });
+}
+
+function sonosLinkComplete() {
+    fetch('/staff/api/sonos/link/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service:_sonosLinkingService})})
+    .then(function(r){return r.json()}).then(function(d){
+        document.getElementById('sonos-link-overlay').style.display = 'none';
+        if(d.ok) {
+            showToast(_sonosLinkingService+' linked!');
+            loadSonosServices();
+        } else {
+            showToast('Link failed: '+(d.error||'unknown'));
+        }
+    }).catch(function(){ showToast('Link failed'); });
+}
+window.sonosLinkComplete = sonosLinkComplete;
+
+function sonosLinkCancel() {
+    document.getElementById('sonos-link-overlay').style.display = 'none';
+}
+window.sonosLinkCancel = sonosLinkCancel;
+
+function sonosBrowseOpen(name) {
+    _browseStack = [{service:name, id:'root', title:name}];
+    document.getElementById('sonos-browse-overlay').style.display = 'block';
+    _renderBrowse();
+}
+
+function sonosBrowseClose() {
+    document.getElementById('sonos-browse-overlay').style.display = 'none';
+    _browseStack = [];
+}
+window.sonosBrowseClose = sonosBrowseClose;
+
+function sonosBrowseBack() {
+    if(_browseStack.length > 1) {
+        _browseStack.pop();
+        _renderBrowse();
+    } else {
+        sonosBrowseClose();
+    }
+}
+window.sonosBrowseBack = sonosBrowseBack;
+
+function _renderBrowse() {
+    var current = _browseStack[_browseStack.length - 1];
+    document.getElementById('sonos-browse-title').textContent = current.title;
+    document.getElementById('sonos-browse-back').textContent = _browseStack.length > 1 ? '‹ Back' : '‹ Close';
+    var list = document.getElementById('sonos-browse-list');
+    list.innerHTML = '<div style="text-align:center;color:#8E8E93;padding:40px">Loading...</div>';
+    fetch('/staff/api/sonos/browse?service='+encodeURIComponent(current.service)+'&id='+encodeURIComponent(current.id))
+    .then(function(r){return r.json()}).then(function(d){
+        if(d.error) {
+            list.innerHTML = '<div style="text-align:center;color:#8E8E93;padding:40px">'+d.error+'</div>';
+            return;
+        }
+        var frag = document.createDocumentFragment();
+        (d.items || []).forEach(function(item){
+            var div = document.createElement('div');
+            div.className = 'browse-item';
+            var artHtml = item.art ? '<img class="browse-art" loading="lazy" src="'+item.art+'" onerror="this.style.display=\'none\'">' : '<div class="browse-art"></div>';
+            div.innerHTML = artHtml +
+                '<div class="browse-info"><div class="browse-title">'+item.title+'</div></div>' +
+                (item.container && !item.can_play ? '<div class="browse-arrow">›</div>' : '');
+            if(item.container && !item.can_play) {
+                div.onclick = function(){
+                    _browseStack.push({service:current.service, id:item.id, title:item.title});
+                    _renderBrowse();
+                };
+            } else {
+                div.onclick = function(){ _playBrowseItem(current.service, item); };
+            }
+            frag.appendChild(div);
+        });
+        list.innerHTML = '';
+        list.appendChild(frag);
+        if(!d.items || d.items.length === 0) {
+            list.innerHTML = '<div style="text-align:center;color:#8E8E93;padding:40px">No items</div>';
+        }
+    }).catch(function(){
+        list.innerHTML = '<div style="text-align:center;color:#8E8E93;padding:40px">Failed to load</div>';
+    });
+}
+
+function _playBrowseItem(service, item) {
+    if(!confirm('Play "' + item.title + '"?')) return;
+    fetch('/staff/api/sonos/browse/play',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service:service,id:item.id,title:item.title})})
+    .then(function(r){return r.json()}).then(function(d){
+        if(d.ok) {
+            showToast('Playing: '+item.title);
+            sonosBrowseClose();
+            setTimeout(loadSonos, 1500);
+        } else {
+            showToast('Play failed: '+(d.error||''));
+        }
+    }).catch(function(){ showToast('Play failed'); });
+}
+
+// ── Lights ──
+function loadLights() {
+    fetch('/staff/api/lights').then(function(r){return r.json()}).then(function(data){
+        lightsData = data;
+        renderLightZones();
+        if(data.activeScene) highlightScene(data.activeScene);
+    }).catch(function(){});
+}
+
+function renderLightZones() {
+    var container = document.getElementById('light-zones');
+    container.innerHTML = '';
+    if(!lightsData || !lightsData.zones) return;
+    lightsData.zones.forEach(function(zone){
+        var div = document.createElement('div');
+        div.className = 'zone-card';
+        div.innerHTML =
+            '<div class="venue-section-label" style="padding-top:12px">'+zone.name.toUpperCase()+'</div>' +
+            '<div class="zone-header">' +
+                '<span class="zone-name">'+zone.name+'</span>' +
+                '<div style="display:flex;align-items:center;gap:12px">' +
+                    '<span class="zone-pct" id="pct-'+zone.id+'">'+zone.level+'%</span>' +
+                    '<button class="ios-toggle '+(zone.on?'on':'')+'" id="tog-'+zone.id+'" onclick="toggleZone(\''+zone.id+'\')"></button>' +
+                '</div>' +
+            '</div>' +
+            '<input type="range" class="zone-slider" min="0" max="100" value="'+zone.level+'" id="slider-'+zone.id+'" oninput="slideZone(\''+zone.id+'\',this.value)">' +
+            '<div class="quick-levels">' +
+                '<button class="ql-btn'+(zone.level===0&&!zone.on?' active':'')+'" onclick="quickLevel(\''+zone.id+'\',0)">Off</button>' +
+                '<button class="ql-btn'+(zone.level===25?' active':'')+'" onclick="quickLevel(\''+zone.id+'\',25)">25%</button>' +
+                '<button class="ql-btn'+(zone.level===50?' active':'')+'" onclick="quickLevel(\''+zone.id+'\',50)">50%</button>' +
+                '<button class="ql-btn'+(zone.level===75?' active':'')+'" onclick="quickLevel(\''+zone.id+'\',75)">75%</button>' +
+                '<button class="ql-btn'+(zone.level===100?' active':'')+'" onclick="quickLevel(\''+zone.id+'\',100)">100%</button>' +
+            '</div>';
+        container.appendChild(div);
+    });
+}
+
+function slideZone(zoneId, val) {
+    val = parseInt(val);
+    document.getElementById('pct-'+zoneId).textContent = val+'%';
+    updateLightZone(zoneId, val, val > 0);
+}
+function quickLevel(zoneId, val) {
+    document.getElementById('slider-'+zoneId).value = val;
+    document.getElementById('pct-'+zoneId).textContent = val+'%';
+    updateLightZone(zoneId, val, val > 0);
+    // Highlight active quick level
+    var card = document.getElementById('slider-'+zoneId).closest('.zone-card');
+    card.querySelectorAll('.ql-btn').forEach(function(b){b.classList.remove('active')});
+    card.querySelectorAll('.ql-btn').forEach(function(b,i){
+        if([0,25,50,75,100][i] === val) b.classList.add('active');
+    });
+}
+function toggleZone(zoneId) {
+    var tog = document.getElementById('tog-'+zoneId);
+    tog.classList.toggle('on');
+    var isOn = tog.classList.contains('on');
+    var level = parseInt(document.getElementById('slider-'+zoneId).value);
+    updateLightZone(zoneId, isOn ? level : 0, isOn);
+}
+function updateLightZone(zoneId, level, on) {
+    if(!lightsData) return;
+    lightsData.zones.forEach(function(z){ if(z.id===zoneId){z.level=level;z.on=on;} });
+    fetch('/staff/api/lights',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lightsData)}).catch(function(){});
+}
+window.slideZone = slideZone;
+window.quickLevel = quickLevel;
+window.toggleZone = toggleZone;
+
+function setScene(scene) {
+    var levels = {open:{bar:100,dining:100},dinner:{bar:75,dining:50},late:{bar:50,dining:25},closed:{bar:0,dining:0}};
+    var s = levels[scene];
+    if(!s || !lightsData) return;
+    lightsData.activeScene = scene;
+    lightsData.zones.forEach(function(z){
+        if(s[z.id] !== undefined) { z.level = s[z.id]; z.on = s[z.id] > 0; }
+    });
+    renderLightZones();
+    highlightScene(scene);
+    fetch('/staff/api/lights',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lightsData)}).catch(function(){});
+    showToast('Scene: '+scene.charAt(0).toUpperCase()+scene.slice(1));
+}
+window.setScene = setScene;
+
+function highlightScene(scene) {
+    document.querySelectorAll('.scene-btn').forEach(function(b){
+        b.classList.toggle('active', b.getAttribute('data-scene') === scene);
+    });
+}
+
+// ── Thermostat ──
+function loadThermostat() {
+    fetch('/api/thermostats').then(function(r){return r.json()}).then(function(resp){
+        var data = resp.data || resp;
+        var container = document.getElementById('thermo-chatham');
+        container.innerHTML = '';
+        var loc = data.chatham;
+        if(!loc || loc.length === 0) {
+            container.innerHTML = '<div class="thermo-card"><div class="thermo-status">No data</div></div>';
+            return;
+        }
+        loc.forEach(function(t){
+            var div = document.createElement('div');
+            div.className = 'thermo-card';
+            div.id = 'thermo-'+t.id;
+            var statusText = (t.equipment_status === 'off' || t.equipment_status === 'idle') ? 'Idle' : t.equipment_status;
+            statusText += ' · Set ' + Math.round(t.heat_setpoint) + '°F';
+            div.innerHTML =
+                '<div class="thermo-loc">CHATHAM · '+t.label.toUpperCase()+'</div>' +
+                '<div class="thermo-temp">'+Math.round(t.current_temp)+'°</div>' +
+                '<div class="thermo-status">'+statusText+'</div>' +
+                '<div class="thermo-controls">' +
+                    '<button class="thermo-btn" onclick="adjustTemp('+t.id+',\'chatham\',-1)">−</button>' +
+                    '<span class="thermo-setpoint" id="sp-'+t.id+'">'+Math.round(t.heat_setpoint)+'°</span>' +
+                    '<button class="thermo-btn" onclick="adjustTemp('+t.id+',\'chatham\',1)">+</button>' +
+                '</div>';
+            container.appendChild(div);
+        });
+    }).catch(function(){});
+}
+
+function adjustTemp(deviceId, location, delta) {
+    var sp = document.getElementById('sp-'+deviceId);
+    var current = parseInt(sp.textContent);
+    var newTemp = current + delta;
+    sp.textContent = newTemp + '°';
+    fetch('/api/thermostats/set',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({location:location, device_id:deviceId, heat_setpoint:newTemp, cool_setpoint:newTemp+10})
+    }).then(function(r){return r.json()}).then(function(d){
+        if(!d.success && d.error) showToast('Temp error: '+d.error);
+    }).catch(function(){});
+}
+window.adjustTemp = adjustTemp;
+
+})();
+</script>
+</body>
+</html>

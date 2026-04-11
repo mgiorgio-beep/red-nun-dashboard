@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Specials — Red Nun</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredericka+the+Great&display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:'Aldenburg';src:url('/staff/static/fonts/aldenburg-demo.otf') format('opentype');font-display:swap}
+@font-face{font-family:'Blzee';src:url('/staff/static/fonts/blzee.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Coalhand Luke';src:url('/staff/static/fonts/coalhand-luke.ttf') format('truetype');font-display:swap}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a2a1a;}
+
+.board{
+  width:100%;height:100vw;
+  background:
+    radial-gradient(ellipse at 25% 15%, rgba(50,60,50,.5) 0%, transparent 50%),
+    radial-gradient(ellipse at 75% 85%, rgba(45,55,45,.3) 0%, transparent 50%),
+    linear-gradient(180deg, #1a2a1a 0%, #162016 30%, #1a241a 60%, #141e14 100%);
+  display:flex;flex-direction:column;
+  padding:3vh 2vw 3vh;
+  position:relative;overflow:hidden;
+}
+
+.board::before{
+  content:'';position:absolute;top:0;left:0;right:0;bottom:0;
+  pointer-events:none;
+}
+
+.board::after{
+  content:'';position:absolute;top:0;left:0;right:0;bottom:0;
+  background:
+    radial-gradient(ellipse at 30% 45%, rgba(180,180,170,.03) 0%, transparent 40%),
+    radial-gradient(ellipse at 65% 70%, rgba(180,180,170,.02) 0%, transparent 35%);
+  pointer-events:none;
+}
+
+.content{
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;
+  flex:1;min-height:0;
+}
+
+.title{
+  font-family:'Fredericka the Great',cursive;
+  font-size:16vh;color:rgba(255,255,255,.95);
+  text-align:center;line-height:1;
+  text-shadow:2px 2px 4px rgba(0,0,0,.4);
+  margin-bottom:1vh;
+  flex-shrink:0;
+}
+
+.chalk-wave{text-align:center;margin:.5vh 0 1.5vh;flex-shrink:0;}
+.chalk-wave svg{width:60%;height:2.5vh;opacity:.5}
+.chalk-wave-sm{text-align:center;margin:.1vh 0;flex-shrink:0;}
+.chalk-wave-sm svg{width:40%;height:1.5vh;opacity:.7}
+
+.items{
+  flex:1;min-height:0;
+  display:flex;flex-direction:column;
+  justify-content:space-evenly;
+  overflow:hidden;
+}
+
+.item{padding:.2vh 0}
+
+.item-name{
+  font-family:'Fredericka the Great',cursive;
+  font-size:8vh;color:rgba(255,255,255,.92);
+  line-height:1.15;
+  text-shadow:1px 1px 3px rgba(0,0,0,.4);
+}
+.item-name .label{
+  font-size:6vh;color:rgba(255,255,255,.55);
+}
+.item-desc{
+  font-family:'Fredericka the Great',cursive;
+  font-size:4.5vh;color:rgba(255,255,255,.65);
+  line-height:1.2;margin-top:.2vh;
+  text-shadow:1px 1px 2px rgba(0,0,0,.2);
+}
+.inline-price{
+  font-size:5vh;color:rgba(255,255,255,.8);
+}
+
+/* Bar TV (smaller screen) overrides */
+body.size-bar .title{font-size:7vh}
+body.size-bar .items{justify-content:space-evenly;gap:0}
+body.size-bar .title{margin-bottom:0}
+body.size-bar .board{padding:1vh 2vw 1vh}
+body.size-bar .item{padding:0}
+body.size-bar .item-name{font-size:5.8vh;line-height:1.05}
+body.size-bar .item-name .label{font-size:4.5vh}
+body.size-bar .item-desc{font-size:4.2vh;line-height:1.05;margin-top:0}
+body.size-bar .inline-price{font-size:4.2vh}
+body.size-bar .eighty-six-tag{font-size:3vh}
+body.size-bar .chalk-wave-sm{margin:0;flex-shrink:0;height:0;overflow:hidden}
+body.size-bar .chalk-wave-sm svg path{d:path('M0,8 L200,8')}
+body.size-bar .chalk-wave{margin:.3vh 0 .5vh}
+
+.empty-msg{
+  font-family:'Fredericka the Great',cursive;
+  font-size:5vh;color:rgba(255,255,255,.15);text-align:center;
+  flex:1;display:flex;align-items:center;justify-content:center;
+}
+
+.chalk-white .item-name{color:rgba(240,236,226,.92)}
+.chalk-white .item-name .label{color:rgba(240,236,226,.55)}
+.chalk-yellow .item-name{color:rgba(245,230,163,.92)}
+.chalk-yellow .item-name .label{color:rgba(245,230,163,.55)}
+.chalk-yellow .item-desc{color:rgba(245,230,163,.55)}
+.chalk-yellow .inline-price{color:rgba(245,230,163,.75)}
+.chalk-blue .item-name{color:rgba(158,197,232,.92)}
+.chalk-blue .item-name .label{color:rgba(158,197,232,.55)}
+.chalk-blue .item-desc{color:rgba(158,197,232,.55)}
+.chalk-blue .inline-price{color:rgba(158,197,232,.75)}
+.chalk-pink .item-name{color:rgba(232,160,160,.92)}
+.chalk-pink .item-name .label{color:rgba(232,160,160,.55)}
+.chalk-pink .item-desc{color:rgba(232,160,160,.55)}
+.chalk-pink .inline-price{color:rgba(232,160,160,.75)}
+.chalk-green .item-name{color:rgba(168,213,162,.92)}
+.chalk-green .item-name .label{color:rgba(168,213,162,.55)}
+.chalk-green .item-desc{color:rgba(168,213,162,.55)}
+.chalk-green .inline-price{color:rgba(168,213,162,.75)}
+
+.item.eighty-sixed{position:relative}
+.item.eighty-sixed .item-name,
+.item.eighty-sixed .item-desc{opacity:.3;}
+.chalk-scratch{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  pointer-events:none;z-index:2;
+}
+.chalk-scratch path{
+  fill:none;
+  stroke:rgba(255,255,255,.55);
+  stroke-width:2.5;
+  stroke-linecap:round;
+  filter:url(#chalk);
+}
+.eighty-six-tag{
+  font-family:'Fredericka the Great',cursive;
+  font-size:4vh;color:rgba(255,80,80,.7);
+  margin-left:1.5vw;position:relative;z-index:3;
+  opacity:1 !important;
+}
+</style>
+</head>
+<body style="position:fixed; top:calc(50vh - 50vw); left:calc(50vw - 50vh); width:100vh; height:100vw; transform:rotate(-90deg); transform-origin:center center; overflow:hidden;">
+<div class="board">
+<svg width="0" height="0" style="position:absolute">
+  <filter id="chalk">
+    <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" result="noise"/>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+<div class="content">
+
+  <div class="title" id="board-title">Specials</div>
+  <div class="chalk-wave">
+    <svg viewBox="0 0 200 20" preserveAspectRatio="none">
+      <path d="M0,10 Q25,2 50,10 T100,10 T150,10 T200,10" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <div class="items" id="items"></div>
+
+</div>
+</div>
+
+<script>
+var data = {};
+var _loadedFonts = {'Fredericka the Great': true, 'Aldenburg': true, 'Blzee': true, 'Coalhand Luke': true};
+var TITLE_COLORS = {
+  white:'rgba(255,255,255,.95)',yellow:'rgba(245,230,163,.95)',
+  blue:'rgba(158,197,232,.95)',pink:'rgba(232,160,160,.95)',green:'rgba(168,213,162,.95)'
+};
+
+function loadFont(name) {
+  if (_loadedFonts[name]) return;
+  _loadedFonts[name] = true;
+  var link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=' + name.replace(/ /g, '+') + (name === 'Amatic SC' ? ':wght@700' : '') + '&display=swap';
+  document.head.appendChild(link);
+}
+
+// Apply size variant from query param
+(function(){
+  var p = new URLSearchParams(window.location.search);
+  if (p.get('size')) document.body.classList.add('size-' + p.get('size'));
+})();
+
+// Always fetch fresh data on load — never fall back to stale baked-in data
+function fetchBoard() {
+  fetch('/staff/api/board?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d) {
+    data = d;
+    render();
+  }).catch(function(){
+    // Retry in 3 seconds instead of showing stale data
+    setTimeout(fetchBoard, 3000);
+  });
+}
+fetchBoard();
+
+function render() {
+  // Apply font
+  var font = data.font || 'Fredericka the Great';
+  loadFont(font);
+  var ff = "'" + font + "',cursive";
+  document.getElementById('board-title').style.fontFamily = ff;
+
+  // Apply title color
+  document.getElementById('board-title').style.color = TITLE_COLORS[data.titleColor || 'white'] || TITLE_COLORS.white;
+
+  document.getElementById('board-title').textContent = data.title || 'Specials';
+
+  var h = '';
+  var hasContent = false;
+  var soupColor = data.soupColor && data.soupColor !== 'white' ? ' chalk-' + data.soupColor : '';
+  var appColor = data.appColor && data.appColor !== 'white' ? ' chalk-' + data.appColor : '';
+
+  if (data.soup && data.soup.name) {
+    hasContent = true;
+    var s86 = data.soup.eightySixed ? ' eighty-sixed' : '';
+    h += '<div class="item' + s86 + soupColor + '">';
+    if (data.soup.eightySixed) h += chalkScratch();
+    h += '<div class="item-name"><span class="label">Soup: </span>' + esc(titleCase(data.soup.name)) + (data.soup.eightySixed ? '<span class="eighty-six-tag">86\'d</span>' : '') + '</div>';
+    if (data.soup.desc || data.soup.price) {
+      h += '<div class="item-desc">';
+      if (data.soup.desc) h += esc(data.soup.desc);
+      if (data.soup.price) h += (data.soup.desc ? ' ' : '') + '<span class="inline-price">' + esc(data.soup.price) + '</span>';
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+
+  if (data.appetizer && data.appetizer.name) {
+    hasContent = true;
+    var a86 = data.appetizer.eightySixed ? ' eighty-sixed' : '';
+    h += '<div class="item' + a86 + appColor + '">';
+    if (data.appetizer.eightySixed) h += chalkScratch();
+    h += '<div class="item-name"><span class="label">App: </span>' + esc(titleCase(data.appetizer.name)) + (data.appetizer.eightySixed ? '<span class="eighty-six-tag">86\'d</span>' : '') + '</div>';
+    if (data.appetizer.desc || data.appetizer.price) {
+      h += '<div class="item-desc">';
+      if (data.appetizer.desc) h += esc(data.appetizer.desc);
+      if (data.appetizer.price) h += (data.appetizer.desc ? ' ' : '') + '<span class="inline-price">' + esc(data.appetizer.price) + '</span>';
+      h += '</div>';
+    }
+    h += '</div>';
+    h += wave();
+  }
+
+  var items = data.items || [];
+  items.forEach(function(item, i) {
+    hasContent = true;
+    var i86 = item.eightySixed ? ' eighty-sixed' : '';
+    var colorClass = item.color && item.color !== 'white' ? ' chalk-' + item.color : '';
+    h += '<div class="item' + i86 + colorClass + '">';
+    if (item.eightySixed) h += chalkScratch();
+    h += '<div class="item-name">' + esc(titleCase(item.name)) + (item.eightySixed ? '<span class="eighty-six-tag">86\'d</span>' : '') + '</div>';
+    if (item.desc || item.price) {
+      h += '<div class="item-desc">';
+      if (item.desc) h += esc(item.desc);
+      if (item.price) h += (item.desc ? ' ' : '') + '<span class="inline-price">' + esc(item.price) + '</span>';
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+
+  if (!hasContent) {
+    h = '<div class="empty-msg">No specials yet...</div>';
+  }
+
+  document.getElementById('items').innerHTML = h;
+
+  // Apply font to all chalk text elements
+  var ff = "'" + (data.font || 'Fredericka the Great') + "',cursive";
+  document.querySelectorAll('.item-name,.item-desc,.inline-price,.empty-msg,.eighty-six-tag').forEach(function(el) {
+    el.style.fontFamily = ff;
+  });
+}
+
+function wave() {
+  return '<div class="chalk-wave-sm"><svg viewBox="0 0 200 15" preserveAspectRatio="none"><path d="M0,8 Q30,2 60,8 T120,8 T180,8 T200,8" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1" stroke-linecap="round"/></svg></div>';
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function titleCase(s) {
+  if (!s) return '';
+  return s.replace(/\S+/g, function(w) {
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  });
+}
+
+function chalkScratch() {
+  return '<svg class="chalk-scratch" viewBox="0 0 200 40" preserveAspectRatio="none"><path d="M2,20 Q30,8 55,22 T110,18 T165,22 T198,20"/></svg>';
+}
+
+var _lastJson = '';
+var _lastRv = 0;
+setInterval(function() {
+  fetch('/staff/api/board?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d) {
+    _lastRv = d._rv || 0;
+    var json = JSON.stringify(d);
+    if (json !== _lastJson) {
+      _lastJson = json;
+      data = d;
+      render();
+    }
+  }).catch(function(){});
+}, 10000);
+</script>
+</body>
+</html>
