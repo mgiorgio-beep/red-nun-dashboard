@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Vendor Scrapers — Red Nun</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+/* Layout */
+.layout { display: flex; height: 100vh; }
+.sidebar-container { width: 240px; flex-shrink: 0; }
+.main-content { flex: 1; overflow-y: auto; padding: 24px; }
+.content-wrap { max-width: 1100px; }
+
+/* Page header */
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--text); }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+/* Summary bar */
+.summary-bar {
+  display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;
+}
+.summary-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 20px; flex: 1; min-width: 140px;
+}
+.summary-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.summary-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+.summary-value.green { color: var(--green); }
+.summary-value.red { color: var(--red); }
+.summary-value.blue { color: var(--blue); }
+
+/* Table */
+.vendor-table {
+  width: 100%; border-collapse: collapse;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden;
+}
+.vendor-table th {
+  text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 600;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+}
+.vendor-table td {
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  font-size: 14px; vertical-align: middle;
+}
+.vendor-table tr:last-child td { border-bottom: none; }
+.vendor-table tr:hover td { background: rgba(56,189,248,0.03); }
+
+/* Status badge */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+}
+.status-badge.healthy { background: var(--green-soft); color: var(--green); }
+.status-badge.expired { background: var(--red-soft); color: var(--red); }
+.status-badge.unknown { background: var(--amber-soft); color: var(--amber); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-badge.healthy .status-dot { background: var(--green); }
+.status-badge.expired .status-dot { background: var(--red); }
+.status-badge.unknown .status-dot { background: var(--amber); }
+
+/* Time text */
+.time-ago { color: var(--text2); font-size: 13px; }
+.time-ago.stale { color: var(--amber); }
+.time-ago.old { color: var(--red); }
+
+/* Invoices count */
+.inv-count { font-weight: 600; font-size: 14px; }
+.inv-count.zero { color: var(--text3); }
+.inv-count.positive { color: var(--green); }
+
+/* Failure reason */
+.failure-reason { font-size: 12px; color: var(--red); font-style: italic; }
+
+/* Result toast */
+.result-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600; margin-left: 6px;
+}
+.result-badge.ok { background: var(--green-soft); color: var(--green); }
+.result-badge.fail { background: var(--red-soft); color: var(--red); }
+.log-link { font-size: 11px; color: var(--blue); cursor: pointer; text-decoration: underline; margin-left: 4px; }
+
+/* Log modal */
+.log-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: center; justify-content: center;
+}
+.log-modal {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  width: 90%; max-width: 800px; max-height: 80vh; display: flex; flex-direction: column;
+}
+.log-modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px; border-bottom: 1px solid var(--border);
+}
+.log-modal-header h3 { font-size: 16px; font-weight: 600; }
+.log-modal-close { background: none; border: none; color: var(--text2); font-size: 20px; cursor: pointer; }
+.log-modal-body {
+  flex: 1; overflow-y: auto; padding: 16px;
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-all; color: var(--text2);
+}
+
+/* Buttons */
+.btn-refresh, .btn-run {
+  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text2); font-size: 13px;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-refresh:hover { border-color: var(--blue); color: var(--blue); }
+.btn-run { border-color: var(--green); color: var(--green); }
+.btn-run:hover { background: var(--green-soft); }
+.btn-run:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-run-sm {
+  padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text2); font-size: 12px;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-run-sm:hover { border-color: var(--green); color: var(--green); }
+.btn-run-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-run-sm.running { border-color: var(--amber); color: var(--amber); cursor: default; }
+.header-buttons { display: flex; gap: 8px; align-items: center; }
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+  border-top-color: var(--amber); border-radius: 50%; animation: spin 0.8s linear infinite;
+  vertical-align: middle; margin-right: 4px;
+}
+
+/* Loading */
+.loading { text-align: center; padding: 40px; color: var(--text3); }
+
+/* Mobile */
+@media (max-width: 767px) {
+  .layout { display: block; height: auto; }
+  .sidebar-container { display: none; }
+  .main-content { width: 100%; padding: 16px; overflow-y: visible; }
+  .summary-bar { gap: 10px; }
+  .summary-card { min-width: 100px; padding: 12px; }
+  .summary-value { font-size: 22px; }
+  .vendor-table { font-size: 13px; }
+  .vendor-table th, .vendor-table td { padding: 10px 12px; }
+  .col-failure { display: none; }
+}
+</style>
+<link rel="stylesheet" href="/static/sidebar.css">
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar-container" id="sidebar"></div>
+  <div class="main-content">
+    <div class="content-wrap">
+
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div class="page-title">Vendor Scrapers</div>
+          <div class="page-sub">Session health and scraper status for all vendor invoice portals</div>
+        </div>
+        <div class="header-buttons">
+          <button class="btn-run" id="btnRunAll" onclick="runScraper('all')">Run All</button>
+          <button class="btn-refresh" onclick="loadData()">Refresh</button>
+        </div>
+      </div>
+
+      <div class="summary-bar" id="summaryBar">
+        <div class="summary-card"><div class="summary-label">Total Vendors</div><div class="summary-value blue" id="sumTotal">—</div></div>
+        <div class="summary-card"><div class="summary-label">Healthy</div><div class="summary-value green" id="sumHealthy">—</div></div>
+        <div class="summary-card"><div class="summary-label">Expired</div><div class="summary-value red" id="sumExpired">—</div></div>
+        <div class="summary-card"><div class="summary-label">Last Run Invoices</div><div class="summary-value blue" id="sumInvoices">—</div></div>
+      </div>
+
+      <div id="tableContainer">
+        <div class="loading">Loading vendor sessions...</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="/static/sidebar.js"></script>
+<script>
+(function() {
+'use strict';
+
+// Map session_name -> scraper key for the Run buttons
+const SESSION_TO_KEY = {
+  'US Foods': 'usfoods',
+  'Performance Foodservice': 'pfg',
+  'L. Knife & Son, Inc.': 'vtinfo',
+  'Colonial Wholesale Beverage': 'vtinfo',
+  "Southern Glazer's Beverage Company (chatham)": 'sg_chatham',
+  "Southern Glazer's Beverage Company (dennis)": 'sg_dennis',
+  'Martignetti Companies': 'martignetti',
+  'Craft Collective Inc': 'craft_collective',
+};
+
+let runningScrapers = {};  // current running state
+let scraperResults = {};   // last run results per key
+let pollTimer = null;
+
+// Map scraper key -> session_name (reverse of SESSION_TO_KEY)
+const KEY_TO_SESSION = {};
+for (const [sess, key] of Object.entries(SESSION_TO_KEY)) {
+  KEY_TO_SESSION[key] = KEY_TO_SESSION[key] || sess;
+}
+
+function timeAgo(isoStr) {
+  if (!isoStr) return { text: 'Never', cls: 'old' };
+  const d = new Date(isoStr);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+
+  let text, cls;
+  if (diffMin < 1) { text = 'Just now'; cls = ''; }
+  else if (diffMin < 60) { text = diffMin + 'm ago'; cls = ''; }
+  else if (diffHr < 24) { text = diffHr + 'h ago'; cls = ''; }
+  else if (diffDay < 3) { text = diffDay + 'd ago'; cls = 'stale'; }
+  else { text = diffDay + 'd ago'; cls = 'old'; }
+
+  return { text, cls };
+}
+
+function renderTable(sessions) {
+  sessions.sort((a, b) => {
+    if (a.status === 'expired' && b.status !== 'expired') return -1;
+    if (b.status === 'expired' && a.status !== 'expired') return 1;
+    return a.vendor_name.localeCompare(b.vendor_name);
+  });
+
+  const total = sessions.length;
+  const healthy = sessions.filter(s => s.status === 'healthy').length;
+  const expired = sessions.filter(s => s.status === 'expired').length;
+  const totalInv = sessions.reduce((sum, s) => sum + (s.invoices_scraped_last_run || 0), 0);
+
+  document.getElementById('sumTotal').textContent = total;
+  document.getElementById('sumHealthy').textContent = healthy;
+  document.getElementById('sumExpired').textContent = expired;
+  document.getElementById('sumInvoices').textContent = totalInv;
+
+  const anyRunning = Object.keys(runningScrapers).length > 0;
+  const allRunning = 'all' in runningScrapers;
+  const btnAll = document.getElementById('btnRunAll');
+  if (allRunning) {
+    btnAll.disabled = true;
+    btnAll.innerHTML = '<span class="spinner"></span>Running...';
+  } else if (anyRunning) {
+    btnAll.disabled = true;
+    btnAll.textContent = 'Run All';
+  } else {
+    btnAll.disabled = false;
+    btnAll.textContent = 'Run All';
+  }
+
+  let html = '<table class="vendor-table">';
+  html += '<thead><tr>';
+  html += '<th>Vendor</th>';
+  html += '<th>Status</th>';
+  html += '<th>Last Scrape</th>';
+  html += '<th>Last Invoice</th>';
+  html += '<th>Invoices</th>';
+  html += '<th class="col-failure">Failure</th>';
+  html += '<th>Action</th>';
+  html += '</tr></thead><tbody>';
+
+  for (const s of sessions) {
+    const statusCls = s.status === 'healthy' ? 'healthy' : (s.status === 'expired' ? 'expired' : 'unknown');
+    const statusLabel = s.status === 'healthy' ? 'Healthy' : (s.status === 'expired' ? 'Expired' : 'Unknown');
+    const lastScrape = timeAgo(s.last_successful_scrape);
+    const invCount = s.invoices_scraped_last_run || 0;
+    const invCls = invCount > 0 ? 'positive' : 'zero';
+
+    const scraperKey = SESSION_TO_KEY[s.vendor_name] || '';
+    const isRunning = scraperKey && (scraperKey in runningScrapers || allRunning);
+    const lastResult = scraperKey ? scraperResults[scraperKey] : null;
+
+    // Invoices column — show count with context
+    let invHtml;
+    if (invCount > 0) {
+      invHtml = '<span class="inv-count positive">' + invCount + ' new</span>';
+    } else if (s.status === 'healthy') {
+      invHtml = '<span class="inv-count zero">Caught up</span>';
+    } else {
+      invHtml = '<span class="inv-count zero">0</span>';
+    }
+
+    // Action column
+    let actionHtml;
+    if (!scraperKey) {
+      actionHtml = '<span style="color:var(--text3);">—</span>';
+    } else if (isRunning) {
+      actionHtml = '<button class="btn-run-sm running" disabled><span class="spinner"></span>Running</button>';
+    } else {
+      actionHtml = '<button class="btn-run-sm" onclick="runScraper(\'' + scraperKey + '\')"' +
+        (anyRunning ? ' disabled' : '') + '>Run</button>';
+      // Show last result badge if recent (within 5 min)
+      if (lastResult && lastResult.finished) {
+        const ago = Date.now() - new Date(lastResult.finished).getTime();
+        if (ago < 300000) {
+          if (lastResult.exit_code === 0) {
+            actionHtml += '<span class="result-badge ok">Done</span>';
+          } else {
+            actionHtml += '<span class="result-badge fail">Failed</span>';
+            actionHtml += '<span class="log-link" onclick="viewLog(\'' + scraperKey + '\')">Log</span>';
+          }
+        }
+      }
+      // Also show log link if there's a failure_reason
+      if (s.failure_reason && !isRunning) {
+        actionHtml += '<span class="log-link" onclick="viewLog(\'' + scraperKey + '\')">Log</span>';
+      }
+    }
+
+    const lastInvoice = timeAgo(s.last_invoice_date);
+
+    html += '<tr>';
+    html += '<td style="font-weight:600;">' + escHtml(s.vendor_name) + '</td>';
+    html += '<td><span class="status-badge ' + statusCls + '"><span class="status-dot"></span>' + statusLabel + '</span></td>';
+    html += '<td><span class="time-ago ' + lastScrape.cls + '">' + lastScrape.text + '</span></td>';
+    html += '<td><span class="time-ago ' + lastInvoice.cls + '">' + lastInvoice.text + '</span></td>';
+    html += '<td>' + invHtml + '</td>';
+    html += '<td class="col-failure">' + (s.failure_reason ? '<span class="failure-reason">' + escHtml(s.failure_reason) + '</span>' : '<span style="color:var(--text3);">—</span>') + '</td>';
+    html += '<td>' + actionHtml + '</td>';
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
+  document.getElementById('tableContainer').innerHTML = html;
+}
+
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+async function checkRunning() {
+  try {
+    const r = await fetch('/api/vendor-scrapers/running');
+    if (!r.ok) return;
+    const data = await r.json();
+    const wasRunning = Object.keys(runningScrapers).length > 0;
+    runningScrapers = data.running || {};
+    const nowRunning = Object.keys(runningScrapers).length > 0;
+
+    // If scrapers just finished, refresh the data
+    if (wasRunning && !nowRunning) {
+      loadData();
+      stopPolling();
+    } else {
+      // Re-render table to update button states
+      loadData();
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(checkRunning, 3000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+window.runScraper = async function(vendorKey) {
+  try {
+    const r = await fetch('/api/vendor-scrapers/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vendor: vendorKey })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      alert(data.error || 'Failed to start scraper');
+      return;
+    }
+    // Immediately mark as running in UI
+    if (vendorKey === 'all') {
+      runningScrapers['all'] = { display_name: 'Run All' };
+    } else {
+      runningScrapers[vendorKey] = { display_name: vendorKey };
+    }
+    loadData();
+    startPolling();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+};
+
+window.loadData = async function() {
+  try {
+    const [sessR, runR] = await Promise.all([
+      fetch('/api/vendor-sessions'),
+      fetch('/api/vendor-scrapers/running')
+    ]);
+    if (!sessR.ok) throw new Error('HTTP ' + sessR.status);
+    const sessData = await sessR.json();
+    if (runR.ok) {
+      const runData = await runR.json();
+      runningScrapers = runData.running || {};
+      scraperResults = runData.results || {};
+      if (Object.keys(runningScrapers).length > 0 && !pollTimer) startPolling();
+    }
+    renderTable(sessData.sessions || []);
+  } catch (e) {
+    document.getElementById('tableContainer').innerHTML =
+      '<div class="loading" style="color:var(--red);">Error loading vendor sessions: ' + e.message + '</div>';
+  }
+};
+
+window.viewLog = async function(key) {
+  try {
+    const r = await fetch('/api/vendor-scrapers/log/' + encodeURIComponent(key));
+    const data = await r.json();
+    const logText = data.log || data.error || 'No log available';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'log-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML =
+      '<div class="log-modal">' +
+      '  <div class="log-modal-header">' +
+      '    <h3>Scraper Log: ' + escHtml(key) + '</h3>' +
+      '    <button class="log-modal-close" onclick="this.closest(\'.log-overlay\').remove()">&times;</button>' +
+      '  </div>' +
+      '  <div class="log-modal-body">' + escHtml(logText) + '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+  } catch (e) {
+    alert('Could not fetch log: ' + e.message);
+  }
+};
+
+loadData();
+setInterval(loadData, 60000);
+
+})();
+</script>
+</body>
+</html>

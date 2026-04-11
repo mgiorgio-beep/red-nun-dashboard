@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Order Guide — Red Nun</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+/* Layout */
+.layout { display: flex; height: 100vh; }
+.sidebar-container { width: 240px; flex-shrink: 0; }
+.main-content { flex: 1; overflow-y: auto; padding: 24px; max-width: 900px; }
+
+/* Page header */
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--text); }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+/* Search panel */
+.search-panel {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px; margin-bottom: 24px;
+}
+.search-label { font-size: 12px; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+.search-textarea {
+  width: 100%; min-height: 120px; padding: 12px;
+  background: var(--bg); border: 1px solid var(--border-focus);
+  border-radius: 10px; color: var(--text); font-family: var(--font);
+  font-size: 14px; resize: vertical; transition: border-color 0.2s;
+}
+.search-textarea:focus { outline: none; border-color: var(--blue); }
+.search-textarea::placeholder { color: var(--text3); }
+.search-actions { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+.btn-search {
+  padding: 10px 24px; border-radius: 10px; border: none;
+  background: var(--blue); color: #fff; font-size: 14px; font-weight: 600;
+  font-family: var(--font); cursor: pointer; transition: opacity 0.2s;
+}
+.btn-search:hover { opacity: 0.85; }
+.btn-search:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-copy {
+  padding: 10px 18px; border-radius: 10px;
+  border: 1px solid var(--border-focus); background: transparent;
+  color: var(--text2); font-size: 13px; font-weight: 600;
+  font-family: var(--font); cursor: pointer; transition: all 0.2s;
+}
+.btn-copy:hover { border-color: var(--text2); color: var(--text); }
+.btn-copy:disabled { opacity: 0.4; cursor: not-allowed; }
+.search-hint { font-size: 12px; color: var(--text3); margin-left: auto; }
+
+/* Results */
+#resultsArea { display: flex; flex-direction: column; gap: 20px; }
+
+.result-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+}
+.result-header {
+  padding: 14px 18px; background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.result-term { font-size: 15px; font-weight: 700; color: var(--text); }
+.result-count { font-size: 12px; color: var(--text3); }
+
+.vendor-group { border-bottom: 1px solid var(--border); }
+.vendor-group:last-child { border-bottom: none; }
+.vendor-header {
+  padding: 10px 18px;
+  background: rgba(255,255,255,0.02);
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text2);
+}
+
+.product-row {
+  padding: 10px 18px 10px 24px;
+  display: flex; align-items: center; gap: 12px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.product-row:first-of-type { border-top: none; }
+.product-name { flex: 1; font-size: 13px; color: var(--text); line-height: 1.4; }
+.product-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.product-price {
+  font-size: 15px; font-weight: 700; white-space: nowrap; text-align: right;
+}
+.product-unit { font-size: 11px; color: var(--text3); text-align: right; margin-top: 1px; }
+.cheapest-badge {
+  font-size: 10px; font-weight: 700; color: var(--green);
+  background: var(--green-soft); border-radius: 4px;
+  padding: 2px 6px; white-space: nowrap; flex-shrink: 0;
+}
+
+/* No-match state */
+.no-match {
+  padding: 16px 18px; color: var(--text3); font-size: 13px;
+  font-style: italic;
+}
+
+/* Loading / empty */
+.state-msg {
+  text-align: center; padding: 60px 20px;
+  color: var(--text3); font-size: 14px;
+}
+.state-icon { font-size: 40px; margin-bottom: 12px; }
+
+/* Copy toast */
+.copy-toast {
+  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-elevated); border: 1px solid var(--border-focus);
+  color: var(--text); padding: 10px 20px; border-radius: 20px;
+  font-size: 13px; font-weight: 600; opacity: 0;
+  transition: opacity 0.3s; pointer-events: none; z-index: 999;
+}
+.copy-toast.show { opacity: 1; }
+
+@media (max-width: 768px) {
+  .layout { display: block; height: auto; }
+  .main-content { padding: 16px; overflow-y: visible; }
+  .sidebar-container { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar-container" id="sidebar-mount"></div>
+  <div class="main-content">
+
+    <div class="page-header">
+      <div class="page-title">&#128722; Order Guide</div>
+      <div class="page-sub">Search purchase history for all vendor options and prices. All options shown — not just cheapest.</div>
+    </div>
+
+    <div class="search-panel">
+      <div class="search-label">Items to search (one per line)</div>
+      <textarea class="search-textarea" id="itemInput"
+        placeholder="chicken breast&#10;mushrooms&#10;french fries&#10;burger buns&#10;romaine lettuce"></textarea>
+      <div class="search-actions">
+        <button class="btn-search" id="searchBtn" onclick="doSearch()">&#128269; Search</button>
+        <button class="btn-copy" id="copyBtn" onclick="copyResults()" disabled>&#128203; Copy</button>
+        <span class="search-hint" id="searchHint"></span>
+      </div>
+    </div>
+
+    <div id="resultsArea">
+      <div class="state-msg">
+        <div class="state-icon">&#128722;</div>
+        Enter items above and click Search to see all vendor options from your purchase history.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="copy-toast" id="copyToast">Copied to clipboard!</div>
+
+<script>
+let lastResults = [];
+
+async function doSearch() {
+  const raw = document.getElementById('itemInput').value.trim();
+  if (!raw) return;
+  const items = raw.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!items.length) return;
+
+  const btn = document.getElementById('searchBtn');
+  const hint = document.getElementById('searchHint');
+  btn.disabled = true;
+  btn.textContent = 'Searching...';
+  hint.textContent = '';
+  document.getElementById('resultsArea').innerHTML =
+    '<div class="state-msg"><div class="state-icon">⏳</div>Searching purchase history...</div>';
+
+  try {
+    const resp = await fetch('/api/order-guide/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({items})
+    });
+    const data = await resp.json();
+    lastResults = data;
+    renderResults(data);
+
+    const found = data.filter(r => r.match_count > 0).length;
+    hint.textContent = found + ' of ' + data.length + ' item(s) found';
+    document.getElementById('copyBtn').disabled = found === 0;
+  } catch(e) {
+    document.getElementById('resultsArea').innerHTML =
+      '<div class="state-msg"><div class="state-icon">⚠️</div>Error loading results</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 Search';
+  }
+}
+
+function renderResults(results) {
+  if (!results.length) {
+    document.getElementById('resultsArea').innerHTML =
+      '<div class="state-msg"><div class="state-icon">📋</div>No results</div>';
+    return;
+  }
+
+  const html = results.map(r => {
+    const noMatch = !r.matches || r.matches.length === 0;
+    const matchHtml = noMatch
+      ? '<div class="no-match">No purchase history found for this item.</div>'
+      : r.matches.map(m => vendorGroupHtml(m, r.min_price)).join('');
+
+    return `
+      <div class="result-card">
+        <div class="result-header">
+          <div class="result-term">${escHtml(r.search_term)}</div>
+          <div class="result-count">${r.match_count > 0 ? r.match_count + ' option(s)' : 'No results'}</div>
+        </div>
+        ${matchHtml}
+      </div>`;
+  }).join('');
+
+  document.getElementById('resultsArea').innerHTML = html;
+}
+
+function vendorGroupHtml(vendorData, minPrice) {
+  const products = vendorData.products.map(p => {
+    const isCheapest = minPrice !== null && p.unit_price !== null
+      && Math.abs(p.unit_price - minPrice) < 0.01;
+    const priceColor = isCheapest ? 'var(--green)' : 'var(--text)';
+    const badge = isCheapest ? '<span class="cheapest-badge">&#10003; Best Price</span>' : '';
+    const lastDate = p.last_purchased
+      ? 'Last: ' + formatDate(p.last_purchased) : '';
+    return `
+      <div class="product-row">
+        <div style="flex:1;min-width:0">
+          <div class="product-name">${escHtml(p.product_name)}</div>
+          <div class="product-meta">${lastDate}</div>
+        </div>
+        ${badge}
+        <div style="text-align:right;flex-shrink:0">
+          <div class="product-price" style="color:${priceColor}">
+            ${p.unit_price !== null ? '$' + p.unit_price.toFixed(2) : '—'}
+          </div>
+          <div class="product-unit">${escHtml(p.unit || '')}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="vendor-group">
+      <div class="vendor-header">${escHtml(vendorData.vendor)}</div>
+      ${products}
+    </div>`;
+}
+
+function copyResults() {
+  if (!lastResults.length) return;
+  const lines = [];
+  lastResults.forEach(r => {
+    lines.push('=== ' + r.search_term.toUpperCase() + ' ===');
+    if (!r.matches || r.matches.length === 0) {
+      lines.push('  (no purchase history)');
+    } else {
+      r.matches.forEach(m => {
+        lines.push('  VENDOR: ' + m.vendor);
+        m.products.forEach(p => {
+          const price = p.unit_price !== null ? '$' + p.unit_price.toFixed(2) : '—';
+          const unit = p.unit ? '/' + p.unit : '';
+          const cheapest = r.min_price !== null && p.unit_price !== null
+            && Math.abs(p.unit_price - r.min_price) < 0.01 ? ' ✓' : '';
+          lines.push('    ' + p.product_name + ' — ' + price + unit + cheapest);
+          if (p.last_purchased) lines.push('      (Last purchased: ' + formatDate(p.last_purchased) + ')');
+        });
+      });
+    }
+    lines.push('');
+  });
+  const text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('copyToast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  }).catch(() => {
+    prompt('Copy this text:', text);
+  });
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  const parts = d.split('-');
+  if (parts.length === 3) return parts[1] + '/' + parts[2] + '/' + parts[0].substring(2);
+  return d;
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Allow Enter in textarea (or Ctrl+Enter) to trigger search
+document.getElementById('itemInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    doSearch();
+  }
+});
+</script>
+<script src="/static/sidebar.js"></script>
+</body>
+</html>

@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Specials Board — Red Nun</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+html, body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100%; }
+
+/* Header */
+.page-header {
+  padding: 16px 16px 0;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.page-title { font-size: 20px; font-weight: 700; }
+.page-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+.btn-view {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border-focus);
+  background: transparent; color: var(--text2); font-size: 12px; font-weight: 600;
+  font-family: var(--font); cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-view:hover { border-color: var(--blue); color: var(--blue); }
+
+/* List */
+#specialsList { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Special card */
+.special-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden; transition: border-color 0.2s;
+}
+.special-card.inactive { opacity: 0.5; }
+.special-card.dragging { opacity: 0.4; }
+.special-card.drag-over { border-color: var(--blue); }
+
+.card-header {
+  padding: 12px 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.drag-handle {
+  width: 20px; height: 20px; flex-shrink: 0; cursor: grab;
+  color: var(--text3); display: flex; align-items: center; justify-content: center;
+}
+.drag-handle:active { cursor: grabbing; }
+.drag-handle svg { width: 16px; height: 16px; }
+.card-info { flex: 1; min-width: 0; }
+.card-title { font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-price { font-size: 13px; color: var(--green); font-weight: 600; margin-top: 1px; }
+.card-desc { font-size: 12px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-cat { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+.card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.btn-icon {
+  width: 34px; height: 34px; border-radius: 8px; border: none;
+  background: var(--bg-elevated); color: var(--text2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-icon:hover { background: var(--border-focus); color: var(--text); }
+.btn-icon.active-toggle { background: var(--green-soft); color: var(--green); }
+.btn-icon.active-toggle:hover { background: var(--red-soft); color: var(--red); }
+.btn-icon.inactive-toggle { background: var(--red-soft); color: var(--red); }
+.btn-icon.inactive-toggle:hover { background: var(--green-soft); color: var(--green); }
+.btn-icon.danger:hover { background: var(--red-soft); color: var(--red); }
+.btn-icon svg { width: 16px; height: 16px; }
+
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--text3); font-size: 14px;
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+/* Add button */
+.add-fab {
+  position: fixed; bottom: 24px; right: 24px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--blue); border: none; color: #fff;
+  font-size: 28px; font-weight: 300; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(56,189,248,0.4);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  z-index: 100;
+}
+.add-fab:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(56,189,248,0.5); }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(2,6,23,0.85);
+  z-index: 200; display: flex; align-items: flex-end;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.modal-overlay.show { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--bg-card); border: 1px solid var(--border-focus);
+  border-radius: 20px 20px 0 0; width: 100%; padding: 20px 16px 32px;
+  transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-overlay.show .modal { transform: translateY(0); }
+.modal-title { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: none; color: var(--text3);
+  font-size: 22px; cursor: pointer; padding: 4px;
+}
+
+/* Form */
+.form-group { margin-bottom: 14px; }
+.form-label {
+  font-size: 11px; font-weight: 700; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block;
+}
+.form-input {
+  width: 100%; padding: 12px; background: var(--bg);
+  border: 1px solid var(--border-focus); border-radius: 10px;
+  color: var(--text); font-family: var(--font); font-size: 15px;
+  transition: border-color 0.2s;
+}
+.form-input:focus { outline: none; border-color: var(--blue); }
+.form-input::placeholder { color: var(--text3); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-actions { display: flex; gap: 10px; margin-top: 18px; }
+.btn-save {
+  flex: 1; padding: 14px; border-radius: 12px; border: none;
+  background: var(--blue); color: #fff; font-size: 15px; font-weight: 700;
+  font-family: var(--font); cursor: pointer; transition: opacity 0.2s;
+}
+.btn-save:hover { opacity: 0.88; }
+.btn-cancel {
+  padding: 14px 20px; border-radius: 12px;
+  border: 1px solid var(--border-focus); background: transparent;
+  color: var(--text2); font-size: 15px; font-weight: 600;
+  font-family: var(--font); cursor: pointer;
+}
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-elevated); border: 1px solid var(--border-focus);
+  color: var(--text); padding: 10px 20px; border-radius: 20px;
+  font-size: 13px; font-weight: 600; opacity: 0;
+  transition: opacity 0.3s; pointer-events: none; z-index: 300; white-space: nowrap;
+}
+.toast.show { opacity: 1; }
+
+/* Top status bar */
+.status-bar {
+  padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; color: var(--text3);
+  border-bottom: 1px solid var(--border);
+  margin-top: 12px;
+}
+.status-count { color: var(--text2); font-weight: 600; }
+.btn-clear-all {
+  background: none; border: none; color: var(--red); font-size: 12px;
+  font-weight: 600; cursor: pointer; font-family: var(--font); padding: 4px 8px;
+}
+.btn-clear-all:hover { opacity: 0.75; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="page-title">&#127825; Specials Board</div>
+    <div class="page-sub">Manage tonight's chalkboard specials</div>
+  </div>
+  <div class="header-actions">
+    <a href="/specials" target="_blank" class="btn-view">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:14px;height:14px"><path stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+      TV View
+    </a>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span><span class="status-count" id="activeCount">0</span> active specials</span>
+  <button class="btn-clear-all" onclick="confirmClearAll()">Clear All</button>
+</div>
+
+<div id="specialsList">
+  <div class="empty-state">
+    <div class="empty-icon">&#127825;</div>
+    No specials yet. Tap + to add tonight's first special.
+  </div>
+</div>
+
+<button class="add-fab" onclick="openModal(null)" title="Add special">+</button>
+
+<!-- Edit / Add Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOnBg(event)">
+  <div class="modal" id="modal">
+    <button class="modal-close" onclick="closeModal()">&#10005;</button>
+    <div class="modal-title" id="modalTitle">Add Special</div>
+    <input type="hidden" id="editId">
+    <div class="form-group">
+      <label class="form-label">Special Name *</label>
+      <input class="form-input" id="fTitle" placeholder="e.g. Pan-Seared Salmon" maxlength="60">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-input" id="fDesc" placeholder="e.g. With lemon beurre blanc and roasted potatoes" rows="2" style="resize:vertical;min-height:60px;"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Price</label>
+        <input class="form-input" id="fPrice" placeholder="e.g. $28" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <input class="form-input" id="fCat" placeholder="e.g. Entrée" maxlength="30" list="catSuggestions">
+        <datalist id="catSuggestions">
+          <option value="Appetizer">
+          <option value="Entrée">
+          <option value="Dessert">
+          <option value="Cocktail">
+          <option value="Wine">
+          <option value="Beer">
+          <option value="Soup">
+          <option value="Salad">
+        </datalist>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveSpecial()">Save Special</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let specials = [];
+let dragSrcId = null;
+
+// ── Load ──────────────────────────────────────────────────────────────
+async function loadSpecials() {
+  try {
+    const resp = await fetch('/api/specials?all=1');
+    specials = await resp.json();
+    render();
+  } catch(e) {
+    showToast('Error loading specials');
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function render() {
+  const list = document.getElementById('specialsList');
+  const active = specials.filter(s => s.active);
+  document.getElementById('activeCount').textContent = active.length;
+
+  if (!specials.length) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🍓</div>No specials yet. Tap + to add tonight's first special.</div>`;
+    return;
+  }
+
+  list.innerHTML = specials.map(s => cardHtml(s)).join('');
+  attachDragListeners();
+}
+
+function cardHtml(s) {
+  const toggleClass = s.active ? 'active-toggle' : 'inactive-toggle';
+  const toggleTitle = s.active ? 'Hide (deactivate)' : 'Show (activate)';
+  const toggleIcon = s.active
+    ? `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>`
+    : `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>`;
+
+  return `
+    <div class="special-card${s.active ? '' : ' inactive'}" id="card-${s.id}"
+         data-id="${s.id}" draggable="true">
+      <div class="card-header">
+        <div class="drag-handle" title="Drag to reorder">
+          <svg fill="currentColor" viewBox="0 0 24 24"><path d="M8 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM8 13.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM8 21a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM16 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM16 13.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM16 21a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></svg>
+        </div>
+        <div class="card-info">
+          <div class="card-title">${esc(s.title)}</div>
+          ${s.price ? `<div class="card-price">${esc(s.price)}</div>` : ''}
+          ${s.description ? `<div class="card-desc">${esc(s.description)}</div>` : ''}
+          ${s.category ? `<div class="card-cat">${esc(s.category)}</div>` : ''}
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon ${toggleClass}" onclick="toggleActive(${s.id})" title="${toggleTitle}">${toggleIcon}</button>
+          <button class="btn-icon" onclick="openModal(${s.id})" title="Edit">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+          </button>
+          <button class="btn-icon danger" onclick="deleteSpecial(${s.id})" title="Delete">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Drag & Drop ───────────────────────────────────────────────────────
+function attachDragListeners() {
+  document.querySelectorAll('.special-card').forEach(card => {
+    card.addEventListener('dragstart', e => {
+      dragSrcId = parseInt(card.dataset.id);
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      document.querySelectorAll('.special-card').forEach(c => c.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.special-card').forEach(c => c.classList.remove('drag-over'));
+      card.classList.add('drag-over');
+    });
+    card.addEventListener('drop', async e => {
+      e.preventDefault();
+      const targetId = parseInt(card.dataset.id);
+      if (dragSrcId === targetId) return;
+
+      // Reorder locally
+      const srcIdx = specials.findIndex(s => s.id === dragSrcId);
+      const tgtIdx = specials.findIndex(s => s.id === targetId);
+      const [moved] = specials.splice(srcIdx, 1);
+      specials.splice(tgtIdx, 0, moved);
+      render();
+
+      // Persist
+      await saveOrder();
+    });
+  });
+}
+
+async function saveOrder() {
+  try {
+    await fetch('/api/specials/reorder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({order: specials.map(s => s.id)})
+    });
+  } catch(e) {
+    showToast('Failed to save order');
+  }
+}
+
+// ── Toggle Active ─────────────────────────────────────────────────────
+async function toggleActive(id) {
+  const s = specials.find(x => x.id === id);
+  if (!s) return;
+  try {
+    const resp = await fetch(`/api/specials/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({active: s.active ? 0 : 1})
+    });
+    const updated = await resp.json();
+    const idx = specials.findIndex(x => x.id === id);
+    if (idx !== -1) specials[idx] = updated;
+    render();
+    showToast(updated.active ? 'Showing on board' : 'Hidden from board');
+  } catch(e) {
+    showToast('Error updating special');
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────
+async function deleteSpecial(id) {
+  const s = specials.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`Delete "${s.title}"?`)) return;
+  try {
+    await fetch(`/api/specials/${id}`, {method: 'DELETE'});
+    specials = specials.filter(x => x.id !== id);
+    render();
+    showToast('Special deleted');
+  } catch(e) {
+    showToast('Error deleting special');
+  }
+}
+
+// ── Clear All ─────────────────────────────────────────────────────────
+async function confirmClearAll() {
+  if (!specials.length) return;
+  if (!confirm('Delete ALL specials? This cannot be undone.')) return;
+  try {
+    await Promise.all(specials.map(s => fetch(`/api/specials/${s.id}`, {method: 'DELETE'})));
+    specials = [];
+    render();
+    showToast('All specials cleared');
+  } catch(e) {
+    showToast('Error clearing specials');
+  }
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────
+function openModal(id) {
+  const overlay = document.getElementById('modalOverlay');
+  if (id) {
+    const s = specials.find(x => x.id === id);
+    if (!s) return;
+    document.getElementById('modalTitle').textContent = 'Edit Special';
+    document.getElementById('editId').value = id;
+    document.getElementById('fTitle').value = s.title || '';
+    document.getElementById('fDesc').value = s.description || '';
+    document.getElementById('fPrice').value = s.price || '';
+    document.getElementById('fCat').value = s.category || '';
+  } else {
+    document.getElementById('modalTitle').textContent = 'Add Special';
+    document.getElementById('editId').value = '';
+    document.getElementById('fTitle').value = '';
+    document.getElementById('fDesc').value = '';
+    document.getElementById('fPrice').value = '';
+    document.getElementById('fCat').value = '';
+  }
+  overlay.classList.add('show');
+  setTimeout(() => document.getElementById('fTitle').focus(), 300);
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+function closeModalOnBg(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+async function saveSpecial() {
+  const title = document.getElementById('fTitle').value.trim();
+  if (!title) { document.getElementById('fTitle').focus(); return; }
+
+  const id = document.getElementById('editId').value;
+  const payload = {
+    title,
+    description: document.getElementById('fDesc').value.trim(),
+    price: document.getElementById('fPrice').value.trim(),
+    category: document.getElementById('fCat').value.trim(),
+  };
+
+  try {
+    let resp, updated;
+    if (id) {
+      resp = await fetch(`/api/specials/${id}`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      updated = await resp.json();
+      const idx = specials.findIndex(x => x.id === parseInt(id));
+      if (idx !== -1) specials[idx] = updated;
+    } else {
+      resp = await fetch('/api/specials', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      updated = await resp.json();
+      specials.push(updated);
+    }
+    closeModal();
+    render();
+    showToast(id ? 'Special updated' : 'Special added');
+  } catch(e) {
+    showToast('Error saving special');
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Keyboard shortcut ─────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// Init
+loadSpecials();
+</script>
+
+<script src="/static/sidebar.js"></script>
+</body>
+</html>

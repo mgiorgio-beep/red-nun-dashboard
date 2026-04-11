@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Red Nun — Product Mapping</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+:root { --bg: #020617; --card-bg: #0f172a; --border: #1e293b; --text: #e2e8f0; --text2: #94a3b8; --text3: #64748b; --green: #22c55e; --red: #ef4444; --amber: #f59e0b; --blue: #38bdf8; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:14px; }
+.main { margin-left:240px; padding:24px; }
+@media(max-width:768px) { .main { margin-left:0; padding:16px; } }
+
+.stats-bar { display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap; }
+.stat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:16px 20px; flex:1; min-width:140px; }
+.stat-label { font-size:12px; color:var(--text3); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; }
+.stat-value { font-size:28px; font-weight:700; }
+
+.tabs { display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:0; }
+.tab { padding:10px 18px; cursor:pointer; color:var(--text3); font-weight:600; font-size:13px; border-bottom:2px solid transparent; transition:all 0.15s; }
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+.tab .badge { display:inline-block; background:var(--border); color:var(--text2); padding:1px 7px; border-radius:10px; font-size:11px; margin-left:6px; }
+.tab.active .badge { background:rgba(56,189,248,0.2); color:var(--blue); }
+
+.panel { display:none; }
+.panel.active { display:block; }
+
+.row-card { background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:14px 18px; margin-bottom:8px; }
+.row-top { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.vi-name { font-weight:600; flex:1; min-width:200px; }
+.vi-vendor { color:var(--text3); font-size:12px; }
+.vi-price { color:var(--amber); font-weight:600; font-size:13px; }
+.arrow { color:var(--text3); font-size:16px; }
+.canon-name { color:var(--green); font-weight:600; }
+.confidence { font-size:12px; padding:2px 8px; border-radius:4px; font-weight:600; }
+.conf-high { background:rgba(34,197,94,0.15); color:var(--green); }
+.conf-med { background:rgba(245,158,11,0.15); color:var(--amber); }
+
+.btn { padding:6px 14px; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; transition:background 0.15s; }
+.btn-confirm { background:var(--green); color:#000; }
+.btn-confirm:hover { background:#16a34a; }
+.btn-reject { background:transparent; border:1px solid var(--border); color:var(--text3); }
+.btn-reject:hover { background:rgba(239,68,68,0.1); color:var(--red); border-color:var(--red); }
+.btn-link { background:var(--blue); color:#000; }
+.btn-link:hover { background:#0ea5e9; }
+.btn-create { background:var(--amber); color:#000; }
+.btn-create:hover { background:#d97706; }
+
+.expand-panel { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:none; }
+.expand-panel.open { display:block; }
+.search-input { width:100%; padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:14px; margin-bottom:8px; }
+.search-input:focus { outline:none; border-color:var(--blue); }
+.search-result { padding:8px 12px; cursor:pointer; border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
+.search-result:hover { background:var(--border); }
+.search-results { max-height:200px; overflow-y:auto; margin-bottom:12px; }
+
+.create-form { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:14px; margin-top:8px; }
+.form-row { display:flex; gap:10px; margin-bottom:10px; align-items:end; }
+.form-group { flex:1; }
+.form-group label { display:block; font-size:11px; color:var(--text3); margin-bottom:4px; text-transform:uppercase; }
+.form-group input, .form-group select { width:100%; padding:8px 10px; background:var(--card-bg); border:1px solid var(--border); border-radius:4px; color:var(--text); font-size:13px; }
+.form-group input:focus, .form-group select:focus { outline:none; border-color:var(--blue); }
+
+.linked-type { font-size:11px; padding:2px 6px; border-radius:3px; }
+.linked-auto { background:rgba(34,197,94,0.15); color:var(--green); }
+.linked-manual { background:rgba(56,189,248,0.15); color:var(--blue); }
+
+.empty-state { text-align:center; padding:40px; color:var(--text3); }
+.search-bar-top { margin-bottom:16px; }
+.toast { position:fixed; bottom:24px; right:24px; background:var(--green); color:#000; padding:12px 20px; border-radius:8px; font-weight:600; z-index:9999; display:none; }
+</style>
+</head>
+<body>
+<div class="main">
+  <h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Product Mapping</h1>
+  <p style="color:var(--text3);margin-bottom:20px;font-size:13px">Link vendor invoice items to canonical products for consistent costing</p>
+
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-label">Auto-Linked</div><div class="stat-value" style="color:var(--green)" id="st-auto">-</div></div>
+    <div class="stat-card"><div class="stat-label">Suggested</div><div class="stat-value" style="color:var(--amber)" id="st-suggested">-</div></div>
+    <div class="stat-card"><div class="stat-label">Unlinked</div><div class="stat-value" style="color:var(--red)" id="st-unlinked">-</div></div>
+    <div class="stat-card"><div class="stat-label">Skipped</div><div class="stat-value" style="color:var(--text3)" id="st-skipped">-</div></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('suggested')">Suggested <span class="badge" id="tab-suggested-count">0</span></div>
+    <div class="tab" onclick="switchTab('unlinked')">Unlinked <span class="badge" id="tab-unlinked-count">0</span></div>
+    <div class="tab" onclick="switchTab('linked')">Linked</div>
+  </div>
+
+  <!-- SUGGESTED TAB -->
+  <div class="panel active" id="panel-suggested">
+    <div id="suggested-list"></div>
+  </div>
+
+  <!-- UNLINKED TAB -->
+  <div class="panel" id="panel-unlinked">
+    <div id="unlinked-list"></div>
+  </div>
+
+  <!-- LINKED TAB -->
+  <div class="panel" id="panel-linked">
+    <div class="search-bar-top">
+      <input type="text" class="search-input" id="linked-search" placeholder="Search linked items..." oninput="loadLinked()">
+    </div>
+    <div id="linked-list"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/sidebar.js"></script>
+<script>
+let currentTab = 'suggested';
+let _searchTimers = {};
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['suggested','unlinked','linked'][i] === tab);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'linked') loadLinked();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+
+// ── Load Stats ────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const s = await fetch('/api/product-mapping/stats').then(r => r.json());
+    document.getElementById('st-auto').textContent = s.auto_linked || 0;
+    document.getElementById('st-suggested').textContent = s.suggested || 0;
+    document.getElementById('st-unlinked').textContent = s.unlinked || 0;
+    document.getElementById('st-skipped').textContent = s.skipped || 0;
+    document.getElementById('tab-suggested-count').textContent = s.suggested || 0;
+    document.getElementById('tab-unlinked-count').textContent = s.unlinked || 0;
+  } catch(e) { console.error(e); }
+}
+
+// ── Load Suggested ────────────────────────────────────────────
+async function loadSuggested() {
+  try {
+    const items = await fetch('/api/product-mapping/suggested').then(r => r.json());
+    const el = document.getElementById('suggested-list');
+    if (!items.length) {
+      el.innerHTML = '<div class="empty-state">No suggestions — all items are linked or unmatched</div>';
+      return;
+    }
+    el.innerHTML = items.map(it => {
+      const conf = it.confidence || 0;
+      const cls = conf >= 75 ? 'conf-high' : 'conf-med';
+      const vn = it.vendor_name || '';
+      const pr = it.unit_price ? '$' + Number(it.unit_price).toFixed(2) : '';
+      const vin = esc(it.vendor_item_name);
+      const cn = esc(it.canonical_product_name);
+      return `<div class="row-card" id="sug-${esc(it.vendor_item_name)}">
+        <div class="row-top">
+          <div class="vi-name">${vin}</div>
+          <div class="vi-vendor">${vn}</div>
+          <div class="vi-price">${pr}</div>
+          <div class="arrow">&rarr;</div>
+          <div class="canon-name">${cn}</div>
+          <span class="confidence ${cls}">${conf.toFixed(0)}%</span>
+          <button class="btn btn-confirm" data-vendor="${escAttr(it.vendor_item_name)}" data-canonical="${escAttr(it.canonical_product_name)}">Confirm</button>
+          <button class="btn btn-reject" data-vendor="${escAttr(it.vendor_item_name)}">Wrong</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function confirmSuggestion(viName, canonName, btn) {
+  btn.disabled = true;
+  try {
+    await fetch('/api/product-mapping/confirm', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ vendor_item_name: viName, canonical_product_name: canonName })
+    });
+    btn.closest('.row-card').remove();
+    loadStats();
+    showToast('Linked: ' + viName.substring(0, 30));
+  } catch(e) { btn.disabled = false; console.error(e); }
+}
+
+async function rejectSuggestion(viName, btn) {
+  btn.disabled = true;
+  try {
+    await fetch('/api/product-mapping/reject-suggestion', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ vendor_item_name: viName })
+    });
+    btn.closest('.row-card').remove();
+    loadStats();
+    loadUnlinked();
+    showToast('Moved to Unlinked');
+  } catch(e) { btn.disabled = false; console.error(e); }
+}
+
+// ── Load Unlinked ─────────────────────────────────────────────
+async function loadUnlinked() {
+  try {
+    const items = await fetch('/api/product-mapping/unlinked').then(r => r.json());
+    const el = document.getElementById('unlinked-list');
+    if (!items.length) {
+      el.innerHTML = '<div class="empty-state">All vendor items are linked or suggested</div>';
+      return;
+    }
+    el.innerHTML = items.map((it, idx) => {
+      const vn = it.vendor_name || '';
+      const pr = it.price ? '$' + Number(it.price).toFixed(2) : '';
+      const cat = it.category || '';
+      return `<div class="row-card" id="unl-${idx}">
+        <div class="row-top" style="cursor:pointer" onclick="toggleExpand(${idx})">
+          <div class="vi-name">${esc(it.vendor_item_name)}</div>
+          <div class="vi-vendor">${vn}</div>
+          <div class="vi-price">${pr}</div>
+          <span style="font-size:11px;color:var(--text3)">${cat}</span>
+          <span style="color:var(--text3);font-size:18px" id="chevron-${idx}">&#9662;</span>
+        </div>
+        <div class="expand-panel" id="expand-${idx}" data-viname="${escAttr(it.vendor_item_name)}">
+          <input type="text" class="search-input" placeholder="Search canonical products..." oninput="searchCanonicals(this,${idx})" data-idx="${idx}">
+          <div class="search-results" id="sr-${idx}"></div>
+          <button class="btn btn-create" onclick="showCreateForm(${idx})" style="font-size:12px">+ New Product</button>
+          <div class="create-form" id="cf-${idx}" style="display:none">
+            <div class="form-row">
+              <div class="form-group" style="flex:2"><label>Product Name</label><input id="cf-name-${idx}" value="${escAttr(it.vendor_item_name)}"></div>
+              <div class="form-group"><label>Category</label>
+                <select id="cf-cat-${idx}"><option value="Food">Food</option><option value="Beer">Beer</option><option value="Liquor">Liquor</option><option value="Wine">Wine</option><option value="NA Beverages">NA Beverages</option><option value="Other">Other</option></select>
+              </div>
+            </div>
+            <button class="btn btn-create" onclick="createAndLink(${idx})">Create & Link</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+function toggleExpand(idx) {
+  const panel = document.getElementById('expand-' + idx);
+  const chev = document.getElementById('chevron-' + idx);
+  const isOpen = panel.classList.contains('open');
+  // Close all
+  document.querySelectorAll('.expand-panel.open').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('[id^="chevron-"]').forEach(c => c.innerHTML = '&#9662;');
+  if (!isOpen) {
+    panel.classList.add('open');
+    chev.innerHTML = '&#9652;';
+    panel.querySelector('.search-input').focus();
+  }
+}
+
+function searchCanonicals(input, idx) {
+  clearTimeout(_searchTimers[idx]);
+  _searchTimers[idx] = setTimeout(async () => {
+    const q = input.value.trim();
+    const sr = document.getElementById('sr-' + idx);
+    if (q.length < 2) { sr.innerHTML = ''; return; }
+    try {
+      const items = await fetch('/api/product-mapping/search-canonicals?q=' + encodeURIComponent(q)).then(r => r.json());
+      sr.innerHTML = items.map(p => {
+        const pr = p.case_price ? '$' + Number(p.case_price).toFixed(2) : '';
+        return `<div class="search-result" data-action="link-canonical" data-idx="${idx}" data-canonical="${escAttr(p.product_name)}">
+          <span>${esc(p.product_name)}</span>
+          <span style="color:var(--text3);font-size:12px">${p.category || ''} ${pr}</span>
+        </div>`;
+      }).join('') || '<div style="padding:8px;color:var(--text3)">No matches</div>';
+    } catch(e) { console.error(e); }
+  }, 250);
+}
+
+async function linkToCanonical(idx, canonName) {
+  const panel = document.getElementById('expand-' + idx);
+  const viName = panel.dataset.viname;
+  try {
+    await fetch('/api/product-mapping/confirm', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ vendor_item_name: viName, canonical_product_name: canonName })
+    });
+    document.getElementById('unl-' + idx).remove();
+    loadStats();
+    showToast('Linked: ' + viName.substring(0, 30));
+  } catch(e) { console.error(e); }
+}
+
+function showCreateForm(idx) {
+  const cf = document.getElementById('cf-' + idx);
+  cf.style.display = cf.style.display === 'none' ? 'block' : 'none';
+}
+
+async function createAndLink(idx) {
+  const panel = document.getElementById('expand-' + idx);
+  const viName = panel.dataset.viname;
+  const name = document.getElementById('cf-name-' + idx).value.trim();
+  const cat = document.getElementById('cf-cat-' + idx).value;
+  if (!name) { alert('Product name required'); return; }
+  try {
+    const r = await fetch('/api/product-mapping/create-canonical', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ product_name: name, category: cat, vendor_item_name: viName })
+    });
+    if (!r.ok) throw new Error('Failed');
+    document.getElementById('unl-' + idx).remove();
+    loadStats();
+    showToast('Created & linked: ' + name.substring(0, 30));
+  } catch(e) { console.error(e); alert('Error: ' + e.message); }
+}
+
+// ── Load Linked ───────────────────────────────────────────────
+let _linkedItems = [];
+async function loadLinked() {
+  try {
+    const q = (document.getElementById('linked-search').value || '').trim();
+    const url = '/api/product-mapping/linked' + (q ? '?search=' + encodeURIComponent(q) : '');
+    _linkedItems = await fetch(url).then(r => r.json());
+    const el = document.getElementById('linked-list');
+    if (!_linkedItems.length) {
+      el.innerHTML = '<div class="empty-state">No linked items' + (q ? ' matching "' + esc(q) + '"' : '') + '</div>';
+      return;
+    }
+    el.innerHTML = _linkedItems.map((it, idx) => {
+      const type = it.auto_linked ? 'auto' : 'manual';
+      const typeCls = it.auto_linked ? 'linked-auto' : 'linked-manual';
+      const conf = it.confidence ? it.confidence.toFixed(0) + '%' : '';
+      const vn = it.vendor_name || '—';
+      const pr = it.unit_price ? '$' + Number(it.unit_price).toFixed(2) : '—';
+      const dt = it.invoice_date || '—';
+      return `<div class="row-card" id="lnk-${idx}">
+        <div class="row-top" style="cursor:pointer" onclick="toggleLinkedExpand(${idx})">
+          <div class="vi-name" style="font-size:13px">${esc(it.vendor_item_name)}</div>
+          <div class="arrow">&rarr;</div>
+          <div class="canon-name" style="font-size:13px">${esc(it.canonical_product_name)}</div>
+          ${conf ? '<span class="confidence conf-high">' + conf + '</span>' : ''}
+          <span class="linked-type ${typeCls}">${type}</span>
+          <span style="color:var(--text3);font-size:18px" id="lnk-chev-${idx}">&#9662;</span>
+        </div>
+        <div class="expand-panel" id="lnk-expand-${idx}" data-viname="${escAttr(it.vendor_item_name)}">
+          <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:12px">
+            <div><span style="color:var(--text3);font-size:11px;text-transform:uppercase">Vendor</span><div style="font-weight:600">${esc(vn)}</div></div>
+            <div><span style="color:var(--text3);font-size:11px;text-transform:uppercase">Last Price</span><div style="font-weight:600;color:var(--amber)">${pr}</div></div>
+            <div><span style="color:var(--text3);font-size:11px;text-transform:uppercase">Invoice Date</span><div style="font-weight:600">${esc(dt)}</div></div>
+            <div><span style="color:var(--text3);font-size:11px;text-transform:uppercase">Confidence</span><div style="font-weight:600">${conf || '—'}</div></div>
+            <div><span style="color:var(--text3);font-size:11px;text-transform:uppercase">Linked By</span><div style="font-weight:600">${type}</div></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <button class="btn btn-reject" onclick="unlinkItem(${idx})" style="border-color:var(--red);color:var(--red)">&#10005; Unlink</button>
+            <button class="btn btn-link" onclick="startReassign(${idx})">&#9998; Reassign</button>
+          </div>
+          <div class="reassign-panel" id="lnk-reassign-${idx}" style="display:none">
+            <input type="text" class="search-input" placeholder="Search canonical products..." oninput="searchLinkedCanonicals(this,${idx})" data-idx="${idx}">
+            <div class="search-results" id="lnk-sr-${idx}"></div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+function toggleLinkedExpand(idx) {
+  const panel = document.getElementById('lnk-expand-' + idx);
+  const chev = document.getElementById('lnk-chev-' + idx);
+  const isOpen = panel.classList.contains('open');
+  document.querySelectorAll('[id^="lnk-expand-"]').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('[id^="lnk-chev-"]').forEach(c => c.innerHTML = '&#9662;');
+  if (!isOpen) {
+    panel.classList.add('open');
+    chev.innerHTML = '&#9652;';
+  }
+}
+
+async function unlinkItem(idx) {
+  const panel = document.getElementById('lnk-expand-' + idx);
+  const viName = panel.dataset.viname;
+  try {
+    await fetch('/api/product-mapping/unlink', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ vendor_item_name: viName })
+    });
+    document.getElementById('lnk-' + idx).remove();
+    loadStats();
+    showToast('Unlinked: ' + viName.substring(0, 30));
+  } catch(e) { console.error(e); }
+}
+
+function startReassign(idx) {
+  const rp = document.getElementById('lnk-reassign-' + idx);
+  const show = rp.style.display === 'none';
+  rp.style.display = show ? 'block' : 'none';
+  if (show) rp.querySelector('.search-input').focus();
+}
+
+function searchLinkedCanonicals(input, idx) {
+  clearTimeout(_searchTimers['lnk-' + idx]);
+  _searchTimers['lnk-' + idx] = setTimeout(async () => {
+    const q = input.value.trim();
+    const sr = document.getElementById('lnk-sr-' + idx);
+    if (q.length < 2) { sr.innerHTML = ''; return; }
+    try {
+      const items = await fetch('/api/product-mapping/search-canonicals?q=' + encodeURIComponent(q)).then(r => r.json());
+      sr.innerHTML = items.map(p => {
+        const pr = p.case_price ? '$' + Number(p.case_price).toFixed(2) : '';
+        return `<div class="search-result" data-action="reassign" data-idx="${idx}" data-canonical="${escAttr(p.product_name)}">
+          <span>${esc(p.product_name)}</span>
+          <span style="color:var(--text3);font-size:12px">${p.category || ''} ${pr}</span>
+        </div>`;
+      }).join('') || '<div style="padding:8px;color:var(--text3)">No matches</div>';
+    } catch(e) { console.error(e); }
+  }, 250);
+}
+
+async function reassignItem(idx, newCanon) {
+  const panel = document.getElementById('lnk-expand-' + idx);
+  const viName = panel.dataset.viname;
+  try {
+    await fetch('/api/product-mapping/confirm', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ vendor_item_name: viName, canonical_product_name: newCanon })
+    });
+    loadStats();
+    loadLinked();
+    showToast('Reassigned: ' + viName.substring(0, 30));
+  } catch(e) { console.error(e); }
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// ── Delegated event listener for all dynamic buttons ──────────
+document.addEventListener('click', function(e) {
+  // Suggested tab: Confirm
+  var btn = e.target.closest('.btn-confirm');
+  if (btn && btn.dataset.vendor) {
+    confirmSuggestion(btn.dataset.vendor, btn.dataset.canonical, btn);
+    return;
+  }
+  // Suggested tab: Reject
+  btn = e.target.closest('.btn-reject');
+  if (btn && btn.dataset.vendor) {
+    rejectSuggestion(btn.dataset.vendor, btn);
+    return;
+  }
+  // Unlinked search result: link to canonical
+  var sr = e.target.closest('[data-action="link-canonical"]');
+  if (sr) {
+    linkToCanonical(Number(sr.dataset.idx), sr.dataset.canonical);
+    return;
+  }
+  // Linked search result: reassign
+  sr = e.target.closest('[data-action="reassign"]');
+  if (sr) {
+    reassignItem(Number(sr.dataset.idx), sr.dataset.canonical);
+    return;
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────
+loadStats();
+loadSuggested();
+loadUnlinked();
+</script>
+</body>
+</html>

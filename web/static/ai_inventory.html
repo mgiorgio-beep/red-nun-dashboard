@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1C1C1E">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Red Nun — Smart Count</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #1C1C1E;
+  --bg-card:  rgba(58,58,60,0.5);
+  --bg-elevated: rgba(44,44,46,0.98);
+  --bg-glass: rgba(58,58,60,0.4);
+  --border:   rgba(255,255,255,0.1);
+  --text:     #F5F5F7;
+  --text2:    rgba(245,245,247,0.65);
+  --text3:    rgba(245,245,247,0.4);
+  --red:      #FF453A;
+  --red-s:    rgba(255,69,58,0.15);
+  --green:    #30D158;
+  --green-s:  rgba(48,209,88,0.15);
+  --amber:    #FF9F0A;
+  --amber-s:  rgba(255,159,10,0.15);
+  --blue:     #0A84FF;
+  --blue-s:   rgba(10,132,255,0.15);
+  --r:  14px;
+  --r-lg: 20px;
+  --r-sm: 10px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; -webkit-font-smoothing:antialiased; font-size:14px; }
+
+/* ── Page tabs ── */
+.page-tabs {
+  background:rgba(28,28,30,0.92); backdrop-filter:blur(30px);
+  border-bottom:1px solid var(--border);
+  display:flex; gap:4px; padding:12px 20px;
+  position:sticky; top:0; z-index:99; overflow-x:auto;
+}
+.page-tabs::-webkit-scrollbar{display:none}
+.tab-btn {
+  padding:8px 18px; border-radius:8px;
+  background:transparent; border:1px solid transparent;
+  color:var(--text2); font-size:13px; font-weight:600;
+  cursor:pointer; white-space:nowrap; transition:all .2s;
+  font-family:var(--font);
+}
+.tab-btn.active { background:var(--blue-s); border-color:rgba(10,132,255,.35); color:var(--blue); }
+.tab-btn:hover:not(.active) { background:var(--bg-card); border-color:var(--border); color:var(--text); }
+
+/* ── Content ── */
+.ai-content { padding:24px 20px 200px; max-width:900px; margin:0 auto; }
+.rn-layout { height:auto !important; overflow:visible !important; }
+.rn-main { overflow:visible !important; }
+
+/* ── Buttons ── */
+.btn-start {
+  width:100%; padding:18px; border-radius:14px; border:none;
+  background:var(--red); color:#fff;
+  font-size:17px; font-weight:800; font-family:var(--font);
+  cursor:pointer; transition:all .2s; letter-spacing:-.2px;
+  margin-top:8px;
+}
+.btn-start:active { transform:scale(.98); opacity:.9; }
+.btn-start:disabled { opacity:.5; cursor:not-allowed; }
+
+.btn-primary {
+  width:100%; padding:14px; border-radius:12px; border:none;
+  background:var(--blue); color:#fff;
+  font-size:15px; font-weight:700; font-family:var(--font);
+  cursor:pointer; transition:all .2s;
+}
+.btn-primary:active { transform:scale(.98); }
+.btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+
+.btn-confirm-all {
+  padding:12px 24px; border-radius:10px; border:none;
+  background:var(--green); color:#fff;
+  font-size:14px; font-weight:700; font-family:var(--font);
+  cursor:pointer; transition:all .2s;
+}
+.btn-confirm-all:active { transform:scale(.97); }
+
+/* ── Location pills ── */
+.loc-row { display:flex; gap:10px; margin:16px 0; }
+.loc-pill {
+  flex:1; padding:14px; border-radius:12px; text-align:center;
+  border:2px solid var(--border); background:var(--bg-card);
+  color:var(--text2); font-size:15px; font-weight:700; cursor:pointer;
+  transition:all .2s; font-family:var(--font); letter-spacing:-.2px;
+}
+.loc-pill.active { background:var(--red-s); border-color:rgba(255,69,58,.5); color:var(--red); }
+
+/* ── Recent sessions ── */
+.recent-row {
+  display:flex; align-items:center; gap:14px;
+  background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--r); padding:14px 16px; margin-bottom:8px;
+  cursor:pointer; transition:all .2s; text-decoration:none; color:var(--text);
+}
+.recent-row:hover { border-color:rgba(255,255,255,.2); }
+.recent-info { flex:1; }
+.recent-title { font-size:14px; font-weight:600; margin-bottom:2px; }
+.recent-sub   { font-size:12px; color:var(--text3); }
+.recent-badge {
+  font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px;
+  white-space:nowrap;
+}
+.badge-green { background:var(--green-s); color:var(--green); }
+.badge-amber { background:var(--amber-s); color:var(--amber); }
+.badge-red   { background:var(--red-s);   color:var(--red); }
+.badge-blue  { background:var(--blue-s);  color:var(--blue); }
+.badge-gray  { background:rgba(255,255,255,.06); color:var(--text3); }
+
+/* ── Active session card ── */
+.session-active-card {
+  background:var(--bg-elevated); border:1px solid rgba(255,69,58,.3);
+  border-radius:var(--r-lg); padding:24px 20px; margin-bottom:20px;
+}
+.recording-indicator {
+  display:flex; align-items:center; gap:8px;
+  font-size:13px; font-weight:700; color:var(--red);
+  margin-bottom:20px;
+}
+.rec-dot {
+  width:10px; height:10px; background:var(--red);
+  border-radius:50%; flex-shrink:0;
+  animation: pulse-red 1.5s ease-in-out infinite;
+}
+@keyframes pulse-red {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:0.35; transform:scale(.85); }
+}
+
+.session-meta {
+  font-size:12px; color:var(--text3); margin-bottom:20px; line-height:1.6;
+}
+
+.instructions-card {
+  background:rgba(0,0,0,.25); border-radius:var(--r);
+  padding:16px; margin-bottom:20px;
+}
+.step {
+  font-size:13px; color:var(--text2); padding:5px 0; line-height:1.5;
+}
+.step-auto {
+  color:var(--green); font-weight:600; margin-top:4px;
+}
+
+.waiting-status {
+  display:none;
+  align-items:center; gap:12px;
+  background:var(--blue-s); border-radius:var(--r-sm);
+  padding:14px 16px; margin-bottom:16px;
+  font-size:13px; font-weight:600; color:var(--blue);
+}
+.waiting-status.show { display:flex; }
+.elapsed { font-size:12px; color:var(--text3); margin-left:auto; }
+
+.cancel-link {
+  display:block; text-align:center; margin-top:16px;
+  color:var(--text3); font-size:12px; text-decoration:none;
+  cursor:pointer; background:none; border:none; font-family:var(--font);
+  padding:4px;
+}
+.cancel-link:hover { color:var(--red); }
+
+/* manual upload fallback */
+.manual-upload-section {
+  display:none; margin-top:16px;
+  border-top:1px solid var(--border); padding-top:16px;
+}
+.manual-upload-section.show { display:block; }
+.upload-zone {
+  border:2px dashed rgba(255,255,255,.12); border-radius:var(--r-lg);
+  background:var(--bg-elevated); padding:32px 20px;
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  cursor:pointer; transition:all .3s;
+}
+.upload-zone:hover,.upload-zone.drag-over { border-color:var(--blue); }
+.upload-title { font-size:15px; font-weight:700; margin-bottom:4px; }
+.upload-sub   { font-size:12px; color:var(--text3); line-height:1.6; }
+.file-chosen  { display:none; margin-top:10px; padding:8px 14px; background:var(--bg-card); border-radius:8px; font-size:12px; color:var(--text2); }
+input[type="file"] { display:none; }
+
+/* ── Processing overlay ── */
+.proc-overlay {
+  display:none; position:fixed; inset:0; z-index:200;
+  background:rgba(0,0,0,.75); backdrop-filter:blur(12px);
+  align-items:center; justify-content:center; flex-direction:column;
+}
+.proc-overlay.show { display:flex; }
+.proc-card {
+  background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--r-lg); padding:32px 28px; width:320px; max-width:90vw;
+}
+.proc-title { font-size:17px; font-weight:700; margin-bottom:24px; text-align:center; }
+.proc-step {
+  display:flex; align-items:center; gap:12px; padding:8px 0;
+  font-size:13px; color:var(--text3);
+}
+.proc-step.done { color:var(--green); }
+.proc-step.active { color:var(--text); }
+.proc-step-icon {
+  width:24px; height:24px; border-radius:50%; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:11px;
+  background:rgba(255,255,255,.06); color:var(--text3);
+}
+.proc-step.done .proc-step-icon { background:var(--green-s); color:var(--green); }
+.proc-step.active .proc-step-icon { background:var(--blue-s); color:var(--blue); }
+.spin { width:16px; height:16px; border:2px solid var(--blue-s); border-top-color:var(--blue); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── Review view ── */
+.review-header {
+  background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--r); padding:18px 20px; margin-bottom:20px;
+}
+.review-summary { font-size:15px; font-weight:600; margin-bottom:4px; }
+.review-sub { font-size:12px; color:var(--text3); }
+.review-meta-row { display:flex; gap:10px; flex-wrap:wrap; margin:12px 0 0; }
+.review-chip { padding:5px 12px; border-radius:20px; font-size:12px; font-weight:600; }
+.chip-green { background:var(--green-s); color:var(--green); }
+.chip-amber { background:var(--amber-s); color:var(--amber); }
+.chip-red   { background:var(--red-s);   color:var(--red); }
+.chip-blue  { background:var(--blue-s);  color:var(--blue); }
+
+.transcript-toggle { background:none; border:1px solid var(--border); border-radius:8px; color:var(--text3); font-size:12px; font-weight:500; font-family:var(--font); padding:6px 14px; cursor:pointer; margin-top:12px; transition:all .2s; }
+.transcript-toggle:hover { color:var(--text2); border-color:rgba(255,255,255,.2); }
+.transcript-box { display:none; margin-top:12px; padding:14px 16px; background:rgba(0,0,0,.3); border-radius:10px; font-size:12px; color:var(--text2); line-height:1.7; font-family:ui-monospace,monospace; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; }
+
+.loc-group { margin-bottom:24px; }
+.loc-group-header { font-size:11px; font-weight:700; color:var(--text3); letter-spacing:.6px; text-transform:uppercase; padding:0 0 8px; border-bottom:1px solid rgba(255,255,255,.06); margin-bottom:12px; }
+
+.item-card { background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--r); padding:14px 16px; margin-bottom:8px; transition:all .2s; }
+.item-card.flagged  { border-color:rgba(255,159,10,.3); background:rgba(255,159,10,.04); }
+.item-card.conflict { border-color:rgba(255,69,58,.3);  background:rgba(255,69,58,.04); }
+.item-card.new-prod { border-color:rgba(255,69,58,.25); background:rgba(255,69,58,.03); }
+.item-card.confirmed{ border-color:rgba(48,209,88,.25); background:rgba(48,209,88,.03); }
+.item-row { display:flex; align-items:center; gap:10px; }
+.item-name { flex:1; font-size:14px; font-weight:600; }
+.item-qty  { font-size:20px; font-weight:800; min-width:48px; text-align:right; }
+.item-unit { font-size:12px; color:var(--text3); min-width:36px; }
+.item-flag-badge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; }
+.item-detail { display:none; margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,.06); }
+.item-detail.open { display:block; }
+.detail-row { display:flex; gap:12px; margin-bottom:8px; flex-wrap:wrap; }
+.detail-cell { flex:1; min-width:100px; }
+.detail-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; font-weight:600; margin-bottom:3px; }
+.detail-val   { font-size:13px; font-weight:600; }
+.qty-editor   { display:flex; align-items:center; gap:8px; margin-top:10px; }
+.qty-input    { width:90px; padding:8px 12px; border-radius:8px; background:rgba(0,0,0,.3); border:1px solid var(--border); color:var(--text); font-size:15px; font-weight:700; font-family:var(--font); text-align:center; }
+.qty-input:focus { outline:none; border-color:var(--blue); }
+.qty-save-btn { padding:8px 16px; border-radius:8px; border:none; background:var(--blue-s); color:var(--blue); font-size:13px; font-weight:700; font-family:var(--font); cursor:pointer; transition:all .2s; }
+.qty-save-btn:hover { background:var(--blue); color:#fff; }
+.qty-del-btn { padding:8px 16px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-size:13px; font-weight:700; font-family:var(--font); cursor:pointer; transition:all .2s; margin-left:8px; }
+.qty-del-btn:hover { background:#dc2626; }
+
+/* ── History ── */
+.history-row { display:flex; align-items:center; gap:14px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--r); padding:14px 16px; margin-bottom:8px; cursor:pointer; transition:all .2s; text-decoration:none; color:var(--text); }
+.history-row:hover { border-color:rgba(255,255,255,.2); }
+.history-info { flex:1; }
+.history-title { font-size:14px; font-weight:600; margin-bottom:2px; }
+.history-sub   { font-size:12px; color:var(--text3); }
+.history-count { font-size:20px; font-weight:800; text-align:right; }
+.history-count span { font-size:11px; font-weight:500; color:var(--text3); display:block; }
+
+/* ── Toast ── */
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:rgba(58,58,60,.98); border:1px solid rgba(255,255,255,.12); color:var(--text); border-radius:12px; padding:12px 20px; font-size:13px; font-weight:600; z-index:9999; opacity:0; pointer-events:none; transition:opacity .25s; white-space:nowrap; }
+.toast.show { opacity:1; }
+
+/* ── Section label ── */
+.section-label { font-size:11px; color:var(--text3); font-weight:700; letter-spacing:.6px; text-transform:uppercase; margin-bottom:12px; }
+.empty-state { text-align:center; padding:60px 20px; color:var(--text3); }
+.empty-state svg { width:48px; height:48px; margin-bottom:16px; opacity:.4; }
+.empty-state p { font-size:14px; font-weight:500; }
+
+/* ── Confirm bar ── */
+.confirm-bar { display:none; position:fixed; bottom:0; left:0; right:0; padding:16px 20px calc(16px + env(safe-area-inset-bottom)); background:rgba(28,28,30,.95); backdrop-filter:blur(30px); border-top:1px solid var(--border); z-index:100; gap:12px; }
+.confirm-bar.show { display:flex; }
+.rn-sb-location { display:none !important; }
+</style>
+<link rel="stylesheet" href="/static/sidebar.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar"></aside>
+  <div class="main-content">
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Processing Overlay -->
+    <div class="proc-overlay" id="procOverlay">
+      <div class="proc-card">
+        <div class="proc-title">Processing Recording</div>
+        <div class="proc-step" id="step-upload">
+          <div class="proc-step-icon" id="si-upload">1</div>
+          <span>Video received</span>
+        </div>
+        <div class="proc-step" id="step-audio">
+          <div class="proc-step-icon" id="si-audio">2</div>
+          <span>Transcribing audio...</span>
+        </div>
+        <div class="proc-step" id="step-vision">
+          <div class="proc-step-icon" id="si-vision">3</div>
+          <span>Parsing inventory items...</span>
+        </div>
+        <div class="proc-step" id="step-reconcile">
+          <div class="proc-step-icon" id="si-reconcile">4</div>
+          <span>Building draft...</span>
+        </div>
+        <div class="proc-step" id="step-ready">
+          <div class="proc-step-icon" id="si-ready">5</div>
+          <span>Ready for review</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page tabs -->
+    <div class="page-tabs">
+      <button class="tab-btn active" id="tab-count"   onclick="showTab('count')">Smart Count</button>
+      <button class="tab-btn"        id="tab-history" onclick="showTab('history')">History</button>
+    </div>
+
+    <!-- ══ TAB: SMART COUNT ═══════════════════════════════════════ -->
+    <div id="view-count" class="ai-content">
+
+      <!-- STATE 1 — No active session (default) -->
+      <div id="state-start">
+        <p class="section-label">New Count Session</p>
+
+        <div class="loc-row">
+          <button class="loc-pill" id="loc-chatham" onclick="setLoc('Chatham')">CHATHAM</button>
+          <button class="loc-pill" id="loc-dennis"  onclick="setLoc('Dennis Port')">DENNIS PORT</button>
+        </div>
+
+        <button class="btn-start" id="startBtn" onclick="startSession()" disabled>
+          Select your location to start
+        </button>
+
+        <div id="recentSessions" style="margin-top:28px">
+          <!-- Populated by loadRecentSessions() -->
+        </div>
+      </div>
+
+      <!-- STATE 2 — Session active (after Start tapped) -->
+      <div id="state-active" style="display:none">
+        <div class="session-active-card">
+          <div class="recording-indicator">
+            <div class="rec-dot"></div>
+            <span>Session Active</span>
+          </div>
+
+          <div id="activeLocationBadge" style="font-size:15px;font-weight:800;color:var(--red);margin-bottom:12px;letter-spacing:-.2px;"></div>
+          <div class="session-meta" id="activeMeta">Loading...</div>
+
+          <div class="instructions-card">
+            <div class="step">① Put on your glasses</div>
+            <div class="step">② Press the button on the arm — LED on = recording</div>
+            <div class="step">③ Walk and talk — say what you see</div>
+            <div class="step">④ Press button again — LED off = done</div>
+            <div class="step">⑤ Upload each recording (max 3 min each)</div>
+            <div class="step step-auto">⑥ Tap "Done Recording" when finished</div>
+          </div>
+
+          <div class="waiting-status" id="waitingStatus">
+            <div class="spin" style="border-color:rgba(10,132,255,.25);border-top-color:var(--blue)"></div>
+            <div>Waiting for upload...</div>
+            <div class="elapsed" id="elapsedTime">0:00</div>
+          </div>
+
+          <!-- File counter badge (hidden until first upload) -->
+          <div id="uploadCountBadge" style="display:none;margin-top:16px;padding:14px 16px;border-radius:14px;background:rgba(48,209,88,.08);border:1px solid rgba(48,209,88,.25);text-align:center;">
+            <div style="font-size:20px;font-weight:800;color:var(--green);" id="uploadCountNum">0</div>
+            <div style="font-size:12px;color:var(--green);font-weight:600;" id="uploadCountLabel">files uploaded</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Record more or tap "Done" to process</div>
+          </div>
+
+          <!-- Done Recording button (hidden until files > 0) -->
+          <button id="doneRecordingBtn" style="display:none;width:100%;padding:16px;border-radius:14px;border:none;background:var(--red);color:#fff;font-size:16px;font-weight:800;font-family:var(--font);cursor:pointer;margin-top:12px;letter-spacing:-.2px;transition:all .2s;" onclick="doneRecording()">
+            Done Recording
+          </button>
+
+          <!-- Upload section: local page link OR direct upload (if already on local network) -->
+          <div id="localUploadSection" style="margin-top:16px;">
+            <!-- Shown when on Cloudflare (HTTPS) — link to local upload page -->
+            <div id="uploadViaLink">
+              <a id="localUploadLink" href="#" target="_blank" style="display:block;width:100%;padding:16px;border-radius:14px;border:none;background:var(--blue);color:#fff;font-size:16px;font-weight:800;font-family:var(--font);text-align:center;text-decoration:none;transition:all .2s;">
+                Upload Recordings
+              </a>
+              <p style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px;line-height:1.5;">
+                Opens the upload page on Chatham WiFi (connect to WiFi first).<br>
+                Tip: Share from Photos &rarr; Audio Only (~5 MB vs 100+ MB)
+              </p>
+              <a id="liveRecordLink" href="#" target="_blank" style="display:block;width:100%;padding:16px;border-radius:14px;border:none;background:var(--green);color:#fff;font-size:16px;font-weight:800;font-family:var(--font);text-align:center;text-decoration:none;transition:all .2s;margin-top:12px;">
+                Live Record (Audio Only)
+              </a>
+              <p style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px;line-height:1.5;">
+                Record inventory counts directly from your phone &mdash; no video needed.
+              </p>
+            </div>
+            <!-- Shown when on local network (HTTP) — direct upload form -->
+            <div id="uploadDirect" style="display:none">
+              <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-title">Tap to select file</div>
+                <div class="upload-sub">Video: MP4, MOV &nbsp;|&nbsp; Audio: M4A, MP3, WAV</div>
+                <div class="file-chosen" id="fileChosen"></div>
+              </div>
+              <input type="file" id="fileInput" accept="video/*,audio/*,.mp4,.mov,.avi,.mkv,.webm,.wav,.mp3,.m4a,.aac,.ogg,.flac">
+              <button class="btn-primary" id="manualUploadBtn" onclick="manualUpload()" disabled style="margin-top:12px">
+                Upload
+              </button>
+            </div>
+          </div>
+          <button class="cancel-link" onclick="cancelSession()" style="color:var(--text3)">
+            Cancel session
+          </button>
+        </div>
+      </div>
+
+      <!-- STATE 3 — Processing / Review -->
+      <div id="state-review" style="display:none">
+        <div class="review-header">
+          <div class="review-summary" id="reviewSummary">Loading…</div>
+          <div class="review-sub"    id="reviewSub"></div>
+          <div class="review-meta-row" id="reviewMeta"></div>
+          <button class="transcript-toggle" onclick="toggleTranscript()">Show transcript</button>
+          <pre class="transcript-box" id="transcriptBox"></pre>
+        </div>
+
+        <div id="itemGroups" style="padding-bottom:100px"></div>
+
+        <div class="confirm-bar show" id="confirmBar">
+          <button class="btn-confirm-all" onclick="confirmAll()">
+            ✓ Confirm All &amp; Save
+          </button>
+          <button onclick="reprocessSession()" style="padding:12px 16px;border-radius:10px;border:1px solid rgba(10,132,255,0.3);background:transparent;color:var(--blue);font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;">
+            Reprocess
+          </button>
+          <button onclick="resetToStart()" style="padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;">
+            New Count
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /view-count -->
+
+    <!-- ══ TAB: HISTORY ═══════════════════════════════════════════ -->
+    <div id="view-history" class="ai-content" style="display:none">
+      <p class="section-label">Past Confirmed Counts</p>
+      <div id="historyList">
+        <div class="empty-state">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <p>No confirmed counts yet</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main-content -->
+</div><!-- /layout -->
+
+<script src="/static/sidebar.js"></script>
+<script>
+// Desktop redirect — show message if not on mobile
+(function() {
+  if (window.innerWidth >= 768) {
+    document.querySelector('.main-content').innerHTML = [
+      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;',
+      'height:100vh;padding:40px;font-family:var(--font);color:var(--text);',
+      'background:var(--bg);text-align:center;">',
+      '<div style="font-size:64px;margin-bottom:24px;">📱</div>',
+      '<div style="font-size:22px;font-weight:700;margin-bottom:12px;">Mobile Only</div>',
+      '<div style="font-size:15px;color:var(--text2);max-width:360px;line-height:1.5;">',
+      'Smart Count is designed for use during inventory walks.<br>',
+      'Open <strong>dashboard.rednun.com/ai-inventory</strong> on your phone to start a session.',
+      '</div></div>'
+    ].join('');
+  }
+})();
+
+// ── State ──────────────────────────────────────────────────────────────────
+var selectedLocation = null;
+var currentSessionId = null;
+var currentTaskId    = null;
+var pollTimer        = null;
+var elapsedTimer     = null;
+var sessionData      = null;
+var sessionStartTime = null;
+var manualUploadShown = false;
+var uploadCount      = 0;
+var isLocal          = location.protocol === 'http:'; // HTTP = local network, HTTPS = Cloudflare
+
+// Show direct upload form when on local network, link when on Cloudflare
+(function() {
+  if (isLocal) {
+    var viaLink = document.getElementById('uploadViaLink');
+    var direct  = document.getElementById('uploadDirect');
+    if (viaLink) viaLink.style.display = 'none';
+    if (direct)  direct.style.display = '';
+  }
+})();
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function showTab(tab) {
+  document.getElementById('view-count').style.display   = tab === 'count'   ? '' : 'none';
+  document.getElementById('view-history').style.display = tab === 'history' ? '' : 'none';
+  document.getElementById('tab-count').classList.toggle('active',   tab === 'count');
+  document.getElementById('tab-history').classList.toggle('active', tab === 'history');
+  if (tab === 'history') loadHistory();
+  if (window.setActiveItem) window.setActiveItem('nav-aicount');
+}
+
+// ── Location ───────────────────────────────────────────────────────────────
+function setLoc(loc) {
+  selectedLocation = loc;
+  document.getElementById('loc-chatham').classList.toggle('active', loc === 'Chatham');
+  document.getElementById('loc-dennis').classList.toggle('active',  loc === 'Dennis Port');
+  // Enable start button and update text
+  var btn = document.getElementById('startBtn');
+  btn.disabled = false;
+  btn.textContent = 'Start Inventory \u2014 ' + loc;
+}
+window.setGlobalLocation = function(val) {
+  setLoc(val === 'chatham' ? 'Chatham' : 'Dennis Port');
+};
+
+// ── UI state transitions ───────────────────────────────────────────────────
+function showState(s) {
+  document.getElementById('state-start').style.display  = s === 'start'  ? '' : 'none';
+  document.getElementById('state-active').style.display = s === 'active' ? '' : 'none';
+  document.getElementById('state-review').style.display = s === 'review' ? '' : 'none';
+}
+
+// ── Start session ──────────────────────────────────────────────────────────
+function startSession() {
+  if (!selectedLocation) { showToast('Select a location first', 'red'); return; }
+  var btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+
+  fetch('/api/ai-inventory/sessions', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({location: selectedLocation, started_by: 'mike'})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    btn.disabled = false;
+    btn.textContent = 'Start Inventory \u2014 ' + selectedLocation;
+    if (d.error) { showToast('Error: ' + d.error, 'red'); return; }
+
+    currentSessionId = d.session_id;
+    localStorage.setItem('ai_session_id', d.session_id);
+    localStorage.setItem('ai_upload_token', d.upload_token);
+    localStorage.setItem('ai_session_location', selectedLocation);
+
+    // Set local upload link
+    var localUrl = 'http://10.1.10.83:8080/local-upload?session=' + d.session_id +
+                   '&token=' + encodeURIComponent(d.upload_token) +
+                   '&location=' + encodeURIComponent(d.location);
+    document.getElementById('localUploadLink').href = localUrl;
+    var liveUrl = 'http://10.1.10.83:8080/live-record?session=' + d.session_id +
+                  '&token=' + encodeURIComponent(d.upload_token) +
+                  '&location=' + encodeURIComponent(d.location);
+    document.getElementById('liveRecordLink').href = liveUrl;
+
+    showState('active');
+    updateActiveMeta(d.location, d.started_at);
+    startElapsedTimer();
+    startSessionPoller();
+    // Show "Waiting for video" indicator after 2 minutes
+    setTimeout(function(){
+      document.getElementById('waitingStatus').classList.add('show');
+    }, 120000);
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    btn.textContent = 'Start Inventory \u2014 ' + selectedLocation;
+    showToast('Failed to start session', 'red');
+    console.error(err);
+  });
+}
+
+function updateActiveMeta(location, startedAt) {
+  var el = document.getElementById('activeMeta');
+  var loc = location || selectedLocation || 'Unknown';
+  var timeStr = startedAt ? new Date(startedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+  el.textContent = timeStr ? 'Started ' + timeStr : '';
+  document.getElementById('activeLocationBadge').textContent = 'Counting: ' + loc;
+}
+
+// ── Elapsed timer ──────────────────────────────────────────────────────────
+function startElapsedTimer() {
+  sessionStartTime = Date.now();
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  elapsedTimer = setInterval(function() {
+    var elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+    var min = Math.floor(elapsed / 60);
+    var sec = elapsed % 60;
+    var el = document.getElementById('elapsedTime');
+    if (el) el.textContent = min + ':' + String(sec).padStart(2, '0');
+  }, 1000);
+}
+
+// ── Session polling ────────────────────────────────────────────────────────
+function startSessionPoller() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(function() {
+    if (!currentSessionId) return;
+    fetch('/api/ai-inventory/sessions/' + currentSessionId + '/status')
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        if (d.error) return; // session gone — keep polling
+
+        var status = d.status;
+
+        // Files uploaded but not yet processing — show counter
+        if (status === 'recording') {
+          var uc = d.upload_count || 0;
+          if (uc > 0) updateUploadCount(uc);
+        }
+
+        if (status === 'recording_uploaded') {
+          // Files uploaded, ready to process — show active state with upload count
+          var uc2 = d.upload_count || 0;
+          if (uc2 > 0) updateUploadCount(uc2);
+        }
+
+        if (status === 'processing') {
+          // Processing started — switch to processing overlay
+          document.getElementById('waitingStatus').classList.add('show');
+          showProcOverlay();
+          advanceProcSteps(status);
+        }
+
+        if (status === 'draft' || status === 'ready') {
+          // Processing complete — show review
+          clearInterval(pollTimer);
+          clearInterval(elapsedTimer);
+          hideOverlay();
+          var sid = d.session_id || currentSessionId;
+          currentSessionId = sid;
+          loadDraftSession(sid);
+        }
+
+        if (status === 'error') {
+          clearInterval(pollTimer);
+          hideOverlay();
+          showToast('Processing failed — try uploading manually', 'red');
+          document.getElementById('waitingStatus').classList.remove('show');
+        }
+      })
+      .catch(function(){});
+  }, 5000);
+}
+
+var _procShown = false;
+function showProcOverlay() {
+  if (_procShown) return;
+  _procShown = true;
+  showState('active'); // keep active state visible underneath
+  document.getElementById('procOverlay').classList.add('show');
+  showStep('upload', 'done');
+  showStep('audio', 'active');
+}
+
+function advanceProcSteps(status) {
+  if (status === 'processing') {
+    showStep('upload', 'done');
+    showStep('audio', 'active');
+  }
+}
+
+var fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', function() {
+  var f = fileInput.files[0];
+  if (!f) return;
+  var el = document.getElementById('fileChosen');
+  el.style.display = 'block';
+  el.textContent = f.name + ' (' + formatBytes(f.size) + ')';
+  document.getElementById('manualUploadBtn').disabled = false;
+});
+
+function manualUpload() {
+  var f = fileInput.files[0];
+  if (!f || !currentSessionId) return;
+  var btn = document.getElementById('manualUploadBtn');
+  btn.disabled = true;
+  btn.textContent = 'Uploading...';
+
+  var token = localStorage.getItem('ai_upload_token') || '';
+  var fd = new FormData();
+  fd.append('video', f);
+
+  var uploadUrl = '/api/ai-inventory/sessions/' + currentSessionId + '/upload?token=' + encodeURIComponent(token);
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', uploadUrl);
+  xhr.onload = function() {
+    btn.textContent = 'Upload';
+    try {
+      var d = JSON.parse(xhr.responseText);
+      if (d.error) { btn.disabled = false; showToast('Upload error: ' + d.error, 'red'); return; }
+      // Update file count — do NOT auto-process
+      updateUploadCount(d.upload_count || (uploadCount + 1));
+      showToast('File ' + (d.upload_count || '') + ' uploaded');
+      // Reset file input for next upload
+      fileInput.value = '';
+      document.getElementById('fileChosen').style.display = 'none';
+      btn.disabled = true;
+    } catch(e) {
+      btn.disabled = false;
+      showToast('Upload error: bad response', 'red');
+    }
+  };
+  xhr.onerror = function() {
+    btn.disabled = false;
+    btn.textContent = 'Upload';
+    showToast('Upload failed — try the Chatham WiFi link above', 'red');
+  };
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      var pct = Math.round(e.loaded / e.total * 100);
+      btn.textContent = 'Uploading... ' + pct + '%';
+    }
+  };
+  xhr.send(fd);
+}
+
+// ── Upload count display ───────────────────────────────────────────────────
+function updateUploadCount(n) {
+  uploadCount = n;
+  var badge = document.getElementById('uploadCountBadge');
+  var numEl = document.getElementById('uploadCountNum');
+  var labelEl = document.getElementById('uploadCountLabel');
+  var doneBtn = document.getElementById('doneRecordingBtn');
+
+  if (n > 0) {
+    badge.style.display = '';
+    numEl.textContent = n;
+    labelEl.textContent = n === 1 ? 'file uploaded' : 'files uploaded';
+    doneBtn.style.display = '';
+    doneBtn.textContent = 'Done Recording \u2014 Process ' + n + ' File' + (n === 1 ? '' : 's');
+  } else {
+    badge.style.display = 'none';
+    doneBtn.style.display = 'none';
+  }
+}
+
+// ── Done Recording — trigger processing ───────────────────────────────────
+function doneRecording() {
+  if (!currentSessionId || uploadCount < 1) return;
+  var btn = document.getElementById('doneRecordingBtn');
+  btn.disabled = true;
+  btn.textContent = 'Starting processing...';
+
+  var token = localStorage.getItem('ai_upload_token') || '';
+  fetch('/api/ai-inventory/sessions/' + currentSessionId + '/process?token=' + encodeURIComponent(token), {
+    method: 'POST'
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    if (d.error) {
+      btn.disabled = false;
+      btn.textContent = 'Done Recording \u2014 Process ' + uploadCount + ' File' + (uploadCount === 1 ? '' : 's');
+      showToast('Error: ' + d.error, 'red');
+      return;
+    }
+    currentTaskId = d.task_id;
+    showProcOverlay();
+    showStep('upload', 'done');
+    showStep('audio', 'active');
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    btn.textContent = 'Done Recording \u2014 Process ' + uploadCount + ' File' + (uploadCount === 1 ? '' : 's');
+    showToast('Network error', 'red');
+    console.error(err);
+  });
+}
+
+// ── Cancel session ─────────────────────────────────────────────────────────
+function cancelSession() {
+  if (!currentSessionId) { resetToStart(); return; }
+  if (!confirm('Cancel this inventory session?')) return;
+
+  fetch('/api/ai-inventory/sessions/' + currentSessionId + '/cancel', {method: 'POST'})
+    .then(function(){ resetToStart(); })
+    .catch(function(){ resetToStart(); });
+}
+
+function resetToStart() {
+  if (pollTimer) clearInterval(pollTimer);
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  pollTimer = null; elapsedTimer = null; _procShown = false;
+  currentSessionId = null; currentTaskId = null; sessionData = null;
+  manualUploadShown = false;
+  selectedLocation = null;
+  uploadCount = 0;
+  localStorage.removeItem('ai_session_id');
+  localStorage.removeItem('ai_upload_token');
+  localStorage.removeItem('ai_session_location');
+  fileInput.value = '';
+  document.getElementById('fileChosen').style.display = 'none';
+  document.getElementById('manualUploadBtn').disabled = true;
+  document.getElementById('waitingStatus').classList.remove('show');
+  document.getElementById('uploadCountBadge').style.display = 'none';
+  document.getElementById('doneRecordingBtn').style.display = 'none';
+  document.getElementById('loc-chatham').classList.remove('active');
+  document.getElementById('loc-dennis').classList.remove('active');
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('startBtn').textContent = 'Select your location to start';
+  hideOverlay();
+  showState('start');
+  loadRecentSessions();
+}
+
+// ── Load draft session ─────────────────────────────────────────────────────
+function loadDraftSession(sessionId) {
+  fetch('/api/ai-inventory/drafts/' + sessionId)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.error) { showToast(d.error, 'red'); return; }
+      sessionData = d;
+      renderReview(d);
+      showState('review');
+    })
+    .catch(function(){ showToast('Failed to load session', 'red'); });
+}
+
+// ── Recent sessions ────────────────────────────────────────────────────────
+function loadRecentSessions() {
+  var loc = selectedLocation;
+  fetch('/api/ai-inventory/sessions/recent?location=' + encodeURIComponent(loc))
+    .then(function(r){ return r.json(); })
+    .then(function(rows) {
+      var el = document.getElementById('recentSessions');
+      if (!rows || !rows.length) { el.innerHTML = ''; return; }
+      var html = '<p class="section-label" style="margin-bottom:10px">Recent Sessions</p>';
+      rows.forEach(function(r) {
+        var badgeClass = 'badge-gray';
+        var badgeText  = r.status;
+        if (r.status === 'confirmed') { badgeClass = 'badge-green'; badgeText = '✓ Confirmed'; }
+        else if (r.status === 'draft') { badgeClass = 'badge-amber'; badgeText = 'Needs Review'; }
+        else if (r.status === 'started') { badgeClass = 'badge-red'; badgeText = 'Active'; }
+        else if (r.status === 'recording') { badgeClass = 'badge-red'; badgeText = 'Recording'; }
+        else if (r.status === 'processing') { badgeClass = 'badge-blue'; badgeText = 'Processing'; }
+
+        var date = r.session_date || (r.started_at ? r.started_at.substring(0,10) : '');
+        var items = r.item_count || 0;
+
+        html += '<div class="recent-row" onclick="openRecentSession(' + r.id + ',\'' + r.status + '\')">';
+        html += '<div class="recent-info">';
+        html += '<div class="recent-title">' + esc(r.location) + (date ? ' &mdash; ' + esc(date) : '') + '</div>';
+        html += '<div class="recent-sub">' + items + ' items</div>';
+        html += '</div>';
+        html += '<span class="recent-badge ' + badgeClass + '">' + badgeText + '</span>';
+        html += '</div>';
+      });
+      el.innerHTML = html;
+    })
+    .catch(function(){});
+}
+
+function openRecentSession(sessionId, status) {
+  if (status === 'started' || status === 'recording' || status === 'processing' || status === 'recording_uploaded') {
+    // Resume active session
+    currentSessionId = sessionId;
+    localStorage.setItem('ai_session_id', sessionId);
+    var resumeToken = localStorage.getItem('ai_upload_token') || '';
+    var resumeLoc = localStorage.getItem('ai_session_location') || selectedLocation || '';
+    var localUrl = 'http://10.1.10.83:8080/local-upload?session=' + sessionId +
+                   '&token=' + encodeURIComponent(resumeToken) +
+                   '&location=' + encodeURIComponent(resumeLoc);
+    document.getElementById('localUploadLink').href = localUrl;
+    var liveUrl = 'http://10.1.10.83:8080/live-record?session=' + sessionId +
+                  '&token=' + encodeURIComponent(resumeToken) +
+                  '&location=' + encodeURIComponent(resumeLoc);
+    document.getElementById('liveRecordLink').href = liveUrl;
+    showState('active');
+    updateActiveMeta(resumeLoc, null);
+    startElapsedTimer();
+    startSessionPoller();
+    return;
+  }
+  // Load review for draft/confirmed
+  currentSessionId = sessionId;
+  loadDraftSession(sessionId);
+}
+
+// ── Render review ──────────────────────────────────────────────────────────
+function renderReview(d) {
+  var sess  = d.session;
+  var items = d.items || [];
+  var flagged = items.filter(function(i){ return i.flag && i.flag !== 'none'; }).length;
+  var auto    = items.length - flagged;
+
+  document.getElementById('reviewSummary').textContent =
+    items.length + ' items — ' + auto + ' auto-confirmed, ' + flagged + ' need review';
+  document.getElementById('reviewSub').textContent =
+    (sess.location || '') + ' · ' + (sess.session_date || '') + ' · ' + (sess.source_type || '').replace('_',' ');
+
+  var metaHtml = '';
+  if (auto > 0)    metaHtml += '<span class="review-chip chip-green">✓ ' + auto    + ' agreed</span>';
+  if (flagged > 0) metaHtml += '<span class="review-chip chip-amber">⚠ ' + flagged + ' flagged</span>';
+  var newProds = items.filter(function(i){ return i.flag === 'new_product'; }).length;
+  if (newProds > 0) metaHtml += '<span class="review-chip chip-red">+ ' + newProds + ' new products</span>';
+  document.getElementById('reviewMeta').innerHTML = metaHtml;
+
+  document.getElementById('transcriptBox').textContent = sess.raw_transcript || '(no transcript available)';
+
+  // Group by storage location
+  var groups = {};
+  items.forEach(function(item) {
+    var loc = item.storage_location_name || 'Unassigned';
+    if (!groups[loc]) groups[loc] = [];
+    groups[loc].push(item);
+  });
+
+  var html = '';
+  Object.keys(groups).sort().forEach(function(loc) {
+    html += '<div class="loc-group">';
+    html += '<div class="loc-group-header">' + esc(loc) + '</div>';
+    groups[loc].forEach(function(item) { html += renderItemCard(item); });
+    html += '</div>';
+  });
+  document.getElementById('itemGroups').innerHTML = html;
+
+  // Hide confirm bar for confirmed sessions
+  if (sess.status === 'confirmed') {
+    document.getElementById('confirmBar').classList.remove('show');
+  } else {
+    document.getElementById('confirmBar').classList.add('show');
+  }
+}
+
+function renderItemCard(item) {
+  var qty   = item.reconciled_quantity != null ? item.reconciled_quantity : (item.quantity || 0);
+  var flag  = item.flag || 'none';
+  var cardClass = '';
+  var badgeHtml = '';
+
+  if (flag === 'conflict') { cardClass = 'conflict'; badgeHtml = '<span class="item-flag-badge badge-amber">Conflict</span>'; }
+  else if (flag === 'review')  { cardClass = 'flagged';  badgeHtml = '<span class="item-flag-badge badge-amber">Review</span>'; }
+  else if (flag === 'new_product') { cardClass = 'new-prod'; badgeHtml = '<span class="item-flag-badge badge-red">New</span>'; }
+  else { badgeHtml = '<span class="item-flag-badge badge-green">✓</span>'; }
+
+  var audQty = item.audio_quantity  != null ? item.audio_quantity  : '—';
+  var visQty = item.vision_quantity != null ? item.vision_quantity : '—';
+  var conf   = item.reconciled_confidence != null ? Math.round(item.reconciled_confidence * 100) + '%' : '—';
+
+  return '<div class="item-card ' + cardClass + '" id="item-' + item.id + '" onclick="toggleDetail(' + item.id + ')">' +
+    '<div class="item-row">' +
+      '<span class="item-name">' + esc(item.product_name) + '</span>' +
+      badgeHtml +
+      '<span class="item-qty">' + formatQty(qty) + '</span>' +
+      '<span class="item-unit">' + esc(item.unit || '') + '</span>' +
+    '</div>' +
+    '<div class="item-detail" id="detail-' + item.id + '">' +
+      '<div class="detail-row">' +
+        '<div class="detail-cell"><div class="detail-label">Audio</div><div class="detail-val">' + audQty + '</div></div>' +
+        '<div class="detail-cell"><div class="detail-label">Vision</div><div class="detail-val">' + visQty + '</div></div>' +
+        '<div class="detail-cell"><div class="detail-label">Confidence</div><div class="detail-val">' + conf + '</div></div>' +
+      '</div>' +
+      (item.flag_notes ? '<div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚠ ' + esc(item.flag_notes) + '</div>' : '') +
+      '<div class="qty-editor" onclick="event.stopPropagation()">' +
+        '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">' +
+          '<label style="font-size:12px;color:var(--text-secondary);white-space:nowrap">Name</label>' +
+          '<input type="text" class="qty-input" id="nameInput-' + item.id + '" value="' + esc(item.product_name) + '" style="flex:1">' +
+        '</div>' +
+        '<input type="number" class="qty-input" id="qtyInput-' + item.id + '" value="' + qty + '" step="0.5" min="0">' +
+        '<button class="qty-save-btn" onclick="saveQty(' + item.id + ')">Save</button>' +
+        '<button class="qty-del-btn" onclick="removeItem(' + item.id + ')">Remove</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function formatQty(q) {
+  var n = parseFloat(q);
+  if (isNaN(n)) return '—';
+  return n % 1 === 0 ? n.toString() : n.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function toggleDetail(itemId) {
+  var el = document.getElementById('detail-' + itemId);
+  if (el) el.classList.toggle('open');
+}
+
+function toggleTranscript() {
+  var tb  = document.getElementById('transcriptBox');
+  var btn = document.querySelector('.transcript-toggle');
+  var open = tb.style.display === 'block';
+  tb.style.display = open ? 'none' : 'block';
+  btn.textContent  = open ? 'Show transcript' : 'Hide transcript';
+}
+
+// ── Save single qty ────────────────────────────────────────────────────────
+function saveQty(itemId) {
+  var inp = document.getElementById('qtyInput-' + itemId);
+  if (!inp) return;
+  var qty = parseFloat(inp.value);
+  if (isNaN(qty) || qty < 0) { showToast('Invalid quantity', 'red'); return; }
+
+  var nameInp = document.getElementById('nameInput-' + itemId);
+  var newName = nameInp ? nameInp.value.trim() : '';
+
+  fetch('/api/ai-inventory/drafts/' + currentSessionId + '/items/' + itemId, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({reconciled_quantity: qty, product_name: newName || undefined, flag: 'none', flag_notes: ''})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    if (d.success) {
+      var card = document.getElementById('item-' + itemId);
+      var qtySpan = card && card.querySelector('.item-qty');
+      if (qtySpan) qtySpan.textContent = formatQty(qty);
+      var nameSpan = card && card.querySelector('.item-name');
+      if (nameSpan && newName) nameSpan.textContent = newName;
+      if (card) card.className = 'item-card confirmed';
+      var badge = card && card.querySelector('.item-flag-badge');
+      if (badge) { badge.className = 'item-flag-badge badge-green'; badge.textContent = '✓'; }
+      document.getElementById('detail-' + itemId).classList.remove('open');
+      showToast('Saved');
+    } else {
+      showToast('Save failed', 'red');
+    }
+  })
+  .catch(function(){ showToast('Network error', 'red'); });
+}
+
+// ── Remove item ─────────────────────────────────────────────────────────
+function removeItem(itemId) {
+  fetch('/api/ai-inventory/drafts/' + currentSessionId + '/items/' + itemId, {
+    method: 'DELETE'
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    if (d.success) {
+      var card = document.getElementById('item-' + itemId);
+      if (card) card.remove();
+      // Remove from sessionData.items too
+      if (sessionData && sessionData.items) {
+        sessionData.items = sessionData.items.filter(function(i){ return i.id !== itemId; });
+      }
+      showToast('Removed');
+    } else {
+      showToast('Remove failed', 'red');
+    }
+  })
+  .catch(function(){ showToast('Network error', 'red'); });
+}
+
+// ── Reprocess session ──────────────────────────────────────────────────────
+function reprocessSession() {
+  if (!currentSessionId) return;
+  if (!confirm('Reprocess this session? Current items will be replaced.')) return;
+
+  var token = localStorage.getItem('ai_upload_token') || '';
+  var url = '/api/ai-inventory/sessions/' + currentSessionId + '/process?token=' + encodeURIComponent(token);
+
+  fetch(url, { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) {
+        showToast('Reprocess error: ' + d.error, 'red');
+      } else {
+        showToast('Reprocessing started...');
+        showState('active');
+        _procShown = false;
+        startSessionPoller();
+      }
+    })
+    .catch(function() { showToast('Network error', 'red'); });
+}
+
+// ── Confirm all ────────────────────────────────────────────────────────────
+function confirmAll() {
+  if (!sessionData || !currentSessionId) return;
+  var items = sessionData.items || [];
+  var payload = items.map(function(item) {
+    var qtyInput = document.getElementById('qtyInput-' + item.id);
+    var qty = qtyInput ? parseFloat(qtyInput.value) : item.reconciled_quantity;
+    return {item_id: item.id, confirmed_quantity: (isNaN(qty) ? item.reconciled_quantity : qty)};
+  });
+
+  var btn = document.querySelector('.btn-confirm-all');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  fetch('/api/ai-inventory/drafts/' + currentSessionId + '/confirm', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({items: payload, confirmed_by: 'manager'})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    btn.disabled = false;
+    btn.textContent = '✓ Confirm All & Save';
+    if (d.success) {
+      showToast('Count confirmed — ' + d.confirmed_count + ' items saved');
+      document.querySelectorAll('.item-card').forEach(function(c){
+        c.className = 'item-card confirmed';
+        var badge = c.querySelector('.item-flag-badge');
+        if (badge) { badge.className = 'item-flag-badge badge-green'; badge.textContent = '✓'; }
+      });
+      document.getElementById('reviewSummary').textContent = '✓ Count confirmed — ' + d.confirmed_count + ' items saved';
+      // Replace confirm bar with navigation buttons
+      document.getElementById('confirmBar').innerHTML =
+        '<a href="/manage#inventory" style="flex:1;padding:14px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-size:15px;font-weight:700;font-family:var(--font);text-align:center;text-decoration:none;">View Inventory</a>' +
+        '<button onclick="resetToStart()" style="padding:14px 20px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;">New Count</button>';
+      document.getElementById('confirmBar').classList.add('show');
+      // Clear session from localStorage so next visit starts fresh
+      clearSessionStorage();
+    } else {
+      showToast('Error: ' + (d.error || 'confirm failed'), 'red');
+    }
+  })
+  .catch(function(){ btn.disabled = false; showToast('Network error', 'red'); });
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+function loadHistory() {
+  fetch('/api/ai-inventory/history')
+    .then(function(r){ return r.json(); })
+    .then(function(rows) {
+      var el = document.getElementById('historyList');
+      if (!rows.length) {
+        el.innerHTML = '<div class="empty-state"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><p>No confirmed counts yet</p></div>';
+        return;
+      }
+      el.innerHTML = rows.map(function(r) {
+        var pct = r.item_count > 0 ? Math.round((r.auto_confirmed_count / r.item_count) * 100) : 0;
+        return '<div class="history-row" onclick="loadHistoryDetail(' + r.id + ')">' +
+          '<div class="history-info">' +
+            '<div class="history-title">' + esc(r.location) + ' &mdash; ' + esc(r.session_date || r.confirmed_at || '') + '</div>' +
+            '<div class="history-sub">' + (r.confirmed_by ? 'by ' + esc(r.confirmed_by) + ' &nbsp;·&nbsp; ' : '') + esc(r.source_type || '').replace('_',' ') + '</div>' +
+          '</div>' +
+          '<div class="history-count">' + r.item_count + '<span>' + pct + '% auto</span></div>' +
+        '</div>';
+      }).join('');
+    })
+    .catch(function(){ showToast('Failed to load history', 'red'); });
+}
+
+function loadHistoryDetail(sessionId) {
+  showTab('count');
+  currentSessionId = sessionId;
+  loadDraftSession(sessionId);
+}
+
+// ── Processing overlay helpers ─────────────────────────────────────────────
+function hideOverlay() {
+  document.getElementById('procOverlay').classList.remove('show');
+  _procShown = false;
+  ['upload','audio','vision','reconcile','ready'].forEach(function(s){ showStep(s,''); });
+}
+
+function showStep(name, state) {
+  var row  = document.getElementById('step-'+name);
+  var icon = document.getElementById('si-'+name);
+  if (!row) return;
+  row.className = 'proc-step' + (state ? ' '+state : '');
+  if (state === 'active') {
+    icon.innerHTML = '<div class="spin"></div>';
+  } else if (state === 'done') {
+    icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  } else {
+    var nums = {upload:1,audio:2,vision:3,reconcile:4,ready:5};
+    icon.innerHTML = String(nums[name] || '');
+  }
+}
+
+// ── Utility ────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatBytes(n) {
+  if (n < 1024*1024) return (n/1024).toFixed(1)+' KB';
+  return (n/1024/1024).toFixed(1)+' MB';
+}
+var _toastTimer = null;
+function showToast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = type === 'red' ? 'rgba(255,69,58,.95)' : 'rgba(58,58,60,.98)';
+  el.classList.add('show');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 3000);
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+if (window.setActiveItem) window.setActiveItem('nav-aicount');
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.setActiveItem) window.setActiveItem('nav-aicount');
+  // Do NOT sync location from topbar — force conscious pick every time
+
+  // Check for in-progress session in localStorage
+  var savedSessionId = localStorage.getItem('ai_session_id');
+  if (savedSessionId) {
+    currentSessionId = parseInt(savedSessionId, 10);
+    // Verify it's still active
+    fetch('/api/ai-inventory/sessions/' + currentSessionId + '/status')
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        if (d.error || !d.status) { clearSessionStorage(); return; }
+        var status = d.status;
+        if (status === 'started' || status === 'recording' || status === 'recording_uploaded' || status === 'processing') {
+          var loc = localStorage.getItem('ai_session_location') || selectedLocation || '';
+          var tk = localStorage.getItem('ai_upload_token') || '';
+          var lUrl = 'http://10.1.10.83:8080/local-upload?session=' + currentSessionId +
+                     '&token=' + encodeURIComponent(tk) +
+                     '&location=' + encodeURIComponent(loc);
+          document.getElementById('localUploadLink').href = lUrl;
+          var lrUrl = 'http://10.1.10.83:8080/live-record?session=' + currentSessionId +
+                      '&token=' + encodeURIComponent(tk) +
+                      '&location=' + encodeURIComponent(loc);
+          document.getElementById('liveRecordLink').href = lrUrl;
+          showState('active');
+          updateActiveMeta(loc, d.started_at);
+          // Restore upload count if session has files
+          if (d.upload_count && d.upload_count > 0) {
+            updateUploadCount(d.upload_count);
+          }
+          // Immediately show processing overlay if already processing
+          if (status === 'processing') {
+            showProcOverlay();
+            advanceProcSteps(status);
+          }
+          startElapsedTimer();
+          startSessionPoller();
+        } else if (status === 'draft') {
+          loadDraftSession(currentSessionId);
+        } else {
+          clearSessionStorage();
+          loadRecentSessions();
+        }
+      })
+      .catch(function(){ clearSessionStorage(); loadRecentSessions(); });
+  } else {
+    loadRecentSessions();
+  }
+});
+
+function clearSessionStorage() {
+  currentSessionId = null;
+  localStorage.removeItem('ai_session_id');
+  localStorage.removeItem('ai_upload_token');
+  localStorage.removeItem('ai_session_location');
+}
+</script>
+</body>
+</html>

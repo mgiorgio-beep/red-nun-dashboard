@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Red Nun — Project Plan</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #020617; font-family: 'JetBrains Mono', monospace; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+const DATA = {
+  name: "Red Nun Dashboard",
+  subtitle: "Restaurant Analytics & Operations Platform",
+  status: "active",
+  children: [
+    {
+      name: "Infrastructure",
+      icon: "\u2699",
+      status: "done",
+      children: [
+        { name: "DigitalOcean Server", detail: "Ubuntu 24, Flask/Gunicorn, Nginx", status: "done" },
+        { name: "SSL / Domain", detail: "dashboard.rednun.com", status: "done" },
+        { name: "SQLite Database", detail: "WAL mode, all tables", status: "done" },
+        { name: "Background Scheduler", detail: "APScheduler auto-sync", status: "done" },
+        { name: "Backup System", detail: "Manual pre-change backups", status: "done" },
+        { name: "Automated Backups", detail: "Nightly 3AM tar + DB copy, 14-day retention in /opt/backups/", status: "done" },
+        { name: "PWA Setup", detail: "manifest.json, service-worker.js, app icons, Apple meta tags", status: "done" },
+      ]
+    },
+    {
+      name: "Data Integrations",
+      icon: "\uD83D\uDD17",
+      status: "done",
+      children: [
+        { name: "Toast Orders", detail: "12+ mo backfilled, daily sync", status: "done" },
+        { name: "Toast Labor", detail: "Time entries, 4AM-4AM window", status: "done" },
+        { name: "Toast Employees", detail: "Roster sync both locations", status: "done" },
+        { name: "Toast Menus", detail: "Items and groups synced", status: "done" },
+        { name: "Timezone Fix", detail: "4AM ET boundaries (not UTC)", status: "done" },
+        { name: "Void/Delete Filter", detail: "Exclude from analytics", status: "done" },
+        { name: "Historical Re-sync", detail: "13 months backfilled (Jan 2025\u2013Feb 2026), 64K orders, daily sync active", status: "done" },
+        { name: "Net Sales Match", detail: "~$181 discrepancy vs Toast — needs formula audit", status: "planned" },
+        { name: "MarginEdge Sync", detail: "Legacy \u2014 replaced by invoice scanner. 164 products/74 vendors preserved as reference. Invoice data wiped Session 14.", status: "done" },
+        { name: "7shifts", detail: "Client built (8 functions), tokens configured both locations. No routes registered yet.", status: "progress" },
+        { name: "Honeywell Temps", detail: "Cron-based, both locations", status: "done" },
+      ]
+    },
+    {
+      name: "Dashboard & Analytics",
+      icon: "\uD83D\uDCCA",
+      status: "done",
+      children: [
+        { name: "Main Dashboard", detail: "Sales table, PTD/YTD, labor", status: "done" },
+        { name: "Location Switcher", detail: "Dennis / Chatham dropdown", status: "done" },
+        { name: "Revenue Analytics", detail: "Daily/weekly/monthly", status: "done" },
+        { name: "Labor Analytics", detail: "Cost, % of sales, FOH/BOH", status: "done" },
+        { name: "Beverage Cost", detail: "Pour cost by category", status: "done" },
+        { name: "Food Cost", detail: "COGS from invoice data", status: "done" },
+        { name: "Server Performance", detail: "Individual server metrics", status: "done" },
+        { name: "Dashboard Polish", detail: "Mobile cards, layout cleanup", status: "planned" },
+        { name: "Trend Comparisons", detail: "WoW, MoM, YoY", status: "planned" },
+        { name: "Custom Date Ranges", detail: "User-selectable picker", status: "planned" },
+      ]
+    },
+    {
+      name: "Navigation",
+      icon: "\uD83E\uDDED",
+      status: "done",
+      children: [
+        { name: "Sidebar Component", detail: "Shared sidebar.js all pages", status: "done" },
+        { name: "Collapsible Sections", detail: "Analytics, Management, Products, Recipes, Invoices", status: "done" },
+        { name: "Notification Dots", detail: "Pending invoices indicator", status: "done" },
+        { name: "Mobile Hamburger", detail: "Responsive sidebar", status: "done" },
+        { name: "Active State Fixes", detail: "Correct highlight on nav", status: "planned" },
+        { name: "Tab Sync", detail: "Analytics tabs \u2194 sidebar", status: "planned" },
+      ]
+    },
+    {
+      name: "Invoice Scanner",
+      icon: "\uD83D\uDD0D",
+      status: "done",
+      children: [
+        { name: "Upload & OCR", detail: "Image/PDF, Claude API", status: "done" },
+        { name: "Data Extraction", detail: "Vendor, date, line items", status: "done" },
+        { name: "Category Memory", detail: "Remembers corrections", status: "done" },
+        { name: "Pending Review UI", detail: "Edit categories, confirm", status: "done" },
+        { name: "Invoice History", detail: "Browse confirmed invoices", status: "done" },
+        { name: "Batch OCR", detail: "47 images processed", status: "done" },
+        { name: "Auto-Populate", detail: "Feeds product_costing on invoice confirm", status: "done" },
+        { name: "Local File Watcher", detail: "Watches intake folder, cron /5min", status: "done" },
+        { name: "Multi-Page PDFs", detail: "Handle as single scan", status: "planned" },
+        { name: "Duplicate Detection", detail: "Flag same inv #/vendor", status: "done" },
+        { name: "Email Auto-Import", detail: "Gmail API OAuth, modular pipeline, cron /5min", status: "done" },
+        { name: "Gmail OAuth", detail: "gmail_auth.py --url/--code flow; token pending Mike's auth", status: "progress" },
+        { name: "Session 14: Clean Slate Reset", detail: "Wiped all ME/scanned invoice+product data. Fresh invoices from last 7 days rebuild products via auto-populate pipeline", status: "done" },
+        { name: "Session 15: Auto-Detect Location", detail: "OCR extracts ship_to_address, matches ZIP/street/town to chatham or dennis. Auto-selects in review UI with badge. All 3 pipelines covered (UI, batch_ocr, watcher).", status: "done" },
+        { name: "Session 13A: Vendor Item Foundation", detail: "vendor_items table (product\u2192vendor split), matching engine (auto/suggest/new), Haiku anomaly detection, vendor_routes blueprint (6 endpoints), vendor comparison API. 154 products migrated.", status: "done" },
+        { name: "Per-Line Math Validation", detail: "qty × unit_price vs total_price check on every line item. Red row highlighting + 'check math' badge for mismatches. Error count in section header. Inline editable prices with iOS numeric keyboard.", status: "done" },
+      ]
+    },
+    {
+      name: "Inventory",
+      icon: "\uD83D\uDCE6",
+      status: "done",
+      children: [
+        { name: "Product Setup", detail: "Clean rebuild: product_costing table (305 products, 62 canonicals), single formula cost_per_recipe_unit = case_price / units_per_case. Fresh UI with search/filter/expand. Needs Setup modal for inline product setup from recipe editor.", status: "done" },
+        { name: "Storage Locations", detail: "11 locations (Walk-in/Dry/Bar/Freezer/Front per location + Shed). CRUD routes, product assignment, count sheet ordering.", status: "done" },
+        { name: "Product Catalog", detail: "catalog.html — searchable product browser with vendor/price data. catalog_routes.py (3 endpoints).", status: "done" },
+        { name: "Product Mapping", detail: "MarginEdge model: vendor_item_links table, 5-rule fuzzy match (token_set_ratio, length ratio, key token overlap, category gate, 90%/75% thresholds), 62 canonicals seeded, is_canonical flag, expandable Linked tab with unlink/reassign, event delegation for quote safety.", status: "done" },
+        { name: "Inline Editing", detail: "Click row to expand/edit — built into Product Setup", status: "done" },
+        { name: "Par Levels", detail: "Min/max per product/location", status: "planned" },
+        { name: "Order Guide", detail: "Search invoice history by item, all vendor options + prices", status: "done" },
+        { name: "AI Smart Count", detail: "Built & tested — Whisper audio + Claude Vision + reconcile engine + API + UI. 83/83 tests pass. Seamless upload flow: Start → glasses record → iOS Shortcut auto-uploads → review. Session 16 complete.", status: "done" },
+        { name: "Inventory Counts", detail: "Weekly/monthly manual entry", status: "done" },
+        { name: "Usage Tracking", detail: "Theoretical from recipes", status: "planned" },
+        { name: "Waste Logging", detail: "Waste, comps, spoilage", status: "planned" },
+        { name: "Variance Reports", detail: "Actual vs theoretical", status: "future" },
+      ]
+    },
+    {
+      name: "Recipe Costing",
+      icon: "\uD83C\uDF73",
+      status: "done",
+      children: [
+        { name: "Recipe Builder", detail: "76 recipes, ingredients with canonical autocomplete, localStorage persist", status: "done" },
+        { name: "Cost Calculation", detail: "recipe_costing.py — uses active vendor item prices, unit conversion, food cost %", status: "done" },
+        { name: "Recipe Viewer UI", detail: "manage.html — cost breakdown table, food cost % badges, editable servings/menu price", status: "done" },
+        { name: "Voice Recipe Builder", detail: "voice_recipe.html — Whisper transcribe + Haiku parse + fuzzy match + save. Mobile-first, iOS codec support.", status: "done" },
+        { name: "Auto-Recosting", detail: "Background thread recalculates all recipe costs on every invoice confirm", status: "done" },
+        { name: "Session 13B: Recipe Costing Engine", detail: "recipe_costing.py, voice_recipe_routes.py, voice_recipe.html, 3 new endpoints, Recipe Viewer in manage.html. 18/18 checks passed.", status: "done" },
+        { name: "PMIX Mapping", detail: "pmix_mapping table, rapidfuzz auto-suggest (64 auto-mapped), mapping UI with recipe dropdowns + multipliers, theoretical food cost report with date range presets", status: "done" },
+        { name: "Session 13C: PMIX Mapping", detail: "pmix_matcher.py, pmix_routes.py (5 endpoints), PMIX Mapping view in manage.html + sidebar. 25/25 checks passed.", status: "done" },
+        { name: "Session 14: Product Costing Rebuild", detail: "product_costing table + routes, recipe editor uses cost_per_recipe_unit, Needs Setup modal, Product Mapping rebuild with auto-match. 35/35 tests passed.", status: "done" },
+        { name: "Session 15: Mapping Hardening", detail: "62 canonicals seeded, 5-rule fuzzy match, is_canonical flag, unlink/reassign UI, canonical price propagation, recipe ingredient fixes, localStorage persist. 48/48 tests passed.", status: "done" },
+        { name: "Sub-Recipes", detail: "Sauces, dressings, prep", status: "planned" },
+        { name: "Cost Alerts", detail: "Price change notifications", status: "future" },
+        { name: "Menu Engineering", detail: "Popularity \u00D7 profitability", status: "future" },
+      ]
+    },
+    {
+      name: "Product Pipeline Rebuild (S34-39)",
+      icon: "\uD83D\uDD27",
+      status: "done",
+      children: [
+        { name: "S34: Toast Menu Sync", detail: "Manual sync button in Settings. 277 items pulled (Food 117, Drinks 149, Merch 6, Catering 5). store_menus() fixed for Toast V2 API format.", status: "done" },
+        { name: "S35: Schema Consolidation", detail: "Enhanced products (yield_pct, recipe_unit) + vendor_items (match_confidence, match_method, last_invoice_id). Migrated 59 canonical products. Disabled legacy product_costing writes. product_helpers.py created.", status: "done" },
+        { name: "S36: OCR + Pack Size Parser", detail: "vendor_item_code in OCR prompt + saved to DB. parse_pack_size() 13/13 tests. Wired into vendor_item_matcher. 205 vendor items backfilled with pack data.", status: "done" },
+        { name: "S37: Product Setup UI", detail: "canonical_product_routes.py (6 endpoints). Rebuilt Product Setup view with summary cards, recipe_unit/yield_pct editing, vendor item drill-down.", status: "done" },
+        { name: "S38: Recipe + Menu Linking", detail: "Switched recipe costing to vendor_items chain. Inline product creation in autocomplete. Searchable menu item linking modal. Cost display from canonical products.", status: "done" },
+        { name: "S39: Menu Analysis", detail: "Full Menu Analysis view with summary cards, coverage bar, sortable table, ingredient drill-down. Archived product_costing/product_name_map/vendor_item_links. Pipeline complete.", status: "done" },
+      ]
+    },
+    {
+      name: "S40: Recipe Auto-Populate",
+      icon: "\uD83E\uDD16",
+      status: "done",
+      children: [
+        { name: "Menu descriptions synced", detail: "Added description column to menu_items. Re-synced Toast: 161/508 have descriptions.", status: "done" },
+        { name: "393 recipes created", detail: "One per unique menu item (158 FOOD, 110 LIQUOR, 71 BEER, 30 WINE, 24 NA_BEV). Merch skipped.", status: "done" },
+        { name: "1,342 ingredients populated", detail: "Claude API: 1,136 matched canonical (85%), 206 new. All qty=0 for manual entry. ~$1.35 API cost.", status: "done" },
+        { name: "Auto-populate button", detail: "UI button on Recipes page with preview/confirm. POST /api/inventory/recipes/auto-populate.", status: "done" },
+      ]
+    },
+    {
+      name: "Bill Pay",
+      icon: "\uD83D\uDCB5",
+      status: "progress",
+      children: [
+        { name: "Vendor Management", detail: "Contacts, payment terms", status: "done" },
+        { name: "Invoice Payment Tracking", detail: "Mark paid: date/method/ref; outstanding view by vendor; payment filter pills", status: "done" },
+        { name: "Payment Scheduling", detail: "Schedule by due date", status: "planned" },
+        { name: "GL Code Mapping", detail: "Categories \u2192 GL codes", status: "planned" },
+        { name: "QuickBooks Export", detail: "Export to QuickBooks", status: "future" },
+      ]
+    },
+    {
+      name: "Settings",
+      icon: "\u26A1",
+      status: "progress",
+      children: [
+        { name: "Settings Section", detail: "Category mgmt, config", status: "planned" },
+        { name: "User Accounts", detail: "2 users (admin, rob), login/logout, login_required decorator, session auth", status: "done" },
+        { name: "Role Permissions", detail: "Manager vs staff levels", status: "future" },
+        { name: "Notifications", detail: "Email/SMS alerts", status: "future" },
+        { name: "Data Export", detail: "Weekly export endpoint (/api/export/weekly)", status: "done" },
+      ]
+    },
+    {
+      name: "Sports Guide",
+      icon: "\uD83C\uDFC8",
+      status: "done",
+      children: [
+        { name: "ESPN Scraper", detail: "fanzo_scraper.py \u2014 multi-sport schedule/scores. Daily cron.", status: "done" },
+        { name: "Live Odds", detail: "espn_odds_fetcher.py + odds_fetcher.py \u2014 spread/ML/total for NFL, NBA, MLB, NHL", status: "done" },
+        { name: "Team Logos", detail: "Auto-fetched and cached per team", status: "done" },
+        { name: "TV Guide Display", detail: "sports.py blueprint, public/embed views, section reordering", status: "done" },
+        { name: "Chalkboard Mode", detail: "TV-optimized portrait display for bar screens", status: "done" },
+        { name: "TV Control Module", detail: "Staff-facing mobile UI: DirecTV channel database, Roku local API control, tap game \u2192 TV switches channel. Phone-only.", status: "planned" },
+      ]
+    },
+    {
+      name: "Specials Board",
+      icon: "\uD83C\uDF7D",
+      status: "done",
+      children: [
+        { name: "Specials CRUD", detail: "specials_routes.py \u2014 create/edit/delete/reorder daily specials", status: "done" },
+        { name: "Admin UI", detail: "specials_admin.html \u2014 manage specials with drag reorder", status: "done" },
+        { name: "Chalkboard Display", detail: "chalkboard_specials_portrait.html \u2014 TV portrait display for bar", status: "done" },
+      ]
+    },
+    {
+      name: "Mobile", icon: "\uD83D\uDCF1", status: "planned",
+      children: [
+        { name: "Mobile Layout Overhaul", detail: "Phone-first all screens", status: "planned" },
+        { name: "Today Snapshot", detail: "Sales, labor, alerts at a glance", status: "planned" },
+        { name: "Invoice Camera Scan", detail: "Snap photo, OCR in-app", status: "planned" },
+        { name: "Batch Photo Upload", detail: "Quick multiple invoices, process all", status: "planned" },
+        { name: "Voice Inventory Count", detail: "Speak counts hands-free as you go", status: "planned" },
+        { name: "BLE Scale Connect", detail: "Bluetooth scale for bottle weights", status: "planned" },
+        { name: "Barcode Camera Scan", detail: "Phone camera UPC to product ID", status: "planned" },
+        { name: "Quick Inventory Entry", detail: "Fast scroll, auto-save, offline", status: "planned" },
+        { name: "Bill Pay Approvals", detail: "Review and approve on the go", status: "planned" },
+        { name: "Price Alerts Push", detail: "Notify on price spikes", status: "planned" },
+        { name: "Offline Mode", detail: "Cache product data, sync later", status: "planned" },
+        { name: "Home Screen Shortcut", detail: "Add to home, app-like feel", status: "planned" },
+      ]
+    },
+    {
+      name: "AI Phone Agent", icon: "\uD83E\uDD16", status: "future",
+      children: [
+        { name: "Twilio Setup", detail: "Phone number, call routing", status: "future" },
+        { name: "Speech-to-Text", detail: "Real-time voice transcription", status: "future" },
+        { name: "AI Reasoning", detail: "Claude API for natural answers", status: "future" },
+        { name: "Text-to-Speech", detail: "Natural voice response", status: "future" },
+        { name: "Knowledge Base", detail: "Menu, hours, specials, FAQs", status: "future" },
+        { name: "Live Data Integration", detail: "Pull reservations from OpenTable", status: "future" },
+        { name: "Transfer to Human", detail: "Escalate when AI cannot help", status: "future" },
+        { name: "Call Logging", detail: "Log calls, transcripts, outcomes", status: "future" },
+        { name: "Dual Location", detail: "Route by Dennis Port or Chatham", status: "future" },
+      ]
+    },
+    {
+      name: "Future Expansion", icon: "\uD83D\uDE80", status: "future",
+      children: [
+        { name: "Marketing Automation", detail: "Email/SMS via SendGrid+Twilio, AI content, segmentation", status: "future" },
+        { name: "Campaign Triggers", detail: "Birthday, lapsed 3wks, weather-based flash deals", status: "future" },
+        { name: "Dynamic Pricing", detail: "Real-time deals based on weather, slow periods, velocity", status: "future" },
+        { name: "Review Monitor", detail: "Google/Yelp/TripAdvisor auto-pull, AI draft replies", status: "future" },
+        { name: "Competitive Intel", detail: "Scrape competitor menus, pricing, reviews", status: "future" },
+        { name: "Smart Event Calendar", detail: "AI promos from historical patterns + weather + Cape events", status: "future" },
+        { name: "Voice Specials Costing", detail: "Cook speaks ingredients, instant food cost + pricing", status: "future" },
+        { name: "AI Menu Suggestions", detail: "Suggest specials to move aging inventory", status: "future" },
+        { name: "AI Kitchen Assistant", detail: "Real-time cost questions, sub ingredients, prep lists", status: "future" },
+        { name: "Staff Schedule Optimizer", detail: "AI draft schedules in 7shifts from forecast + weather", status: "future" },
+        { name: "Supplier Negotiation", detail: "Price tracking, benchmarks, auto-draft negotiation emails", status: "future" },
+        { name: "Location Comparison", detail: "Daypart trends, weather impact, drink mix differences", status: "future" },
+        { name: "Loyalty Program", detail: "Built-in points/visits, no third-party fees", status: "future" },
+        { name: "Cape Tourism Integration", detail: "Ferry, beach, events correlated with sales forecasts", status: "future" },
+        { name: "Local Partnerships", detail: "Auto co-marketing proposals for hotels, charters", status: "future" },
+        { name: "Voice of Customer", detail: "Unified: transactions, reviews, marketing, visits", status: "future" },
+        { name: "Waste Prediction", detail: "Forecast spoilage, suggest specials to move product", status: "future" },
+        { name: "Auto Menu Card", detail: "Generate special description + push to Toast POS", status: "future" },
+      ]
+    },
+  ]
+};
+
+const STATUS = {
+  done: { color: "#22c55e", bg: "#052e16", label: "DONE" },
+  progress: { color: "#f59e0b", bg: "#451a03", label: "IN PROGRESS" },
+  planned: { color: "#94a3b8", bg: "#1e293b", label: "PLANNED" },
+  future: { color: "#6366f1", bg: "#1e1b4b", label: "FUTURE" },
+  active: { color: "#ef4444", bg: "#450a0a", label: "ACTIVE" },
+};
+
+function StatusPill({ status }) {
+  const s = STATUS[status];
+  return React.createElement("span", { style: {
+    display: "inline-block", padding: "2px 8px", borderRadius: 9999,
+    fontSize: 9, fontWeight: 700, letterSpacing: 1,
+    color: s.color, background: s.bg,
+    border: `1px solid ${s.color}33`, textTransform: "uppercase",
+  }}, s.label);
+}
+
+function getProgress(node) {
+  if (!node.children) return node.status === "done" ? 100 : 0;
+  const done = node.children.filter(c => c.status === "done").length;
+  return Math.round((done / node.children.length) * 100);
+}
+
+function ProgressRing({ pct, size = 32 }) {
+  const r = (size - 4) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (pct / 100) * circ;
+  const color = pct === 100 ? "#22c55e" : pct > 50 ? "#f59e0b" : "#94a3b8";
+  return (
+    <svg width={size} height={size} style={{ transform: "rotate(-90deg)", flexShrink: 0 }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1e293b" strokeWidth={3} />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={3}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        style={{ transition: "stroke-dashoffset 0.5s ease" }} />
+      <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
+        fill={color} fontSize={9} fontWeight={700}
+        style={{ transform: "rotate(90deg)", transformOrigin: "center" }}>{pct}%</text>
+    </svg>
+  );
+}
+
+function LeafNode({ item }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "6px 12px", background: "#0f172a",
+      borderRadius: 6, borderLeft: `3px solid ${STATUS[item.status].color}`,
+      fontSize: 13,
+    }}>
+      <span style={{ color: "#e2e8f0", fontWeight: 600, flex: 1 }}>{item.name}</span>
+      <span style={{ color: "#64748b", fontSize: 11, flex: 1.2 }}>{item.detail}</span>
+      <StatusPill status={item.status} />
+    </div>
+  );
+}
+
+function BranchNode({ node, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const pct = getProgress(node);
+  const doneCount = node.children.filter(c => c.status === "done").length;
+  const totalCount = node.children.length;
+
+  React.useEffect(() => { setOpen(defaultOpen); }, [defaultOpen]);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div onClick={() => setOpen(!open)} style={{
+        display: "flex", alignItems: "center", gap: 12,
+        padding: "10px 16px",
+        background: open ? "#1e293b" : "#0f172a",
+        border: `1px solid ${open ? STATUS[node.status].color + "55" : "#1e293b"}`,
+        borderRadius: 10, cursor: "pointer",
+        transition: "all 0.2s ease", userSelect: "none",
+      }}>
+        <span style={{ fontSize: 22 }}>{node.icon}</span>
+        <ProgressRing pct={pct} />
+        <div style={{ flex: 1 }}>
+          <div style={{ color: "#f1f5f9", fontWeight: 700, fontSize: 15 }}>{node.name}</div>
+          <div style={{ color: "#64748b", fontSize: 11, marginTop: 1 }}>{doneCount}/{totalCount} complete</div>
+        </div>
+        <StatusPill status={node.status} />
+        <span style={{
+          color: "#475569", fontSize: 18, fontWeight: 300,
+          transform: open ? "rotate(90deg)" : "rotate(0deg)",
+          transition: "transform 0.2s ease",
+        }}>&rsaquo;</span>
+      </div>
+      {open && (
+        <div style={{
+          marginLeft: 24, paddingLeft: 16,
+          borderLeft: "2px solid #1e293b",
+          marginTop: 4, display: "flex", flexDirection: "column", gap: 3,
+          paddingTop: 4, paddingBottom: 4,
+        }}>
+          {node.children.map((child, i) => (
+            <div key={i} style={{ position: "relative" }}>
+              <div style={{
+                position: "absolute", left: -17, top: 14,
+                width: 12, height: 2, background: "#1e293b",
+              }} />
+              <LeafNode item={child} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryBar() {
+  let total = 0, done = 0, prog = 0, plan = 0, fut = 0;
+  DATA.children.forEach(branch => {
+    branch.children.forEach(leaf => {
+      total++;
+      if (leaf.status === "done") done++;
+      else if (leaf.status === "progress") prog++;
+      else if (leaf.status === "planned") plan++;
+      else fut++;
+    });
+  });
+  const pct = Math.round((done / total) * 100);
+
+  return (
+    <div style={{
+      display: "flex", gap: 16, alignItems: "center", justifyContent: "center",
+      flexWrap: "wrap", padding: "16px 0",
+    }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 36, fontWeight: 800, color: "#22c55e", lineHeight: 1 }}>{pct}%</div>
+        <div style={{ fontSize: 10, color: "#64748b", letterSpacing: 1, marginTop: 4 }}>COMPLETE</div>
+      </div>
+      <div style={{ width: 1, height: 40, background: "#1e293b" }} />
+      {[
+        { n: done, label: "Done", color: "#22c55e" },
+        { n: prog, label: "In Progress", color: "#f59e0b" },
+        { n: plan, label: "Planned", color: "#94a3b8" },
+        { n: fut, label: "Future", color: "#6366f1" },
+      ].map((s, i) => (
+        <div key={i} style={{ textAlign: "center", minWidth: 60 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.n}</div>
+          <div style={{ fontSize: 9, color: "#64748b", letterSpacing: 0.5, marginTop: 3 }}>{s.label}</div>
+        </div>
+      ))}
+      <div style={{ width: 1, height: 40, background: "#1e293b" }} />
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#e2e8f0", lineHeight: 1 }}>{total}</div>
+        <div style={{ fontSize: 9, color: "#64748b", letterSpacing: 0.5, marginTop: 3 }}>Total Items</div>
+      </div>
+    </div>
+  );
+}
+
+function Roadmap() {
+  const phases = [
+    { name: "Core Platform", status: "done", items: ["Toast sync", "Invoice scanner", "Product mapping", "Recipe costing"] },
+    { name: "Inventory Ops", status: "done", items: ["Product setup", "AI Smart Count", "Storage", "Order guide"] },
+    { name: "Cost Control", status: "progress", items: ["Sub-recipes", "Par levels", "Net sales match"] },
+    { name: "Bill Pay", status: "progress", items: ["Payment scheduling", "GL codes", "QuickBooks"] },
+    { name: "Advanced", status: "future", items: ["7shifts routes", "Menu engineering", "Mobile overhaul"] },
+  ];
+
+  return (
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 0" }}>
+      {phases.map((p, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{
+            background: STATUS[p.status].bg,
+            border: `1px solid ${STATUS[p.status].color}33`,
+            borderRadius: 8, padding: "10px 14px",
+            minWidth: 140, flex: "0 0 auto",
+          }}>
+            <div style={{ fontSize: 10, color: STATUS[p.status].color, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>
+              PHASE {i + 1}
+            </div>
+            <div style={{ fontSize: 13, color: "#f1f5f9", fontWeight: 600, marginBottom: 6 }}>{p.name}</div>
+            {p.items.map((item, j) => (
+              <div key={j} style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.6 }}>{"\u2022"} {item}</div>
+            ))}
+          </div>
+          {i < phases.length - 1 && (
+            <span style={{ color: "#334155", fontSize: 18, flexShrink: 0 }}>{"\u2192"}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function App() {
+  const [expandAll, setExpandAll] = useState(false);
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#020617",
+      color: "#e2e8f0", fontFamily: "'JetBrains Mono', monospace",
+    }}>
+      <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }}>
+        <div style={{ textAlign: "center", marginBottom: 8 }}>
+          <div style={{
+            display: "inline-block", padding: "4px 16px",
+            background: "#450a0a", borderRadius: 6,
+            border: "1px solid #ef444433", marginBottom: 12,
+          }}>
+            <span style={{ color: "#ef4444", fontSize: 10, fontWeight: 700, letterSpacing: 2 }}>
+              RED NUN BAR & GRILL
+            </span>
+          </div>
+          <h1 style={{
+            fontSize: 28, fontWeight: 800, color: "#f8fafc",
+            margin: "0 0 4px 0", letterSpacing: -0.5,
+          }}>Dashboard Project Tree</h1>
+          <p style={{ color: "#64748b", fontSize: 12, margin: 0 }}>
+            Dennis Port & Chatham, MA — Updated Mar 1, 2026
+          </p>
+        </div>
+
+        <SummaryBar />
+
+        <div style={{
+          background: "#0f172a", borderRadius: 10,
+          padding: "14px 16px", marginBottom: 16,
+          border: "1px solid #1e293b",
+        }}>
+          <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700, letterSpacing: 1.5, marginBottom: 8 }}>
+            ROADMAP
+          </div>
+          <Roadmap />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button onClick={() => setExpandAll(!expandAll)} style={{
+            background: "none", border: "1px solid #334155",
+            color: "#94a3b8", padding: "4px 12px", borderRadius: 6,
+            fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+          }}>
+            {expandAll ? "Collapse All" : "Expand All"}
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {DATA.children.map((branch, i) => (
+            <BranchNode key={i} node={branch} defaultOpen={expandAll} />
+          ))}
+        </div>
+
+        <div style={{
+          textAlign: "center", marginTop: 32, paddingTop: 16,
+          borderTop: "1px solid #1e293b",
+          color: "#334155", fontSize: 10,
+        }}>
+          dashboard.rednun.com — Replacing MarginEdge at $0.05/invoice
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>

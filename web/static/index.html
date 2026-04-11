@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Red Nun">
+<meta name="theme-color" content="#1C1C1E">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<title>Red Nun Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#1C1C1E;--elevated:rgba(44,44,46,0.98);--card:rgba(58,58,60,0.45);
+  --glass:rgba(58,58,60,0.35);--border:rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.15);--text:#F5F5F7;
+  --text2:rgba(245,245,247,0.6);--text3:rgba(245,245,247,0.35);
+  --red:#FF453A;--red-s:rgba(255,69,58,0.12);
+  --green:#30D158;--green-s:rgba(48,209,88,0.12);
+  --blue:#0A84FF;--blue-s:rgba(10,132,255,0.12);
+  --orange:#FF9F0A;--orange-s:rgba(255,159,10,0.12);
+  --purple:#BF5AF2;--purple-s:rgba(191,90,242,0.12);
+  --font:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+
+/* Header */
+.hdr{position:sticky;top:0;z-index:100;padding:env(safe-area-inset-top,10px) 16px 10px;background:rgba(28,28,30,0.85);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-logo{width:32px;height:32px;background:linear-gradient(135deg,var(--red),#FF6259);border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;box-shadow:0 3px 10px rgba(255,69,58,0.3)}
+.hdr-title{font-size:16px;font-weight:700;letter-spacing:-0.3px}
+.hdr-sub{font-size:9px;color:var(--text3);font-weight:500;letter-spacing:0.6px;text-transform:uppercase}
+.hdr-right{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.hdr-btn{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:5px 9px;font-size:10px;font-weight:500;font-family:var(--font);cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap}
+.hdr-btn:hover{border-color:var(--border2);color:var(--text)}
+.badge-live{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;font-size:9px;font-weight:600;background:var(--green-s);color:var(--green)}
+.badge-live::before{content:'';width:5px;height:5px;background:var(--green);border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Controls */
+.controls{padding:8px 16px;border-bottom:1px solid var(--border);background:rgba(28,28,30,0.6);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;flex-direction:column;gap:6px}
+.pg{display:flex;gap:3px}
+.p{padding:6px 12px;border-radius:16px;background:var(--card);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:500;font-family:var(--font);cursor:pointer;white-space:nowrap;transition:all .2s}
+.p:hover{border-color:var(--border2)}
+.p.a{background:var(--red-s);border-color:rgba(255,69,58,0.35);color:var(--red)}
+.p.la{background:var(--elevated);border-color:var(--border2);color:var(--text)}
+.p.da{background:var(--red);border-color:var(--red);color:#fff}
+.ds{color:var(--text3);font-size:10px}
+input[type="date"]{background:var(--card);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:7px;font-size:11px;font-family:var(--font);width:120px;max-width:120px;min-width:0;-webkit-appearance:none;appearance:none}
+input[type="date"]:focus{outline:none;border-color:var(--border2)}
+.ba{background:linear-gradient(135deg,var(--red),#FF6259);border:none;color:#fff;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:600;font-family:var(--font);cursor:pointer;width:auto;flex-shrink:0}
+.sp{margin-left:auto}
+
+/* Layout */
+.layout{display:flex;height:100vh}
+.sidebar{width:240px;background:rgba(24,24,27,0.98);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.main-content{flex:1;overflow-y:auto}
+
+/* Sidebar */
+.sidebar-header{padding:20px;border-bottom:1px solid var(--border)}
+.sidebar-logo{font-size:20px;font-weight:700;color:var(--red)}
+.sidebar-nav{flex:1;padding:12px 0}
+.nav-item{padding:10px 20px;display:flex;align-items:center;gap:12px;color:var(--text2);cursor:pointer;transition:all .2s;border-left:3px solid transparent;text-decoration:none}
+.nav-item:hover{background:rgba(255,255,255,0.03);color:var(--text)}
+.nav-item.active{background:var(--red-s);color:var(--red);border-left-color:var(--red)}
+.nav-icon{width:20px;height:20px;opacity:0.8}
+
+/* Page Tabs */
+.page-tabs{background:rgba(28,28,30,0.85);backdrop-filter:blur(30px);border-bottom:1px solid var(--border);display:flex;gap:4px;padding:12px 24px;position:sticky;top:0;z-index:99}
+.page-tab{padding:8px 16px;border-radius:8px;background:transparent;border:1px solid transparent;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .2s;text-decoration:none;display:inline-block}
+.page-tab:hover{background:var(--card);border-color:var(--border)}
+.page-tab.active{background:var(--red-s);border-color:rgba(255,69,58,0.3);color:var(--red)}
+
+/* Main */
+.main{padding:12px 16px 80px;max-width:1000px;margin:0 auto}
+.panel{display:none}.panel.active{display:block}
+
+/* ═══ KPI CARD — the star of the show ═══ */
+.k-grid{display:grid;grid-template-columns:repeat(1,1fr);gap:10px;margin-bottom:12px}
+@media(min-width:500px){.k-grid{grid-template-columns:repeat(2,1fr);gap:8px}}
+@media(min-width:900px){.k-grid{grid-template-columns:repeat(4,1fr)}}
+
+.k{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:16px;padding:16px;cursor:pointer;transition:all .25s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden}
+.k:hover{border-color:var(--border2)}
+.k:active{transform:scale(0.97)}
+.k.open{border-color:var(--border2);background:var(--card)}
+.k-top{display:flex;justify-content:space-between;align-items:flex-start}
+.k-label{font-size:11px;font-weight:500;color:var(--text2);margin-bottom:6px}
+.k-arrow{width:20px;height:20px;color:var(--text3);transition:transform .25s}
+.k.open .k-arrow{transform:rotate(90deg)}
+.k-val{font-size:30px;font-weight:800;letter-spacing:-1.2px;line-height:1}
+@media(max-width:400px){.k-val{font-size:24px}}
+.k-sub{font-size:11px;color:var(--text2);margin-top:5px;display:flex;align-items:center;gap:5px}
+.k-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px}
+.tg{background:var(--green-s);color:var(--green)}
+.tb{background:var(--red-s);color:var(--red)}
+.tn{background:rgba(255,255,255,0.05);color:var(--text3)}
+.k-bar{height:2px;background:rgba(255,255,255,0.04);border-radius:1px;margin-top:10px;overflow:hidden}
+.k-bar-f{height:100%;border-radius:1px;transition:width .5s ease}
+
+/* Detail panel inside card */
+.k-detail{max-height:0;overflow:hidden;transition:max-height .35s cubic-bezier(.4,0,.2,1)}
+.k.open .k-detail{max-height:2000px}
+.k-detail-inner{padding-top:12px;margin-top:12px;border-top:1px solid var(--border)}
+
+/* Detail table */
+.dt{width:100%;border-collapse:collapse;font-size:12px}
+.dt th{text-align:left;padding:6px 0;font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)}
+.dt td{padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+.dt tr:last-child td{border-bottom:none}
+.dt .n{text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
+.dt .b{font-weight:700}
+.dt .d{color:var(--text3)}
+.dt .g{color:var(--green)}.dt .r{color:var(--red)}
+
+/* Standalone table card */
+.tc{background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:12px}
+.tc-title{padding:14px 16px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.tc table{width:100%;border-collapse:collapse;font-size:12px}
+.tc th{text-align:left;padding:8px 14px;font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)}
+.tc td{padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.tc tr:last-child td{border-bottom:none}
+.tc tr:hover td{background:rgba(255,255,255,0.015)}
+.tc .n{text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
+.tc .b{font-weight:700}.tc .d{color:var(--text3)}.tc .g{color:var(--green)}.tc .r{color:var(--red)}
+
+/* Split */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+@media(max-width:600px){.split{grid-template-columns:1fr}}
+
+/* Category badge */
+.cb{display:inline-block;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.cb-food{background:var(--green-s);color:var(--green)}.cb-beer{background:var(--orange-s);color:var(--orange)}.cb-liquor{background:var(--red-s);color:var(--red)}.cb-wine{background:var(--purple-s);color:var(--purple)}.cb-na{background:var(--blue-s);color:var(--blue)}
+
+.rank{width:24px;text-align:center}.medal{font-size:13px}
+.empty{text-align:center;padding:50px 16px;color:var(--text3);font-size:13px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);padding:10px 20px;border-radius:12px;background:var(--elevated);border:1px solid var(--border);color:var(--text);font-size:13px;font-weight:500;z-index:300;opacity:0;transition:all .3s;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.an{animation:fadeUp .3s cubic-bezier(.4,0,.2,1) forwards}
+@media(max-width:768px){.hdr{flex-wrap:wrap;gap:6px}.hdr-right{width:100%}}
+
+/* Mobile layout */
+.ctrl-row{display:flex;gap:4px;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}
+.ctrl-row::-webkit-scrollbar{display:none}
+.ctrl-row-right{display:flex;gap:4px;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.ctrl-row-right::-webkit-scrollbar{display:none}
+@media(max-width:768px){
+  .sidebar{display:none}
+  .layout{display:block}
+  .main-content{width:100%}
+  .hdr{padding:env(safe-area-inset-top,8px) 12px 8px}
+  .hdr-right{gap:4px}
+  .hdr-btn{padding:4px 7px;font-size:9px}
+  .badge-live{padding:3px 6px;font-size:8px}
+  .controls{padding:6px 12px;gap:5px}
+  .sp{display:none}
+}
+@media(min-width:769px){
+  .controls{flex-direction:row;flex-wrap:wrap;align-items:center}
+}
+
+
+
+
+
+</style>
+<link rel="stylesheet" href="/static/sidebar.css">
+</head>
+<body>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:34px;height:34px;background:linear-gradient(135deg,var(--red),#FF6259);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;box-shadow:0 4px 12px rgba(255,69,58,0.3)">RN</div>
+        <div>
+          <div style="font-size:17px;font-weight:700;letter-spacing:-0.3px">Red Nun Analytics</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:500;letter-spacing:0.5px;text-transform:uppercase">Toast + MarginEdge</div>
+        </div>
+      </div>
+    </div>
+    <nav class="sidebar-nav" id="tg">
+      <div class="nav-item" data-tab="today">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Today
+      </div>
+      <div class="nav-item active" data-tab="overview">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 12a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1v-7z"/></svg>
+        Overview
+      </div>
+      <div class="nav-item" data-tab="labor">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        Labor
+      </div>
+      <div class="nav-item" data-tab="pourcost">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+        Bev Cost
+      </div>
+      <div class="nav-item" data-tab="cogs">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+        Food Cost
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Page Tabs -->
+    <div class="page-tabs">
+      <a href="/" class="page-tab active">Analytics</a>
+      <a href="/manage" class="page-tab">Management</a>
+      <a href="/invoices" class="page-tab">Invoices</a>
+      <a href="/catalog" class="page-tab">Catalog</a>
+      <select id="global-location" onchange="setGlobalLocation(this.value)" style="margin-left:auto;padding:6px 12px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer">
+        <option value="dennis">📍 Dennis Port</option>
+        <option value="chatham">📍 Chatham</option>
+      </select>
+    </div>
+
+    <!-- Analytics Dashboard Content -->
+    <div class="controls">
+  <div class="pg"><button class="p la" data-loc="">Both</button><button class="p" data-loc="dennis">Dennis</button><button class="p" data-loc="chatham">Chatham</button></div>
+  <div class="sp"></div>
+  <div class="pg"><button class="p date-btn" onclick="setToday()" data-date="today">Today</button><button class="p date-btn" onclick="setYesterday()" data-date="yesterday">Yest</button><button class="p date-btn" onclick="setThisWeek()" data-date="thisweek">This Wk</button><button class="p date-btn" onclick="setLastWeek()" data-date="lastweek">Last Wk</button><button class="p date-btn" onclick="setLast30()" data-date="30d">30d</button></div>
+  <span class="ds">|</span><input type="date" id="startDate"><span class="ds">–</span><input type="date" id="endDate"><button class="ba" onclick="refreshAll()">Apply</button>
+</div>
+<div class="main">
+  <div class="panel" id="panel-today"></div>
+  <div class="panel active" id="panel-overview"></div>
+  <div class="panel" id="panel-labor"></div>
+  <div class="panel" id="panel-pourcost"></div>
+  <div class="panel" id="panel-cogs"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const S={location:'',start:'',end:'',tab:'overview',cache:{}};
+const $=s=>document.querySelector(s);const $$=s=>document.querySelectorAll(s);
+const fmt=n=>n==null?'$0':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtDec=n=>n==null?'$0.00':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtPct=n=>(n==null?0:Number(n)).toFixed(1)+'%';
+const fmtD=d=>{if(!d||d.length<8)return d;const s=d.replace(/-/g,'');return s.slice(4,6)+'/'+s.slice(6,8)};
+const dayN=d=>{if(!d||d.length<8)return'';const s=d.replace(/-/g,'');const dt=new Date(s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8)+'T12:00:00');return['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()]};
+function lds(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function showToast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
+function clearDA(){$$('.date-btn').forEach(b=>b.classList.remove('da'))}
+function setToday(){clearDA();$('[data-date="today"]').classList.add('da');const s=lds(new Date());$('#startDate').value=s;$('#endDate').value=s;refreshAll()}
+function setYesterday(){clearDA();$('[data-date="yesterday"]').classList.add('da');const y=new Date();y.setDate(y.getDate()-1);const s=lds(y);$('#startDate').value=s;$('#endDate').value=s;refreshAll()}
+function setThisWeek(){clearDA();$('[data-date="thisweek"]').classList.add('da');const now=new Date(),day=now.getDay(),mon=new Date(now);mon.setDate(now.getDate()-(day===0?6:day-1));$('#startDate').value=lds(mon);$('#endDate').value=lds(now);refreshAll()}
+function setLastWeek(){clearDA();$('[data-date="lastweek"]').classList.add('da');const now=new Date(),day=now.getDay(),tm=new Date(now);tm.setDate(now.getDate()-(day===0?6:day-1));const lm=new Date(tm);lm.setDate(tm.getDate()-7);const ls=new Date(tm);ls.setDate(tm.getDate()-1);$('#startDate').value=lds(lm);$('#endDate').value=lds(ls);refreshAll()}
+function setLast30(){clearDA();$('[data-date="30d"]').classList.add('da');const now=new Date(),ago=new Date(now);ago.setDate(now.getDate()-30);$('#startDate').value=lds(ago);$('#endDate').value=lds(now);refreshAll()}
+async function api(path){const key=path+'|'+S.location+'|'+S.start+'|'+S.end;if(S.cache[key])return S.cache[key];const p=new URLSearchParams();if(S.location)p.set('location',S.location);if(S.start)p.set('start',S.start);if(S.end)p.set('end',S.end);try{const r=await fetch('/api/'+path+'?'+p);if(!r.ok)throw 0;const d=await r.json();S.cache[key]=d;return d}catch(e){return null}}
+
+// Arrow SVG
+const ARR='<svg class="k-arrow" viewBox="0 0 20 20" fill="currentColor"><path d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"/></svg>';
+
+// KPI card builder with expandable detail
+function K(id,label,value,sub,tag,tagCls,barPct,barClr,detailHtml){
+  const tH=tag?`<span class="k-tag ${tagCls}">${tag}</span>`:'';
+  const bH=barPct!=null?`<div class="k-bar"><div class="k-bar-f" style="width:${Math.min(barPct,100)}%;background:${barClr||'var(--red)'}"></div></div>`:'';
+  const dH=detailHtml?`<div class="k-detail"><div class="k-detail-inner">${detailHtml}</div></div>`:'';
+  const click=detailHtml?` onclick="this.classList.toggle('open')"`:'';
+  return `<div class="k an" id="${id}"${click}><div class="k-top"><div class="k-label">${label}</div>${detailHtml?ARR:''}</div><div class="k-val">${value}</div><div class="k-sub">${sub} ${tH}</div>${bH}${dH}</div>`;
+}
+
+// ══════════════ TODAY SNAPSHOT ══════════════
+async function loadToday(){
+  const loc=S.location||'';
+  const url='/api/dashboard/today'+(loc?'?location='+loc:'');
+  const data=await fetch(url).then(r=>r.json());
+
+  const fmt=(n)=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+
+  const h=`
+    <div style="text-align:center;padding:20px 0 10px;border-bottom:1px solid var(--border);margin-bottom:20px">
+      <div style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Today</div>
+      <div style="font-size:28px;font-weight:800;color:var(--text)">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:16px;max-width:400px;margin:0 auto">
+      <div style="background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:20px;padding:28px;text-align:center">
+        <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.8px">Sales</div>
+        <div style="font-size:56px;font-weight:900;letter-spacing:-2px;color:var(--green);line-height:1">${fmt(data.sales)}</div>
+      </div>
+      <div style="background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:20px;padding:28px;text-align:center">
+        <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.8px">Labor %</div>
+        <div style="font-size:56px;font-weight:900;letter-spacing:-2px;color:${data.labor_pct>30?'var(--red)':data.labor_pct>25?'var(--orange)':'var(--green)'};line-height:1">${data.labor_pct}%</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:8px">${fmt(data.labor_cost)} labor cost</div>
+      </div>
+      <div style="background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:20px;padding:28px;text-align:center">
+        <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.8px">Covers</div>
+        <div style="font-size:56px;font-weight:900;letter-spacing:-2px;color:var(--blue);line-height:1">${data.covers}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:8px">${data.covers>0?fmt(data.sales/data.covers)+' per cover':'--'}</div>
+      </div>
+    </div>
+  `;
+  $('#panel-today').innerHTML=h;
+}
+
+// ══════════════ OVERVIEW ══════════════
+async function loadOverview(){
+  const[daily,daypart,mix,labor,laborDaily]=await Promise.all([api('revenue/daily'),api('revenue/daypart'),api('revenue/salesmix'),api('labor/summary'),api('labor/daily')]);
+  let h='';
+  const tR=daily?daily.reduce((s,r)=>s+(r.net_revenue||0),0):0;
+  const tO=daily?daily.reduce((s,r)=>s+(r.order_count||0),0):0;
+  const tT=daily?daily.reduce((s,r)=>s+(r.tips||0),0):0;
+  const ac=tO>0?tR/tO:0;
+  const lp=labor?labor.labor_pct||0:0;
+  const lc=labor?labor.total_labor_cost||0:0;
+
+  // Revenue detail
+  let revD='';
+  if(daily&&daily.length){revD='<table class="dt"><thead><tr><th>Date</th><th>Day</th>';if(!S.location)revD+='<th>Loc</th>';revD+='<th class="n">Rev</th><th class="n">Orders</th><th class="n">Tips</th></tr></thead><tbody>';for(const r of daily){revD+=`<tr><td>${fmtD(r.business_date)}</td><td class="d">${dayN(r.business_date)}</td>`;if(!S.location)revD+=`<td class="d">${r.location==='dennis'?'DP':'CH'}</td>`;revD+=`<td class="n b">${fmt(r.net_revenue)}</td><td class="n">${r.order_count}</td><td class="n g">${fmt(r.tips)}</td></tr>`}revD+='</tbody></table>'}
+
+  // Avg check detail (same daily data, different cols)
+  let acD='';
+  if(daily&&daily.length){acD='<table class="dt"><thead><tr><th>Date</th>';if(!S.location)acD+='<th>Loc</th>';acD+='<th class="n">Avg Check</th><th class="n">Revenue</th><th class="n">Orders</th></tr></thead><tbody>';for(const r of daily){acD+=`<tr><td>${fmtD(r.business_date)}</td>`;if(!S.location)acD+=`<td class="d">${r.location==='dennis'?'DP':'CH'}</td>`;acD+=`<td class="n b">${fmtDec(r.avg_check)}</td><td class="n">${fmt(r.net_revenue)}</td><td class="n d">${r.order_count}</td></tr>`}acD+='</tbody></table>'}
+
+  // Labor detail
+  let labD='';
+  if(laborDaily&&laborDaily.length){const dates=[...new Set(laborDaily.map(r=>r.business_date))].sort();labD='<table class="dt"><thead><tr><th>Date</th><th class="n">Labor</th><th class="n">Rev</th><th class="n">%</th></tr></thead><tbody>';for(const d of dates){const rows=laborDaily.filter(x=>x.business_date===d);const lcc=rows.reduce((s,r)=>s+(r.labor_cost||0),0);const rv=rows.reduce((s,r)=>s+(r.revenue||0),0);const pct=rv>0?(lcc/rv*100):0;labD+=`<tr><td>${fmtD(d)} <span class="d">${dayN(d)}</span></td><td class="n">${fmt(lcc)}</td><td class="n d">${fmt(rv)}</td><td class="n ${pct>30?'r':'g'}" style="font-weight:700">${pct.toFixed(1)}%</td></tr>`}labD+='</tbody></table>'}
+
+  // Sales mix detail
+  let mixD='';
+  if(mix&&mix.length){const tM=mix.reduce((s,m)=>s+(m.revenue||0),0);mixD='<table class="dt"><thead><tr><th>Category</th><th class="n">Revenue</th><th class="n">%</th></tr></thead><tbody>';for(const m of mix){mixD+=`<tr><td><span class="cb cb-${m.category.toLowerCase().replace(' ','')}">${m.category}</span></td><td class="n b">${fmt(m.revenue)}</td><td class="n d">${(tM>0?(m.revenue/tM*100):0).toFixed(1)}%</td></tr>`}mixD+='</tbody></table>'}
+
+  h+='<div class="k-grid">';
+  h+=K('ov-rev','Net Revenue',fmt(tR),tO+' orders',null,null,null,null,revD);
+  h+=K('ov-ac','Avg Check',fmtDec(ac),'per order',null,null,null,null,acD);
+  h+=K('ov-labor','Labor Cost',fmtPct(lp),fmt(lc),lp>30?'High':'On Track',lp>30?'tb':'tg',lp,lp>30?'var(--red)':'var(--green)',labD);
+  h+=K('ov-mix','Sales Mix',tO.toLocaleString()+' orders',daily?daily.length+' days':'',null,null,null,null,mixD);
+  h+='</div>';
+
+  // Daypart cards
+  if(daypart&&daypart.length){
+    const parts=[...new Set(daypart.map(d=>d.daypart))];
+    h+='<div class="k-grid">';
+    for(const p of parts){
+      const rows=daypart.filter(d=>d.daypart===p);
+      const rev=rows.reduce((s,r)=>s+(r.revenue||0),0);
+      const ord=rows.reduce((s,r)=>s+(r.order_count||0),0);
+      let pD='';
+      if(!S.location&&rows.length>1){pD='<table class="dt"><thead><tr><th>Location</th><th class="n">Revenue</th><th class="n">Orders</th></tr></thead><tbody>';for(const r of rows){pD+=`<tr><td>${r.location==='dennis'?'Dennis Port':'Chatham'}</td><td class="n b">${fmt(r.revenue)}</td><td class="n">${r.order_count||''}</td></tr>`}pD+='</tbody></table>'}
+      h+=K('ov-'+p.toLowerCase(),p,fmt(rev),ord+' orders',null,null,null,null,pD);
+    }
+    h+='</div>';
+  }
+
+  // Price Movers
+  const movers=await api('price-movers');
+  if(movers&&(movers.increases.length||movers.decreases.length)){
+    h+='<div style="margin-top:12px"><div class="tc"><div class="tc-title">Price Movers</div></div>';
+    h+='<div class="split">';
+
+    // Increases (red)
+    if(movers.increases.length){
+      h+='<div class="tc"><div style="padding:8px 12px;background:var(--red-s);border-radius:8px 8px 0 0"><span style="color:var(--red);font-weight:700;font-size:11px">↑ TOP INCREASES</span></div><table><thead><tr><th>Product</th><th class="n">Was</th><th class="n">Now</th><th class="n">Δ</th></tr></thead><tbody>';
+      for(const m of movers.increases){
+        h+=`<tr><td style="font-weight:600">${m.product_name}</td><td class="n d">${fmtDec(m.previous_price)}</td><td class="n b">${fmtDec(m.current_price)}</td><td class="n r" style="font-weight:700">+${m.change_pct}%</td></tr>`;
+      }
+      h+='</tbody></table></div>';
+    }
+
+    // Decreases (green)
+    if(movers.decreases.length){
+      h+='<div class="tc"><div style="padding:8px 12px;background:var(--green-s);border-radius:8px 8px 0 0"><span style="color:var(--green);font-weight:700;font-size:11px">↓ TOP DECREASES</span></div><table><thead><tr><th>Product</th><th class="n">Was</th><th class="n">Now</th><th class="n">Δ</th></tr></thead><tbody>';
+      for(const m of movers.decreases){
+        h+=`<tr><td style="font-weight:600">${m.product_name}</td><td class="n d">${fmtDec(m.previous_price)}</td><td class="n b">${fmtDec(m.current_price)}</td><td class="n g" style="font-weight:700">${m.change_pct}%</td></tr>`;
+      }
+      h+='</tbody></table></div>';
+    }
+
+    h+='</div></div>';
+  }
+
+  $('#panel-overview').innerHTML=h;
+}
+
+// ══════════════ LABOR ══════════════
+async function loadLabor(){
+  const[summary,daily,byRole]=await Promise.all([api('labor/summary'),api('labor/daily'),api('labor/byrole')]);
+  let h='';
+  if(!summary||(summary.total_labor_cost===0&&summary.total_hours===null)){
+    $('#panel-labor').innerHTML='<div class="empty">No labor data for selected period.</div>';return;
+  }
+  if(summary){
+    const s=summary;
+    // Role detail for labor card
+    let roleD='';
+    if(byRole&&byRole.length){roleD='<table class="dt"><thead><tr><th>Role</th><th class="n">Cost</th><th class="n">Hours</th></tr></thead><tbody>';for(const r of byRole){roleD+=`<tr><td style="font-weight:600">${r.job_title||'Unknown'}</td><td class="n b">${fmt(r.labor_cost)}</td><td class="n d">${(r.total_hours||0).toFixed(0)}h</td></tr>`}roleD+='</tbody></table>'}
+
+    // Daily detail for hours card
+    let dayD='';
+    if(daily&&daily.length){const dates=[...new Set(daily.map(r=>r.business_date))].sort();dayD='<table class="dt"><thead><tr><th>Date</th><th class="n">Labor</th><th class="n">Revenue</th><th class="n">%</th></tr></thead><tbody>';for(const d of dates){const rows=daily.filter(x=>x.business_date===d);const lc=rows.reduce((s,r)=>s+(r.labor_cost||0),0);const rv=rows.reduce((s,r)=>s+(r.revenue||0),0);const pct=rv>0?(lc/rv*100):0;dayD+=`<tr><td>${fmtD(d)} <span class="d">${dayN(d)}</span></td><td class="n">${fmt(lc)}</td><td class="n d">${fmt(rv)}</td><td class="n ${pct>30?'r':'g'}" style="font-weight:700">${pct.toFixed(1)}%</td></tr>`}dayD+='</tbody></table>'}
+
+    h+='<div class="k-grid">';
+    h+=K('lb-tot','Total Labor',fmtPct(s.labor_pct),fmt(s.total_labor_cost),s.labor_pct>30?'High':'OK',s.labor_pct>30?'tb':'tg',s.labor_pct,s.labor_pct>30?'var(--red)':'var(--green)',roleD);
+    h+=K('lb-hr','Hourly Labor',fmt(s.total_labor_cost-(s.salary_cost||0)),'excl. salary',null,null,null,null,null);
+    h+=K('lb-hours','Total Hours',(s.total_hours||0).toFixed(0)+'h',(s.unique_employees||0)+' employees',null,null,null,null,dayD);
+    h+=K('lb-ot','Overtime',(s.total_overtime_hours||0).toFixed(1)+'h','',(s.total_overtime_hours||0)>10?'Watch':'OK',(s.total_overtime_hours||0)>10?'tb':'tg',null,null,null);
+    h+='</div>';
+  }
+  $('#panel-labor').innerHTML=h;
+}
+
+// ══════════════ BEV COST ══════════════
+async function loadPourCost(){
+  const pc=await api('cogs/pourcost');let h='';
+  if(pc&&pc.total_bev_cost>0){
+    let catD='';const cats=pc.categories||[];
+    if(cats.length){catD='<table class="dt"><thead><tr><th>Category</th><th class="n">Cost</th><th class="n">% Bev Rev</th></tr></thead><tbody>';for(const c of cats){catD+=`<tr><td><span class="cb cb-${c.type.toLowerCase()}">${c.type}</span></td><td class="n b">${fmt(c.cost)}</td><td class="n ${c.pct_of_bev_rev>30?'r':''}">${fmtPct(c.pct_of_bev_rev)}</td></tr>`}catD+='</tbody></table>'}
+    h+='<div class="k-grid">';
+    h+=K('pc-pct','Bev Cost %',fmtPct(pc.pour_cost_pct),'bev cost / bev rev',pc.pour_cost_pct>25?'High':'Good',pc.pour_cost_pct>25?'tb':'tg',pc.pour_cost_pct,pc.pour_cost_pct>25?'var(--red)':'var(--green)',catD);
+    h+=K('pc-cost','Total Bev Cost',fmt(pc.total_bev_cost),cats.length+' categories',null,null,null,null,null);
+    h+=K('pc-rev','Total Revenue',fmt(pc.total_revenue),'all categories',null,null,null,null,null);
+    h+=K('pc-brev','Est. Bev Revenue',fmt(pc.est_bev_revenue),'~30% of total',null,null,null,null,null);
+    h+='</div>';
+  }else{h='<div class="empty">No bev cost data for selected period.</div>'}
+  $('#panel-pourcost').innerHTML=h;
+}
+
+// ══════════════ FOOD COST ══════════════
+async function loadCOGS(){
+  const[summary,vendors]=await Promise.all([api('cogs/summary'),api('cogs/vendors')]);let h='';
+  if(summary){
+    const cats=summary.categories||[];const total=summary.total_cost||0;
+    let catD='';
+    if(cats.length){catD='<table class="dt"><thead><tr><th>Category</th><th class="n">Cost</th><th class="n">%</th></tr></thead><tbody>';for(const c of cats){catD+=`<tr><td style="font-weight:600">${c.category_type}</td><td class="n b">${fmt(c.total_cost)}</td><td class="n d">${fmtPct(c.pct_of_total)}</td></tr>`}catD+='</tbody></table>'}
+    let venD='';
+    if(vendors&&vendors.length){venD='<table class="dt"><thead><tr><th>Vendor</th><th class="n">Spent</th><th class="n">#</th></tr></thead><tbody>';for(const v of vendors.slice(0,10)){venD+=`<tr><td>${v.vendor_name}</td><td class="n b">${fmt(v.total_spent)}</td><td class="n d">${v.invoice_count}</td></tr>`}venD+='</tbody></table>'}
+
+    const food=cats.find(c=>c.category_type==='FOOD');
+    h+='<div class="k-grid">';
+    h+=K('cg-tot','Total COGS',fmt(total),(summary.period_start||'')+' – '+(summary.period_end||''),null,null,null,null,catD);
+    h+=K('cg-food','Food',fmt(food?food.total_cost:0),food?fmtPct(food.pct_of_total)+' of total':'',null,null,null,null,null);
+    const rem=cats.filter(c=>c.category_type!=='FOOD');
+    for(const c of rem.slice(0,1)){h+=K('cg-'+c.category_type.toLowerCase(),c.category_type,fmt(c.total_cost),fmtPct(c.pct_of_total)+' of total',null,null,null,null,null)}
+    h+=K('cg-vend','Top Vendors',vendors?vendors.length+' vendors':'','by spend',null,null,null,null,venD);
+    h+='</div>';
+  }
+  $('#panel-cogs').innerHTML=h;
+}
+
+// ══════════════ ROUTING ══════════════
+function switchTab(t){
+  window.location.hash=t+(S.location?'.'+S.location:'');
+  S.tab=t;
+  $$('#tg .nav-item').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
+  $$('.panel').forEach(x=>x.classList.toggle('active',x.id==='panel-'+t));
+
+  // Sync with sidebar
+  const tabToNav={overview:'nav-dashboard',labor:'nav-labor',pourcost:'nav-bevcost',cogs:'nav-foodcost'};
+  const navId=tabToNav[t];
+  if(navId&&typeof window.setActiveItem==='function'){
+    window.setActiveItem(navId);
+  }
+
+  loadTab(t);
+}
+function loadTab(t){switch(t){case'today':loadToday();break;case'overview':loadOverview();break;case'labor':loadLabor();break;case'pourcost':loadPourCost();break;case'cogs':loadCOGS();break;}}
+function refreshAll(){S.start=($('#startDate').value||'').replace(/-/g,'');S.end=($('#endDate').value||'').replace(/-/g,'');S.cache={};$$('#tg .nav-item').forEach(x=>x.classList.toggle('active',x.dataset.tab===S.tab));$$('.panel').forEach(x=>x.classList.toggle('active',x.id==='panel-'+S.tab));loadTab(S.tab)}
+async function syncToast(){showToast('Syncing...');try{const r=await fetch('/api/sync/daily',{method:'POST'});const d=await r.json();showToast(d.message||'Done!');S.cache={};refreshAll()}catch(e){showToast('Failed')}}
+function exportWeekly(){const p=new URLSearchParams();if(S.location)p.set('location',S.location);if(S.start)p.set('start',S.start);if(S.end)p.set('end',S.end);window.open('/api/export/weekly?'+p,'_blank')}
+document.addEventListener('DOMContentLoaded',()=>{$$('#tg .nav-item').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));$$('[data-loc]').forEach(b=>b.addEventListener('click',()=>{$$('[data-loc]').forEach(x=>{x.classList.remove('la')});b.classList.add('la');S.location=b.dataset.loc;S.cache={};window.location.hash=S.tab+(S.location?'.'+S.location:'');loadTab(S.tab)}));const h=window.location.hash.replace('#','');if(h){const parts=h.split('.');if(parts[0])S.tab=parts[0];if(parts[1]){S.location=parts[1];$$('[data-loc]').forEach(x=>{x.classList.remove('la');if(x.dataset.loc===S.location)x.classList.add('la')})}}setToday()});
+</script>
+  </div><!-- /main-content -->
+</div><!-- /layout -->
+<script src="/static/sidebar.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/static/service-worker.js')
+      .then(reg => console.log('SW registered'))
+      .catch(err => console.log('SW failed:', err));
+  });
+}
+</script>
+</body>
+</html>

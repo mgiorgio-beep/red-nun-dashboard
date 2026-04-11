@@ -1,0 +1,42 @@
+{
+  "name": "Red Nun Dashboard",
+  "short_name": "Red Nun",
+  "description": "Restaurant analytics and management dashboard for Red Nun Bar & Grill",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#FF453A",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "food"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Scan Invoice",
+      "short_name": "Scan",
+      "description": "Scan a new invoice",
+      "url": "/invoices#scan",
+      "icons": []
+    },
+    {
+      "name": "Analytics",
+      "short_name": "Analytics",
+      "description": "View sales and labor analytics",
+      "url": "/#revenue",
+      "icons": []
+    }
+  ]
+}

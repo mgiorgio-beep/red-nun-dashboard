@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Vendor Payments — Red Nun</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+/* Layout */
+.layout { display: flex; height: 100vh; }
+.sidebar-container { width: 240px; flex-shrink: 0; }
+.main-content { flex: 1; overflow-y: auto; padding: 24px; }
+.content-wrap { max-width: 1100px; }
+
+/* Page header */
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--text); }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+/* Summary bar */
+.summary-bar { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.summary-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 20px; flex: 1; min-width: 140px;
+}
+.summary-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.summary-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+.summary-value.green { color: var(--green); }
+.summary-value.blue { color: var(--blue); }
+
+/* Filter bar */
+.filter-bar { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+.filter-select {
+  padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text); font-size: 13px; font-family: var(--font);
+  cursor: pointer; min-width: 140px;
+}
+.filter-select:focus { outline: none; border-color: var(--border-focus); }
+
+/* Table */
+.pay-table {
+  width: 100%; border-collapse: collapse;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden;
+}
+.pay-table th {
+  text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 600;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+}
+.pay-table td {
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  font-size: 14px; vertical-align: middle;
+}
+.pay-table tr.payment-row { cursor: pointer; }
+.pay-table tr.payment-row:hover td { background: rgba(56,189,248,0.03); }
+.pay-table th.col-right, .pay-table td.col-right { text-align: right; }
+.pay-table td.col-mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; color: var(--text2); }
+
+/* Expandable detail */
+.detail-row { display: none; }
+.detail-row.open { display: table-row; }
+.detail-row td { padding: 0; background: rgba(2,6,23,0.5); }
+.detail-content { padding: 10px 16px 16px 48px; }
+.detail-table { width: 100%; border-collapse: collapse; }
+.detail-table th {
+  text-align: left; padding: 6px 12px; font-size: 10px; font-weight: 600;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.3px;
+}
+.detail-table td { padding: 6px 12px; font-size: 13px; color: var(--text2); border-bottom: 1px solid rgba(30,41,59,0.5); }
+.detail-table tr:last-child td { border-bottom: none; }
+
+/* Credit amounts */
+.amt-credit { color: var(--red); }
+
+/* Buttons */
+.header-buttons { display: flex; gap: 8px; align-items: center; }
+.btn-action {
+  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text2); font-size: 13px; font-family: var(--font);
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-action:hover { border-color: var(--blue); color: var(--blue); }
+.btn-upload { border-color: var(--green); color: var(--green); }
+.btn-upload:hover { background: var(--green-soft); }
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+  border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite;
+  vertical-align: middle; margin-right: 4px;
+}
+
+/* Loading / empty */
+.loading { text-align: center; padding: 40px; color: var(--text3); }
+
+/* Upload modal */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7); z-index: 9999;
+  display: none; align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  width: 90%; max-width: 480px; padding: 24px;
+}
+.modal-title { font-size: 16px; font-weight: 600; }
+.modal-close { background: none; border: none; color: var(--text2); font-size: 22px; cursor: pointer; padding: 0 4px; }
+.drop-zone {
+  border: 2px dashed var(--border-focus); border-radius: 8px; padding: 40px;
+  text-align: center; color: var(--text3); cursor: pointer; transition: all 0.2s;
+  margin-top: 16px;
+}
+.drop-zone.dragover { border-color: var(--blue); background: var(--blue-soft); color: var(--text2); }
+.drop-hint { font-size: 14px; margin-bottom: 6px; }
+.drop-sub { font-size: 12px; }
+#uploadStatus { margin-top: 12px; font-size: 13px; color: var(--text2); }
+
+/* Chevron on expandable rows */
+.expand-icon { display: inline-block; transition: transform 0.2s; font-size: 12px; color: var(--text3); margin-right: 6px; }
+.payment-row.expanded .expand-icon { transform: rotate(90deg); }
+
+/* Source badges */
+.badge-source {
+  display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.3px; text-transform: uppercase;
+}
+.badge-import { background: var(--blue-soft); color: var(--blue); }
+.badge-check { background: var(--green-soft); color: var(--green); }
+.badge-portal { background: rgba(168,85,247,0.12); color: #a855f7; }
+
+/* Status pills */
+.pill-status {
+  display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.pill-cleared { background: var(--green-soft); color: var(--green); }
+.pill-pending { background: var(--amber-soft); color: var(--amber); }
+.pill-printed { background: var(--blue-soft); color: var(--blue); }
+.pill-processing { background: rgba(168,85,247,0.12); color: #a855f7; }
+.pill-void { background: rgba(71,85,105,0.2); color: var(--text3); }
+.pill-failed { background: var(--red-soft); color: var(--red); }
+
+@keyframes pulse-purple {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pill-processing { animation: pulse-purple 1.5s ease-in-out infinite; }
+
+/* Void button in detail */
+.btn-void {
+  padding: 4px 12px; border-radius: 6px; border: 1px solid var(--red);
+  background: transparent; color: var(--red); font-size: 11px; font-weight: 600;
+  cursor: pointer; margin-top: 8px;
+}
+.btn-void:hover { background: var(--red-soft); }
+
+/* Mobile */
+@media (max-width: 767px) {
+  .layout { display: block; height: auto; }
+  .sidebar-container { display: none; }
+  .main-content { width: 100%; padding: 16px; overflow-y: visible; }
+  .summary-bar { gap: 10px; }
+  .summary-card { min-width: 100px; padding: 12px; }
+  .summary-value { font-size: 22px; }
+  .pay-table th, .pay-table td { padding: 10px 12px; }
+  .col-hide-mobile { display: none; }
+  .detail-content { padding: 10px 12px 12px 12px; }
+}
+</style>
+<link rel="stylesheet" href="/static/sidebar.css">
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar-container" id="sidebar"></div>
+  <div class="main-content">
+    <div class="content-wrap">
+
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div class="page-title">Payments</div>
+          <div class="page-sub">All payment records — imports, checks, and portal payments</div>
+        </div>
+        <div class="header-buttons">
+          <button class="btn-action btn-upload" onclick="openUpload()">Upload</button>
+          <button class="btn-action" onclick="exportExcel()">Export</button>
+          <button class="btn-action" onclick="loadData()">Refresh</button>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="summary-bar">
+        <div class="summary-card">
+          <div class="summary-label">Total Paid</div>
+          <div class="summary-value green" id="sumTotal">--</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">This Month</div>
+          <div class="summary-value blue" id="sumMonth">--</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Payments</div>
+          <div class="summary-value" id="sumCount">--</div>
+        </div>
+        <div class="summary-card" id="vendorBreakdownCard">
+          <div class="summary-label">By Vendor</div>
+          <div id="vendorBreakdown" style="margin-top:6px;font-size:13px;color:var(--text2)">--</div>
+        </div>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="filter-bar">
+        <select class="filter-select" id="filterVendor" onchange="loadData()">
+          <option value="">All Vendors</option>
+        </select>
+        <select class="filter-select" id="filterLocation" onchange="loadData()">
+          <option value="">All Locations</option>
+          <option value="Dennis">Dennis</option>
+          <option value="Chatham">Chatham</option>
+        </select>
+        <select class="filter-select" id="filterSource" onchange="loadData()">
+          <option value="">All Sources</option>
+          <option value="import">Import</option>
+          <option value="check">Check</option>
+          <option value="portal">Portal</option>
+        </select>
+        <select class="filter-select" id="filterStatus" onchange="loadData()">
+          <option value="">All Statuses</option>
+          <option value="cleared">Cleared</option>
+          <option value="pending">Pending</option>
+          <option value="printed">Printed</option>
+          <option value="processing">Processing</option>
+          <option value="void">Void</option>
+          <option value="failed">Failed</option>
+        </select>
+      </div>
+
+      <!-- Payment Table -->
+      <div id="tableContainer">
+        <div class="loading">Loading payments...</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal-overlay" id="uploadModal" onclick="if(event.target===this)closeUpload()">
+  <div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="modal-title">Upload Payments</div>
+      <button class="modal-close" onclick="closeUpload()">&times;</button>
+    </div>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="drop-hint">Drop .xlsx or .pdf here</div>
+      <div class="drop-sub">or click to browse</div>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.pdf" style="display:none" onchange="handleFile(this)">
+    <div id="uploadStatus"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+var allVendors = [];
+var autoRefreshTimer = null;
+
+function loadData() {
+  var vendor = document.getElementById('filterVendor').value;
+  var location = document.getElementById('filterLocation').value;
+  var source = document.getElementById('filterSource').value;
+  var status = document.getElementById('filterStatus').value;
+  var url = '/api/payments?';
+  if (vendor) url += 'vendor=' + encodeURIComponent(vendor) + '&';
+  if (location) url += 'location=' + encodeURIComponent(location) + '&';
+  if (source) url += 'source=' + encodeURIComponent(source) + '&';
+  if (status) url += 'status=' + encodeURIComponent(status) + '&';
+
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    renderSummary(data.summary);
+    renderTable(data.payments);
+    populateVendorFilter(data.summary.by_vendor);
+    // Auto-refresh if any processing payments
+    var hasProcessing = false;
+    for (var i = 0; i < data.payments.length; i++) {
+      if (data.payments[i].status === 'processing') { hasProcessing = true; break; }
+    }
+    if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+    if (hasProcessing) {
+      autoRefreshTimer = setInterval(loadData, 5000);
+    }
+  }).catch(function(){
+    document.getElementById('tableContainer').innerHTML =
+      '<div class="loading" style="color:var(--red);">Failed to load payments</div>';
+  });
+}
+
+function renderSummary(summary) {
+  document.getElementById('sumTotal').textContent = fmtMoney(summary.total_all_time);
+  document.getElementById('sumMonth').textContent = fmtMoney(summary.total_this_month);
+  var totalCount = 0;
+  for (var i = 0; i < summary.by_vendor.length; i++) totalCount += summary.by_vendor[i].count;
+  document.getElementById('sumCount').textContent = totalCount;
+
+  // Vendor breakdown (top 3 + overflow) — merge locations per vendor
+  var bd = document.getElementById('vendorBreakdown');
+  if (!summary.by_vendor.length) {
+    bd.textContent = 'No payments';
+    return;
+  }
+  var merged = {};
+  for (var i = 0; i < summary.by_vendor.length; i++) {
+    var v = summary.by_vendor[i];
+    if (!merged[v.vendor]) merged[v.vendor] = 0;
+    merged[v.vendor] += v.total;
+  }
+  var sorted = Object.keys(merged).sort(function(a, b) { return merged[b] - merged[a]; });
+  var html = '';
+  var maxShow = 3;
+  for (var i = 0; i < Math.min(sorted.length, maxShow); i++) {
+    html += '<div style="display:flex;justify-content:space-between;padding:2px 0">';
+    html += '<span>' + esc(sorted[i]) + '</span>';
+    html += '<span style="font-weight:600;color:var(--text)">' + fmtMoney(merged[sorted[i]]) + '</span>';
+    html += '</div>';
+  }
+  if (sorted.length > maxShow) {
+    var otherCount = sorted.length - maxShow;
+    var otherTotal = 0;
+    for (var j = maxShow; j < sorted.length; j++) otherTotal += merged[sorted[j]];
+    html += '<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text3)">';
+    html += '<span>+' + otherCount + ' more</span>';
+    html += '<span style="font-weight:600">' + fmtMoney(otherTotal) + '</span>';
+    html += '</div>';
+  }
+  bd.innerHTML = html;
+}
+
+function sourceBadge(src) {
+  var cls = 'badge-import', label = 'Import';
+  if (src === 'check') { cls = 'badge-check'; label = 'Check'; }
+  else if (src === 'portal') { cls = 'badge-portal'; label = 'Portal'; }
+  return '<span class="badge-source ' + cls + '">' + label + '</span>';
+}
+
+function statusPill(st) {
+  var map = {
+    cleared: 'pill-cleared', pending: 'pill-pending', printed: 'pill-printed',
+    processing: 'pill-processing', void: 'pill-void', failed: 'pill-failed'
+  };
+  var cls = map[st] || 'pill-pending';
+  var label = st ? st.charAt(0).toUpperCase() + st.slice(1) : 'Cleared';
+  return '<span class="pill-status ' + cls + '">' + label + '</span>';
+}
+
+function renderTable(payments) {
+  if (!payments || !payments.length) {
+    document.getElementById('tableContainer').innerHTML =
+      '<div class="loading">No payments found</div>';
+    return;
+  }
+
+  var colCount = 10;
+  var html = '<table class="pay-table"><thead><tr>';
+  html += '<th></th><th>Date</th><th>Vendor</th><th class="col-hide-mobile">Location</th>';
+  html += '<th>Payment Ref</th><th class="col-hide-mobile">Source</th><th class="col-hide-mobile">Status</th>';
+  html += '<th class="col-right col-hide-mobile">Invoices</th><th class="col-right">Total</th>';
+  html += '</tr></thead><tbody>';
+
+  for (var i = 0; i < payments.length; i++) {
+    var p = payments[i];
+    var isNeg = p.payment_total < 0;
+    var amtCls = isNeg ? ' amt-credit' : '';
+    var invCount = p.invoices ? p.invoices.length : 0;
+
+    html += '<tr class="payment-row" data-id="' + p.id + '" onclick="toggleRow(this,' + p.id + ')">';
+    html += '<td><span class="expand-icon">&#9654;</span></td>';
+    html += '<td>' + fmtDate(p.payment_date) + '</td>';
+    html += '<td style="font-weight:600">' + esc(p.vendor) + '</td>';
+    html += '<td class="col-hide-mobile">' + esc(p.location || '') + '</td>';
+    html += '<td class="col-mono">' + esc(p.payment_ref || '') + '</td>';
+    html += '<td class="col-hide-mobile">' + sourceBadge(p.source) + '</td>';
+    html += '<td class="col-hide-mobile">' + statusPill(p.status) + '</td>';
+    html += '<td class="col-right col-hide-mobile">' + invCount + '</td>';
+    html += '<td class="col-right' + amtCls + '" style="font-weight:600">' + fmtMoney(p.payment_total) + '</td>';
+    html += '</tr>';
+
+    // Detail row
+    html += '<tr class="detail-row" id="detail-' + p.id + '"><td colspan="' + colCount + '"><div class="detail-content">';
+    if (p.check_number) {
+      html += '<div style="margin-bottom:8px;font-size:13px;color:var(--text2)">Check #' + esc(p.check_number) + '</div>';
+    }
+    if (p.memo) {
+      html += '<div style="margin-bottom:8px;font-size:13px;color:var(--text3)">Memo: ' + esc(p.memo) + '</div>';
+    }
+    if (invCount) {
+      html += '<table class="detail-table"><thead><tr>';
+      html += '<th>Invoice #</th><th>Invoice Date</th><th>Due Date</th><th style="text-align:right">Amount</th>';
+      html += '</tr></thead><tbody>';
+      for (var j = 0; j < p.invoices.length; j++) {
+        var inv = p.invoices[j];
+        var invNeg = inv.amount_paid < 0;
+        html += '<tr>';
+        html += '<td style="font-weight:500">' + esc(inv.invoice_number || '') + '</td>';
+        html += '<td>' + fmtDate(inv.invoice_date) + '</td>';
+        html += '<td>' + fmtDate(inv.due_date) + '</td>';
+        html += '<td style="text-align:right' + (invNeg ? ';color:var(--red)' : '') + '">' + fmtMoney(inv.amount_paid) + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    } else {
+      html += '<span style="color:var(--text3);font-size:13px">No invoice details</span>';
+    }
+    // Action buttons in detail row
+    var actions = '';
+    if (p.status === 'failed' || p.status === 'processing') {
+      actions += '<button class="btn-void" onclick="event.stopPropagation();deletePayment(' + p.id + ')">Delete</button>';
+    }
+    if ((p.source === 'check' || p.source === 'portal') && p.status !== 'void' && p.status !== 'failed') {
+      actions += '<button class="btn-void" onclick="event.stopPropagation();voidPayment(' + p.id + ')" style="margin-left:6px">Void Payment</button>';
+    }
+    if (actions) html += '<div style="margin-top:8px">' + actions + '</div>';
+    html += '</div></td></tr>';
+  }
+
+  html += '</tbody></table>';
+  document.getElementById('tableContainer').innerHTML = html;
+}
+
+function populateVendorFilter(byVendor) {
+  // Build unique vendor names (without location)
+  var vendors = {};
+  for (var i = 0; i < byVendor.length; i++) {
+    vendors[byVendor[i].vendor] = true;
+  }
+  var sel = document.getElementById('filterVendor');
+  var current = sel.value;
+  sel.innerHTML = '<option value="">All Vendors</option>';
+  var keys = Object.keys(vendors).sort();
+  for (var i = 0; i < keys.length; i++) {
+    sel.innerHTML += '<option value="' + esc(keys[i]) + '">' + esc(keys[i]) + '</option>';
+  }
+  sel.value = current;
+}
+
+window.toggleRow = function(tr, id) {
+  var detail = document.getElementById('detail-' + id);
+  if (!detail) return;
+  var isOpen = detail.classList.contains('open');
+  detail.classList.toggle('open');
+  tr.classList.toggle('expanded');
+};
+
+function fmtMoney(val) {
+  if (val == null || val === '') return '$0.00';
+  var n = Number(val);
+  var neg = n < 0;
+  var abs = Math.abs(n);
+  var s = '$' + abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return neg ? '-' + s : s;
+}
+
+function fmtDate(val) {
+  if (!val) return '';
+  // If YYYY-MM-DD format, convert to MM/DD/YY
+  var parts = (val + '').split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    return parts[1] + '/' + parts[2] + '/' + parts[0].substring(2);
+  }
+  return val;
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+// Upload functions
+window.openUpload = function() { document.getElementById('uploadModal').classList.add('open'); };
+window.closeUpload = function() {
+  document.getElementById('uploadModal').classList.remove('open');
+  document.getElementById('uploadStatus').innerHTML = '';
+  document.getElementById('fileInput').value = '';
+};
+
+var dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+dropZone.addEventListener('drop', function(e) {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+
+window.handleFile = function(input) {
+  if (input.files.length) uploadFile(input.files[0]);
+};
+
+function uploadFile(file) {
+  var status = document.getElementById('uploadStatus');
+  status.innerHTML = '<span class="spinner"></span> Uploading ' + esc(file.name) + '...';
+  var fd = new FormData();
+  fd.append('file', file);
+  fetch('/api/payments/upload', { method: 'POST', body: fd })
+    .then(function(r){ return r.json().then(function(d){ return {ok: r.ok, data: d}; }); })
+    .then(function(result) {
+      if (result.ok) {
+        var d = result.data;
+        if (d.format === 'pdf') {
+          status.innerHTML = '<span style="color:var(--green)">PDF saved for manual review</span>';
+        } else {
+          status.innerHTML = '<span style="color:var(--green)">Imported ' + (d.imported || 0) + ' payment(s)' +
+            (d.skipped_duplicates ? ', ' + d.skipped_duplicates + ' duplicate(s) skipped' : '') + '</span>';
+          loadData();
+        }
+      } else {
+        status.innerHTML = '<span style="color:var(--red)">' + esc(result.data.error || 'Upload failed') + '</span>';
+      }
+    })
+    .catch(function() {
+      status.innerHTML = '<span style="color:var(--red)">Network error</span>';
+    });
+}
+
+window.voidPayment = function(id) {
+  if (!confirm('Void this payment? This will reverse invoice balances if applicable.')) return;
+  fetch('/api/payments/' + id + '/void', { method: 'PUT' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.status === 'ok') loadData();
+      else alert(d.error || 'Failed to void');
+    })
+    .catch(function(){ alert('Network error'); });
+};
+
+window.deletePayment = function(id) {
+  if (!confirm('Delete this payment record? This just removes the record — no invoice balances are affected.')) return;
+  fetch('/api/payments/' + id, { method: 'DELETE' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.status === 'ok') loadData();
+      else alert(d.error || 'Failed to delete');
+    })
+    .catch(function(){ alert('Network error'); });
+};
+
+window.exportExcel = function() {
+  var vendor = document.getElementById('filterVendor').value;
+  var location = document.getElementById('filterLocation').value;
+  var url = '/api/payments/export?';
+  if (vendor) url += 'vendor=' + encodeURIComponent(vendor) + '&';
+  if (location) url += 'location=' + encodeURIComponent(location) + '&';
+  window.location.href = url;
+};
+
+window.loadData = loadData;
+loadData();
+
+})();
+</script>
+<script src="/static/sidebar.js"></script>
+</body>
+</html>

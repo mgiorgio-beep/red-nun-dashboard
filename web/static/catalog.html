@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1C1C1E">
+<title>Red Nun — Product Catalog</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #1C1C1E;
+  --bg-elevated: rgba(44,44,46,0.98);
+  --bg-card: rgba(58,58,60,0.5);
+  --bg-glass: rgba(58,58,60,0.4);
+  --border: rgba(255,255,255,0.1);
+  --border-focus: rgba(255,255,255,0.25);
+  --text: #F5F5F7;
+  --text2: rgba(245,245,247,0.65);
+  --text3: rgba(245,245,247,0.4);
+  --red: #FF453A;
+  --red-soft: rgba(255,69,58,0.15);
+  --green: #30D158;
+  --green-soft: rgba(48,209,88,0.15);
+  --blue: #0A84FF;
+  --blue-soft: rgba(10,132,255,0.15);
+  --orange: #FF9F0A;
+  --orange-soft: rgba(255,159,10,0.15);
+  --purple: #BF5AF2;
+  --purple-soft: rgba(191,90,242,0.15);
+  --r: 16px;
+  --r-sm: 10px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Layout */
+.layout { display: flex; height: 100vh; }
+.sidebar { width: 240px; background: rgba(24,24,27,0.98); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.main-content { flex: 1; overflow-y: auto; }
+
+/* Sidebar */
+.sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); }
+
+/* ── Header ── */
+.header {
+  display: none;
+}
+.hdr-left { display: flex; align-items: center; gap: 12px; }
+.hdr-logo {
+  width: 34px; height: 34px;
+  background: linear-gradient(135deg, var(--red), #FF6259);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px; color: #fff;
+  box-shadow: 0 4px 12px rgba(255,69,58,0.3);
+}
+.hdr-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.hdr-sub { font-size: 11px; color: var(--text3); font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; }
+.hdr-btn {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text2);
+  padding: 7px 14px; font-size: 12px; font-weight: 500;
+  font-family: var(--font); cursor: pointer; text-decoration: none;
+  transition: all 0.2s;
+}
+
+/* ── Page Tabs ── */
+.page-tabs {
+  background: rgba(28,28,30,0.85);
+  backdrop-filter: blur(30px);
+  border-bottom: 1px solid var(--border);
+  display: flex; gap: 4px; padding: 12px 24px;
+  position: sticky; top: 0; z-index: 99;
+}
+.page-tab {
+  padding: 8px 16px; border-radius: 8px;
+  background: transparent; border: 1px solid transparent;
+  color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all 0.2s;
+  text-decoration: none; display: inline-block;
+}
+.page-tab:hover { background: var(--bg-card); border-color: var(--border); }
+.page-tab.active { background: var(--red-soft); border-color: rgba(255,69,58,0.3); color: var(--red); }
+
+/* ── Content ── */
+.content {
+  padding: 0 0 20px;
+  max-width: 700px; margin: 0 auto;
+}
+
+/* ── Search ── */
+.search-wrap {
+  position: sticky; top: calc(var(--safe-top) + 58px); z-index: 50;
+  padding: 12px 20px 8px;
+  background: rgba(28,28,30,0.8);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+}
+.search-box {
+  position: relative;
+}
+.search-icon {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--text3);
+}
+.search-input {
+  width: 100%; padding: 11px 16px 11px 42px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text);
+  font-size: 15px; font-family: var(--font); font-weight: 400;
+  transition: border-color 0.2s;
+}
+.search-input:focus { outline: none; border-color: var(--border-focus); }
+.search-input::placeholder { color: var(--text3); }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex; gap: 6px; padding: 8px 20px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.tab {
+  padding: 8px 16px; border-radius: 20px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text2); font-size: 12px; font-weight: 600;
+  font-family: var(--font); cursor: pointer; white-space: nowrap;
+  transition: all 0.2s;
+}
+.tab:hover { border-color: var(--border-focus); }
+.tab.active {
+  background: var(--bg-elevated); border-color: var(--text2);
+  color: var(--text);
+}
+.tab.active-red {
+  background: var(--red-soft); border-color: rgba(255,69,58,0.4);
+  color: var(--red);
+}
+
+/* ── Stats ── */
+.stats {
+  display: flex; gap: 8px; padding: 8px 20px 12px;
+  flex-wrap: wrap;
+}
+.stat {
+  padding: 6px 12px; border-radius: 8px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  font-size: 12px; color: var(--text2);
+}
+.stat strong { color: var(--text); font-weight: 700; margin-right: 4px; }
+
+/* ── Product Card ── */
+.card {
+  margin: 0 20px 8px; padding: 14px 16px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  transition: all 0.2s;
+}
+.card:hover { border-color: var(--border-focus); }
+.card-info { flex: 1; min-width: 0; }
+.card-name {
+  font-size: 14px; font-weight: 600; letter-spacing: -0.2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card-sub {
+  font-size: 12px; color: var(--text3); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card-meta { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+
+.card-right { text-align: right; flex-shrink: 0; }
+.card-price { font-size: 17px; font-weight: 700; letter-spacing: -0.5px; }
+.card-unit { font-size: 11px; color: var(--text3); }
+
+/* ── Category Badge ── */
+.cat {
+  display: inline-block; padding: 3px 8px;
+  border-radius: 6px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.cat-FOOD { background: var(--green-soft); color: var(--green); }
+.cat-BEER { background: var(--orange-soft); color: var(--orange); }
+.cat-LIQUOR { background: var(--red-soft); color: var(--red); }
+.cat-WINE { background: var(--purple-soft); color: var(--purple); }
+.cat-NA_BEVERAGES { background: var(--blue-soft); color: var(--blue); }
+.cat-NON_COGS, .cat-OTHER, .cat-LIQUOR_WINE_BEER, .cat-LIQUOR_WINE {
+  background: rgba(255,255,255,0.06); color: var(--text3);
+}
+
+/* ── Vendor Card ── */
+.vcard {
+  margin: 0 20px 8px; padding: 16px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 14px; cursor: pointer;
+  transition: all 0.2s;
+}
+.vcard:active { transform: scale(0.98); }
+.vcard-top { display: flex; justify-content: space-between; align-items: start; }
+.vcard-name { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
+.vcard-total { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.vcard-meta {
+  font-size: 12px; color: var(--text3); margin-top: 6px;
+  display: flex; gap: 12px;
+}
+.vcard-bar {
+  height: 3px; background: rgba(255,255,255,0.05);
+  border-radius: 2px; margin-top: 10px; overflow: hidden;
+}
+.vcard-bar-fill { height: 100%; border-radius: 2px; }
+
+.vcard-products {
+  display: none; margin-top: 12px;
+  border-top: 1px solid var(--border); padding-top: 10px;
+}
+.vcard.expanded .vcard-products { display: block; }
+.vp-row {
+  display: flex; justify-content: space-between;
+  padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 13px;
+}
+.vp-row:last-child { border-bottom: none; }
+.vp-name { font-weight: 500; color: var(--text2); }
+.vp-price { font-weight: 600; }
+
+/* ── Empty State ── */
+.empty {
+  text-align: center; padding: 80px 20px; color: var(--text3);
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+.empty-text { font-size: 15px; font-weight: 500; }
+
+/* ── Loading ── */
+.loading { text-align: center; padding: 60px 20px; color: var(--text3); }
+.spinner {
+  width: 28px; height: 28px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--red);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fadeUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+/* Mobile: Hide sidebar */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .layout{display:block;height:auto}
+  .main-content{width:100%}
+}
+</style>
+<script>
+window.currentLocation = localStorage.getItem('globalLocation') || 'dennis';
+function setGlobalLocation(v) {
+  window.currentLocation = v;
+  localStorage.setItem('globalLocation', v);
+  location.reload();
+}
+document.addEventListener('DOMContentLoaded', function() {
+  var s = document.getElementById('global-location');
+  if (s) s.value = window.currentLocation;
+});
+</script>
+<link rel="stylesheet" href="/static/sidebar.css">
+</head>
+<body>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:34px;height:34px;background:linear-gradient(135deg,var(--red),#FF6259);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;box-shadow:0 4px 12px rgba(255,69,58,0.3)">RN</div>
+        <div>
+          <div style="font-size:17px;font-weight:700;letter-spacing:-0.3px">Product Catalog</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:500;letter-spacing:0.5px;text-transform:uppercase">Vendors · Products · Prices</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Page Navigation Tabs -->
+    <nav class="page-tabs">
+      <a href="/" class="page-tab">Analytics</a>
+      <a href="/manage" class="page-tab">Management</a>
+      <a href="/invoices" class="page-tab">Invoices</a>
+      <a href="/catalog" class="page-tab active">Catalog</a>
+    </nav>
+
+    <div class="content">
+  <div class="search-wrap">
+    <div class="search-box">
+      <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input class="search-input" id="searchInput" placeholder="Search products or vendors..." oninput="doSearch(this.value)">
+    </div>
+  </div>
+
+  <div class="tabs" id="viewTabs">
+    <button class="tab active" onclick="switchView(this,'products')">Products</button>
+    <button class="tab" onclick="switchView(this,'vendors')">Vendors</button>
+    <button class="tab" onclick="switchView(this,'recent')">Recent Prices</button>
+  </div>
+
+  <div class="tabs" id="catTabs">
+    <button class="tab active-red" onclick="filterCat(this,'all')">All</button>
+    <button class="tab" onclick="filterCat(this,'LIQUOR')">Liquor</button>
+    <button class="tab" onclick="filterCat(this,'BEER')">Beer</button>
+    <button class="tab" onclick="filterCat(this,'WINE')">Wine</button>
+    <button class="tab" onclick="filterCat(this,'FOOD')">Food</button>
+    <button class="tab" onclick="filterCat(this,'NA_BEVERAGES')">NA Bev</button>
+  </div>
+
+  <div class="stats" id="statsBar"></div>
+  <div id="content">
+    <div class="loading"><div class="spinner"></div>Loading catalog...</div>
+  </div>
+</div>
+  </div><!-- /main-content -->
+</div><!-- /layout -->
+
+<script>
+let allProducts = [];
+let allVendors = [];
+let allPrices = [];
+let currentView = 'products';
+let currentCat = 'all';
+let searchTerm = '';
+
+const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+async function loadData() {
+  try {
+    const [prodResp, vendResp, priceResp] = await Promise.all([
+      fetch('/api/catalog/products'),
+      fetch('/api/catalog/vendors'),
+      fetch('/api/catalog/prices'),
+    ]);
+    allProducts = await prodResp.json();
+    allVendors = await vendResp.json();
+    allPrices = await priceResp.json();
+    render();
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading data</div></div>';
+  }
+}
+
+function switchView(btn, view) {
+  window.location.hash = view + (currentCat !== 'all' ? '.' + currentCat : '');
+  currentView = view;
+  document.querySelectorAll('#viewTabs .tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('catTabs').style.display = view === 'recent' ? 'none' : 'flex';
+  render();
+}
+
+function filterCat(btn, cat) {
+  window.location.hash = currentView + (cat !== 'all' ? '.' + cat : '');
+  currentCat = cat;
+  document.querySelectorAll('#catTabs .tab').forEach(t => {
+    t.classList.remove('active');
+    t.classList.remove('active-red');
+  });
+  btn.classList.add('active-red');
+  render();
+}
+
+function doSearch(term) {
+  searchTerm = term.toLowerCase().trim();
+  render();
+}
+
+function render() {
+  if (currentView === 'products') renderProducts();
+  else if (currentView === 'vendors') renderVendors();
+  else renderPrices();
+}
+
+function renderProducts() {
+  let items = allProducts;
+  if (currentCat !== 'all') items = items.filter(p => p.category_type === currentCat);
+  if (searchTerm) {
+    items = items.filter(p =>
+      (p.product_name||'').toLowerCase().includes(searchTerm) ||
+      (p.vendor_name||'').toLowerCase().includes(searchTerm)
+    );
+  }
+
+  const cats = {};
+  items.forEach(p => { cats[p.category_type] = (cats[p.category_type]||0) + 1; });
+  document.getElementById('statsBar').innerHTML =
+    `<div class="stat"><strong>${items.length}</strong> products</div>` +
+    Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([k,v]) =>
+      `<div class="stat"><strong>${v}</strong> ${k}</div>`
+    ).join('');
+
+  if (!items.length) {
+    document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No products found</div></div>';
+    return;
+  }
+
+  document.getElementById('content').innerHTML = items.map((p, i) => `
+    <div class="card animate-in" style="animation-delay:${Math.min(i*0.02,0.5)}s">
+      <div class="card-info">
+        <div class="card-name">${p.product_name || 'Unknown'}</div>
+        <div class="card-sub">${p.vendor_name || p.source || ''}</div>
+        <div class="card-meta">
+          <span class="cat cat-${p.category_type||'OTHER'}">${p.category_type||'OTHER'}</span>
+          ${p.location ? `<span style="font-size:11px;color:var(--text3)">${p.location}</span>` : ''}
+        </div>
+      </div>
+      <div class="card-right">
+        <div class="card-price">${fmt(p.latest_price)}</div>
+        <div class="card-unit">${p.unit || p.report_by_unit || ''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderVendors() {
+  let items = allVendors;
+  if (currentCat !== 'all') items = items.filter(v => v.category === currentCat);
+  if (searchTerm) items = items.filter(v => (v.vendor_name||'').toLowerCase().includes(searchTerm));
+
+  const totalSpend = items.reduce((s,v) => s + (v.total_spent||0), 0);
+  document.getElementById('statsBar').innerHTML =
+    `<div class="stat"><strong>${items.length}</strong> vendors</div>` +
+    `<div class="stat"><strong>${fmt(totalSpend)}</strong> total spend</div>`;
+
+  if (!items.length) {
+    document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🏪</div><div class="empty-text">No vendors found</div></div>';
+    return;
+  }
+
+  const maxSpend = items[0]?.total_spent || 1;
+  const catColor = c => c==='FOOD'?'var(--green)':c==='BEER'?'var(--orange)':c==='LIQUOR'?'var(--red)':c==='WINE'?'var(--purple)':'var(--blue)';
+
+  document.getElementById('content').innerHTML = items.map((v, i) => `
+    <div class="vcard animate-in" style="animation-delay:${Math.min(i*0.03,0.5)}s" onclick="this.classList.toggle('expanded')">
+      <div class="vcard-top">
+        <div>
+          <div class="vcard-name">${v.vendor_name}</div>
+          <span class="cat cat-${v.category||'OTHER'}" style="margin-top:4px">${v.category||'OTHER'}</span>
+        </div>
+        <div class="vcard-total">${fmt(v.total_spent)}</div>
+      </div>
+      <div class="vcard-meta">
+        <span>${v.invoice_count||0} invoices</span>
+        <span>${v.location||'both'}</span>
+        ${v.last_invoice ? `<span>Last: ${v.last_invoice}</span>` : ''}
+      </div>
+      <div class="vcard-bar">
+        <div class="vcard-bar-fill" style="width:${((v.total_spent||0)/maxSpend*100).toFixed(0)}%;background:${catColor(v.category)}"></div>
+      </div>
+      ${v.products && v.products.length ? `
+        <div class="vcard-products">
+          ${v.products.map(p => `
+            <div class="vp-row">
+              <span class="vp-name">${p.product_name}</span>
+              <span class="vp-price">${fmt(p.latest_price)} / ${p.unit||'ea'}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+function renderPrices() {
+  document.getElementById('statsBar').innerHTML = `<div class="stat"><strong>${allPrices.length}</strong> recent prices</div>`;
+
+  let items = allPrices;
+  if (searchTerm) {
+    items = items.filter(p =>
+      (p.product_name||'').toLowerCase().includes(searchTerm) ||
+      (p.vendor_name||'').toLowerCase().includes(searchTerm)
+    );
+  }
+
+  if (!items.length) {
+    document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">💰</div><div class="empty-text">No price data yet.<br>Scan invoices to build history.</div></div>';
+    return;
+  }
+
+  document.getElementById('content').innerHTML = items.map((p, i) => `
+    <div class="card animate-in" style="animation-delay:${Math.min(i*0.02,0.5)}s">
+      <div class="card-info">
+        <div class="card-name">${p.product_name}</div>
+        <div class="card-sub">${p.vendor_name||''} · ${p.invoice_date||''}</div>
+      </div>
+      <div class="card-right">
+        <div class="card-price">${fmt(p.unit_price)}</div>
+        <div class="card-unit">${p.unit||''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Restore from hash
+const h = window.location.hash.replace('#','');
+if (h) {
+  const parts = h.split('.');
+  if (parts[0]) currentView = parts[0];
+  if (parts[1]) currentCat = parts[1];
+  document.querySelectorAll('#viewTabs .tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.toLowerCase().includes(currentView.slice(0,4)));
+  });
+  document.querySelectorAll('#catTabs .tab').forEach(t => {
+    const cat = t.getAttribute('onclick').match(/'([^']+)'/)[1];
+    t.classList.remove('active-red');
+    if (cat === currentCat) t.classList.add('active-red');
+  });
+  document.getElementById('catTabs').style.display = currentView === 'recent' ? 'none' : 'flex';
+}
+loadData();
+</script>
+<script src="/static/sidebar.js"></script>
+</body>
+</html>

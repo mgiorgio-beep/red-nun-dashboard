@@ -1,0 +1,3677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1C1C1E">
+<title>Red Nun — Invoice Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #1C1C1E;
+  --bg-elevated: rgba(44,44,46,0.98);
+  --bg-card: rgba(58,58,60,0.5);
+  --bg-glass: rgba(58,58,60,0.4);
+  --border: rgba(255,255,255,0.1);
+  --border-focus: rgba(255,255,255,0.25);
+  --text: #F5F5F7;
+  --text2: rgba(245,245,247,0.65);
+  --text3: rgba(245,245,247,0.4);
+  --red: #FF453A;
+  --red-soft: rgba(255,69,58,0.15);
+  --green: #30D158;
+  --green-soft: rgba(48,209,88,0.15);
+  --blue: #0A84FF;
+  --blue-soft: rgba(10,132,255,0.15);
+  --orange: #FF9F0A;
+  --orange-soft: rgba(255,159,10,0.15);
+  --purple: #BF5AF2;
+  --yellow: #FFD60A;
+  --r: 16px;
+  --r-lg: 24px;
+  --r-sm: 10px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  font-size: 12px;
+}
+
+/* Layout */
+.layout { display: flex; height: 100vh; }
+.sidebar { width: 240px; background: rgba(24,24,27,0.98); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.main-content { flex: 1; overflow-y: auto; }
+
+/* Sidebar */
+.sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); }
+
+/* ── Header ── */
+.header {
+  display: none;
+}
+.hdr-left { display: flex; align-items: center; gap: 12px; }
+.hdr-logo {
+  width: 34px; height: 34px;
+  background: linear-gradient(135deg, #FF453A, #FF6259);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px; color: #fff;
+  box-shadow: 0 2px 8px rgba(255,69,58,0.25);
+}
+.hdr-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.hdr-sub { font-size: 11px; color: var(--text3); font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; }
+.hdr-btn {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text2);
+  padding: 7px 14px; font-size: 12px; font-weight: 500;
+  font-family: var(--font); cursor: pointer; text-decoration: none;
+  transition: all 0.2s;
+}
+.hdr-btn:hover { background: var(--bg-glass); color: var(--text); }
+
+/* ── Page Tabs ── */
+.page-tabs {
+  background: rgba(28,28,30,0.85);
+  backdrop-filter: blur(30px);
+  border-bottom: 1px solid var(--border);
+  display: flex; gap: 4px; padding: 12px 24px;
+  position: sticky; top: 0; z-index: 99;
+}
+.page-tabs::-webkit-scrollbar { display: none; }
+.page-tab {
+  padding: 8px 16px; border-radius: 8px;
+  background: transparent; border: 1px solid transparent;
+  color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: all 0.2s; text-decoration: none; display: inline-block;
+}
+.page-tab:hover { background: var(--bg-card); border-color: var(--border); }
+.page-tab.active { background: var(--red-soft); border-color: rgba(255,69,58,0.35); color: var(--red); }
+
+/* Desktop: Better spacing and positioning */
+@media(min-width:769px){
+  .page-tabs{
+    padding: 12px 20px;
+    gap: 6px;
+  }
+  .page-tab{
+    font-size: 14px;
+    padding: 10px 18px;
+  }
+}
+
+/* ── Content ── */
+.content {
+  padding: calc(var(--safe-top) + 110px) 0 calc(80px + var(--safe-bottom));
+  min-height: 100vh; min-height: 100dvh;
+}
+
+/* ── Location Picker ── */
+.loc-picker {display:none !important;
+  display: flex; gap: 8px; padding: 20px 20px 12px;
+}
+.loc-pill {
+  flex: 1; padding: 9px; border-radius: 10px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text2); font-size: 13px; font-weight: 500;
+  font-family: var(--font); cursor: pointer; text-align: center;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.loc-pill.active {
+  background: var(--red-soft); border-color: rgba(255,69,58,0.4);
+  color: var(--red);
+}
+
+/* ── Scan View ── */
+.scan-section { padding: 0 20px; }
+
+.scan-zone {
+  width: 100%; aspect-ratio: 3/2;
+  border-radius: var(--r-lg); overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1.5px dashed rgba(255,255,255,0.12);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  cursor: pointer; position: relative;
+  transition: all 0.3s;
+}
+.scan-zone:hover, .scan-zone.dragover {
+  border-color: var(--red); background: rgba(255,69,58,0.03);
+}
+.scan-zone.has-image { border: none; }
+.scan-zone.has-image .scan-prompt { display: none; }
+
+.scan-prompt { text-align: center; }
+.scan-prompt-icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  background: var(--bg-card); margin: 0 auto 14px; color: var(--text2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+}
+.scan-prompt-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.2px; }
+.scan-prompt-sub { font-size: 12px; color: var(--text3); font-weight: 400; }
+
+.scan-zone img {
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: var(--r-lg);
+}
+
+.scan-zone .pdf-preview {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  height: 100%;
+}
+.pdf-icon { font-size: 48px; margin-bottom: 8px; }
+.pdf-name { font-size: 13px; color: var(--text2); }
+
+input[type="file"] { display: none; }
+
+/* ── Action Buttons ── */
+.scan-actions {
+  display: flex; gap: 10px; padding: 16px 20px;
+}
+.action-btn {
+  flex: 1; padding: 12px; border-radius: 12px;
+  font-size: 14px; font-weight: 600;
+  font-family: var(--font); cursor: pointer;
+  border: none; transition: all 0.25s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.action-btn:active { transform: scale(0.97); }
+.btn-camera {
+  background: var(--bg-card); color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-upload {
+  background: var(--bg-card); color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-scan {
+  background: linear-gradient(135deg, #FF453A, #FF6259);
+  color: #fff; box-shadow: 0 2px 12px rgba(255,69,58,0.25);
+}
+.btn-scan:disabled {
+  opacity: 0.3; box-shadow: none; cursor: not-allowed;
+}
+
+/* ── Processing Overlay ── */
+.processing {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(28,28,30,0.9);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  flex-direction: column; align-items: center; justify-content: center;
+}
+.processing.active { display: flex; }
+.proc-ring {
+  width: 60px; height: 60px;
+  border: 3px solid var(--border);
+  border-top-color: var(--red);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 24px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.proc-text { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+.proc-sub { font-size: 13px; color: var(--text3); }
+
+/* ── Review View ── */
+.review-view { display: none; }
+.review-view.active { display: block; padding-bottom: 100px; }
+.scan-view.hidden { display: none; }
+
+.rv-header {
+  padding: 16px 20px; display: flex;
+  align-items: center; justify-content: space-between;
+}
+.rv-title { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+.rv-back {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text2);
+  padding: 7px 14px; font-size: 13px; font-weight: 500;
+  font-family: var(--font); cursor: pointer;
+}
+
+.rv-card {
+  margin: 0 20px 12px; padding: 18px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: var(--r); transition: all 0.2s;
+}
+
+.rv-field-row { display: flex; gap: 10px; margin-bottom: 10px; }
+.rv-field-row:last-child { margin-bottom: 0; }
+.rv-field { flex: 1; }
+.rv-label {
+  font-size: 10px; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.8px;
+  margin-bottom: 5px;
+}
+.rv-input {
+  width: 100%; padding: 10px 12px;
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text);
+  font-size: 15px; font-family: var(--font); font-weight: 500;
+  transition: border-color 0.2s;
+}
+.rv-input:focus { outline: none; border-color: var(--blue); }
+
+.rv-total-input {
+  font-size: 28px; font-weight: 800; letter-spacing: -1px;
+  color: var(--green); text-align: right;
+  background: transparent; border: 1px solid transparent;
+}
+.rv-total-input:focus { border-color: var(--blue); }
+
+.rv-category {
+  display: inline-block; padding: 4px 12px;
+  border-radius: 8px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.cat-FOOD { background: var(--green-soft); color: var(--green); }
+.cat-BEER { background: var(--orange-soft); color: var(--orange); }
+.cat-LIQUOR { background: var(--red-soft); color: var(--red); }
+.cat-WINE { background: rgba(191,90,242,0.15); color: var(--purple); }
+.cat-NA_BEVERAGES { background: var(--blue-soft); color: var(--blue); }
+.cat-NON_COGS { background: rgba(255,255,255,0.06); color: var(--text3); }
+
+/* ── Line Items ── */
+.rv-items-title {
+  padding: 20px 20px 12px;
+  font-size: 13px; font-weight: 600; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+.rv-item {
+  margin: 0 20px 8px; padding: 14px 16px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex; align-items: center; gap: 12px;
+  transition: all 0.2s;
+}
+.rv-item-info { flex: 1; min-width: 0; }
+.rv-item-name {
+  font-size: 14px; font-weight: 600; letter-spacing: -0.2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-item-desc {
+  font-size: 11px; color: var(--text3); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-item-qty { font-size: 12px; color: var(--text2); margin-top: 3px; }
+
+.rv-item-cat select {
+  appearance: none; -webkit-appearance: none;
+  padding: 4px 8px; border-radius: 8px;
+  font-size: 10px; font-weight: 700; font-family: var(--font);
+  border: 1px solid var(--border); cursor: pointer;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.rv-item-cat select.cat-FOOD { background: var(--green-soft); color: var(--green); }
+.rv-item-cat select.cat-BEER { background: var(--orange-soft); color: var(--orange); }
+.rv-item-cat select.cat-LIQUOR { background: var(--red-soft); color: var(--red); }
+.rv-item-cat select.cat-WINE { background: rgba(191,90,242,0.15); color: var(--purple); }
+.rv-item-cat select.cat-NA_BEVERAGES { background: var(--blue-soft); color: var(--blue); }
+.rv-item-cat select.cat-NON_COGS { background: rgba(255,255,255,0.06); color: var(--text3); }
+
+.rv-item-price {
+  font-size: 16px; font-weight: 700; letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+.rv-item-unit { font-size: 11px; color: var(--text3); text-align: right; }
+
+/* ── Confirm Button ── */
+.rv-confirm {
+  margin: 20px; padding: 16px;
+  border-radius: 14px; border: none;
+  background: linear-gradient(135deg, var(--green), #2DD4A0);
+  color: #fff; font-size: 17px; font-weight: 700;
+  font-family: var(--font); cursor: pointer;
+  width: calc(100% - 40px);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 2px 12px rgba(48,209,88,0.2);
+  transition: all 0.2s;
+}
+.rv-confirm:active { transform: scale(0.97); }
+.rv-cancel {
+  display: block; text-align: center; padding: 12px;
+  color: var(--red); font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: var(--font);
+  background: none; border: none; width: 100%;
+}
+
+/* ── History View ── */
+.history-view { display: none; }
+.history-view.active { display: block; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 120px; }
+
+/* Search & Controls */
+.search-bar {
+  width: 100%; padding: 12px 16px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text);
+  font-size: 14px; font-family: var(--font); font-weight: 500;
+  transition: border-color 0.2s;
+}
+.search-bar:focus { outline: none; border-color: var(--blue); }
+.search-bar::placeholder { color: var(--text3); }
+
+.hist-controls {
+  display: flex; gap: 8px; padding: 8px 20px 12px;
+}
+.hist-select {
+  flex: 1; padding: 10px 12px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text2);
+  font-size: 12px; font-weight: 500; font-family: var(--font);
+  cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23999' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+  padding-right: 32px;
+}
+
+.hist-filters {
+  display: flex; gap: 6px; padding: 8px 20px 16px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.hist-pill {
+  padding: 8px 16px; border-radius: 20px;
+  background: var(--bg-card); border: 1.5px solid var(--border);
+  color: var(--text2); font-size: 12px; font-weight: 600;
+  font-family: var(--font); cursor: pointer; white-space: nowrap;
+  transition: all 0.2s;
+}
+.hist-pill.active {
+  background: var(--bg-elevated); border-color: var(--text);
+  color: var(--text);
+}
+
+.hist-item {
+  margin: 0 20px 8px; padding: 16px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  transition: all 0.2s;
+}
+.hist-item:active { transform: scale(0.98); background: var(--bg-card); }
+.hist-vendor { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+.hist-meta { font-size: 12px; color: var(--text3); margin-top: 4px; }
+.hist-right { text-align: right; }
+.hist-total { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+.hist-status {
+  display: inline-block; padding: 3px 8px; border-radius: 6px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; margin-top: 4px;
+}
+.status-pending { background: var(--orange-soft); color: var(--orange); }
+.status-confirmed { background: var(--green-soft); color: var(--green); }
+
+.hist-empty {
+  text-align: center; padding: 80px 20px; color: var(--text3);
+}
+.hist-empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+.hist-empty-text { font-size: 15px; font-weight: 500; }
+
+/* ── Reports View ── */
+.reports-view { display: none; }
+.reports-view.active { display: block; }
+
+.reports-tabs {
+  display: flex; gap: 6px; padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.report-tab {
+  flex: 1; padding: 10px; border-radius: 10px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text2); font-size: 12px; font-weight: 600;
+  font-family: var(--font); cursor: pointer;
+  transition: all 0.2s;
+}
+.report-tab.active {
+  background: var(--red-soft); border-color: rgba(255,69,58,0.4);
+  color: var(--red);
+}
+
+.report-card {
+  margin: 12px 20px; padding: 16px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.report-card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.report-card-title {
+  font-size: 15px; font-weight: 600; letter-spacing: -0.2px;
+}
+.report-card-value {
+  font-size: 20px; font-weight: 700; letter-spacing: -0.5px;
+  color: var(--green);
+}
+.report-bar {
+  height: 6px; background: rgba(255,255,255,0.05);
+  border-radius: 3px; margin-top: 8px; overflow: hidden;
+}
+.report-bar-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--red), var(--orange));
+  transition: width 0.5s ease;
+}
+.report-meta {
+  font-size: 11px; color: var(--text3); margin-top: 6px;
+}
+
+/* ── Bottom Nav ── */
+.bottom-nav {display:none !important;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  padding: 8px 20px calc(var(--safe-bottom) + 8px);
+  background: rgba(28,28,30,0.85);
+  backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+  border-top: 1px solid var(--border);
+  display: flex; gap: 8px;
+}
+.nav-tab {
+  flex: 1; padding: 10px; border-radius: 14px;
+  background: transparent; border: none;
+  color: var(--text3); font-size: 11px; font-weight: 600;
+  font-family: var(--font); cursor: pointer;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  transition: all 0.25s;
+}
+.nav-tab .nav-icon { width: 24px; height: 24px; }
+.nav-tab.active { color: var(--red); }
+
+/* ── Toast Notification ── */
+.toast {
+  position: fixed; top: calc(var(--safe-top) + 80px);
+  left: 50%; transform: translateX(-50%) translateY(-20px);
+  padding: 12px 24px; border-radius: 14px;
+  background: var(--bg-elevated);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  color: var(--text); font-size: 14px; font-weight: 500;
+  z-index: 300; opacity: 0; pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fadeUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+/* ── Desktop ── */
+@media (min-width: 768px) {
+  .content { max-width: 1100px; margin: 0 auto; }
+  .bottom-nav {display:none !important; max-width: 600px; left: 50%; transform: translateX(-50%); border-radius: 16px 16px 0 0; }
+  .header { backdrop-filter: blur(40px); }
+  .processing { backdrop-filter: blur(30px); }
+  .scan-zone { aspect-ratio: 16/9; }
+  .rv-item { cursor: default; }
+  .hist-item:hover { border-color: var(--border-focus); background: var(--bg-card); }
+  .scan-view:not(.active) { display: none; }
+  .add-inv-header { display: flex !important; }
+  .nav-scan-tab { display: none !important; }
+}
+@media (max-width: 767px) {
+  .add-inv-header { display: none !important; }
+}
+
+@media (min-width: 1024px) {
+  .content { max-width: 1100px; }
+  .bottom-nav {display:none !important; max-width: 700px; }
+  .rv-card { padding: 24px; }
+  .rv-item { padding: 16px 20px; }
+  .hist-item { padding: 18px 20px; }
+}
+
+/* Mobile: Make page tabs more visible and accessible */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .layout{display:block;height:auto}
+  .main-content{width:100%}
+  .header{padding:12px 16px}
+  .hdr-title{font-size:15px}
+  .hdr-sub{font-size:10px}
+  .hdr-btn{padding:6px 10px;font-size:11px}
+
+  .page-tabs{
+    position:sticky;
+    top:56px;
+    z-index:99;
+    background:rgba(28,28,30,0.98);
+    backdrop-filter:blur(20px);
+    -webkit-backdrop-filter:blur(20px);
+    padding:10px 16px;
+    gap:6px;
+  }
+  .page-tab{
+    font-size:13px;
+    padding:8px 14px;
+  }
+
+  .content{
+    padding:calc(var(--safe-top) + 120px) 0 calc(80px + var(--safe-bottom));
+  }
+
+  .loc-picker{padding:16px}
+  .loc-pill{font-size:14px;padding:10px}
+}
+
+/* ── Session 29: Split-Pane Reconciliation View ── */
+.reconcile-view{display:none;}
+.reconcile-view.active{display:flex;position:fixed;top:0;left:0;right:0;bottom:0;height:100vh;overflow:hidden;z-index:10000;background:#1a1a1a;}body.reconcile-open{overflow:hidden;}
+
+.recon-left{
+  width:45%;height:100%;position:sticky;top:50px;
+  background:#111;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.recon-pdf-scroll{
+  flex:1;overflow:auto;cursor:grab;
+}
+.recon-pdf-scroll.grabbing{cursor:grabbing;}
+.recon-pdf-toolbar{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:rgba(28,28,30,0.95);border-bottom:1px solid var(--border);
+  font-size:12px;color:var(--text2);flex-shrink:0;
+}
+.recon-pdf-toolbar button{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:6px;color:var(--text2);padding:4px 10px;
+  font-size:12px;cursor:pointer;font-family:inherit;
+}
+.recon-pdf-toolbar button:hover{background:rgba(255,255,255,0.1);}
+.recon-pdf-container{
+  display:inline-flex;justify-content:center;
+  align-items:flex-start;padding:8px;min-width:100%;
+}
+.recon-pdf-container canvas{box-shadow:0 2px 12px rgba(0,0,0,0.5);}
+.recon-pdf-container img{border-radius:4px;transform-origin:top center;}
+.recon-pdf-fallback{padding:40px;text-align:center;color:var(--text3);}
+.recon-pdf-fallback a{color:var(--blue);}
+
+.recon-right{
+  width:55%;height:100%;overflow-y:auto;display:flex;flex-direction:column;
+}
+
+/* Discrepancy bar */
+.recon-disc-bar{
+  position:sticky;top:0;z-index:10;
+  display:flex;align-items:center;gap:8px;
+  padding:12px 16px;
+  background:rgba(28,28,30,0.98);backdrop-filter:blur(20px);
+  border-bottom:2px solid var(--border);
+  font-size:13px;font-weight:600;flex-shrink:0;
+}
+.recon-disc-bar.balanced{border-bottom-color:var(--green);}
+.recon-disc-bar.imbalanced{border-bottom-color:var(--red);}
+.recon-disc-item{display:flex;flex-direction:column;align-items:center;flex:1;}
+.recon-disc-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;}
+.recon-disc-value{font-size:18px;font-weight:700;margin-top:2px;}
+.recon-disc-eq{font-size:18px;color:var(--text3);flex:0;padding:0 2px;}
+.recon-disc-result{padding:6px 14px;border-radius:10px;font-weight:700;font-size:16px;white-space:nowrap;}
+.recon-disc-result.balanced{background:var(--green-soft);color:var(--green);}
+.recon-disc-result.imbalanced{background:var(--red-soft);color:var(--red);}
+
+/* Right pane content */
+.recon-content{padding:16px;flex:1;}
+
+/* Editable items table */
+.recon-items-table{width:100%;border-collapse:collapse;font-size:13px;}
+.recon-items-table th{
+  text-align:left;padding:8px 6px;font-size:10px;
+  color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;
+  border-bottom:1px solid var(--border);
+  background:var(--bg);
+}
+.recon-items-table td{
+  padding:6px;border-bottom:1px solid rgba(255,255,255,0.04);
+  vertical-align:middle;
+}
+.recon-items-table tr:hover{background:rgba(255,255,255,0.03);}
+.recon-items-table tr.math-err{border-left:3px solid var(--red);background:rgba(255,69,58,0.06);}
+.recon-items-table input,.recon-items-table select{
+  width:100%;background:transparent;border:1px solid transparent;
+  border-radius:6px;color:var(--text);padding:4px 6px;
+  font-size:13px;font-family:inherit;font-weight:500;
+  box-sizing:border-box;
+}
+.recon-items-table input:focus,.recon-items-table select:focus{
+  outline:none;border-color:var(--blue);background:rgba(0,0,0,0.2);
+}
+.recon-items-table input[type="number"]{-moz-appearance:textfield;}
+.recon-items-table input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;}
+
+.recon-add-item{
+  width:100%;padding:8px;margin-top:8px;
+  background:transparent;border:1px dashed var(--border);
+  border-radius:8px;color:var(--text3);font-size:12px;
+  cursor:pointer;font-family:inherit;
+}
+.recon-add-item:hover{border-color:var(--text2);color:var(--text2);}
+
+.recon-del-btn{
+  background:none;border:none;color:var(--red);cursor:pointer;
+  font-size:16px;padding:2px 6px;border-radius:4px;opacity:0.4;
+}
+.recon-del-btn:hover{opacity:1;background:var(--red-soft);}
+
+/* Footer */
+.recon-footer{
+  padding:12px 16px;border-top:1px solid var(--border);
+  display:flex;gap:10px;background:rgba(28,28,30,0.95);flex-shrink:0;
+}
+.recon-confirm-btn{
+  flex:1;padding:14px;border-radius:12px;border:none;
+  background:linear-gradient(135deg,var(--green),#2DD4A0);
+  color:#fff;font-size:15px;font-weight:700;
+  font-family:inherit;cursor:pointer;
+  transition:opacity 0.2s;
+}
+.recon-confirm-btn:disabled{
+  opacity:0.35;cursor:not-allowed;
+  background:linear-gradient(135deg,#666,#555);
+}
+.recon-back-btn{
+  padding:14px 20px;border-radius:12px;
+  background:var(--bg-card);border:1px solid var(--border);
+  color:var(--text2);font-size:14px;font-weight:600;
+  font-family:inherit;cursor:pointer;
+}
+.recon-back-btn:hover{background:rgba(255,255,255,0.08);}
+
+/* Mobile toggle (< 768px) */
+.recon-mobile-tabs{display:none;}
+
+@media (max-width:767px){
+  .reconcile-view.active{flex-direction:column;height:auto;min-height:100vh;}
+  .recon-left{display:none;width:100%;height:55vh;position:relative;}
+  .recon-right{display:none;width:100%;}
+  .recon-left.mob-active{display:flex;}
+  .recon-right.mob-active{display:flex;}
+  .recon-mobile-tabs{
+    display:flex;position:sticky;top:50px;z-index:11;
+    background:rgba(28,28,30,0.98);border-bottom:1px solid var(--border);
+  }
+  .recon-mob-tab{
+    flex:1;padding:10px;text-align:center;
+    background:transparent;border:none;border-bottom:2px solid transparent;
+    color:var(--text3);font-size:13px;font-weight:600;
+    font-family:inherit;cursor:pointer;
+  }
+  .recon-mob-tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .recon-disc-bar{top:0;}
+  .recon-items-table th,.recon-items-table td{padding:4px 3px;font-size:11px;}
+  .recon-items-table input,.recon-items-table select{font-size:11px;padding:3px 4px;}
+}
+
+/* ── Invoice History Table (desktop) ── */
+.invoice-table { width:100%; border-collapse:collapse; }
+.invoice-table thead th {
+  text-align:left; padding:8px 14px; font-size:11px; font-weight:700;
+  color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em;
+  border-bottom:1px solid var(--border); cursor:pointer; user-select:none;
+  white-space:nowrap;
+}
+.invoice-table thead th:hover { color:var(--text); }
+.invoice-table thead th.sort-active { color:var(--accent); }
+.invoice-table tbody tr {
+  border-bottom:1px solid var(--border);
+  cursor:pointer; transition:background 0.15s;
+}
+.invoice-table tbody tr:hover { background:var(--bg-card); }
+.invoice-table td { padding:9px 14px; vertical-align:middle; font-size:13px; }
+.invoice-table .td-thumb { width:44px; padding-right:4px; }
+.invoice-table .td-vendor { font-weight:600; color:var(--text); min-width:140px; }
+.invoice-table .td-num { color:var(--text-muted); font-size:12px; white-space:nowrap; }
+.invoice-table .td-date { color:var(--text-muted); white-space:nowrap; font-size:12px; }
+.invoice-table .td-loc { color:var(--text-muted); font-size:12px; text-transform:capitalize; }
+.invoice-table .td-total { font-weight:700; color:var(--text); text-align:right; white-space:nowrap; }
+.invoice-table .td-badges { text-align:right; white-space:nowrap; min-width:100px; }
+@media (max-width: 767px) {
+  .invoice-table thead { display:none; }
+  .invoice-table, .invoice-table tbody, .invoice-table tr, .invoice-table td { display:block; width:100%; }
+  .invoice-table tbody tr {
+    display:flex; flex-wrap:wrap; align-items:center;
+    padding:14px 16px; gap:4px; border-bottom:1px solid var(--border);
+  }
+  .invoice-table .td-thumb { width:36px; flex-shrink:0; }
+  .invoice-table .td-vendor { flex:1; min-width:120px; font-size:14px; }
+  .invoice-table .td-num, .invoice-table .td-date, .invoice-table .td-loc {
+    font-size:11px; color:var(--text-muted);
+  }
+  .invoice-table .td-num::after { content:' · '; }
+  .invoice-table .td-loc { order:3; width:100%; padding-left:44px; margin-top:-2px; }
+  .invoice-table .td-total { font-size:15px; margin-left:auto; }
+  .invoice-table .td-badges { width:100%; padding-left:44px; margin-top:2px; }
+  .invoice-table td { padding:2px 4px; border:none; }
+  .invoice-table tbody tr td:not(.td-thumb):not(.td-vendor):not(.td-total):not(.td-badges):not(.td-loc) {
+    font-size:11px;
+  }
+}
+</style>
+<link rel="stylesheet" href="/static/sidebar.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+</head>
+<body>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:34px;height:34px;background:linear-gradient(135deg,var(--red),#FF6259);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;box-shadow:0 4px 12px rgba(255,69,58,0.3)">RN</div>
+        <div>
+          <div style="font-size:17px;font-weight:700;letter-spacing:-0.3px">Invoice Scanner</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:500;letter-spacing:0.5px;text-transform:uppercase">Snap · Review · Save</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Page Navigation Tabs -->
+    <nav class="page-tabs">
+      <a href="/" class="page-tab">Analytics</a>
+      <a href="/manage" class="page-tab">Management</a>
+      <a href="/invoices" class="page-tab active">Invoices</a>
+      <a href="/catalog" class="page-tab">Catalog</a>
+      <select id="global-location" onchange="setGlobalLocation(this.value)" style="margin-left:auto;padding:6px 12px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer">
+        <option value="dennis">📍 Dennis Port</option>
+        <option value="chatham">📍 Chatham</option>
+      </select>
+    </nav>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Processing Overlay -->
+<div class="processing" id="processing">
+  <div class="proc-ring"></div>
+  <div class="proc-text" id="procText">Analyzing Invoice</div>
+  <div class="proc-sub" id="procSub">Claude is reading every line item...</div>
+</div>
+
+<!-- Content -->
+<div class="content">
+
+  <!-- ── Scan View (mobile only — hidden on desktop) ── -->
+  <script>if(window.innerWidth>=768)document.write('<style>.scan-view{display:none!important}</style>');</script>
+  <div class="scan-view" id="scanView">
+    <div class="loc-picker">
+      <button class="loc-pill active" data-loc="dennis" onclick="setLoc(this)">Dennis Port</button>
+      <button class="loc-pill" data-loc="chatham" onclick="setLoc(this)">Chatham</button>
+    </div>
+
+    <div class="scan-section">
+      <div class="scan-zone" id="scanZone" onclick="openDocScanner()">
+        <div class="scan-prompt">
+          <div class="scan-prompt-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg></div>
+          <div class="scan-prompt-title">Scan Invoice</div>
+          <div class="scan-prompt-sub">Tap to take photo or upload file</div>
+        </div>
+        <img id="previewImg" style="display:none">
+      </div>
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*,application/pdf,.heic,.heif" capture="environment" onchange="handleFile(this)">
+    <input type="file" id="batchInput" accept="image/*,application/pdf,.heic,.heif" multiple onchange="handleBatchFiles(this)">
+
+    <div class="scan-actions">
+      <button class="action-btn btn-camera" onclick="openDocScanner()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg> Camera
+      </button>
+      <button class="action-btn btn-upload" onclick="document.getElementById('batchInput').click()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg> Batch
+      </button>
+      <button class="action-btn btn-scan" id="scanBtn" disabled onclick="processInvoice()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z"/></svg> Scan
+      </button>
+    </div>
+    <input type="file" id="galleryInput" accept="image/*,application/pdf,.heic,.heif" onchange="handleFile(this)">
+  </div>
+
+  <!-- ── Review View ── -->
+  <div class="review-view" id="reviewView">
+    <div class="rv-header">
+      <div class="rv-title">Review Invoice</div>
+      <button class="rv-back" onclick="backToScan()">← Back</button>
+      <button class="rv-delete" onclick="deleteInvoice()" style="background:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-left:8px">🗑 Delete</button>
+    </div>
+
+    <div id="validationBanner" style="display:none;margin:16px 20px 0;padding:12px 16px;border-radius:10px;font-size:13px;line-height:1.6"></div>
+
+    <div class="rv-card">
+      <div class="rv-field-row">
+        <div class="rv-field" style="flex:2">
+          <div class="rv-label">Vendor</div>
+          <input class="rv-input" id="rvVendor">
+        </div>
+        <div class="rv-field" style="flex:1">
+          <div class="rv-label">Total</div>
+          <input class="rv-input rv-total-input" id="rvTotal">
+        </div>
+      </div>
+      <div class="rv-field-row">
+        <div class="rv-field">
+          <div class="rv-label">Invoice #</div>
+          <input class="rv-input" id="rvInvNum">
+        </div>
+        <div class="rv-field">
+          <div class="rv-label">Date</div>
+          <input class="rv-input" id="rvDate" type="date">
+        </div>
+      </div>
+      <div class="rv-field-row">
+        <div class="rv-field">
+          <div class="rv-label">Subtotal</div>
+          <input class="rv-input" id="rvSubtotal">
+        </div>
+        <div class="rv-field">
+          <div class="rv-label">Tax</div>
+          <input class="rv-input" id="rvTax">
+        </div>
+      </div>
+      <div class="rv-field-row">
+        <div class="rv-field" style="flex:2">
+          <div class="rv-label">Location</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <select class="rv-input" id="rvLocation" style="flex:1;appearance:none;-webkit-appearance:none;cursor:pointer">
+              <option value="dennis">📍 Dennis Port</option>
+              <option value="chatham">📍 Chatham</option>
+            </select>
+            <span id="rvLocationBadge" style="display:none;font-size:11px;color:#22c55e;font-weight:700;background:rgba(34,197,94,0.12);padding:3px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0">auto-detected</span>
+          </div>
+        </div>
+        <div class="rv-field">
+          <div class="rv-label">Fees / Other</div>
+          <div id="rvFees" style="padding:10px 0;font-size:15px;color:#f59e0b;font-weight:600">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="rvThumbnailBar" style="display:none;margin:0 20px 12px;cursor:pointer" onclick="openInvoiceImage(currentInvoice.id, currentInvoice.image_path||'')">
+      <img id="rvThumbnailImg" src="" alt="invoice" style="width:100%;max-height:180px;object-fit:contain;border-radius:10px;border:1px solid #3a3a3c;background:#1c1c1e">
+      <div style="text-align:center;font-size:11px;color:#888;margin-top:4px">Tap to view full invoice</div>
+    </div>
+    <div class="rv-items-title" id="rvItemsTitle">Line Items</div>
+    <div id="rvItems"></div>
+
+    <button class="rv-confirm" id="rvConfirmBtn" onclick="confirmInvoice()">Confirm & Save</button>
+    <button class="rv-confirm" id="rvMarkPaidBtn" style="display:none;background:linear-gradient(135deg,#f59e0b,#f97316)" onclick="openMarkPaid()">&#128179; Mark as Paid</button>
+    <div id="rvPaidStatus" style="display:none;margin:0 20px 8px;padding:12px 16px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:12px;color:#22c55e;font-size:14px;font-weight:600;text-align:center"></div>
+    <button class="rv-cancel" onclick="backToScan()">Back</button>
+  </div>
+
+  <!-- ── Session 29: Reconciliation Split-Pane View ── -->
+  <div class="reconcile-view" id="reconcileView">
+    <!-- Mobile toggle bar -->
+    <div class="recon-mobile-tabs">
+      <button class="recon-mob-tab" onclick="reconMobTab('invoice')">View Invoice</button>
+      <button class="recon-mob-tab active" onclick="reconMobTab('edit')">Edit Data</button>
+    </div>
+
+    <!-- Left: PDF/Image Viewer -->
+    <div class="recon-left" id="reconLeft">
+      <div class="recon-pdf-toolbar">
+        <button onclick="reconPdfPrev()" title="Previous page">&#9664;</button>
+        <span id="reconPdfPageInfo">Page 1 / 1</span>
+        <button onclick="reconPdfNext()" title="Next page">&#9654;</button>
+        <span style="flex:1"></span>
+        <button onclick="reconPdfZoom(-0.25)">&#8722;</button>
+        <span id="reconPdfZoomLevel">100%</span>
+        <button onclick="reconPdfZoom(0.25)">+</button>
+      </div>
+      <div class="recon-pdf-scroll"><div class="recon-pdf-container" id="reconPdfContainer">
+        <canvas id="reconPdfCanvas"></canvas>
+      </div></div>
+    </div>
+
+    <!-- Right: Editable Data -->
+    <div class="recon-right mob-active" id="reconRight">
+      <!-- Discrepancy calculator bar -->
+      <div class="recon-disc-bar imbalanced" id="reconDiscBar">
+        <div class="recon-disc-item">
+          <div class="recon-disc-label">Invoice Total</div>
+          <div class="recon-disc-value" id="reconDiscStated">$0.00</div>
+        </div>
+        <div class="recon-disc-eq">=</div>
+        <div class="recon-disc-item">
+          <div class="recon-disc-label">Items + Tax</div>
+          <div class="recon-disc-value" id="reconDiscCalc">$0.00</div>
+        </div>
+        <div class="recon-disc-eq">&rarr;</div>
+        <div class="recon-disc-item">
+          <div class="recon-disc-label">Discrepancy</div>
+          <div class="recon-disc-result imbalanced" id="reconDiscDelta">$0.00</div>
+        </div>
+      </div>
+
+      <div class="recon-content">
+        <!-- Header fields -->
+        <div class="rv-card" style="margin:0 0 12px">
+          <div class="rv-field-row">
+            <div class="rv-field" style="flex:2">
+              <div class="rv-label">Vendor</div>
+              <input class="rv-input" id="reconVendor">
+            </div>
+            <div class="rv-field" style="flex:1">
+              <div class="rv-label">Stated Total</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input class="rv-input" id="reconTotal" style="font-size:18px;font-weight:700;color:var(--text3);flex:1" readonly>
+                <button id="reconEditTotalBtn" onclick="reconUnlockTotal()" style="font-size:11px;padding:2px 8px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text2);cursor:pointer;white-space:nowrap;display:none">&#9998; Edit</button>
+                <button id="reconLockTotalBtn" onclick="reconLockTotal()" style="font-size:11px;padding:2px 8px;background:#22c55e22;border:1px solid #22c55e;border-radius:4px;color:#22c55e;cursor:pointer;white-space:nowrap;display:none">&#10003; Lock</button>
+              </div>
+            </div>
+          </div>
+          <div class="rv-field-row">
+            <div class="rv-field">
+              <div class="rv-label">Invoice #</div>
+              <input class="rv-input" id="reconInvNum">
+            </div>
+            <div class="rv-field">
+              <div class="rv-label">Date</div>
+              <input class="rv-input" id="reconDate" type="date">
+            </div>
+          </div>
+          <div class="rv-field-row">
+            <div class="rv-field">
+              <div class="rv-label">Subtotal (items)</div>
+              <input class="rv-input" id="reconSubtotal" readonly style="color:var(--text3)">
+            </div>
+            <div class="rv-field">
+              <div class="rv-label">Tax</div>
+              <input class="rv-input" id="reconTax" type="number" step="0.01" oninput="reconRecalc()">
+            </div>
+          </div>
+          <div class="rv-field-row">
+            <div class="rv-field">
+              <div class="rv-label">Location</div>
+              <select class="rv-input" id="reconLocation">
+                <option value="dennis">Dennis Port</option>
+                <option value="chatham">Chatham</option>
+              </select>
+            </div>
+            <div class="rv-field">
+              <div class="rv-label">Category</div>
+              <input class="rv-input" id="reconCategory" readonly style="color:var(--text3)">
+            </div>
+          </div>
+        </div>
+
+        <!-- Line items table -->
+        <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">
+          Line Items (<span id="reconItemCount">0</span>)
+        </div>
+        <div style="overflow-x:auto">
+        <table class="recon-items-table">
+          <thead>
+            <tr>
+              <th style="min-width:140px">Product</th>
+              <th style="width:60px;text-align:center">Qty</th>
+              <th style="width:50px">Unit</th>
+              <th style="width:90px;text-align:right">Unit Price</th>
+              <th style="width:90px;text-align:right">Total</th>
+              <th style="width:90px">Category</th>
+              <th style="width:30px"></th>
+            </tr>
+          </thead>
+          <tbody id="reconItemsBody"></tbody>
+        </table>
+        </div>
+        <button class="recon-add-item" onclick="reconAddItem()">+ Add Line Item</button>
+      </div>
+
+      <!-- Footer -->
+      <div class="recon-footer">
+        <button class="recon-back-btn" onclick="reconBack()">&#8592; Back</button>
+        <button onclick="reconDeleteInvoice()" style="padding:8px 16px;border-radius:8px;border:1px solid #dc3545;background:transparent;color:#dc3545;cursor:pointer;font-size:13px;font-weight:600">&#128465; Delete</button>
+        <button class="recon-confirm-btn" id="reconConfirmBtn" disabled onclick="reconConfirm()">
+          Fix discrepancy to confirm
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── History View (default on desktop) ── -->
+  <script>if(window.innerWidth>=768)document.write('<style>.history-view{display:block!important}</style>');</script>
+  <div class="history-view" id="historyView">
+    <div class="add-inv-header" style="display:none;justify-content:space-between;align-items:center;padding:16px 20px 0">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);margin:0">Invoice History</h2>
+      <div style="position:relative" id="addInvoiceDropdown">
+        <button onclick="toggleAddInvoiceMenu()" style="display:flex;align-items:center;gap:8px;padding:10px 18px;background:var(--red);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer">
+          + Add Invoice <span style="font-size:10px;opacity:0.8">&#9662;</span>
+        </button>
+        <div id="addInvoiceMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--bg-elevated);border:1px solid var(--border);border-radius:10px;min-width:200px;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden">
+          <div onclick="openUploadInvoice()" style="padding:14px 16px;cursor:pointer;font-size:14px;color:var(--text);border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg-card)'" onmouseout="this.style.background=''">
+            &#128196; Upload Invoice
+          </div>
+          <div onclick="openCreateInvoice()" style="padding:14px 16px;cursor:pointer;font-size:14px;color:var(--text)" onmouseover="this.style.background='var(--bg-card)'" onmouseout="this.style.background=''">
+            &#9998; Create Invoice
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:16px 20px 8px">
+      <input type="text" class="search-bar" id="searchBar" placeholder="Search invoices, vendors, amounts..." oninput="searchInvoices()">
+    </div>
+    <div class="hist-controls">
+      <select class="hist-select" id="sortBy" onchange="loadHistory()">
+        <option value="date_desc">Date (Newest)</option>
+        <option value="date_asc">Date (Oldest)</option>
+        <option value="amount_desc">Amount (High-Low)</option>
+        <option value="amount_asc">Amount (Low-High)</option>
+        <option value="vendor_asc">Vendor (A-Z)</option>
+      </select>
+      <select class="hist-select" id="filterVendor" onchange="loadHistory()">
+        <option value="">All Vendors</option>
+      </select>
+    </div>
+    <div id="histList"></div>
+  </div>
+
+  <!-- ── Reports View ── -->
+  <div class="reports-view" id="reportsView">
+    <div class="reports-tabs">
+      <button class="report-tab active" onclick="switchReport('vendors',this)">By Vendor</button>
+      <button class="report-tab" onclick="switchReport('categories',this)">By Category</button>
+      <button class="report-tab" onclick="switchReport('items',this)">Top Items</button>
+      <button class="report-tab" onclick="switchReport('outstanding',this)">Outstanding</button>
+    </div>
+    <div id="reportContent"></div>
+  </div>
+
+  <!-- ── Mark Paid Modal ── -->
+  <div id="markPaidModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:none;align-items:flex-end;justify-content:center">
+    <div style="background:#1c1c1e;border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px;padding-bottom:max(24px,env(safe-area-inset-bottom))">
+      <div style="font-size:17px;font-weight:700;margin-bottom:20px">Mark Invoice as Paid</div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:#999;text-transform:uppercase;margin-bottom:6px">Payment Date</div>
+        <input type="date" id="payDate" style="width:100%;padding:10px;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:10px;color:#fff;font-size:15px;font-family:inherit">
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:#999;text-transform:uppercase;margin-bottom:6px">Payment Method</div>
+        <select id="payMethod" style="width:100%;padding:10px;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:10px;color:#fff;font-size:15px;font-family:inherit;appearance:none">
+          <option value="check">Check</option>
+          <option value="ach">ACH / Bank Transfer</option>
+          <option value="card">Credit Card</option>
+          <option value="cash">Cash</option>
+        </select>
+      </div>
+      <div style="margin-bottom:20px">
+        <div style="font-size:11px;color:#999;text-transform:uppercase;margin-bottom:6px">Reference # <span style="color:#666;font-size:10px">(optional)</span></div>
+        <input type="text" id="payRef" placeholder="Check #, transaction ID, etc." style="width:100%;padding:10px;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:10px;color:#fff;font-size:15px;font-family:inherit">
+      </div>
+      <button onclick="submitMarkPaid()" style="width:100%;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,#22c55e,#2DD4A0);color:#fff;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:10px">Mark as Paid</button>
+      <button onclick="closeMarkPaid()" style="width:100%;padding:12px;border-radius:12px;border:none;background:none;color:#ef4444;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer">Cancel</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bottom Nav -->
+<div id="meReviewView" class="me-review" style="display:none">
+  <div class="me-rv-header"><div class="me-rv-title">Invoice Review</div><button class="me-rv-back" onclick="closeMeReview()">&larr; Back</button></div>
+  <div class="me-rv-info" id="meRvInfo"></div>
+  <table class="me-rv-table"><thead><tr><th>Product</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Total</th><th>Category</th></tr></thead><tbody id="meRvItems"></tbody></table>
+  <div class="me-rv-actions"><button class="me-rv-btn me-rv-btn-cancel" onclick="closeMeReview()">Back</button><button class="me-rv-btn me-rv-btn-save" onclick="approveInvoice()">&#10003; Approve Invoice</button></div>
+</div>
+<nav class="bottom-nav">
+  <button class="nav-tab nav-scan-tab active" onclick="showView('scan',this)">
+    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" class="nav-icon"><path d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg>Scan
+  </button>
+  <button class="nav-tab" onclick="showView('history',this)">
+    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" class="nav-icon"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>History
+  </button>
+  <button class="nav-tab" onclick="showView('reports',this)">
+    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" class="nav-icon"><path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>Reports
+  </button>
+</nav>
+
+<script>
+// ── State ──
+let currentLoc = 'dennis';
+let currentImage = null;
+let additionalImages = [];
+let currentMime = 'image/jpeg';
+let currentInvoice = null;
+let histFilter = 'confirmed';
+
+let allInvoices = [];
+let currentReport = 'vendors';
+const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// ── Helpers ──
+function $(id) { return document.getElementById(id); }
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── View Switching ──
+function showView(view, btn) {
+  // Desktop: scan view doesn't exist — redirect to history
+  if (view === 'scan' && window.innerWidth >= 768) view = 'history';
+  // 'pending' is history view with the Pending filter pre-applied
+  let effectiveView = view;
+  if (view === 'pending') {
+    effectiveView = 'history';
+    histFilter = 'pending';
+  } else if (view === 'history') {
+    histFilter = 'confirmed';
+  }
+  // Update page title
+  const pageTitle = document.querySelector('.history-view h2');
+  if (pageTitle) pageTitle.textContent = view === 'pending' ? 'Pending Review' : 'Invoice History';
+  // Hide ALL views first (covers review, meReview, scan, history, reports, reconcile)
+  document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.me-review,.reconcile-view').forEach(function(el){
+    el.style.display = 'none';
+    el.classList.remove('active');
+    el.classList.add('hidden');
+  });
+  // Show the requested view
+  var target = effectiveView === 'scan' ? $('scanView') : effectiveView === 'history' ? $('historyView') : $('reportsView');
+  if (target) {
+    target.style.display = effectiveView === 'scan' ? '' : 'block';
+    target.classList.remove('hidden');
+    target.classList.add('active');
+  }
+  // Show bottom nav and scan-section
+  document.querySelectorAll('.scan-section').forEach(function(v){v.style.display='';});
+  window.location.hash = view;
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  if (btn) {
+    btn.classList.add('active');
+  } else {
+    var tabIdx = effectiveView === 'scan' ? 0 : effectiveView === 'history' ? 1 : 2;
+    var tabs = document.querySelectorAll('.nav-tab');
+    if (tabs[tabIdx]) tabs[tabIdx].classList.add('active');
+  }
+  if (effectiveView === 'history') loadHistory();
+  if (effectiveView === 'reports') loadReports();
+}
+
+var cameFromView = 'history';
+function backToScan() {
+  showView(cameFromView);
+}
+
+// ── Add Invoice dropdown ──
+function toggleAddInvoiceMenu() {
+  var menu = $('addInvoiceMenu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', function(e) {
+  var dd = document.getElementById('addInvoiceDropdown');
+  if (dd && !dd.contains(e.target)) {
+    var m = document.getElementById('addInvoiceMenu');
+    if (m) m.style.display = 'none';
+  }
+});
+
+function openUploadInvoice() {
+  $('addInvoiceMenu').style.display = 'none';
+  // NOTE: Use existing #batchInput element (line 843) — do NOT replace with
+  // a dynamically created input. Dynamic inputs get garbage collected before
+  // onchange fires in some browsers. batchInput handles single + multi files.
+  $('batchInput').click();
+}
+
+// ── Location ──
+function setLoc(btn) {
+  localStorage.setItem("globalLocation", btn.dataset.loc);
+  var rnSel=document.getElementById("rn-location");if(rnSel)rnSel.value=btn.dataset.loc;
+  document.querySelectorAll('.loc-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  currentLoc = btn.dataset.loc;
+  window.currentLocation = btn.dataset.loc;
+  if ($('historyView') && $('historyView').classList.contains('active')) loadHistory();
+}
+function setGlobalLocation(val) {
+  window.currentLocation = val;
+  localStorage.setItem("globalLocation", val);
+  loadHistory();
+  if (currentReport === 'outstanding') generateOutstandingReport();
+}
+
+// ── File Handling ──
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  if (file.name.toLowerCase().endsWith('.pdf')) {
+    currentMime = 'application/pdf';
+  } else if (file.name.toLowerCase().endsWith('.png')) {
+    currentMime = 'image/png';
+  } else {
+    currentMime = 'image/jpeg';
+  }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    currentImage = dataUrl.split(',')[1];
+
+    const zone = $('scanZone');
+    if (!zone) { processInvoice(); return; }
+    zone.classList.add('has-image');
+
+    if (currentMime === 'application/pdf') {
+      if ($('previewImg')) $('previewImg').style.display = 'none';
+      zone.innerHTML = `<div class="pdf-preview"><div class="pdf-icon"><svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg></div><div class="pdf-name">${file.name}</div></div><div class="scan-prompt"><div class="scan-prompt-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg></div><div class="scan-prompt-title">Scan Invoice</div><div class="scan-prompt-sub">Tap to take photo or upload</div></div>`;
+    } else {
+      if ($('previewImg')) $('previewImg').src = dataUrl;
+      if ($('previewImg')) $('previewImg').style.display = 'block';
+    }
+    if ($('scanBtn')) $('scanBtn').disabled = false;
+    showAddPageBtn();
+    if (!$('scanZone')) { processInvoice(); }
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+// ── Batch File Handling ──
+let batchQueue = [];
+let batchResults = {success: [], failed: [], duplicates: [], unreadable: []};
+
+async function handleBatchFiles(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+
+  batchQueue = files;
+  batchResults = {success: [], failed: [], duplicates: [], unreadable: []};
+
+  $('processing').classList.add('active');
+  $('procText').textContent = 'Batch Processing';
+  $('procSub').textContent = `Processing 0 of ${files.length} invoices...`;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    $('procSub').textContent = `Processing ${i+1} of ${files.length}: ${file.name}`;
+
+    try {
+      const result = await processBatchFile(file);
+      if (result.status === 'duplicate') {
+        batchResults.duplicates.push({file: file.name, ...result});
+      } else if (result.status === 'unreadable') {
+        batchResults.unreadable.push({file: file.name, ...result});
+      } else {
+        batchResults.success.push({file: file.name, invoice_id: result.invoice_id});
+      }
+    } catch (e) {
+      batchResults.failed.push({file: file.name, error: e.message});
+    }
+
+    // Small delay between requests
+    if (i < files.length - 1) await new Promise(r => setTimeout(r, 500));
+  }
+
+  $('processing').classList.remove('active');
+  showBatchResults();
+  input.value = '';
+}
+
+async function processBatchFile(file) {
+  return new Promise((resolve, reject) => {
+    let mime = 'image/jpeg';
+    if (file.name.toLowerCase().endsWith('.pdf')) mime = 'application/pdf';
+    else if (file.name.toLowerCase().endsWith('.png')) mime = 'image/png';
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const dataUrl = e.target.result;
+        const base64 = dataUrl.split(',')[1];
+
+        const body = new FormData();
+        const byteChars = atob(base64);
+        const byteArr = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+
+        const ext = mime === 'application/pdf' ? 'pdf' : mime === 'image/png' ? 'png' : (mime === 'image/heic' || mime === 'image/heif') ? 'heic' : 'jpg';
+        body.append('file', new Blob([byteArr], {type: mime}), `invoice.${ext}`);
+        body.append('location', currentLoc);
+
+        const resp = await fetch('/api/invoices/scan', {method: 'POST', body});
+        const data = await resp.json();
+
+        if (resp.status === 409) {
+          resolve({status: 'duplicate', ...data});
+        } else if (resp.status === 400 && data.status === 'unreadable') {
+          resolve({status: 'unreadable', ...data});
+        } else if (data.error) {
+          reject(new Error(data.error));
+        } else {
+          resolve({status: data.status === 'auto_confirmed' ? 'auto_confirmed' : 'success', invoice_id: data.invoice_id, vendor: data.data && data.data.vendor_name, invoice_number: data.data && data.data.invoice_number, data: data.data});
+        }
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function showBatchResults() {
+  const {success, failed, duplicates, unreadable} = batchResults;
+  const autoConfirmed = success.filter(r => r.status === 'auto_confirmed');
+  const needsReview = success.filter(r => r.status !== 'auto_confirmed');
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px';
+
+  let rows = '';
+  autoConfirmed.forEach(r => {
+    rows += `<tr><td style="padding:8px 12px;color:var(--text)">${r.vendor || r.file}</td><td style="padding:8px 12px;color:var(--text2);font-size:12px">${r.invoice_number || ''}</td><td style="padding:8px 12px"><span style="color:#22c55e;font-weight:600">✅ Auto-confirmed</span></td></tr>`;
+  });
+  needsReview.forEach(r => {
+    rows += `<tr><td style="padding:8px 12px;color:var(--text)">${r.vendor || r.file}</td><td style="padding:8px 12px;color:var(--text2);font-size:12px">${r.invoice_number || ''}</td><td style="padding:8px 12px"><span style="color:#f59e0b;font-weight:600">🔍 Needs Review</span></td></tr>`;
+  });
+  duplicates.forEach(r => {
+    rows += `<tr><td style="padding:8px 12px;color:var(--text)">${r.file}</td><td style="padding:8px 12px"></td><td style="padding:8px 12px"><span style="color:var(--text2)">⚠️ Duplicate</span></td></tr>`;
+  });
+  unreadable.forEach(r => {
+    rows += `<tr><td style="padding:8px 12px;color:var(--text)">${r.file}</td><td style="padding:8px 12px"></td><td style="padding:8px 12px"><span style="color:#ef4444">❌ Unreadable</span></td></tr>`;
+  });
+  failed.forEach(r => {
+    rows += `<tr><td style="padding:8px 12px;color:var(--text)">${r.file}</td><td style="padding:8px 12px"></td><td style="padding:8px 12px"><span style="color:#ef4444">❌ Error: ${r.error}</span></td></tr>`;
+  });
+
+  const hasReview = needsReview.length > 0;
+  overlay.innerHTML = `<div style="background:var(--card-bg);border-radius:16px;padding:28px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+    <h3 style="margin:0 0 6px;font-size:18px;color:var(--text)">Batch Complete</h3>
+    <p style="margin:0 0 20px;color:var(--text2);font-size:13px">${success.length} processed · ${autoConfirmed.length} confirmed · ${needsReview.length} need review${duplicates.length ? ' · ' + duplicates.length + ' duplicates' : ''}${(failed.length + unreadable.length) ? ' · ' + (failed.length + unreadable.length) + ' errors' : ''}</p>
+    <table style="width:100%;border-collapse:collapse">${rows}</table>
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+      ${hasReview ? `<button onclick="this.closest('[style*=fixed]').remove();showView('pending');" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">Review Pending</button>` : ''}
+      <button onclick="this.closest('[style*=fixed]').remove();loadHistory();" style="padding:10px 20px;background:var(--card-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-weight:600;cursor:pointer">Done</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  if (success.length > 0) loadHistory();
+}
+
+// ── Process Invoice ──
+async function processInvoice() {
+  if (!currentImage) return;
+  $('processing').classList.add('active');
+
+  try {
+    const body = new FormData();
+    const byteChars = atob(currentImage);
+    const byteArr = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+
+    const ext = currentMime === 'application/pdf' ? 'pdf' : currentMime === 'image/png' ? 'png' : 'jpg';
+    body.append('file', new Blob([byteArr], {type: currentMime}), `invoice.${ext}`);
+    body.append('location', currentLoc);
+
+    // Append additional pages (page 2, 3, etc.)
+    for (let p = 0; p < additionalImages.length; p++) {
+      const pg = additionalImages[p];
+      const pgBytes = atob(pg.data);
+      const pgArr = new Uint8Array(pgBytes.length);
+      for (let j = 0; j < pgBytes.length; j++) pgArr[j] = pgBytes.charCodeAt(j);
+      const pgExt = pg.mime === 'application/pdf' ? 'pdf' : pg.mime === 'image/png' ? 'png' : 'jpg';
+      body.append('extra_file_' + p, new Blob([pgArr], {type: pg.mime}), `page${p+2}.${pgExt}`);
+    }
+
+    const resp = await fetch('/api/invoices/scan', {method:'POST', body});
+    const data = await resp.json();
+
+    if (data.error) throw new Error(data.error);
+
+    // Check for auto-confirmed status
+    if (data.status === 'auto_confirmed') {
+      toast(data.message || 'Invoice auto-confirmed ✅', 'success');
+      showPostConfirmBanners(data);
+      backToScan();
+      loadHistory();
+      return;
+    }
+
+    // Show review screen (status === 'needs_review' or 'ok')
+    currentInvoice = data.data || data;
+    currentInvoice.id = data.invoice_id || currentInvoice.id;
+    currentInvoice.validation = data.validation; // Store validation data
+    showReview(currentInvoice);
+  } catch(e) {
+    toast('Error: ' + e.message);
+  } finally {
+    $('processing').classList.remove('active');
+  }
+}
+
+// ── Review ──
+function deleteInvoice() {
+  if (!currentInvoice || !currentInvoice.id) return;
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999";
+  modal.innerHTML = `<div style="background:var(--card-bg,#1e1e1e);border-radius:12px;padding:24px;max-width:400px;width:90%;text-align:center">
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px;color:var(--text,#fff)">Delete Invoice?</div>
+    <div style="color:var(--text-secondary,#aaa);margin-bottom:20px">${currentInvoice.vendor_name || "Unknown"} — $${(currentInvoice.total||0).toFixed(2)}<br>This cannot be undone.</div>
+    <div style="display:flex;gap:12px;justify-content:center">
+      <button onclick="this.closest(\x27div[style*=fixed]\x27).remove()" style="padding:10px 24px;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:var(--text,#fff);cursor:pointer;font-weight:600">Cancel</button>
+      <button onclick="confirmDelete(${currentInvoice.id},this.closest(\x27div[style*=fixed]\x27))" style="padding:10px 24px;border-radius:8px;border:none;background:#dc3545;color:#fff;cursor:pointer;font-weight:600">Delete</button>
+    </div></div>`;
+  document.body.appendChild(modal);
+}
+async function confirmDelete(id, modal) {
+  try {
+    const resp = await fetch("/api/invoices/" + id, {method:"DELETE"});
+    if (resp.ok) {
+      modal.remove();
+      backToScan();
+      loadHistory();
+      showToast("Invoice deleted", "success");
+    } else {
+      const err = await resp.json();
+      showToast(err.error || "Delete failed", "error");
+    }
+  } catch(e) { showToast("Delete failed", "error"); }
+}
+function showReview(data) {
+  $('scanView').style.display = 'none';
+  $('reviewView').style.display = 'block';
+  $('reviewView').classList.add('active');
+
+  // Show validation banner if there are issues
+  const validation = data.validation;
+  const banner = $('validationBanner');
+  if (validation && validation.issues && validation.issues.length > 0) {
+    banner.innerHTML = '⚠️ ' + validation.issues.map(i => '<div>' + i + '</div>').join('');
+    banner.style.display = 'block';
+    banner.style.background = 'rgba(245,158,11,0.12)';
+    banner.style.border = '1px solid rgba(245,158,11,0.3)';
+    banner.style.color = '#f59e0b';
+  } else {
+    banner.style.display = 'none';
+  }
+
+  $('rvVendor').value = data.vendor_name || '';
+  $('rvTotal').value = (parseFloat(data.total)||0).toFixed(2);
+  $('rvInvNum').value = data.invoice_number || '';
+  $('rvDate').value = data.invoice_date || '';
+  $('rvSubtotal').value = data.subtotal ? parseFloat(data.subtotal).toFixed(2) : '';
+  $('rvTax').value = data.tax ? parseFloat(data.tax).toFixed(2) : '';
+  var fees = (parseFloat(data.total)||0) - (parseFloat(data.subtotal)||0) - (parseFloat(data.tax)||0);
+  $("rvFees").textContent = fees > 0.01 ? "$" + fees.toFixed(2) : "—";
+
+  // Auto-select location if OCR detected it from ship-to address
+  var rvLoc = $('rvLocation');
+  var rvBadge = $('rvLocationBadge');
+  if (data.detected_location) {
+    rvLoc.value = data.detected_location;
+    rvBadge.style.display = 'inline';
+  } else {
+    rvLoc.value = data.location || currentLoc;
+    rvBadge.style.display = 'none';
+  }
+  // Hide badge when user manually changes location
+  rvLoc.onchange = function() { rvBadge.style.display = 'none'; };
+  // Show thumbnail if invoice has image
+  var thumbBar = $('rvThumbnailBar');
+  var thumbImg = $('rvThumbnailImg');
+  if (data.image_path) {
+    thumbImg.src = '/api/invoices/' + data.id + '/thumbnail';
+    thumbBar.style.display = 'block';
+  } else {
+    thumbBar.style.display = 'none';
+  }
+
+  const items = data.line_items || [];
+  // Count math errors
+  const mathErrors = items.filter(it => it.math_error).length;
+  // Total cross-check: sum of line items vs invoice total
+  const itemsSum = items.reduce((s, it) => s + (parseFloat(it.total_price)||0), 0);
+  const invTotal = parseFloat(data.total) || 0;
+  const invTax = parseFloat(data.tax) || 0;
+  const totalGap = invTotal > 0 ? Math.abs(Math.round((itemsSum + invTax - invTotal) * 100) / 100) : 0;
+
+  let titleWarnings = '';
+  if (mathErrors) titleWarnings += `<span style="color:var(--red);font-size:12px;font-weight:700;margin-left:8px">${mathErrors} item${mathErrors>1?'s':''} need${mathErrors===1?'s':''} review</span>`;
+  if (totalGap > 1) titleWarnings += `<div style="color:var(--orange);font-size:11px;font-weight:600;margin-top:4px">Items sum ${fmt(itemsSum)} vs invoice total ${fmt(invTotal)} — $${totalGap.toFixed(2)} gap</div>`;
+  $('rvItemsTitle').innerHTML = `Line Items (${items.length})` + titleWarnings;
+
+  // Disable confirm button if total gap > $1
+  const confirmBtn = $('rvConfirmBtn');
+  if (totalGap > 1) {
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = '0.4';
+    confirmBtn.textContent = 'Fix $' + totalGap.toFixed(2) + ' gap to confirm';
+  } else {
+    confirmBtn.disabled = false;
+    confirmBtn.style.opacity = '1';
+    confirmBtn.textContent = 'Confirm & Save';
+  }
+
+  $('rvItems').innerHTML = items.map((item, i) => {
+    const cat = item.category || item.category_type || 'FOOD';
+    const errStyle = item.math_error ? 'border-left:3px solid var(--red);background:rgba(255,69,58,0.08);' : '';
+    const mathBadge = item.math_error ? `<span style="font-size:10px;font-weight:700;color:var(--red);background:var(--red-soft);padding:2px 6px;border-radius:6px;margin-left:6px;white-space:nowrap">⚠ check math</span>` : '';
+    return `
+      <div class="rv-item animate-in" id="rv-item-${i}" style="animation-delay:${i * 0.03}s;${errStyle}">
+        <div class="rv-item-info">
+          <div class="rv-item-name">${item.product_name || 'Unknown'}</div>
+          ${item.description ? `<div class="rv-item-desc">${item.description}</div>` : ''}
+          <div class="rv-item-qty">${item.quantity||0} × ${item.unit||'ea'} @ ${fmt(item.unit_price)}</div>
+        </div>
+        <div class="rv-item-cat">
+          <select class="cat-${cat}" onchange="updateCat(${i},this)">
+            <option value="FOOD" ${cat==='FOOD'?'selected':''}>Food</option>
+            <option value="BEER" ${cat==='BEER'?'selected':''}>Beer</option>
+            <option value="LIQUOR" ${cat==='LIQUOR'?'selected':''}>Liquor</option>
+            <option value="WINE" ${cat==='WINE'?'selected':''}>Wine</option>
+            <option value="NA_BEVERAGES" ${cat==='NA_BEVERAGES'?'selected':''}>NA Bev</option>
+            <option value="NON_COGS" ${cat==='NON_COGS'?'selected':''}>Non-COGS</option>
+            <option value="TOGO_SUPPLIES" ${cat==='TOGO_SUPPLIES'?'selected':''}>Togo Supplies</option>
+            <option value="DR_SUPPLIES" ${cat==='DR_SUPPLIES'?'selected':''}>DR Supplies</option>
+            <option value="KITCHEN_SUPPLIES" ${cat==='KITCHEN_SUPPLIES'?'selected':''}>Kitchen Supplies</option>
+          </select>
+        </div>
+        <div>
+          <div class="rv-item-price" data-idx="${i}" data-field="total_price">${fmt(item.total_price)}${mathBadge}</div>
+          <div class="rv-item-unit" data-idx="${i}" data-field="unit_price">per: ${fmt(item.unit_price)}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Show correct action buttons based on invoice status + payment
+  const markPaidBtn = $('rvMarkPaidBtn');
+  const paidStatus = $('rvPaidStatus');
+  if (data.status === 'confirmed') {
+    confirmBtn.style.display = 'none';
+    if (data.payment_status === 'paid') {
+      markPaidBtn.style.display = 'none';
+      paidStatus.style.display = 'block';
+      paidStatus.textContent = '✓ Paid' + (data.paid_date ? ' on ' + data.paid_date : '') + (data.payment_method ? ' via ' + data.payment_method : '');
+    } else {
+      markPaidBtn.style.display = 'flex';
+      paidStatus.style.display = 'none';
+    }
+  } else {
+    confirmBtn.style.display = 'flex';
+    markPaidBtn.style.display = 'none';
+    paidStatus.style.display = 'none';
+  }
+
+  // Fetch and inject price change alerts for scanned invoices
+  if (data.id && data.source !== 'marginedge') {
+    loadPriceAlerts(data.id);
+  }
+}
+
+async function loadPriceAlerts(invoiceId) {
+  try {
+    const resp = await fetch(`/api/invoices/${invoiceId}/price-alerts`);
+    const alerts = await resp.json();
+    if (!Array.isArray(alerts) || !alerts.length) return;
+
+    // Build lookup map: lowercase product_name → alert
+    const alertMap = {};
+    alerts.forEach(a => { alertMap[a.product_name.toLowerCase()] = a; });
+
+    document.querySelectorAll('.rv-item').forEach(el => {
+      const nameEl = el.querySelector('.rv-item-name');
+      if (!nameEl) return;
+      const alert = alertMap[nameEl.textContent.trim().toLowerCase()];
+      if (!alert) return;
+
+      el.querySelector('.price-alert-badge')?.remove();
+      const up = alert.pct_change > 0;
+      const color = up ? '#ef4444' : '#22c55e';
+      const badge = document.createElement('div');
+      badge.className = 'price-alert-badge';
+      badge.style.cssText = `font-size:11px;font-weight:700;color:${color};margin-top:4px;padding:2px 6px;background:${color}22;border-radius:4px;display:inline-block;`;
+      badge.title = `Was $${alert.previous_price} on ${alert.previous_date}`;
+      badge.textContent = `${up ? '▲' : '▼'} ${up ? '+' : ''}${alert.pct_change}% vs last`;
+      const info = el.querySelector('.rv-item-info');
+      if (info) info.appendChild(badge);
+    });
+  } catch(e) {
+    // price alerts are non-critical
+  }
+}
+
+function updateCat(idx, sel) {
+  if (currentInvoice?.line_items?.[idx]) {
+    currentInvoice.line_items[idx].category = sel.value;
+    currentInvoice.line_items[idx].category_type = sel.value;
+  }
+  sel.className = 'cat-' + sel.value;
+}
+
+// ── Inline Editing for Line Item Prices ──
+(function() {
+  var rvItems = document.getElementById('rvItems');
+  if (!rvItems) return;
+
+  rvItems.addEventListener('click', function(e) {
+    // Find the price or unit element that was clicked
+    var el = e.target.closest('[data-field]');
+    if (!el || el.querySelector('input')) return; // already editing
+
+    var idx = parseInt(el.dataset.idx);
+    var field = el.dataset.field;
+    if (isNaN(idx) || !currentInvoice?.line_items?.[idx]) return;
+
+    var item = currentInvoice.line_items[idx];
+    var val = parseFloat(item[field] || 0);
+
+    // Create inline input
+    var input = document.createElement('input');
+    input.type = 'number';
+    input.inputMode = 'decimal';
+    input.step = '0.01';
+    input.value = val.toFixed(2);
+    input.style.cssText = 'width:80px;background:rgba(255,255,255,0.1);border:1px solid var(--blue);border-radius:8px;color:var(--text);font-size:14px;font-weight:700;padding:4px 8px;text-align:right;font-family:var(--font);outline:none;';
+
+    el.textContent = '';
+    el.appendChild(input);
+    input.focus();
+    input.select();
+
+    function finishEdit() {
+      var newVal = parseFloat(input.value) || 0;
+      newVal = Math.round(newVal * 100) / 100;
+      item[field] = newVal;
+
+      // Recalculate the other price field to keep math consistent
+      if (field === 'unit_price') {
+        item.total_price = Math.round((item.quantity || 0) * newVal * 100) / 100;
+      } else if (field === 'total_price' && (item.quantity || 0) > 0) {
+        item.unit_price = Math.round(newVal / item.quantity * 100) / 100;
+      }
+
+      // Re-check math error
+      var qty = parseFloat(item.quantity || 0);
+      var up = parseFloat(item.unit_price || 0);
+      var tp = parseFloat(item.total_price || 0);
+      var expected = Math.round(qty * up * 100) / 100;
+      item.math_error = (Math.abs(expected - tp) > 0.02 && qty > 0 && up > 0);
+
+      // Re-render this row
+      var rowEl = document.getElementById('rv-item-' + idx);
+      if (rowEl) {
+        rowEl.style.borderLeft = item.math_error ? '3px solid var(--red)' : '';
+        rowEl.style.background = item.math_error ? 'rgba(255,69,58,0.08)' : '';
+        var priceEl = rowEl.querySelector('[data-field="total_price"]');
+        var unitEl = rowEl.querySelector('[data-field="unit_price"]');
+        if (priceEl) {
+          var badge = item.math_error ? '<span style="font-size:10px;font-weight:700;color:var(--red);background:var(--red-soft);padding:2px 6px;border-radius:6px;margin-left:6px;white-space:nowrap">⚠ check math</span>' : '';
+          priceEl.innerHTML = fmt(item.total_price) + badge;
+        }
+        if (unitEl) unitEl.textContent = 'per: ' + fmt(item.unit_price);
+        // Update qty line too
+        var qtyEl = rowEl.querySelector('.rv-item-qty');
+        if (qtyEl) qtyEl.textContent = (item.quantity||0) + ' × ' + (item.unit||'ea') + ' @ ' + fmt(item.unit_price);
+      }
+
+      // Recalculate invoice subtotal from line items
+      var newSubtotal = 0;
+      (currentInvoice.line_items || []).forEach(function(li) {
+        newSubtotal += parseFloat(li.total_price || 0);
+      });
+      newSubtotal = Math.round(newSubtotal * 100) / 100;
+      currentInvoice.subtotal = newSubtotal;
+      var subEl = document.getElementById('rvSubtotal');
+      if (subEl) subEl.value = newSubtotal.toFixed(2);
+
+      // Update error count + total gap in title
+      var errCount = (currentInvoice.line_items || []).filter(function(li) { return li.math_error; }).length;
+      var invTotal = parseFloat(currentInvoice.total) || 0;
+      var invTax = parseFloat(currentInvoice.tax) || 0;
+      var totalGap = invTotal > 0 ? Math.abs(Math.round((newSubtotal + invTax - invTotal) * 100) / 100) : 0;
+      var titleEl = document.getElementById('rvItemsTitle');
+      if (titleEl) {
+        var warnings = '';
+        if (errCount) warnings += '<span style="color:var(--red);font-size:12px;font-weight:700;margin-left:8px">' + errCount + ' item' + (errCount>1?'s':'') + ' need' + (errCount===1?'s':'') + ' review</span>';
+        if (totalGap > 1) warnings += '<div style="color:var(--orange);font-size:11px;font-weight:600;margin-top:4px">Items sum $' + newSubtotal.toFixed(2) + ' vs invoice total $' + invTotal.toFixed(2) + ' — $' + totalGap.toFixed(2) + ' gap</div>';
+        titleEl.innerHTML = 'Line Items (' + (currentInvoice.line_items || []).length + ')' + warnings;
+      }
+      // Enable/disable confirm button based on total gap
+      var confirmBtn = document.getElementById('rvConfirmBtn');
+      if (confirmBtn) {
+        if (totalGap > 1) {
+          confirmBtn.disabled = true;
+          confirmBtn.style.opacity = '0.4';
+          confirmBtn.textContent = 'Fix $' + totalGap.toFixed(2) + ' gap to confirm';
+        } else {
+          confirmBtn.disabled = false;
+          confirmBtn.style.opacity = '1';
+          confirmBtn.textContent = 'Confirm & Save';
+        }
+      }
+    }
+
+    input.addEventListener('blur', finishEdit);
+    input.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+      if (ev.key === 'Escape') { input.value = val.toFixed(2); input.blur(); }
+    });
+  });
+})();
+
+// ── Confirm ──
+async function confirmInvoice() {
+  if (!currentInvoice) return;
+
+  // Block confirm if items sum doesn't match invoice total
+  var items = currentInvoice.line_items || [];
+  var itemsSum = Math.round(items.reduce(function(s, li) { return s + (parseFloat(li.total_price) || 0); }, 0) * 100) / 100;
+  var invTotal = parseFloat($('rvTotal').value) || 0;
+  var invTax = parseFloat($('rvTax') ? $('rvTax').value : 0) || 0;
+  var gap = Math.abs(itemsSum + invTax - invTotal);
+  if (gap > 1.00) {
+    toast('Items sum $' + itemsSum.toFixed(2) + ' doesn\'t match invoice total $' + invTotal.toFixed(2) + ' — fix prices or total first');
+    return;
+  }
+
+  const btn = $('rvConfirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  btn.style.opacity = '0.6';
+
+  currentInvoice.vendor_name = $('rvVendor').value;
+  currentInvoice.total = parseFloat($('rvTotal').value) || 0;
+  currentInvoice.invoice_number = $('rvInvNum').value;
+  currentInvoice.invoice_date = $('rvDate').value;
+  currentInvoice.subtotal = parseFloat($('rvSubtotal').value) || 0;
+  currentInvoice.tax = parseFloat($('rvTax').value) || 0;
+  currentInvoice.location = $('rvLocation').value;
+
+  try {
+    const resp = await fetch(`/api/invoices/${currentInvoice.id}/confirm`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentInvoice),
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    toast('✓ Invoice saved!');
+    showPostConfirmBanners(data);
+    showView(window.innerWidth >= 768 ? 'history' : 'scan');
+    resetScan();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  } catch(e) {
+    toast('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Confirm & Save';
+    btn.style.opacity = '1';
+  }
+}
+
+// ── Post-confirm banners (anomaly + product linking) ──
+function showPostConfirmBanners(data) {
+  // Remove any existing banners
+  document.querySelectorAll('.post-confirm-banner').forEach(el => el.remove());
+
+  const container = document.createElement('div');
+  container.className = 'post-confirm-banner';
+  container.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9999;width:92%;max-width:500px;display:flex;flex-direction:column;gap:8px;';
+
+  // Anomaly alert banner (yellow, dismissible)
+  if (data.anomaly_alert) {
+    const alertDiv = document.createElement('div');
+    alertDiv.style.cssText = 'background:#92400e;border:1px solid #b45309;border-radius:12px;padding:12px 16px;color:#fef3c7;font-size:13px;font-weight:500;display:flex;align-items:flex-start;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+    const cleanAlert = data.anomaly_alert.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1');
+    alertDiv.innerHTML = `<span style="flex-shrink:0;font-size:16px">&#9888;&#65039;</span><span style="flex:1">${cleanAlert}</span><button onclick="this.parentElement.remove()" style="flex-shrink:0;background:none;border:none;color:#fef3c7;font-size:18px;cursor:pointer;padding:0 4px;line-height:1">&times;</button>`;
+    container.appendChild(alertDiv);
+  }
+
+  // Product linking banner
+  if (data.suggestions > 0) {
+    const linkDiv = document.createElement('div');
+    linkDiv.style.cssText = 'background:rgba(10,132,255,0.15);border:1px solid rgba(10,132,255,0.4);border-radius:12px;padding:12px 16px;color:#0A84FF;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;cursor:pointer;';
+    linkDiv.id = 'suggestionsBanner';
+    linkDiv.innerHTML = `<span style="font-size:16px">&#128279;</span><span style="flex:1">${data.suggestions} item${data.suggestions > 1 ? 's' : ''} need product linking</span><span style="font-size:11px;opacity:0.7">Tap to review</span>`;
+    linkDiv.onclick = () => openSuggestionsPanel(data.invoice?.id || currentInvoice?.id);
+    container.appendChild(linkDiv);
+  }
+
+  // New products note
+  if (data.new_products > 0) {
+    const newDiv = document.createElement('div');
+    newDiv.style.cssText = 'background:#14532d;border:1px solid #16a34a;border-radius:12px;padding:10px 16px;color:#bbf7d0;font-size:12px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+    newDiv.textContent = `${data.new_products} new product${data.new_products > 1 ? 's were' : ' was'} created from unmatched items.`;
+    container.appendChild(newDiv);
+  }
+
+  // Auto-matched count
+  if (data.auto_matched > 0) {
+    const matchDiv = document.createElement('div');
+    matchDiv.style.cssText = 'background:#14532d;border:1px solid #16a34a;border-radius:12px;padding:10px 16px;color:#bbf7d0;font-size:12px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+    matchDiv.textContent = `${data.auto_matched} item${data.auto_matched > 1 ? 's' : ''} auto-matched to existing products.`;
+    container.appendChild(matchDiv);
+  }
+
+  if (container.children.length > 0) {
+    document.body.appendChild(container);
+    // Auto-dismiss non-anomaly banners after 8s
+    setTimeout(() => { container.remove(); }, 12000);
+  }
+}
+
+// ── Suggestions panel ──
+async function openSuggestionsPanel(invoiceId) {
+  if (!invoiceId) return;
+  try {
+    const resp = await fetch(`/api/vendor-items/suggestions?invoice_id=${invoiceId}`);
+    const suggestions = await resp.json();
+    if (!suggestions.length) {
+      toast('No pending suggestions');
+      return;
+    }
+    showSuggestionsModal(suggestions);
+  } catch(e) {
+    toast('Error loading suggestions: ' + e.message);
+  }
+}
+
+function showSuggestionsModal(suggestions) {
+  // Remove existing modal
+  document.querySelectorAll('.suggestions-modal').forEach(el => el.remove());
+
+  const modal = document.createElement('div');
+  modal.className = 'suggestions-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10000;display:flex;align-items:flex-end;justify-content:center;';
+
+  const panel = document.createElement('div');
+  panel.style.cssText = 'background:#1C1C1E;border-radius:20px 20px 0 0;width:100%;max-width:500px;max-height:80vh;overflow-y:auto;padding:20px;';
+
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div style="font-size:17px;font-weight:700;color:#F5F5F7">Product Linking</div>
+    <button onclick="this.closest('.suggestions-modal').remove()" style="background:none;border:none;color:#999;font-size:24px;cursor:pointer">&times;</button>
+  </div>
+  <div style="font-size:12px;color:rgba(245,245,247,0.5);margin-bottom:16px" id="suggestCount">${suggestions.length} item${suggestions.length > 1 ? 's' : ''} need linking</div>`;
+
+  for (const s of suggestions) {
+    html += `<div class="suggestion-card" id="sug-${s.id}" style="background:rgba(58,58,60,0.5);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:600;color:#F5F5F7;margin-bottom:4px">${s.vendor_description || 'Unknown item'}</div>
+      <div style="font-size:12px;color:rgba(245,245,247,0.5);margin-bottom:10px">Suggested match: <span style="color:#0A84FF">${s.product_name || 'None'}</span> <span style="color:#f59e0b">(${Math.round(s.score)}%)</span></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="approveSuggestion(${s.id})" style="flex:1;padding:10px;border-radius:8px;border:none;background:rgba(48,209,88,0.2);color:#30D158;font-weight:600;font-size:13px;cursor:pointer">&#10003; Link It</button>
+        <button onclick="rejectSuggestion(${s.id})" style="flex:1;padding:10px;border-radius:8px;border:none;background:rgba(10,132,255,0.15);color:#0A84FF;font-weight:600;font-size:13px;cursor:pointer">+ Create New</button>
+      </div>
+    </div>`;
+  }
+
+  panel.innerHTML = html;
+  modal.appendChild(panel);
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+}
+
+async function approveSuggestion(id) {
+  try {
+    const resp = await fetch(`/api/vendor-items/approve-suggestion/${id}`, {method:'POST'});
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    const card = document.getElementById(`sug-${id}`);
+    if (card) {
+      card.style.opacity = '0.3';
+      card.style.pointerEvents = 'none';
+      card.querySelector('div:first-child').innerHTML += ' <span style="color:#30D158;font-size:11px">&#10003; Linked</span>';
+    }
+    updateSuggestCount();
+    toast('Linked to product');
+  } catch(e) {
+    toast('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Confirm & Save';
+    btn.style.opacity = '1';
+  }
+}
+
+async function rejectSuggestion(id) {
+  try {
+    const resp = await fetch(`/api/vendor-items/reject-suggestion/${id}`, {method:'POST'});
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    const card = document.getElementById(`sug-${id}`);
+    if (card) {
+      card.style.opacity = '0.3';
+      card.style.pointerEvents = 'none';
+      card.querySelector('div:first-child').innerHTML += ' <span style="color:#0A84FF;font-size:11px">+ New product</span>';
+    }
+    updateSuggestCount();
+    toast(data.message || 'New product created');
+  } catch(e) {
+    toast('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Confirm & Save';
+    btn.style.opacity = '1';
+  }
+}
+
+function updateSuggestCount() {
+  const remaining = document.querySelectorAll('.suggestion-card:not([style*="opacity: 0.3"])').length;
+  const countEl = document.getElementById('suggestCount');
+  if (countEl) countEl.textContent = remaining > 0 ? `${remaining} item${remaining > 1 ? 's' : ''} need linking` : 'All items linked!';
+  const banner = document.getElementById('suggestionsBanner');
+  if (banner && remaining === 0) banner.remove();
+}
+
+
+function showAddPageBtn() {
+  if (document.getElementById('addPageBtn')) {
+    var btn = document.getElementById('addPageBtn');
+    btn.textContent = additionalImages.length ? '+ Add Another Page (' + additionalImages.length + ' added)' : '+ Add Page 2';
+    return;
+  }
+  var btn = document.createElement('button');
+  btn.id = 'addPageBtn';
+  btn.textContent = additionalImages.length ? '+ Add Another Page (' + additionalImages.length + ' added)' : '+ Add Page 2';
+  btn.style.cssText = 'margin-top:10px;width:100%;padding:10px;background:var(--bg-card);border:1px dashed var(--border);border-radius:8px;color:var(--text-muted);font-size:14px;cursor:pointer;';
+  btn.onclick = function() { docExtraPageMode = true; openDocScanner(); };
+  var zone = document.getElementById('scanZone');
+  zone.parentNode.insertBefore(btn, zone.nextSibling);
+}
+
+function addPage(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var b64 = e.target.result.split(',')[1];
+    var mime = 'image/jpeg';
+    if (file.name.toLowerCase().endsWith('.pdf')) mime = 'application/pdf';
+    else if (file.name.toLowerCase().endsWith('.png')) mime = 'image/png';
+    additionalImages.push({data: b64, mime: mime});
+    var btn = document.getElementById('addPageBtn');
+    if (btn) btn.textContent = '+ Add Another Page (' + additionalImages.length + ' added)';
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function resetScan() {
+  currentImage = null;
+  currentInvoice = null;
+  additionalImages = [];
+  if ($('scanBtn')) $('scanBtn').disabled = true;
+  const zone = $('scanZone');
+  zone.classList.remove('has-image');
+  if ($('previewImg')) $('previewImg').style.display = 'none';
+  $('previewImg').src = '';
+  const apb = document.getElementById('addPageBtn'); if (apb) apb.remove();
+  zone.innerHTML = `<div class="scan-prompt"><div class="scan-prompt-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg></div><div class="scan-prompt-title">Scan Invoice</div><div class="scan-prompt-sub">Tap to take photo or upload file</div></div><img id="previewImg" style="display:none">`;
+}
+
+// ── History ──
+async function loadHistory() {
+  let url = '/api/invoices?limit=100';
+  if (histFilter !== 'all') url += '&status=' + histFilter;
+  const loc = window.currentLocation || localStorage.getItem('globalLocation');
+  if (loc) url += '&location=' + encodeURIComponent(loc);
+
+  try {
+    const resp = await fetch(url);
+    allInvoices = await resp.json();
+
+    // Populate vendor filter
+    const vendors = [...new Set(allInvoices.map(inv => inv.vendor_name).filter(Boolean))].sort();
+    const vendorSelect = $('filterVendor');
+    const currentVendor = vendorSelect.value;
+    vendorSelect.innerHTML = '<option value="">All Vendors</option>' +
+      vendors.map(v => `<option value="${v}" ${v===currentVendor?'selected':''}>${v}</option>`).join('');
+
+    displayFilteredInvoices();
+  } catch(e) {
+    $('histList').innerHTML = `<div class="hist-empty"><div class="hist-empty-icon">⚠️</div><div class="hist-empty-text">Error loading invoices</div></div>`;
+  }
+}
+
+function displayFilteredInvoices() {
+  let filtered = [...allInvoices];
+
+  // Apply vendor filter
+  const vendorFilter = $('filterVendor').value;
+  if (vendorFilter) {
+    filtered = filtered.filter(inv => inv.vendor_name === vendorFilter);
+  }
+
+
+  // Apply search
+  const search = ($('searchBar')?.value || '').toLowerCase();
+  if (search) {
+    filtered = filtered.filter(inv =>
+      (inv.vendor_name || '').toLowerCase().includes(search) ||
+      (inv.invoice_number || '').toLowerCase().includes(search) ||
+      (inv.total || '').toString().includes(search)
+    );
+  }
+
+  // Apply sort
+  const sortBy = $('sortBy').value;
+  filtered.sort((a, b) => {
+    switch(sortBy) {
+      case 'date_desc': return (b.invoice_date || '').localeCompare(a.invoice_date || '');
+      case 'date_asc': return (a.invoice_date || '').localeCompare(b.invoice_date || '');
+      case 'amount_desc': return (b.total || 0) - (a.total || 0);
+      case 'amount_asc': return (a.total || 0) - (b.total || 0);
+      case 'vendor_asc': return (a.vendor_name || '').localeCompare(b.vendor_name || '');
+      default: return 0;
+    }
+  });
+
+  if (!filtered.length) {
+    $('histList').innerHTML = `
+      <div class="hist-empty">
+        <div class="hist-empty-icon">📋</div>
+        <div class="hist-empty-text">No invoices found</div>
+      </div>`;
+    return;
+  }
+
+  // Summary bar
+  const totalSpend = filtered.reduce((s, inv) => s + (inv.total || 0), 0);
+  const summaryHtml = `<div style="font-size:12px;color:var(--text-muted);padding:0 4px 12px;display:flex;gap:16px">
+    <span>${filtered.length} invoice${filtered.length !== 1 ? 's' : ''}</span>
+    <span style="color:var(--text);font-weight:600">${fmt(totalSpend)} total</span>
+  </div>`;
+
+  const rows = filtered.map((inv, i) => {
+    // Thumbnail cell
+    const thumbCell = inv.source === 'iif'
+      ? `<td class="td-thumb"><div style="width:36px;height:44px;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(56,189,248,0.3);background:rgba(56,189,248,0.08);font-size:9px;font-weight:800;color:#38bdf8">IIF</div></td>`
+      : inv.image_path
+      ? `<td class="td-thumb"><div onclick="event.stopPropagation();openInvoiceImage(${inv.id},${JSON.stringify(inv.image_path||'')})" title="View invoice" style="width:36px;height:44px;border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid #3a3a3c;background:#1c1c1e"><img src="/api/invoices/${inv.id}/thumbnail" alt="invoice" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=\'font-size:9px;color:#666;display:flex;align-items:center;justify-content:center;height:100%\'>PDF</span>'"></div></td>`
+      : `<td class="td-thumb"></td>`;
+
+    // Days since invoice
+    let daysCell = '';
+    if (inv.invoice_date) {
+      const days = Math.floor((Date.now() - new Date(inv.invoice_date + 'T00:00:00').getTime()) / 86400000);
+      const color = days > 45 ? 'var(--red)' : days > 30 ? '#f59e0b' : 'var(--text-muted)';
+      daysCell = `<span style="font-size:11px;font-weight:600;color:${color}">${days}d</span>`;
+    }
+
+    // Row border color by payment status
+    const rowStyle = inv.payment_status === 'paid'
+      ? 'border-left:3px solid #22c55e44;'
+      : 'border-left:3px solid transparent;';
+
+    return `<tr style="${rowStyle}" onclick="viewInvoice(${inv.id}, '${inv.source||'scanned'}', '${inv.order_id||''}')">
+      ${thumbCell}
+      <td class="td-vendor">${inv.vendor_name || 'Unknown'}</td>
+      <td class="td-num">${inv.invoice_number ? '#'+inv.invoice_number : '—'}</td>
+      <td class="td-date">${inv.invoice_date || '—'}</td>
+      <td class="td-loc">${inv.location || '—'}</td>
+      <td class="td-total">${fmt(inv.total)}</td>
+      <td class="td-badges" style="text-align:right">${daysCell}</td>
+    </tr>`;
+  }).join('');
+
+  $('histList').innerHTML = summaryHtml + `<table class="invoice-table">
+    <thead>
+      <tr>
+        <th class="td-thumb"></th>
+        <th onclick="setSortBy('vendor_asc')">Vendor</th>
+        <th>Invoice #</th>
+        <th onclick="setSortBy('date_desc')">Date</th>
+        <th>Location</th>
+        <th style="text-align:right" onclick="setSortBy('amount_desc')">Total</th>
+        <th style="text-align:right">Status</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function setSortBy(val) {
+  const sel = document.getElementById('sortBy');
+  if (sel) { sel.value = val; loadHistory(); }
+}
+
+function searchInvoices() {
+  displayFilteredInvoices();
+}
+
+function filterHist(btn, filter) {
+  histFilter = filter;
+  // Only deactivate pills in the same row (first row = status pills)
+  btn.closest('.hist-filters').querySelectorAll('.hist-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  loadHistory();
+}
+
+
+// ── Mark Paid ──
+function openMarkPaid() {
+  if (!currentInvoice) return;
+  // Default to today
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('payDate').value = today;
+  document.getElementById('payMethod').value = 'check';
+  document.getElementById('payRef').value = '';
+  const modal = document.getElementById('markPaidModal');
+  modal.style.display = 'flex';
+}
+
+function closeMarkPaid() {
+  document.getElementById('markPaidModal').style.display = 'none';
+}
+
+async function submitMarkPaid() {
+  if (!currentInvoice) return;
+  const paid_date = document.getElementById('payDate').value;
+  const payment_method = document.getElementById('payMethod').value;
+  const payment_reference = document.getElementById('payRef').value.trim();
+  if (!paid_date) { toast('Please enter a payment date'); return; }
+
+  try {
+    const resp = await fetch(`/api/invoices/${currentInvoice.id}/pay`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({paid_date, payment_method, payment_reference: payment_reference || null})
+    });
+    const data = await resp.json();
+    if (data.error) { toast('Error: ' + data.error); return; }
+
+    closeMarkPaid();
+    toast('Invoice marked as paid ✓');
+    // Update currentInvoice and refresh the button state
+    currentInvoice = data.invoice || currentInvoice;
+    currentInvoice.payment_status = 'paid';
+    currentInvoice.paid_date = paid_date;
+    currentInvoice.payment_method = payment_method;
+    // Re-render the action buttons
+    const markPaidBtn = $('rvMarkPaidBtn');
+    const paidStatus = $('rvPaidStatus');
+    if (markPaidBtn) markPaidBtn.style.display = 'none';
+    if (paidStatus) {
+      paidStatus.style.display = 'block';
+      paidStatus.textContent = '✓ Paid on ' + paid_date + ' via ' + payment_method;
+    }
+    // Refresh history if loaded
+    if (allInvoices.length) loadHistory();
+  } catch(e) {
+    toast('Error marking as paid');
+  }
+}
+
+async function viewInvoice(id, source, orderId) {
+  // Remember where we came from so Back returns to the right view
+  cameFromView = histFilter === 'pending' ? 'pending' : 'history';
+  // Reset confirm button every time any invoice is opened
+  const _b = $('rvConfirmBtn');
+  if (_b) { _b.disabled = false; _b.textContent = 'Confirm & Save'; _b.style.opacity = '1'; }
+  try {
+    let resp, data;
+    if (source === 'marginedge' && orderId) {
+      resp = await fetch('/api/invoices/me/' + orderId);
+      data = await resp.json();
+      data.source = 'marginedge';
+    } else {
+      resp = await fetch('/api/invoices/' + id);
+      data = await resp.json();
+      data.source = 'scanned';
+    }
+    currentInvoice = data;
+    // Hide ALL views explicitly (inline styles override class-based display)
+    document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.me-review,.reconcile-view').forEach(function(el){
+      el.style.display = 'none';
+      el.classList.remove('active');
+    });
+    // Session 29: route flagged invoices to split-pane reconciliation
+    if (data.needs_reconciliation === 1 && data.status !== 'confirmed' && data.image_path) {
+      showReconcile(data);
+      return;
+    }
+    if (data.source === 'marginedge') { showMeReview(data); } else { showReview(data); }
+  } catch(e) {
+    console.error(e);
+    toast('Error loading invoice');
+  }
+}
+
+// ── Reports ──
+async function loadReports() {
+  try {
+    const resp = await fetch('/api/invoices?limit=200&status=confirmed');
+    allInvoices = await resp.json();
+    generateReport(currentReport);
+  } catch(e) {
+    $('reportContent').innerHTML = `<div class="hist-empty"><div class="hist-empty-icon">⚠️</div><div class="hist-empty-text">Error loading data</div></div>`;
+  }
+}
+
+function switchReport(type, btn) {
+  currentReport = type;
+  document.querySelectorAll('.report-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  generateReport(type);
+}
+
+function generateReport(type) {
+  if (type === 'outstanding') {
+    generateOutstandingReport();
+    return;
+  }
+  if (!allInvoices.length) {
+    $('reportContent').innerHTML = `<div class="hist-empty"><div class="hist-empty-icon">📊</div><div class="hist-empty-text">No data yet</div></div>`;
+    return;
+  }
+
+  switch(type) {
+    case 'vendors': generateVendorReport(); break;
+    case 'categories': generateCategoryReport(); break;
+    case 'items': generateItemsReport(); break;
+  }
+}
+
+var _outstandingRows = [];
+var _outstandingSort = { col: 'vendor', dir: 'asc' };
+
+async function generateOutstandingReport() {
+  $('reportContent').innerHTML = `<div class="hist-empty"><div class="hist-empty-icon">⏳</div><div class="hist-empty-text">Loading...</div></div>`;
+  try {
+    const loc = window.currentLocation || localStorage.getItem('globalLocation');
+    const locQ = loc ? '?location=' + encodeURIComponent(loc) : '';
+    const [outResp, sumResp] = await Promise.all([
+      fetch('/api/invoices/outstanding' + locQ),
+      fetch('/api/invoices/payment-summary' + locQ)
+    ]);
+    const outstanding = await outResp.json();
+    const summary = await sumResp.json();
+
+    if (!outstanding.length) {
+      $('reportContent').innerHTML = `<div class="hist-empty"><div class="hist-empty-icon">✅</div><div class="hist-empty-text">No outstanding invoices</div></div>`;
+      return;
+    }
+
+    // Flatten into sortable rows
+    _outstandingRows = [];
+    outstanding.forEach(v => {
+      v.invoices.forEach(inv => {
+        _outstandingRows.push({
+          id: inv.id,
+          vendor: v.vendor,
+          invoice_number: inv.invoice_number || '',
+          date: inv.date || '',
+          total: inv.total || 0,
+          location: inv.location || ''
+        });
+      });
+    });
+
+    _outstandingSummary = summary;
+    _renderOutstandingTable();
+  } catch(e) {
+    $('reportContent').innerHTML = `<div class="hist-empty"><div class="hist-empty-icon">⚠️</div><div class="hist-empty-text">Error loading outstanding data</div></div>`;
+  }
+}
+
+function _sortOutstanding(col) {
+  if (_outstandingSort.col === col) {
+    _outstandingSort.dir = _outstandingSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _outstandingSort.col = col;
+    _outstandingSort.dir = col === 'total' ? 'desc' : 'asc';
+  }
+  _renderOutstandingTable();
+}
+
+function _renderOutstandingTable() {
+  const s = _outstandingSort;
+  const rows = [..._outstandingRows].sort((a, b) => {
+    let va = a[s.col], vb = b[s.col];
+    if (s.col === 'total') return s.dir === 'asc' ? va - vb : vb - va;
+    if (s.col === 'date') {
+      va = va || '9999'; vb = vb || '9999';
+      return s.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+    return s.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+
+  const summary = _outstandingSummary;
+  const arrow = (col) => s.col === col ? (s.dir === 'asc' ? ' ▲' : ' ▼') : '';
+  const thStyle = 'cursor:pointer;user-select:none;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;font-weight:700;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.08);white-space:nowrap';
+
+  let html = `
+    <div style="display:flex;gap:12px;padding:16px 0;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px">
+        <div style="font-size:11px;color:#f59e0b;text-transform:uppercase;font-weight:700;margin-bottom:4px">Total Outstanding</div>
+        <div style="font-size:22px;font-weight:700;color:#f59e0b">${fmt(summary.total_outstanding)}</div>
+      </div>
+      <div style="flex:1;min-width:140px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:14px">
+        <div style="font-size:11px;color:#22c55e;text-transform:uppercase;font-weight:700;margin-bottom:4px">Paid Last 30d</div>
+        <div style="font-size:22px;font-weight:700;color:#22c55e">${fmt(summary.total_paid_30d)}</div>
+      </div>
+      <div style="flex:1;min-width:140px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:14px">
+        <div style="font-size:11px;color:#818cf8;text-transform:uppercase;font-weight:700;margin-bottom:4px">Invoices</div>
+        <div style="font-size:22px;font-weight:700;color:#818cf8">${rows.length}</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr>
+          <th onclick="_sortOutstanding('vendor')" style="${thStyle}">Vendor${arrow('vendor')}</th>
+          <th onclick="_sortOutstanding('invoice_number')" style="${thStyle}">Invoice #${arrow('invoice_number')}</th>
+          <th onclick="_sortOutstanding('date')" style="${thStyle}">Date${arrow('date')}</th>
+          <th onclick="_sortOutstanding('total')" style="${thStyle};text-align:right">Amount${arrow('total')}</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  rows.forEach(r => {
+    const amtColor = r.total < 0 ? '#ef4444' : '#f59e0b';
+    html += `
+        <tr onclick="viewInvoice(${r.id},'scanned','')" style="cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04)" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='none'">
+          <td style="padding:10px 12px">${r.vendor}</td>
+          <td style="padding:10px 12px;font-family:monospace">${r.invoice_number || '—'}</td>
+          <td style="padding:10px 12px;color:#94a3b8">${r.date || '—'}</td>
+          <td style="padding:10px 12px;text-align:right;font-weight:700;color:${amtColor}">${fmt(r.total)}</td>
+        </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  $('reportContent').innerHTML = html;
+}
+
+function generateVendorReport() {
+  const vendorTotals = {};
+  allInvoices.forEach(inv => {
+    const vendor = inv.vendor_name || 'Unknown';
+    if (!vendorTotals[vendor]) vendorTotals[vendor] = { total: 0, count: 0 };
+    vendorTotals[vendor].total += inv.total || 0;
+    vendorTotals[vendor].count++;
+  });
+
+  const sorted = Object.entries(vendorTotals).sort((a, b) => b[1].total - a[1].total);
+  const grandTotal = sorted.reduce((sum, [_, data]) => sum + data.total, 0);
+
+  $('reportContent').innerHTML = sorted.map(([vendor, data], i) => {
+    const pct = (data.total / grandTotal * 100).toFixed(1);
+    return `
+      <div class="report-card animate-in" style="animation-delay:${i*0.04}s">
+        <div class="report-card-header">
+          <div class="report-card-title">${vendor}</div>
+          <div class="report-card-value">${fmt(data.total)}</div>
+        </div>
+        <div class="report-bar">
+          <div class="report-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="report-meta">${data.count} invoices · ${pct}% of total spending</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function generateCategoryReport() {
+  const categoryTotals = {};
+  allInvoices.forEach(inv => {
+    (inv.line_items || []).forEach(item => {
+      const cat = item.category_type || item.category || 'FOOD';
+      if (!categoryTotals[cat]) categoryTotals[cat] = 0;
+      categoryTotals[cat] += item.total_price || 0;
+    });
+  });
+
+  const sorted = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+  const grandTotal = sorted.reduce((sum, [_, total]) => sum + total, 0);
+
+  const catColors = {
+    FOOD: 'var(--green)', BEER: 'var(--orange)', LIQUOR: 'var(--red)', WINE: 'var(--purple)', NA_BEVERAGES: 'var(--blue)', TOGO_SUPPLIES: 'var(--amber)', DR_SUPPLIES: 'var(--amber)', KITCHEN_SUPPLIES: 'var(--amber)', NON_COGS: 'var(--text3)', OTHER: 'var(--text3)'};
+
+  $('reportContent').innerHTML = sorted.map(([cat, total], i) => {
+    const pct = (total / grandTotal * 100).toFixed(1);
+    return `
+      <div class="report-card animate-in" style="animation-delay:${i*0.04}s">
+        <div class="report-card-header">
+          <div class="report-card-title"><span class="rv-category cat-${cat}">${cat.replace('_',' ')}</span></div>
+          <div class="report-card-value">${fmt(total)}</div>
+        </div>
+        <div class="report-bar">
+          <div class="report-bar-fill" style="width:${pct}%;background:${catColors[cat]||'var(--red)'}"></div>
+        </div>
+        <div class="report-meta">${pct}% of total COGS</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function generateItemsReport() {
+  const itemTotals = {};
+  allInvoices.forEach(inv => {
+    (inv.line_items || []).forEach(item => {
+      const name = item.product_name || 'Unknown';
+      if (!itemTotals[name]) itemTotals[name] = { total: 0, qty: 0, cat: item.category_type || 'FOOD' };
+      itemTotals[name].total += item.total_price || 0;
+      itemTotals[name].qty += item.quantity || 0;
+    });
+  });
+
+  const sorted = Object.entries(itemTotals).sort((a, b) => b[1].total - a[1].total).slice(0, 30);
+  const grandTotal = sorted.reduce((sum, [_, data]) => sum + data.total, 0);
+
+  $('reportContent').innerHTML = sorted.map(([item, data], i) => {
+    const pct = (data.total / grandTotal * 100).toFixed(1);
+    return `
+      <div class="report-card animate-in" style="animation-delay:${i*0.04}s">
+        <div class="report-card-header">
+          <div class="report-card-title">${item}</div>
+          <div class="report-card-value">${fmt(data.total)}</div>
+        </div>
+        <div class="report-bar">
+          <div class="report-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="report-meta">${data.qty.toFixed(1)} units · <span class="rv-category cat-${data.cat}">${data.cat}</span></div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Init ──
+window.currentLocation = localStorage.getItem("globalLocation") || "dennis";
+var glSel = document.getElementById("global-location");
+if (glSel) glSel.value = window.currentLocation;
+const h = window.location.hash.replace('#','');
+if (h === 'list') {
+  showView('history', document.querySelectorAll('.nav-tab')[1]);
+} else if (h === 'reports') {
+  showView('reports', document.querySelectorAll('.nav-tab')[2]);
+}
+loadHistory();
+
+// Drag & drop
+const zone = $('scanZone');
+['dragenter','dragover'].forEach(e => zone.addEventListener(e, ev => { ev.preventDefault(); zone.classList.add('dragover'); }));
+['dragleave','drop'].forEach(e => zone.addEventListener(e, ev => { ev.preventDefault(); zone.classList.remove('dragover'); }));
+zone.addEventListener('drop', ev => {
+  const file = ev.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    $('fileInput').files = dt.files;
+    handleFile($('fileInput'));
+  }
+});
+</script>
+  </div><!-- /main-content -->
+</div><!-- /layout -->
+<script src="/static/sidebar.js"></script>
+
+<script>
+// sidebar-init-hook: Show correct view based on sidebar selection
+document.addEventListener('DOMContentLoaded', function() {
+  var isDesktop = window.innerWidth >= 768;
+  var h = window.location.hash.replace('#','');
+  // Desktop: use hash, or localStorage (set by sidebar), or default to history
+  if (isDesktop) {
+    var view = h && h !== 'scan' ? h : (localStorage.getItem('invoiceView') || 'history');
+    setTimeout(function() { showView(view); }, 50);
+    return;
+  }
+  // Mobile: respect hash / localStorage
+  if (h && typeof showView === 'function') {
+    setTimeout(function() { showView(h); }, 100);
+  }
+  var saved = localStorage.getItem('invoiceView');
+  if (saved && typeof showView === 'function') {
+    setTimeout(function() { showView(saved); }, 150);
+  }
+});
+
+function showMeReview(data) {
+  console.log('showMeReview called', data.vendor_name, data.items ? data.items.length : 0);
+  document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.scan-section,.bottom-nav').forEach(function(v){v.style.display='none';});
+  var rv = $('meReviewView');
+  rv.style.display = 'block';
+  rv.style.minHeight = '500px';
+  var mainScroll = document.querySelector('.rn-main'); if(mainScroll) mainScroll.scrollTop = 0;
+  var total = data.order_total || data.total || 0;
+  var itemTotal = 0;
+  (data.items || []).forEach(function(it) { itemTotal += (it.total_price || 0); });
+  var diff = Math.abs(total - itemTotal);
+  var diffHtml = diff > 0.01 ? '<div class="me-rv-field"><label>Difference</label><div class="val" style="color:#FF453A">$' + diff.toFixed(2) + '</div></div>' : '';
+  $('meRvInfo').innerHTML =
+    '<div class="me-rv-field"><label>Vendor</label><div class="val">' + (data.vendor_name || 'Unknown') + '</div></div>' +
+    '<div class="me-rv-field"><label>Invoice #</label><div class="val">' + (data.invoice_number || 'N/A') + '</div></div>' +
+    '<div class="me-rv-field"><label>Date</label><div class="val">' + (data.invoice_date || 'N/A') + '</div></div>' +
+    '<div class="me-rv-field"><label>Invoice Total</label><div class="val">$' + Number(total).toFixed(2) + '</div></div>' +
+    '<div class="me-rv-field"><label>Line Item Total</label><div class="val">$' + itemTotal.toFixed(2) + '</div></div>' +
+    diffHtml;
+  var items = data.items || [];
+  if (!items.length) {
+    $('meRvItems').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:rgba(245,245,247,0.5)">No line items found</td></tr>';
+    return;
+  }
+  $('meRvItems').innerHTML = items.map(function(item, i) {
+    return '<tr>' +
+      '<td>' + (item.product_name || '') + '</td>' +
+      '<td style="text-align:center">' + (item.quantity || 0) + '</td>' +
+      '<td class="me-rv-total">$' + Number(item.unit_price || 0).toFixed(2) + '</td>' +
+      '<td class="me-rv-total">$' + Number(item.total_price || 0).toFixed(2) + '</td>' +
+      '<td>' + (item.category_type || '') + '</td>' +
+      '</tr>';
+  }).join('');
+}
+function closeMeReview() {
+  $('meReviewView').style.display = 'none';
+  document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view').forEach(function(v){v.style.display='';});
+  showView('history');
+}
+function approveInvoice() {
+  if (!currentInvoice) return;
+  var orderId = currentInvoice.order_id;
+  fetch('/api/invoices/me/' + orderId + '/approve', {method:'POST'})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      toast('Invoice approved');
+      closeMeReview();
+    }).catch(function(){toast('Error approving')});
+}
+
+// ── Image lightbox ──────────────────────────────────────────────────
+function openInvoiceImage(id, imagePath) {
+  var ext = (imagePath || '').split('.').pop().toLowerCase();
+  if (!imagePath || ext === 'pdf') {
+    window.open('/api/invoices/' + id + '/image', '_blank');
+    return;
+  }
+  var lb = document.getElementById('imgLightbox');
+  var img = document.getElementById('imgLightboxImg');
+  img.src = '/api/invoices/' + id + '/image';
+  lb.style.display = 'flex';
+  document.addEventListener('keydown', _lbKey);
+}
+
+function closeLightbox(e) {
+  if (e && e.target.id !== 'imgLightbox') return;
+  _lbClose();
+}
+
+function _lbClose() {
+  var lb = document.getElementById('imgLightbox');
+  lb.style.display = 'none';
+  document.getElementById('imgLightboxImg').src = '';
+  document.removeEventListener('keydown', _lbKey);
+}
+
+function _lbKey(e) {
+  if (e.key === 'Escape') _lbClose();
+}
+
+
+// ── Doc Scanner ──
+var docStream = null;
+var docAnimFrame = null;
+var docStableStart = null;
+var docLastRect = null;
+var docCaptured = false;
+var DOC_STABLE_MS = 1500;
+var docExtraPageMode = false;
+
+function openDocScanner() {
+  docCaptured = false;
+  docStableStart = null;
+  docLastRect = null;
+  var overlay = document.getElementById('docScannerOverlay');
+  overlay.style.display = 'flex';
+  var video = document.getElementById('docVideo');
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment', width: {ideal:1920}, height: {ideal:1080} }
+  }).then(function(stream) {
+    docStream = stream;
+    video.srcObject = stream;
+    video.onloadedmetadata = function() {
+      video.play();
+      requestAnimationFrame(docScanFrame);
+    };
+  }).catch(function(err) {
+    alert('Camera error: ' + err.name + ' — ' + err.message);
+    closeDocScanner();
+    document.getElementById('fileInput').click();
+  });
+}
+
+function closeDocScanner() {
+  if (docStream) { docStream.getTracks().forEach(function(t){t.stop();}); docStream = null; }
+  if (docAnimFrame) { cancelAnimationFrame(docAnimFrame); docAnimFrame = null; }
+  document.getElementById('docScannerOverlay').style.display = 'none';
+  document.getElementById('docProgress').style.display = 'none';
+  setBracketColor('#fff');
+}
+
+function docScanFrame() {
+  if (!docStream) return;
+  var video = document.getElementById('docVideo');
+  var canvas = document.getElementById('docCanvas');
+  var vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) { docAnimFrame = requestAnimationFrame(docScanFrame); return; }
+  canvas.width = vw; canvas.height = vh;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, vw, vh);
+  var rect = detectDocument(ctx, vw, vh);
+  updateBrackets(rect, vw, vh);
+  checkStability(rect, vw, vh);
+  docAnimFrame = requestAnimationFrame(docScanFrame);
+}
+
+function detectDocument(ctx, w, h) {
+  // Sample grid to find bright rectangular region (white paper)
+  var data = ctx.getImageData(0, 0, w, h).data;
+  var gridX = 12, gridY = 16;
+  var bright = [];
+  for (var gy = 0; gy < gridY; gy++) {
+    for (var gx = 0; gx < gridX; gx++) {
+      var px = Math.floor((gx + 0.5) * w / gridX);
+      var py = Math.floor((gy + 0.5) * h / gridY);
+      var idx = (py * w + px) * 4;
+      var lum = 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+      bright.push({gx:gx, gy:gy, lum:lum});
+    }
+  }
+  var threshold = 180;
+  var brightCells = bright.filter(function(c){return c.lum > threshold;});
+  if (brightCells.length < 20) return null;
+  var minGx = Math.min.apply(null, brightCells.map(function(c){return c.gx;}));
+  var maxGx = Math.max.apply(null, brightCells.map(function(c){return c.gx;}));
+  var minGy = Math.min.apply(null, brightCells.map(function(c){return c.gy;}));
+  var maxGy = Math.max.apply(null, brightCells.map(function(c){return c.gy;}));
+  var spanX = (maxGx - minGx) / gridX;
+  var spanY = (maxGy - minGy) / gridY;
+  if (spanX < 0.3 || spanY < 0.3) return null;
+  var pad = 0.02;
+  return {
+    x: Math.max(0, (minGx / gridX - pad) * w),
+    y: Math.max(0, (minGy / gridY - pad) * h),
+    x2: Math.min(w, ((maxGx+1) / gridX + pad) * w),
+    y2: Math.min(h, ((maxGy+1) / gridY + pad) * h)
+  };
+}
+
+function updateBrackets(rect, vw, vh) {
+  var ow = document.getElementById('docScannerOverlay').offsetWidth;
+  var oh = document.getElementById('docScannerOverlay').querySelector('div').offsetHeight;
+  var scaleX = ow / vw, scaleY = oh / vh;
+  var status = document.getElementById('docStatus');
+  if (!rect) {
+    // Reset to corners
+    positionBrackets(20, 20, ow-60, oh-60);
+    status.textContent = 'Point at invoice';
+    document.getElementById('docProgress').style.display = 'none';
+    setBracketColor('#fff');
+    return;
+  }
+  var x = rect.x * scaleX, y = rect.y * scaleY;
+  var x2 = rect.x2 * scaleX, y2 = rect.y2 * scaleY;
+  positionBrackets(x, y, x2, y2);
+  status.textContent = 'Hold steady...';
+}
+
+function positionBrackets(x, y, x2, y2) {
+  var tl = document.getElementById('bTL');
+  var tr = document.getElementById('bTR');
+  var bl = document.getElementById('bBL');
+  var br = document.getElementById('bBR');
+  tl.style.left = x+'px'; tl.style.top = y+'px';
+  tr.style.left = (x2-40)+'px'; tr.style.top = y+'px';
+  bl.style.left = x+'px'; bl.style.top = (y2-40)+'px';
+  br.style.left = (x2-40)+'px'; br.style.top = (y2-40)+'px';
+}
+
+function setBracketColor(color) {
+  ['bTL','bTR','bBL','bBR'].forEach(function(id) {
+    var el = document.getElementById(id);
+    el.style.borderColor = color;
+  });
+}
+
+function checkStability(rect, vw, vh) {
+  if (!rect) { docStableStart = null; docLastRect = null; return; }
+  var progress = document.getElementById('docProgress');
+  var ring = document.getElementById('docProgressRing');
+  if (docLastRect) {
+    var dx = Math.abs(rect.x - docLastRect.x) / vw;
+    var dy = Math.abs(rect.y - docLastRect.y) / vh;
+    var dx2 = Math.abs(rect.x2 - docLastRect.x2) / vw;
+    var dy2 = Math.abs(rect.y2 - docLastRect.y2) / vh;
+    if (dx + dy + dx2 + dy2 > 0.04) {
+      docStableStart = null;
+      progress.style.display = 'none';
+      setBracketColor('#fff');
+      docLastRect = rect;
+      return;
+    }
+  }
+  docLastRect = rect;
+  if (!docStableStart) docStableStart = Date.now();
+  var elapsed = Date.now() - docStableStart;
+  var pct = Math.min(elapsed / DOC_STABLE_MS, 1);
+  var circ = 213;
+  ring.setAttribute('stroke-dashoffset', circ * (1 - pct));
+  setBracketColor(pct > 0.5 ? '#ff3b30' : '#fff');
+  progress.style.display = 'block';
+  if (pct >= 1 && !docCaptured) {
+    docCaptured = true;
+    captureFrame(rect);
+  }
+}
+
+function captureManually() {
+  var video = document.getElementById('docVideo');
+  var vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw) return;
+  captureFrame(null);
+}
+
+function captureFrame(rect) {
+  var video = document.getElementById('docVideo');
+  var vw = video.videoWidth, vh = video.videoHeight;
+  var offscreen = document.createElement('canvas');
+  if (rect) {
+    var cw = rect.x2 - rect.x, ch = rect.y2 - rect.y;
+    if (cw > ch) {
+      // Landscape document detected — rotate 90° CCW to make portrait
+      offscreen.width = ch; offscreen.height = cw;
+      var ctx = offscreen.getContext('2d');
+      ctx.translate(0, cw);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(video, rect.x, rect.y, cw, ch, 0, 0, cw, ch);
+    } else {
+      offscreen.width = cw; offscreen.height = ch;
+      offscreen.getContext('2d').drawImage(video, rect.x, rect.y, cw, ch, 0, 0, cw, ch);
+    }
+  } else {
+    if (vw > vh) {
+      // Full frame landscape — rotate
+      offscreen.width = vh; offscreen.height = vw;
+      var ctx = offscreen.getContext('2d');
+      ctx.translate(0, vw);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(video, 0, 0);
+    } else {
+      offscreen.width = vw; offscreen.height = vh;
+      offscreen.getContext('2d').drawImage(video, 0, 0);
+    }
+  }
+  // Flash effect
+  var flash = document.createElement('div');
+  flash.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0.8;z-index:10000;pointer-events:none;';
+  document.body.appendChild(flash);
+  setTimeout(function(){flash.remove();}, 200);
+  closeDocScanner();
+  offscreen.toBlob(function(blob) {
+    if (docExtraPageMode) {
+      // Add as extra page instead of main image
+      docExtraPageMode = false;
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var b64 = e.target.result.split(',')[1];
+        additionalImages.push({data: b64, mime: 'image/jpeg'});
+        var btn = document.getElementById('addPageBtn');
+        if (btn) btn.textContent = '+ Add Another Page (' + additionalImages.length + ' added)';
+        toast(additionalImages.length + ' extra page(s) added');
+      };
+      reader.readAsDataURL(blob);
+    } else {
+      var file = new File([blob], 'invoice_scan.jpg', {type:'image/jpeg'});
+      var dt = new DataTransfer();
+      dt.items.add(file);
+      var inp = document.getElementById('fileInput');
+      inp.files = dt.files;
+      handleFile(inp);
+    }
+  }, 'image/jpeg', 0.92);
+}
+
+</script>
+
+<!-- Image lightbox (JPG/PNG invoices) -->
+<div id="imgLightbox" onclick="closeLightbox(event)"
+     style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);
+            align-items:center;justify-content:center;touch-action:none;">
+  <button onclick="_lbClose()"
+          style="position:fixed;top:16px;right:16px;background:rgba(255,255,255,0.12);
+                 border:none;border-radius:50%;width:44px;height:44px;color:#fff;
+                 font-size:26px;line-height:1;cursor:pointer;z-index:1;">&times;</button>
+  <img id="imgLightboxImg" src="" alt="Invoice"
+       onclick="event.stopPropagation()"
+       style="max-width:92vw;max-height:92vh;border-radius:8px;object-fit:contain;
+              touch-action:pinch-zoom;user-select:none;">
+</div>
+
+
+<!-- ── Doc Scanner Overlay ── -->
+<div id="docScannerOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column;">
+  <div style="position:relative;flex:1;overflow:hidden;">
+    <video id="docVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+    <canvas id="docCanvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
+    <!-- Corner brackets -->
+    <div id="docBracket" style="position:absolute;inset:0;pointer-events:none;">
+      <div id="bTL" style="position:absolute;width:40px;height:40px;border-top:3px solid #fff;border-left:3px solid #fff;border-radius:3px 0 0 0;transition:all 0.2s;"></div>
+      <div id="bTR" style="position:absolute;width:40px;height:40px;border-top:3px solid #fff;border-right:3px solid #fff;border-radius:0 3px 0 0;transition:all 0.2s;"></div>
+      <div id="bBL" style="position:absolute;width:40px;height:40px;border-bottom:3px solid #fff;border-left:3px solid #fff;border-radius:0 0 0 3px;transition:all 0.2s;"></div>
+      <div id="bBR" style="position:absolute;width:40px;height:40px;border-bottom:3px solid #fff;border-right:3px solid #fff;border-radius:0 0 3px 0;transition:all 0.2s;"></div>
+    </div>
+    <!-- Status label -->
+    <div id="docStatus" style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-weight:500;text-shadow:0 1px 4px rgba(0,0,0,0.8);">Point at invoice</div>
+    <!-- Stable progress ring -->
+    <svg id="docProgress" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;" width="80" height="80" viewBox="0 0 80 80">
+      <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="6"/>
+      <circle id="docProgressRing" cx="40" cy="40" r="34" fill="none" stroke="#ff3b30" stroke-width="6" stroke-linecap="round"
+        stroke-dasharray="213" stroke-dashoffset="213" transform="rotate(-90 40 40)" style="transition:stroke-dashoffset 0.1s;"/>
+    </svg>
+  </div>
+  <div style="background:#111;padding:16px;display:flex;gap:12px;justify-content:center;align-items:center;">
+    <button onclick="captureManually()" style="flex:1;max-width:200px;padding:14px;background:#ff3b30;border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:600;cursor:pointer;">📸 Capture</button>
+    <button onclick="closeDocScanner()" style="padding:14px 20px;background:#333;border:none;border-radius:12px;color:#fff;font-size:14px;cursor:pointer;">Cancel</button>
+  </div>
+</div>
+
+<!-- ── Session 29: Reconciliation Split-Pane JS ── -->
+<script>
+// ── Reconciliation state ──
+var reconPdf = null, reconPageNum = 1, reconPageCount = 1, reconScale = 1.0;
+
+function showReconcile(data) {
+  var view = $('reconcileView');
+  view.style.display = 'flex';
+  view.classList.add('active');
+
+  // Populate header fields
+  $('reconVendor').value = data.vendor_name || '';
+  $('reconInvNum').value = data.invoice_number || '';
+  $('reconDate').value = data.invoice_date || '';
+  $('reconSubtotal').value = data.subtotal ? parseFloat(data.subtotal).toFixed(2) : '0.00';
+  $('reconTax').value = data.tax ? parseFloat(data.tax).toFixed(2) : '0.00';
+  $('reconLocation').value = data.location || currentLoc;
+  $('reconCategory').value = data.category || '';
+
+  // Stated total — read-only unless null/0, with edit button
+  var statedTotal = parseFloat(data.total) || 0;
+  var totalInput = $('reconTotal');
+  var editBtn = $('reconEditTotalBtn');
+  var lockBtn = $('reconLockTotalBtn');
+  totalInput.value = statedTotal ? statedTotal.toFixed(2) : '';
+  totalInput.readOnly = statedTotal > 0;
+  totalInput.style.color = statedTotal > 0 ? 'var(--text3)' : 'var(--text)';
+  if (!statedTotal) {
+    totalInput.readOnly = false;
+    totalInput.placeholder = 'Enter total...';
+    totalInput.oninput = reconRecalc;
+    editBtn.style.display = 'none';
+    lockBtn.style.display = 'none';
+  } else {
+    totalInput.oninput = null;
+    editBtn.style.display = 'inline-block';
+    lockBtn.style.display = 'none';
+  }
+
+  // Render line items
+  reconRenderItems(data.line_items || []);
+  reconRecalc();
+
+  // Load PDF/image in left pane
+  reconLoadDocument(data.id, data.image_path);
+
+  // Already confirmed? Read-only mode
+  if (data.status === 'confirmed') {
+    $('reconConfirmBtn').style.display = 'none';
+    document.querySelectorAll('#reconcileView .recon-content input, #reconcileView .recon-content select').forEach(function(el) {
+      el.disabled = true;
+    });
+    document.querySelectorAll('.recon-del-btn, .recon-add-item').forEach(function(el) { el.style.display = 'none'; });
+    // Add re-open button
+    var footer = document.querySelector('.recon-footer');
+    var existing = document.getElementById('reconReopenBtn');
+    if (!existing) {
+      var reopenBtn = document.createElement('button');
+      reopenBtn.id = 'reconReopenBtn';
+      reopenBtn.className = 'recon-back-btn';
+      reopenBtn.textContent = 'Re-open for Editing';
+      reopenBtn.style.flex = '1';
+      reopenBtn.onclick = function() {
+        document.querySelectorAll('#reconcileView .recon-content input, #reconcileView .recon-content select').forEach(function(el) {
+          el.disabled = false;
+        });
+        document.querySelectorAll('.recon-del-btn, .recon-add-item').forEach(function(el) { el.style.display = ''; });
+        $('reconConfirmBtn').style.display = '';
+        $('reconTotal').readOnly = false;
+        $('reconTotal').style.color = 'var(--text)';
+        $('reconTotal').oninput = reconRecalc;
+        reopenBtn.remove();
+        reconRecalc();
+      };
+      footer.appendChild(reopenBtn);
+    }
+  }
+
+  // Mobile: default to Edit Data tab
+  if (window.innerWidth < 768) {
+    reconMobTab('edit');
+  }
+}
+
+// ── Render line items as editable table rows ──
+var RECON_CATS = ['FOOD','BEER','LIQUOR','WINE','NA_BEVERAGES','NON_COGS','TOGO_SUPPLIES','DR_SUPPLIES','KITCHEN_SUPPLIES'];
+
+function reconRenderItems(items) {
+  var tbody = $('reconItemsBody');
+  tbody.innerHTML = items.map(function(item, i) {
+    var cat = item.category || item.category_type || 'FOOD';
+    var qty = parseFloat(item.quantity || 0);
+    var up = parseFloat(item.unit_price || 0);
+    var tp = parseFloat(item.total_price || 0);
+    var expected = Math.round(qty * up * 100) / 100;
+    var mathErr = (Math.abs(expected - tp) > 0.02 && qty > 0 && up > 0);
+    var catOpts = RECON_CATS.map(function(c) {
+      return '<option value="' + c + '"' + (c === cat ? ' selected' : '') + '>' + c.replace(/_/g, ' ') + '</option>';
+    }).join('');
+    return '<tr data-idx="' + i + '"' + (mathErr ? ' class="math-err"' : '') + '>' +
+      '<td><input value="' + escHtml(item.product_name || '') + '" onchange="reconUpdateItem(' + i + ',\'product_name\',this.value)"></td>' +
+      '<td><input type="number" step="any" value="' + qty + '" style="width:55px;text-align:center" oninput="reconUpdateItem(' + i + ',\'quantity\',this.value);reconRecalcRow(' + i + ')"></td>' +
+      '<td><input value="' + escHtml(item.unit || 'ea') + '" style="width:45px" onchange="reconUpdateItem(' + i + ',\'unit\',this.value)"></td>' +
+      '<td><input type="number" step="0.01" value="' + up.toFixed(2) + '" style="text-align:right" oninput="reconUpdateItem(' + i + ',\'unit_price\',this.value);reconRecalcRow(' + i + ')"></td>' +
+      '<td><input type="number" step="0.01" value="' + tp.toFixed(2) + '" style="text-align:right;font-weight:700" oninput="reconUpdateItem(' + i + ',\'total_price\',this.value);reconRecalcRowFromTotal(' + i + ')"></td>' +
+      '<td><select onchange="reconUpdateItem(' + i + ',\'category\',this.value)" style="font-size:11px;padding:3px 4px;border-radius:6px;background:var(--bg-card);border:1px solid var(--border);color:var(--text2)">' + catOpts + '</select></td>' +
+      '<td><button class="recon-del-btn" onclick="reconDeleteItem(' + i + ')" title="Remove">&times;</button></td>' +
+    '</tr>';
+  }).join('');
+  $('reconItemCount').textContent = items.length;
+}
+
+function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+// ── Item CRUD + recalc ──
+function reconUpdateItem(idx, field, value) {
+  if (!currentInvoice || !currentInvoice.line_items || !currentInvoice.line_items[idx]) return;
+  if (['quantity', 'unit_price', 'total_price'].indexOf(field) >= 0) {
+    currentInvoice.line_items[idx][field] = parseFloat(value) || 0;
+  } else {
+    currentInvoice.line_items[idx][field] = value;
+  }
+}
+
+function reconRecalcRow(idx) {
+  var item = currentInvoice.line_items[idx];
+  if (!item) return;
+  var qty = parseFloat(item.quantity || 0);
+  var up = parseFloat(item.unit_price || 0);
+  item.total_price = Math.round(qty * up * 100) / 100;
+  // Update total_price input in row
+  var row = $('reconItemsBody').rows[idx];
+  if (row) {
+    var inputs = row.querySelectorAll('input');
+    if (inputs[4]) inputs[4].value = item.total_price.toFixed(2);
+  }
+  reconRecalc();
+}
+
+function reconRecalcRowFromTotal(idx) {
+  var item = currentInvoice.line_items[idx];
+  if (!item) return;
+  var qty = parseFloat(item.quantity || 0);
+  var tp = parseFloat(item.total_price || 0);
+  if (qty > 0) {
+    item.unit_price = Math.round(tp / qty * 100) / 100;
+    var row = $('reconItemsBody').rows[idx];
+    if (row) {
+      var inputs = row.querySelectorAll('input');
+      if (inputs[3]) inputs[3].value = item.unit_price.toFixed(2);
+    }
+  }
+  reconRecalc();
+}
+
+function reconAddItem() {
+  if (!currentInvoice) return;
+  if (!currentInvoice.line_items) currentInvoice.line_items = [];
+  currentInvoice.line_items.push({
+    product_name: '', quantity: 1, unit: 'ea',
+    unit_price: 0, total_price: 0,
+    category: currentInvoice.category || 'FOOD'
+  });
+  reconRenderItems(currentInvoice.line_items);
+  reconRecalc();
+  var rows = $('reconItemsBody').rows;
+  if (rows.length) rows[rows.length - 1].querySelector('input').focus();
+}
+
+function reconDeleteItem(idx) {
+  if (!currentInvoice || !currentInvoice.line_items) return;
+  currentInvoice.line_items.splice(idx, 1);
+  reconRenderItems(currentInvoice.line_items);
+  reconRecalc();
+}
+
+// ── Editable stated total (unlock/lock) ──
+function reconUnlockTotal() {
+  var inp = $('reconTotal');
+  var editBtn = $('reconEditTotalBtn');
+  var lockBtn = $('reconLockTotalBtn');
+  inp.readOnly = false;
+  inp.style.color = 'var(--text)';
+  inp.oninput = reconRecalc;
+  editBtn.style.display = 'none';
+  lockBtn.style.display = 'inline-block';
+  inp.focus();
+  inp.select();
+}
+
+function reconLockTotal() {
+  var inp = $('reconTotal');
+  var editBtn = $('reconEditTotalBtn');
+  var lockBtn = $('reconLockTotalBtn');
+  var val = parseFloat(inp.value) || 0;
+  inp.value = val.toFixed(2);
+  inp.readOnly = true;
+  inp.style.color = 'var(--text3)';
+  inp.oninput = null;
+  editBtn.style.display = 'inline-block';
+  lockBtn.style.display = 'none';
+  reconRecalc();
+}
+
+// ── THE KEY FUNCTION: live discrepancy calculator ──
+function reconRecalc() {
+  if (!currentInvoice) return;
+  var items = currentInvoice.line_items || [];
+  var lineSum = Math.round(items.reduce(function(s, it) {
+    return s + (parseFloat(it.total_price) || 0);
+  }, 0) * 100) / 100;
+  var tax = parseFloat($('reconTax').value) || 0;
+  var calcTotal = Math.round((lineSum + tax) * 100) / 100;
+  var stated = parseFloat($('reconTotal').value) || 0;
+  var disc = Math.round((stated - calcTotal) * 100) / 100;
+  // If discrepancy equals -tax, tax is already included in line items (e.g. UniFirst)
+  // Treat as balanced and zero out the tax to avoid double-counting
+  if (tax > 0 && Math.abs(disc + tax) < 0.015) {
+    tax = 0;
+    $('reconTax').value = '0.00';
+    calcTotal = Math.round(lineSum * 100) / 100;
+    disc = Math.round((stated - calcTotal) * 100) / 100;
+  }
+  var balanced = Math.abs(disc) < 0.015;
+
+  // Update display
+  $('reconDiscStated').textContent = fmt(stated);
+  $('reconDiscCalc').textContent = fmt(calcTotal);
+  var deltaEl = $('reconDiscDelta');
+  deltaEl.textContent = (disc > 0 ? '-' : disc < 0 ? '+' : '') + fmt(Math.abs(disc));
+  deltaEl.className = 'recon-disc-result ' + (balanced ? 'balanced' : 'imbalanced');
+
+  // Update bar color
+  var bar = $('reconDiscBar');
+  bar.className = 'recon-disc-bar ' + (balanced ? 'balanced' : 'imbalanced');
+
+  // Update subtotal display
+  $('reconSubtotal').value = lineSum.toFixed(2);
+
+  // Enable/disable confirm
+  var btn = $('reconConfirmBtn');
+  if (balanced) {
+    btn.disabled = false;
+    btn.textContent = 'Reconcile & Confirm';
+  } else {
+    btn.disabled = true;
+    btn.textContent = 'Fix ' + fmt(Math.abs(disc)) + ' discrepancy to confirm';
+  }
+}
+
+// ── PDF.js document loader ──
+async function reconLoadDocument(invoiceId, imagePath) {
+  var container = $('reconPdfContainer');
+  var ext = (imagePath || '').split('.').pop().toLowerCase();
+
+  if (ext === 'pdf' && window.pdfjsLib) {
+    try {
+      var url = '/api/invoices/' + invoiceId + '/image';
+      reconPdf = await pdfjsLib.getDocument(url).promise;
+      reconPageCount = reconPdf.numPages;
+      reconPageNum = 1;
+      reconScale = 1.0;
+      await reconRenderPdfPage();
+    } catch (e) {
+      console.error('PDF load error:', e);
+      reconPdf = null;
+      container.innerHTML = '<div class="recon-pdf-fallback">PDF failed to load.<br><a href="/api/invoices/' + invoiceId + '/image" target="_blank">Open in new tab</a></div>';
+    }
+  } else if (imagePath) {
+    reconPdf = null;
+    reconScale = 1.0;
+    container.innerHTML = '<img src="/api/invoices/' + invoiceId + '/image" alt="invoice" style="width:100%;max-width:none;">';
+    $('reconPdfPageInfo').textContent = 'Image';
+    $('reconPdfZoomLevel').textContent = '100%';
+  } else {
+    reconPdf = null;
+    container.innerHTML = '<div class="recon-pdf-fallback">No document available</div>';
+  }
+}
+
+async function reconRenderPdfPage() {
+  if (!reconPdf) return;
+  try {
+    var page = await reconPdf.getPage(reconPageNum);
+    var dpr = window.devicePixelRatio || 1;
+    var viewport = page.getViewport({ scale: reconScale * dpr });
+    var canvas = $('reconPdfCanvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    // CSS size = logical size (without dpr multiplier) so it looks sharp
+    var cssViewport = page.getViewport({ scale: reconScale });
+    canvas.style.width = cssViewport.width + 'px';
+    canvas.style.height = cssViewport.height + 'px';
+    canvas.style.display = '';
+    // Clear any fallback content
+    var container = $('reconPdfContainer');
+    var fallback = container.querySelector('.recon-pdf-fallback');
+    if (fallback) fallback.remove();
+    var img = container.querySelector('img');
+    if (img) img.remove();
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+    $('reconPdfPageInfo').textContent = 'Page ' + reconPageNum + ' / ' + reconPageCount;
+    $('reconPdfZoomLevel').textContent = Math.round(reconScale * 100) + '%';
+  } catch (e) {
+    console.error('PDF render error:', e);
+  }
+}
+
+function reconPdfPrev() { if (reconPageNum > 1) { reconPageNum--; reconRenderPdfPage(); } }
+function reconPdfNext() { if (reconPageNum < reconPageCount) { reconPageNum++; reconRenderPdfPage(); } }
+function reconPdfZoom(delta) {
+  reconScale = Math.max(0.5, Math.min(3.0, reconScale + delta));
+  if (reconPdf) {
+    reconRenderPdfPage();
+  } else {
+    // Image zoom — apply CSS transform
+    var img = $('reconPdfContainer').querySelector('img');
+    if (img) {
+      img.style.width = Math.round(reconScale * 100) + '%';
+      img.style.maxWidth = 'none';
+    }
+  }
+  $('reconPdfZoomLevel').textContent = Math.round(reconScale * 100) + '%';
+}
+
+// ── Grab-to-pan on invoice viewer ──
+(function() {
+  var el = document.querySelector('.recon-pdf-scroll');
+  if (!el) return;
+  var dragging = false, startX, startY, scrollL, scrollT;
+  el.addEventListener('mousedown', function(e) {
+    if (e.button !== 0) return;
+    dragging = true;
+    el.classList.add('grabbing');
+    startX = e.clientX; startY = e.clientY;
+    scrollL = el.scrollLeft; scrollT = el.scrollTop;
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    el.scrollLeft = scrollL - (e.clientX - startX);
+    el.scrollTop = scrollT - (e.clientY - startY);
+  });
+  window.addEventListener('mouseup', function() {
+    if (!dragging) return;
+    dragging = false;
+    el.classList.remove('grabbing');
+  });
+})();
+
+// ── Mobile toggle ──
+function reconMobTab(tab) {
+  document.querySelectorAll('.recon-mob-tab').forEach(function(t, i) {
+    t.classList.toggle('active', (i === 0 && tab === 'invoice') || (i === 1 && tab === 'edit'));
+  });
+  $('reconLeft').classList.toggle('mob-active', tab === 'invoice');
+  $('reconRight').classList.toggle('mob-active', tab === 'edit');
+}
+
+// ── Back button ──
+function reconBack() {
+  document.body.classList.remove('reconcile-open');
+  $('reconcileView').style.display = 'none';
+  $('reconcileView').classList.remove('active');
+  reconPdf = null;
+  // Clean up re-open button if present
+  var reopenBtn = document.getElementById('reconReopenBtn');
+  if (reopenBtn) reopenBtn.remove();
+  showView(cameFromView);
+}
+
+// ── Delete from reconciliation view ──
+function reconDeleteInvoice() {
+  if (!currentInvoice || !currentInvoice.id) return;
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:99999';
+  modal.innerHTML = '<div style="background:var(--card-bg,#0f172a);border:1px solid var(--border,#1e293b);border-radius:12px;padding:24px;max-width:400px;width:90%;text-align:center">'
+    + '<div style="font-size:18px;font-weight:700;margin-bottom:8px;color:var(--text,#e2e8f0)">Delete Invoice?</div>'
+    + '<div style="color:var(--text2,#94a3b8);margin-bottom:20px">' + (currentInvoice.vendor_name || 'Unknown') + ' — $' + (currentInvoice.total||0).toFixed(2) + '<br>This cannot be undone.</div>'
+    + '<div style="display:flex;gap:12px;justify-content:center">'
+    + '<button id="reconDelCancel" style="padding:10px 24px;border-radius:8px;border:1px solid var(--border,#1e293b);background:transparent;color:var(--text,#e2e8f0);cursor:pointer;font-weight:600">Cancel</button>'
+    + '<button id="reconDelConfirm" style="padding:10px 24px;border-radius:8px;border:none;background:#dc3545;color:#fff;cursor:pointer;font-weight:600">Delete</button>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+  modal.querySelector('#reconDelCancel').onclick = function() { modal.remove(); };
+  modal.querySelector('#reconDelConfirm').onclick = async function() {
+    try {
+      var resp = await fetch('/api/invoices/' + currentInvoice.id, {method: 'DELETE'});
+      if (resp.ok) {
+        modal.remove();
+        reconBack();
+        loadHistory();
+        toast('Invoice deleted');
+      } else {
+        var err = await resp.json();
+        toast('Error: ' + (err.error || 'Delete failed'));
+      }
+    } catch(e) { toast('Delete failed'); }
+  };
+}
+
+// ── Confirm from reconciliation view ──
+async function reconConfirm() {
+  if (!currentInvoice) return;
+  var btn = $('reconConfirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  // Gather edited data
+  currentInvoice.vendor_name = $('reconVendor').value;
+  currentInvoice.invoice_number = $('reconInvNum').value;
+  currentInvoice.invoice_date = $('reconDate').value;
+  currentInvoice.subtotal = parseFloat($('reconSubtotal').value) || 0;
+  currentInvoice.tax = parseFloat($('reconTax').value) || 0;
+  currentInvoice.total = parseFloat($('reconTotal').value) || 0;
+  currentInvoice.location = $('reconLocation').value;
+
+  try {
+    var resp = await fetch('/api/invoices/' + currentInvoice.id + '/confirm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentInvoice),
+    });
+    var data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    toast('Invoice reconciled & confirmed!');
+    if (typeof showPostConfirmBanners === 'function') showPostConfirmBanners(data);
+    reconBack();
+  } catch (e) {
+    toast('Error: ' + e.message);
+    btn.disabled = false;
+    reconRecalc();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// CREATE INVOICE MODAL
+// ══════════════════════════════════════════════════════
+
+var ciState = { step: 1, type: 'one_time', detailLevel: 'category', vendors: [] };
+var CI_CATEGORIES = ['FOOD','BEER','WINE','LIQUOR','NA_BEVERAGES','NON_COGS','TOGO_SUPPLIES','DR_SUPPLIES','KITCHEN_SUPPLIES'];
+
+function openCreateInvoice() {
+  $('addInvoiceMenu').style.display = 'none';
+  ciState = { step: 1, type: 'one_time', detailLevel: 'category', vendors: [] };
+  // Fetch vendors
+  fetch('/api/inventory/vendors').then(r=>r.json()).then(function(d) {
+    ciState.vendors = (d.vendors || d || []).filter(function(v){return v.active !== false && v.active !== 0;});
+    ciRender();
+  }).catch(function() { ciRender(); });
+  document.getElementById('createInvoiceModal').style.display = 'flex';
+}
+
+function ciClose() {
+  document.getElementById('createInvoiceModal').style.display = 'none';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('createInvoiceModal').style.display === 'flex') ciClose();
+});
+
+function ciRender() {
+  var body = document.getElementById('ciBody');
+  if (ciState.step === 1) ciRenderStep1(body);
+  else if (ciState.step === 2) ciRenderStep2(body);
+  else ciRenderStep3(body);
+}
+
+function ciRenderStep1(el) {
+  var types = [
+    {val:'one_time', label:'One-Time Invoice', desc:'Standard vendor invoice'},
+    {val:'recurring', label:'Recurring Invoice', desc:'Repeats on a schedule'},
+    {val:'credit', label:'Credit / Return', desc:'Credit memo or product return'},
+  ];
+  var html = '<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px">Invoice Type</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:10px">';
+  types.forEach(function(t) {
+    var sel = ciState.type === t.val;
+    html += '<div onclick="ciState.type=\'' + t.val + '\';ciRender()" style="padding:16px;border-radius:10px;border:1px solid ' + (sel ? 'var(--red)' : 'var(--border)') + ';background:' + (sel ? 'var(--red-soft)' : 'transparent') + ';cursor:pointer">'
+      + '<div style="font-weight:600;color:var(--text)">' + t.label + '</div>'
+      + '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + t.desc + '</div></div>';
+  });
+  html += '</div>';
+
+  if (ciState.type === 'recurring') {
+    html += '<div style="margin-top:16px;display:flex;gap:12px">';
+    html += '<div style="flex:1"><div style="font-size:12px;color:var(--text2);margin-bottom:4px">Frequency</div>';
+    html += '<select id="ciFreq" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">';
+    ['weekly','biweekly','monthly'].forEach(function(f) {
+      html += '<option value="' + f + '"' + (ciState.recurring_frequency === f ? ' selected' : '') + '>' + f.charAt(0).toUpperCase() + f.slice(1) + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div style="flex:1"><div style="font-size:12px;color:var(--text2);margin-bottom:4px">Day</div>';
+    html += '<select id="ciDay" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">';
+    for (var d = 1; d <= 31; d++) html += '<option value="' + d + '"' + (ciState.recurring_day == d ? ' selected' : '') + '>' + d + '</option>';
+    html += '</select></div></div>';
+  }
+
+  html += '<div style="display:flex;justify-content:flex-end;margin-top:24px">';
+  html += '<button onclick="ciNext1()" style="padding:10px 24px;background:var(--red);border:none;border-radius:10px;color:#fff;font-weight:600;font-size:14px;cursor:pointer">Next &#8594;</button>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function ciNext1() {
+  if (ciState.type === 'recurring') {
+    var freqEl = document.getElementById('ciFreq');
+    var dayEl = document.getElementById('ciDay');
+    ciState.recurring_frequency = freqEl ? freqEl.value : 'monthly';
+    ciState.recurring_day = dayEl ? parseInt(dayEl.value) : 1;
+  } else {
+    ciState.recurring_frequency = null;
+    ciState.recurring_day = null;
+  }
+  ciState.step = 2;
+  ciRender();
+}
+
+function ciRenderStep2(el) {
+  var today = new Date().toISOString().split('T')[0];
+  var html = '<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px">Invoice Details</div>';
+
+  // Detail level toggle
+  html += '<div style="display:flex;gap:8px;margin-bottom:16px">';
+  ['category','line_item'].forEach(function(lv) {
+    var sel = ciState.detailLevel === lv;
+    var lbl = lv === 'category' ? 'Category Level' : 'Line-Item Detail';
+    html += '<button onclick="ciState.detailLevel=\'' + lv + '\';ciRender()" style="flex:1;padding:10px;border-radius:8px;border:1px solid ' + (sel ? 'var(--red)' : 'var(--border)') + ';background:' + (sel ? 'var(--red-soft)' : 'transparent') + ';color:' + (sel ? 'var(--red)' : 'var(--text2)') + ';font-weight:600;font-size:13px;cursor:pointer">' + lbl + '</button>';
+  });
+  html += '</div>';
+
+  // Header fields — 2-column grid
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
+  // Vendor
+  html += '<div style="grid-column:span 2"><div class="ci-lbl">Vendor *</div>';
+  html += '<select id="ciVendor" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">';
+  html += '<option value="">Select vendor...</option>';
+  ciState.vendors.forEach(function(v) { html += '<option value="' + (v.name||v.vendor_name||'') + '">' + (v.name||v.vendor_name||'') + '</option>'; });
+  html += '</select></div>';
+  // Date
+  html += '<div><div class="ci-lbl">Invoice Date *</div><input type="date" id="ciDate" value="' + today + '" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+  // Invoice #
+  html += '<div><div class="ci-lbl">Invoice #</div><input id="ciInvNum" placeholder="Optional" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+  // Location
+  html += '<div style="grid-column:span 2"><div class="ci-lbl">Location *</div>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<button id="ciLocD" onclick="ciSetLoc(\'dennis\')" class="ci-loc-btn ci-loc-active" style="flex:1;padding:10px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;border:1px solid var(--red);background:var(--red-soft);color:var(--red)">Dennis Port</button>';
+  html += '<button id="ciLocC" onclick="ciSetLoc(\'chatham\')" class="ci-loc-btn" style="flex:1;padding:10px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2)">Chatham</button>';
+  html += '</div></div>';
+  html += '</div>';
+
+  // Items section
+  if (ciState.detailLevel === 'category') {
+    html += '<div style="font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Categories</div>';
+    html += '<div id="ciCatRows"></div>';
+    html += '<button onclick="ciAddCatRow()" style="font-size:13px;color:var(--blue);background:none;border:none;cursor:pointer;padding:4px 0;margin-bottom:16px">+ Add Category</button>';
+  } else {
+    html += '<div style="font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Line Items</div>';
+    html += '<div id="ciItemRows"></div>';
+    html += '<button onclick="ciAddItemRow()" style="font-size:13px;color:var(--blue);background:none;border:none;cursor:pointer;padding:4px 0;margin-bottom:16px">+ Add Line Item</button>';
+  }
+
+  // Additional charges
+  html += '<div style="font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0">Additional Charges</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
+  html += '<div><div class="ci-lbl">Tax</div><input id="ciTax" type="number" step="0.01" value="0" oninput="ciCalcTotal()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+  html += '<div><div class="ci-lbl">Fuel / Freight</div><input id="ciFuel" type="number" step="0.01" value="0" oninput="ciCalcTotal()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+  html += '<div><div class="ci-lbl">Credit</div><input id="ciCredit" type="number" step="0.01" value="0" oninput="ciCalcTotal()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+  html += '<div><div class="ci-lbl">Other</div><input id="ciOther" type="number" step="0.01" value="0" oninput="ciCalcTotal()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+  html += '</div>';
+  html += '<div><div class="ci-lbl">Other Charge Description</div><input id="ciOtherDesc" placeholder="Optional" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:16px"></div>';
+
+  // Total
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-card);border-radius:10px;margin-bottom:20px">';
+  html += '<span style="font-weight:700;color:var(--text);font-size:16px">Invoice Total</span>';
+  html += '<span id="ciTotal" style="font-weight:700;color:var(--green);font-size:20px">$0.00</span>';
+  html += '</div>';
+
+  // Buttons
+  html += '<div style="display:flex;justify-content:space-between">';
+  html += '<button onclick="ciState.step=1;ciRender()" style="padding:10px 20px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text);font-weight:600;font-size:14px;cursor:pointer">&#8592; Back</button>';
+  html += '<button id="ciSubmitBtn" onclick="ciSubmit()" style="padding:10px 24px;background:var(--green);border:none;border-radius:10px;color:#000;font-weight:700;font-size:14px;cursor:pointer">Create Invoice</button>';
+  html += '</div>';
+
+  el.innerHTML = html;
+
+  // Render initial rows
+  if (ciState.detailLevel === 'category') {
+    if (!document.querySelector('#ciCatRows .ci-row')) ciAddCatRow();
+  } else {
+    if (!document.querySelector('#ciItemRows .ci-row')) ciAddItemRow();
+  }
+  ciCalcTotal();
+}
+
+var ciLocVal = 'dennis';
+function ciSetLoc(loc) {
+  ciLocVal = loc;
+  var dBtn = document.getElementById('ciLocD');
+  var cBtn = document.getElementById('ciLocC');
+  if (loc === 'dennis') {
+    dBtn.style.borderColor = 'var(--red)'; dBtn.style.background = 'var(--red-soft)'; dBtn.style.color = 'var(--red)';
+    cBtn.style.borderColor = 'var(--border)'; cBtn.style.background = 'transparent'; cBtn.style.color = 'var(--text2)';
+  } else {
+    cBtn.style.borderColor = 'var(--red)'; cBtn.style.background = 'var(--red-soft)'; cBtn.style.color = 'var(--red)';
+    dBtn.style.borderColor = 'var(--border)'; dBtn.style.background = 'transparent'; dBtn.style.color = 'var(--text2)';
+  }
+}
+
+function ciCatSelect() {
+  var opts = '';
+  CI_CATEGORIES.forEach(function(c) { opts += '<option value="' + c + '">' + c + '</option>'; });
+  return opts;
+}
+
+function ciAddCatRow() {
+  var container = document.getElementById('ciCatRows');
+  var row = document.createElement('div');
+  row.className = 'ci-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+  row.innerHTML = '<select onchange="ciCalcTotal()" style="flex:2;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">' + ciCatSelect() + '</select>'
+    + '<input type="number" step="0.01" placeholder="$0.00" oninput="ciCalcTotal()" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;text-align:right;box-sizing:border-box">'
+    + '<button onclick="this.parentElement.remove();ciCalcTotal()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px 8px">&#128465;</button>';
+  container.appendChild(row);
+}
+
+function ciAddItemRow() {
+  var container = document.getElementById('ciItemRows');
+  var row = document.createElement('div');
+  row.className = 'ci-row';
+  row.style.cssText = 'display:grid;grid-template-columns:2fr 50px 60px 80px 80px 100px 30px;gap:6px;align-items:center;margin-bottom:8px';
+  var iStyle = 'padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box';
+  row.innerHTML = '<input placeholder="Description" style="' + iStyle + '">'
+    + '<input type="number" value="1" min="0" step="1" oninput="ciItemCalcRow(this)" style="' + iStyle + ';text-align:center">'
+    + '<input placeholder="unit" value="each" style="' + iStyle + '">'
+    + '<input type="number" step="0.01" placeholder="0.00" oninput="ciItemCalcRow(this)" style="' + iStyle + ';text-align:right">'
+    + '<input type="number" step="0.01" placeholder="0.00" oninput="ciCalcTotal()" style="' + iStyle + ';text-align:right">'
+    + '<select style="' + iStyle + '">' + ciCatSelect() + '</select>'
+    + '<button onclick="this.parentElement.remove();ciCalcTotal()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0">&#128465;</button>';
+  container.appendChild(row);
+}
+
+function ciItemCalcRow(el) {
+  var row = el.closest('.ci-row');
+  var inputs = row.querySelectorAll('input');
+  var qty = parseFloat(inputs[1].value) || 0;
+  var up = parseFloat(inputs[3].value) || 0;
+  inputs[4].value = (qty * up).toFixed(2);
+  ciCalcTotal();
+}
+
+function ciCalcTotal() {
+  var sum = 0;
+  if (ciState.detailLevel === 'category') {
+    var rows = document.querySelectorAll('#ciCatRows .ci-row');
+    rows.forEach(function(r) { sum += parseFloat(r.querySelector('input').value) || 0; });
+  } else {
+    var rows = document.querySelectorAll('#ciItemRows .ci-row');
+    rows.forEach(function(r) {
+      var inputs = r.querySelectorAll('input');
+      sum += parseFloat(inputs[4] ? inputs[4].value : 0) || 0;
+    });
+  }
+  var tax = parseFloat((document.getElementById('ciTax') || {}).value) || 0;
+  var fuel = parseFloat((document.getElementById('ciFuel') || {}).value) || 0;
+  var credit = parseFloat((document.getElementById('ciCredit') || {}).value) || 0;
+  var other = parseFloat((document.getElementById('ciOther') || {}).value) || 0;
+  var total = sum + tax + fuel - credit + other;
+  var el = document.getElementById('ciTotal');
+  if (el) el.textContent = '$' + total.toFixed(2);
+}
+
+async function ciSubmit() {
+  var vendor = (document.getElementById('ciVendor') || {}).value;
+  if (!vendor) { toast('Select a vendor'); return; }
+  var date = (document.getElementById('ciDate') || {}).value;
+  if (!date) { toast('Enter a date'); return; }
+
+  var btn = document.getElementById('ciSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  var categories = [];
+  var line_items = [];
+  if (ciState.detailLevel === 'category') {
+    document.querySelectorAll('#ciCatRows .ci-row').forEach(function(r) {
+      var cat = r.querySelector('select').value;
+      var amt = parseFloat(r.querySelector('input').value) || 0;
+      if (amt) categories.push({ category: cat, amount: amt });
+    });
+    if (!categories.length) { toast('Add at least one category'); btn.disabled = false; btn.textContent = 'Create Invoice'; return; }
+  } else {
+    document.querySelectorAll('#ciItemRows .ci-row').forEach(function(r) {
+      var inputs = r.querySelectorAll('input');
+      var sel = r.querySelector('select');
+      var tp = parseFloat(inputs[4] ? inputs[4].value : 0) || 0;
+      if (tp || (inputs[0] && inputs[0].value.trim())) {
+        line_items.push({
+          product_name: inputs[0].value.trim(),
+          quantity: parseFloat(inputs[1].value) || 1,
+          unit: inputs[2].value || 'each',
+          unit_price: parseFloat(inputs[3].value) || 0,
+          total_price: tp,
+          category: sel ? sel.value : 'FOOD',
+        });
+      }
+    });
+    if (!line_items.length) { toast('Add at least one item'); btn.disabled = false; btn.textContent = 'Create Invoice'; return; }
+  }
+
+  var tax = parseFloat((document.getElementById('ciTax') || {}).value) || 0;
+  var fuel = parseFloat((document.getElementById('ciFuel') || {}).value) || 0;
+  var credit = parseFloat((document.getElementById('ciCredit') || {}).value) || 0;
+  var other = parseFloat((document.getElementById('ciOther') || {}).value) || 0;
+  var otherDesc = (document.getElementById('ciOtherDesc') || {}).value || '';
+  var itemSum = 0;
+  if (ciState.detailLevel === 'category') categories.forEach(function(c){itemSum+=c.amount;});
+  else line_items.forEach(function(li){itemSum+=li.total_price;});
+  var total = itemSum + tax + fuel - credit + other;
+
+  var payload = {
+    invoice_type: ciState.type,
+    recurring_frequency: ciState.recurring_frequency || null,
+    recurring_day: ciState.recurring_day || null,
+    vendor_name: vendor,
+    invoice_date: date,
+    invoice_number: (document.getElementById('ciInvNum') || {}).value || '',
+    location: ciLocVal,
+    detail_level: ciState.detailLevel,
+    categories: categories,
+    line_items: line_items,
+    tax: tax, fuel_freight: fuel, credit: credit,
+    other_charge: other, other_charge_description: otherDesc,
+    total: Math.round(total * 100) / 100,
+  };
+
+  try {
+    var resp = await fetch('/api/invoices/create-manual', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    var data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    ciState.step = 3;
+    ciState.result = data;
+    ciRender();
+  } catch(e) {
+    toast('Error: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Create Invoice';
+  }
+}
+
+function ciRenderStep3(el) {
+  var r = ciState.result || {};
+  el.innerHTML = '<div style="text-align:center;padding:40px 0">'
+    + '<div style="font-size:48px;margin-bottom:16px">&#10003;</div>'
+    + '<div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px">Invoice Created</div>'
+    + '<div style="color:var(--text2);margin-bottom:24px">' + (r.message || 'Invoice saved.') + '</div>'
+    + '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">'
+    + '<button onclick="ciClose();showView(\'history\')" style="padding:10px 20px;background:var(--blue);border:none;border-radius:10px;color:#fff;font-weight:600;cursor:pointer">View History</button>'
+    + '<button onclick="ciState={step:1,type:\'one_time\',detailLevel:\'category\',vendors:ciState.vendors};ciLocVal=\'dennis\';ciRender()" style="padding:10px 20px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text);font-weight:600;cursor:pointer">Create Another</button>'
+    + '<button onclick="ciClose()" style="padding:10px 20px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text2);font-weight:600;cursor:pointer">Close</button>'
+    + '</div></div>';
+}
+</script>
+
+<!-- Create Invoice Modal -->
+<div id="createInvoiceModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;justify-content:center;align-items:flex-start;overflow-y:auto;padding:40px 16px" onclick="if(event.target===this)ciClose()">
+  <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:100%;max-width:700px;padding:24px;position:relative">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700;color:var(--text)">Create Invoice</div>
+      <button onclick="ciClose()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;padding:4px 8px">&times;</button>
+    </div>
+    <div id="ciBody"></div>
+  </div>
+</div>
+
+<style>
+.ci-lbl{font-size:12px;color:var(--text2);margin-bottom:4px;font-weight:600}
+</style>
+</body>
+</html>

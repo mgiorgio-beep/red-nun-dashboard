@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Red Nun — Summer 2026 Availability</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --red: #8B2020; --red-dark: #5C1414; --red-light: #FAEAEA;
+    --ink: #1C1C1C; --muted: #6B6560; --border: #DDD8D2;
+    --bg: #FAFAF8; --white: #FFFFFF;
+  }
+  html { background: var(--bg); }
+  body { font-family: Georgia, serif; color: var(--ink); line-height: 1.6; padding: 2rem 1rem 4rem; }
+  .page { max-width: 680px; margin: 0 auto; background: var(--white); border: 1px solid var(--border); border-top: 3px solid var(--red); box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.05); padding: 2.5rem 2.5rem 3rem; }
+  .header { text-align: center; border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  .header h1 { font-size: 28px; font-weight: 700; letter-spacing: 0.15em; color: var(--red-dark); text-transform: uppercase; margin-bottom: 4px; }
+  .header .sub { font-size: 12px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; font-family: Arial, sans-serif; }
+  .section { margin-bottom: 1.75rem; }
+  .section-title { font-family: Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--red); border-bottom: 1px solid var(--red-light); padding-bottom: 6px; margin-bottom: 1rem; }
+  .field { margin-bottom: 1.1rem; }
+  .field label { display: block; font-family: Arial, sans-serif; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .field input[type="text"], .field input[type="date"], .field textarea { width: 100%; border: none; border-bottom: 1px solid var(--border); background: transparent; font-family: Georgia, serif; font-size: 15px; color: var(--ink); padding: 5px 2px; outline: none; transition: border-color 0.2s; -webkit-appearance: none; }
+  .field input:focus, .field textarea:focus { border-bottom-color: var(--red); }
+  .field textarea { resize: vertical; min-height: 56px; line-height: 1.5; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .avail-wrap { overflow-x: auto; }
+  table.avail { width: 100%; border-collapse: collapse; min-width: 480px; font-family: Arial, sans-serif; }
+  table.avail th { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.05em; text-align: center; padding: 7px 4px; border: 1px solid var(--border); background: #F7F5F2; }
+  table.avail th.row-hd { text-align: left; width: 70px; }
+  table.avail td { border: 1px solid var(--border); text-align: center; height: 46px; cursor: pointer; font-size: 16px; font-weight: 700; background: var(--white); user-select: none; -webkit-user-select: none; transition: background 0.12s; }
+  table.avail td.row-label { font-size: 12px; font-weight: 600; color: var(--muted); cursor: default; text-align: left; padding-left: 8px; background: #F7F5F2; }
+  table.avail td:not(.row-label):hover { background: #FFF5F5; }
+  table.avail td.marked { background: var(--red-light); color: var(--red); }
+  table.avail td.marked:hover { background: #F5D5D5; }
+  .grid-note { font-family: Arial, sans-serif; font-size: 11px; color: #9C9590; margin-top: 6px; font-style: italic; }
+  .policy-list { list-style: none; }
+  .policy-list li { font-size: 13.5px; line-height: 1.65; color: var(--ink); padding: 7px 0 7px 20px; position: relative; border-bottom: 1px solid #F0ECE8; }
+  .policy-list li:last-child { border-bottom: none; }
+  .policy-list li::before { content: "•"; position: absolute; left: 0; color: var(--red); font-size: 16px; top: 6px; }
+  .policy-list li em { font-style: italic; color: var(--red-dark); }
+  .policy-list li strong { font-weight: bold; }
+  .sig-wrap { border: 1px solid var(--border); border-radius: 3px; position: relative; background: var(--white); overflow: hidden; cursor: crosshair; }
+  .sig-canvas { display: block; width: 100%; height: 100px; touch-action: none; }
+  .sig-hint { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); font-family: Arial, sans-serif; font-size: 11px; color: #C8C4BE; pointer-events: none; transition: opacity 0.2s; white-space: nowrap; }
+  .sig-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+  .btn-clear { background: none; border: none; font-family: Arial, sans-serif; font-size: 11px; color: var(--muted); cursor: pointer; padding: 2px 0; text-decoration: underline; }
+  .btn-clear:hover { color: var(--red); }
+  .divider { height: 1px; background: var(--border); margin: 1.5rem 0; }
+  .submit-area { margin-top: 2rem; text-align: center; }
+  .btn-submit { background: var(--red); color: #fff; border: none; font-family: Arial, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 14px 48px; cursor: pointer; border-radius: 2px; transition: background 0.15s; }
+  .btn-submit:hover { background: var(--red-dark); }
+  .btn-submit:disabled { background: #CCC; cursor: not-allowed; }
+  .error-msg { font-family: Arial, sans-serif; font-size: 13px; color: var(--red); margin-bottom: 12px; min-height: 18px; }
+  .success-screen { display: none; text-align: center; padding: 3rem 1rem; }
+  .success-check { width: 60px; height: 60px; border-radius: 50%; background: #EAF4E2; border: 2px solid #5C9A3A; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; }
+  .success-screen h2 { font-size: 22px; color: var(--ink); margin-bottom: 8px; }
+  .success-screen p { font-family: Arial, sans-serif; font-size: 14px; color: var(--muted); max-width: 340px; margin: 0 auto; }
+  .success-screen a { color: var(--red); }
+  @media (max-width: 580px) { .page { padding: 1.5rem 1.25rem 2.5rem; } .two-col { grid-template-columns: 1fr; gap: 0; } .header h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <h1>The Red Nun</h1>
+    <div class="sub">Summer 2026 &nbsp;&middot;&nbsp; Staff Availability Form</div>
+  </div>
+
+  <div id="main-form">
+    <div class="section">
+      <div class="field">
+        <label>Full Name</label>
+        <input type="text" id="f-name" autocomplete="name" placeholder="First Last" />
+      </div>
+      <div class="field">
+        <label>Position(s)</label>
+        <input type="text" id="f-positions" placeholder="e.g. Server, Bartender, Host" />
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Weekly Availability</div>
+      <div class="two-col" style="margin-bottom:1rem;">
+        <div class="field" style="margin-bottom:0">
+          <label>Start Date</label>
+          <input type="date" id="f-start" />
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Last Day</label>
+          <input type="date" id="f-end" />
+        </div>
+      </div>
+      <div class="avail-wrap">
+        <table class="avail">
+          <thead>
+            <tr>
+              <th class="row-hd"></th>
+              <th>SUN</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th>
+            </tr>
+          </thead>
+          <tbody id="avail-body"></tbody>
+        </table>
+      </div>
+      <p class="grid-note">Click a cell to mark X &mdash; days/shifts you are <strong>not</strong> available</p>
+      <div class="field" style="margin-top:1rem;">
+        <label>How many shifts are you ideally looking to work per week?</label>
+        <input type="text" id="f-shifts" style="max-width:180px" placeholder="e.g. 4-5" />
+      </div>
+      <div class="field">
+        <label>Time off &mdash; specific dates you are unable to work</label>
+        <textarea id="f-timeoff" placeholder="e.g. July 10-12, August 3"></textarea>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Policies &amp; Acknowledgments</div>
+      <ul class="policy-list">
+        <li>All staff must be available to work during the <em>July 4th holiday weekend (July 3&ndash;July 5)</em> regardless of your above availability.</li>
+        <li>Shifts are <strong>your responsibility</strong>. Posting a shift &ldquo;up for grabs&rdquo; does not mean it has been covered &mdash; you remain accountable until it is properly filled and approved.</li>
+        <li>Proper uniform is required, including closed-toed shoes, a Red Nun shirt, and appropriate attire.</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Employee Signature</div>
+      <div class="two-col">
+        <div>
+          <div class="sig-wrap">
+            <canvas class="sig-canvas" id="sig-canvas" width="400" height="120"></canvas>
+            <span class="sig-hint" id="sig-hint">Draw your signature</span>
+          </div>
+          <div style="border-top:1px solid var(--border);margin-top:4px;"></div>
+          <div class="sig-actions">
+            <button class="btn-clear" id="btn-clear" type="button">Clear</button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0;align-self:end;">
+          <label>Date</label>
+          <input type="date" id="f-date" />
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="submit-area">
+      <p class="error-msg" id="error-msg"></p>
+      <button class="btn-submit" id="btn-submit" type="button">Submit Form</button>
+    </div>
+  </div>
+
+  <div class="success-screen" id="success-screen">
+    <div class="success-check">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3B7A20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h2>Availability Submitted</h2>
+    <p>Your signed form has been saved to Google Drive. Thank you &mdash; we&rsquo;ll be in touch with your schedule soon.</p>
+    <p style="margin-top:12px;"><a id="drive-link" href="#" target="_blank" style="display:none;">View your PDF</a></p>
+    <p id="countdown-msg" style="font-family:Arial,sans-serif;font-size:13px;color:var(--muted);margin-top:16px;"></p>
+  </div>
+</div>
+
+<script>
+var DAYS   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+var SHIFTS = ["Lunch","Dinner"];
+var marked = {};
+
+var tbody = document.getElementById("avail-body");
+SHIFTS.forEach(function(shift) {
+  var tr = document.createElement("tr");
+  var lbl = document.createElement("td");
+  lbl.className = "row-label";
+  lbl.textContent = shift;
+  tr.appendChild(lbl);
+  DAYS.forEach(function(day) {
+    var td = document.createElement("td");
+    var key = shift + "|" + day;
+    td.dataset.key = key;
+    td.addEventListener("click", function() {
+      marked[key] = !marked[key];
+      if (marked[key]) { td.classList.add("marked"); td.textContent = "X"; }
+      else             { td.classList.remove("marked"); td.textContent = ""; }
+    });
+    tr.appendChild(td);
+  });
+  tbody.appendChild(tr);
+});
+
+var canvas = document.getElementById("sig-canvas");
+var ctx    = canvas.getContext("2d");
+ctx.strokeStyle = "#111"; ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.lineJoin = "round";
+var drawing = false, last = null, hasSig = false;
+
+function getXY(e) {
+  var r = canvas.getBoundingClientRect();
+  var src = e.touches ? e.touches[0] : e;
+  return { x: (src.clientX - r.left) * (canvas.width / r.width), y: (src.clientY - r.top) * (canvas.height / r.height) };
+}
+canvas.addEventListener("mousedown",  function(e) { e.preventDefault(); drawing = true; last = getXY(e); document.getElementById("sig-hint").style.opacity="0"; hasSig=true; });
+canvas.addEventListener("mousemove",  function(e) { if (!drawing) return; var p=getXY(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; });
+canvas.addEventListener("mouseup",    function() { drawing=false; });
+canvas.addEventListener("mouseleave", function() { drawing=false; });
+canvas.addEventListener("touchstart", function(e) { e.preventDefault(); drawing=true; last=getXY(e); document.getElementById("sig-hint").style.opacity="0"; hasSig=true; }, {passive:false});
+canvas.addEventListener("touchmove",  function(e) { if(!drawing) return; e.preventDefault(); var p=getXY(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; }, {passive:false});
+canvas.addEventListener("touchend",   function() { drawing=false; });
+document.getElementById("btn-clear").addEventListener("click", function() {
+  ctx.clearRect(0,0,canvas.width,canvas.height); hasSig=false;
+  document.getElementById("sig-hint").style.opacity="1";
+});
+
+document.getElementById("f-date").value = new Date().toISOString().split("T")[0];
+
+document.getElementById("btn-submit").addEventListener("click", function() {
+  var errEl = document.getElementById("error-msg");
+  errEl.textContent = "";
+  var name      = document.getElementById("f-name").value.trim();
+  var positions = document.getElementById("f-positions").value.trim();
+  var startDate = document.getElementById("f-start").value;
+  var endDate   = document.getElementById("f-end").value;
+  var shifts    = document.getElementById("f-shifts").value.trim();
+  var timeOff   = document.getElementById("f-timeoff").value.trim();
+  var sigDate   = document.getElementById("f-date").value;
+
+  if (!name)   { errEl.textContent = "Please enter your name."; return; }
+  if (!hasSig) { errEl.textContent = "Please sign the form before submitting."; return; }
+
+  var btn = document.getElementById("btn-submit");
+  btn.disabled = true; btn.textContent = "Submitting...";
+
+  var unavailable = Object.keys(marked).filter(function(k) { return marked[k]; });
+
+  fetch("/availability/submit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: name,
+      positions: positions,
+      start_date: startDate,
+      end_date: endDate,
+      shifts_per_week: shifts,
+      time_off: timeOff,
+      sig_date: sigDate,
+      unavailable: unavailable,
+      signature: canvas.toDataURL("image/png")
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) {
+      document.getElementById("main-form").style.display = "none";
+      document.getElementById("success-screen").style.display = "block";
+      var secs=10;var cdEl=document.getElementById("countdown-msg");cdEl.textContent="This page will close in "+secs+" seconds...";var cdInt=setInterval(function(){secs--;if(secs<=0){clearInterval(cdInt);window.close();}else{cdEl.textContent="This page will close in "+secs+" second"+(secs===1?"":"s")+"...";}},1000);
+      if (data.link) {
+        var a = document.getElementById("drive-link");
+        a.href = data.link; a.style.display = "inline";
+      }
+    } else {
+      btn.disabled = false; btn.textContent = "Submit Form";
+      errEl.textContent = "Submission failed: " + (data.error || "please try again.");
+    }
+  })
+  .catch(function(err) {
+    btn.disabled = false; btn.textContent = "Submit Form";
+    errEl.textContent = "Submission failed: " + err.message;
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1C1C1E">
+<title>Red Nun — Live Record</title>
+<style>
+:root {
+  --bg:     #1C1C1E;
+  --card:   rgba(58,58,60,0.5);
+  --border: rgba(255,255,255,0.1);
+  --text:   #F5F5F7;
+  --text2:  rgba(245,245,247,0.65);
+  --text3:  rgba(245,245,247,0.4);
+  --red:    #FF453A;
+  --green:  #30D158;
+  --blue:   #0A84FF;
+  --font:   'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; padding:20px; -webkit-font-smoothing:antialiased; }
+.container { max-width:420px; margin:0 auto; }
+
+.header { text-align:center; margin-bottom:24px; padding:20px 0; border-bottom:1px solid var(--border); }
+.header h1 { font-size:20px; font-weight:800; letter-spacing:-.3px; }
+.header p { font-size:13px; color:var(--text2); margin-top:6px; }
+
+.session-info {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:14px; padding:16px; margin-bottom:20px;
+}
+.session-info .label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; font-weight:600; margin-bottom:4px; }
+.session-info .value { font-size:15px; font-weight:700; }
+.info-row { display:flex; gap:16px; }
+.info-row > div { flex:1; }
+
+.tip-box {
+  background:rgba(48,209,88,0.08); border:1px solid rgba(48,209,88,0.2);
+  border-radius:12px; padding:14px 16px; margin-bottom:24px;
+  font-size:12px; color:rgba(48,209,88,0.9); line-height:1.7;
+}
+
+.record-area { text-align:center; padding:20px 0; }
+
+.rec-btn {
+  width:120px; height:120px; border-radius:50%;
+  border:4px solid rgba(255,255,255,.15);
+  background:var(--red); color:#fff;
+  font-size:15px; font-weight:800; font-family:var(--font);
+  cursor:pointer; transition:all .2s;
+  display:inline-flex; align-items:center; justify-content:center;
+  box-shadow:0 0 0 0 rgba(255,69,58,0);
+}
+.rec-btn:active { transform:scale(.95); }
+.rec-btn.recording {
+  animation:pulse 1.5s infinite;
+  background:#FF453A;
+  border-color:rgba(255,69,58,.5);
+}
+@keyframes pulse {
+  0%   { box-shadow:0 0 0 0 rgba(255,69,58,0.5); }
+  70%  { box-shadow:0 0 0 20px rgba(255,69,58,0); }
+  100% { box-shadow:0 0 0 0 rgba(255,69,58,0); }
+}
+
+.timer {
+  font-size:48px; font-weight:200; font-variant-numeric:tabular-nums;
+  margin:20px 0 8px; letter-spacing:2px;
+}
+.rec-hint { font-size:13px; color:var(--text3); margin-bottom:20px; }
+
+.level-bar {
+  display:none; height:4px; border-radius:2px;
+  background:rgba(255,255,255,.06); margin:16px 40px; overflow:hidden;
+}
+.level-bar.show { display:block; }
+.level-fill {
+  height:100%; background:var(--green); border-radius:2px;
+  width:0; transition:width .1s;
+}
+
+.done-btn {
+  width:100%; padding:16px; border-radius:14px; border:none;
+  background:var(--blue); color:#fff;
+  font-size:16px; font-weight:800; font-family:var(--font);
+  cursor:pointer; transition:all .2s; display:none;
+}
+.done-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+.status-msg {
+  display:none; text-align:center; padding:12px;
+  border-radius:12px; font-size:14px; font-weight:600; margin-top:16px;
+}
+.status-msg.show { display:block; }
+.status-msg.success { background:rgba(48,209,88,0.1); color:var(--green); border:1px solid rgba(48,209,88,0.2); }
+.status-msg.error { background:rgba(255,69,58,0.1); color:var(--red); border:1px solid rgba(255,69,58,0.2); }
+.status-msg.processing { background:rgba(10,132,255,0.1); color:var(--blue); border:1px solid rgba(10,132,255,0.2); }
+
+.progress-bar {
+  display:none; height:6px; border-radius:3px;
+  background:rgba(255,255,255,.06); margin:16px 0; overflow:hidden;
+}
+.progress-bar.show { display:block; }
+.progress-fill { height:100%; background:var(--blue); border-radius:3px; width:0; transition:width .3s; }
+
+.back-link { display:none; text-align:center; margin-top:20px; }
+.back-link.show { display:block; }
+.back-link a {
+  color:var(--blue); text-decoration:none; font-size:14px; font-weight:600;
+  padding:12px 24px; border:1px solid rgba(10,132,255,0.3);
+  border-radius:10px; display:inline-block;
+}
+
+.cancel-link { text-align:center; margin-top:20px; }
+.cancel-link button {
+  padding:12px 24px; border:1px solid rgba(255,69,58,0.3); border-radius:10px;
+  background:none; color:var(--red); font-size:14px; font-weight:600;
+  font-family:var(--font); cursor:pointer;
+}
+
+.error-state { display:none; text-align:center; padding:60px 20px; }
+.error-state.show { display:block; }
+.error-state p { font-size:15px; color:var(--text2); line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Red Nun — Live Record</h1>
+    <p>Record inventory count directly from your phone</p>
+  </div>
+
+  <div id="errorState" class="error-state">
+    <p>Missing session info.<br>Start a session from the dashboard first, then tap the live record link.</p>
+  </div>
+
+  <div id="mainContent" style="display:none">
+    <div class="session-info">
+      <div class="info-row">
+        <div>
+          <div class="label">Session</div>
+          <div class="value" id="dispSession">&mdash;</div>
+        </div>
+        <div>
+          <div class="label">Location</div>
+          <div class="value" id="dispLocation">&mdash;</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box">
+      <strong>No video needed</strong> — just speak your inventory counts out loud.<br>
+      Walk through each area and say what you see:<br>
+      "I'm in the walk-in. Six gallons of ranch, five gallons of blue cheese..."
+    </div>
+
+    <div class="record-area">
+      <div class="timer" id="timer">0:00</div>
+      <div class="rec-hint" id="recHint">Tap to start recording</div>
+      <button class="rec-btn" id="recBtn" onclick="toggleRecord()">REC</button>
+      <div class="level-bar" id="levelBar"><div class="level-fill" id="levelFill"></div></div>
+    </div>
+
+    <button class="done-btn" id="doneBtn" onclick="uploadAndProcess()">Upload &amp; Process</button>
+
+    <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="status-msg" id="statusMsg"></div>
+    <div class="back-link" id="backLink">
+      <a href="https://dashboard.rednun.com/ai-inventory">Return to Smart Count</a>
+    </div>
+    <div class="cancel-link">
+      <button onclick="cancelSession()">Cancel Session</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var params = new URLSearchParams(window.location.search);
+var sessionId = params.get('session');
+var token = params.get('token');
+var location_ = params.get('location') || '';
+
+var mediaRecorder = null;
+var audioChunks = [];
+var audioBlob = null;
+var recording = false;
+var startTime = 0;
+var timerInterval = null;
+var audioContext = null;
+var analyser = null;
+var levelInterval = null;
+
+if (!sessionId || !token) {
+  document.getElementById('errorState').classList.add('show');
+} else {
+  document.getElementById('mainContent').style.display = '';
+  document.getElementById('dispSession').textContent = '#' + sessionId;
+  document.getElementById('dispLocation').textContent = location_ || 'Session ' + sessionId;
+}
+
+function toggleRecord() {
+  if (recording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+}
+
+function startRecording() {
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(function(stream) {
+      audioChunks = [];
+      audioBlob = null;
+
+      // Set up MediaRecorder
+      var options = {};
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        options.mimeType = 'audio/webm;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        options.mimeType = 'audio/mp4';
+      }
+      mediaRecorder = new MediaRecorder(stream, options);
+
+      mediaRecorder.ondataavailable = function(e) {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = function() {
+        var mimeType = mediaRecorder.mimeType || 'audio/webm';
+        audioBlob = new Blob(audioChunks, { type: mimeType });
+        stream.getTracks().forEach(function(t) { t.stop(); });
+        // Show upload button
+        document.getElementById('doneBtn').style.display = 'block';
+        var sizeMB = (audioBlob.size / 1024 / 1024).toFixed(1);
+        document.getElementById('recHint').textContent = 'Recording saved (' + sizeMB + ' MB) — tap Upload & Process';
+      };
+
+      mediaRecorder.start(1000); // collect data every second
+      recording = true;
+
+      // UI updates
+      var btn = document.getElementById('recBtn');
+      btn.classList.add('recording');
+      btn.textContent = 'STOP';
+      document.getElementById('recHint').textContent = 'Recording... tap to stop';
+      document.getElementById('doneBtn').style.display = 'none';
+
+      // Start timer
+      startTime = Date.now();
+      timerInterval = setInterval(updateTimer, 1000);
+      updateTimer();
+
+      // Audio level meter
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        var source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        document.getElementById('levelBar').classList.add('show');
+        levelInterval = setInterval(updateLevel, 100);
+      } catch(e) {}
+    })
+    .catch(function(err) {
+      var msg = document.getElementById('statusMsg');
+      msg.textContent = 'Microphone access denied — check Settings > Safari > Microphone';
+      msg.className = 'status-msg show error';
+    });
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  recording = false;
+
+  var btn = document.getElementById('recBtn');
+  btn.classList.remove('recording');
+  btn.textContent = 'REC';
+
+  clearInterval(timerInterval);
+  clearInterval(levelInterval);
+  document.getElementById('levelBar').classList.remove('show');
+
+  if (audioContext) {
+    audioContext.close();
+    audioContext = null;
+  }
+}
+
+function updateTimer() {
+  var elapsed = Math.floor((Date.now() - startTime) / 1000);
+  var min = Math.floor(elapsed / 60);
+  var sec = elapsed % 60;
+  document.getElementById('timer').textContent = min + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function updateLevel() {
+  if (!analyser) return;
+  var data = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  var avg = 0;
+  for (var i = 0; i < data.length; i++) avg += data[i];
+  avg = avg / data.length / 255 * 100;
+  document.getElementById('levelFill').style.width = Math.min(100, avg * 3) + '%';
+}
+
+function uploadAndProcess() {
+  if (!audioBlob || !sessionId || !token) return;
+
+  var btn = document.getElementById('doneBtn');
+  btn.disabled = true;
+  btn.textContent = 'Uploading...';
+
+  var bar = document.getElementById('progressBar');
+  var fill = document.getElementById('progressFill');
+  bar.classList.add('show');
+  fill.style.width = '0%';
+
+  // Determine file extension from mime type
+  var ext = '.webm';
+  if (audioBlob.type.indexOf('mp4') >= 0) ext = '.m4a';
+  var filename = 'live_recording' + ext;
+
+  var fd = new FormData();
+  fd.append('video', audioBlob, filename);
+
+  var uploadUrl = '/api/ai-inventory/sessions/' + sessionId + '/upload?token=' + encodeURIComponent(token);
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', uploadUrl);
+
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      fill.style.width = Math.round(e.loaded / e.total * 100) + '%';
+    }
+  };
+
+  xhr.onload = function() {
+    try {
+      var d = JSON.parse(xhr.responseText);
+      if (xhr.status >= 200 && xhr.status < 300 && !d.error) {
+        // Upload done — now trigger processing
+        btn.textContent = 'Processing...';
+        fill.style.width = '100%';
+        triggerProcess();
+      } else {
+        bar.classList.remove('show');
+        btn.disabled = false;
+        btn.textContent = 'Upload & Process';
+        showMsg('Upload error: ' + (d.error || 'failed'), 'error');
+      }
+    } catch(e) {
+      bar.classList.remove('show');
+      btn.disabled = false;
+      btn.textContent = 'Upload & Process';
+      showMsg('Bad response from server', 'error');
+    }
+  };
+
+  xhr.onerror = function() {
+    bar.classList.remove('show');
+    btn.disabled = false;
+    btn.textContent = 'Upload & Process';
+    showMsg('Network error — check WiFi', 'error');
+  };
+
+  xhr.send(fd);
+}
+
+function triggerProcess() {
+  var processUrl = '/api/ai-inventory/sessions/' + sessionId + '/process?token=' + encodeURIComponent(token);
+  fetch(processUrl, { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      document.getElementById('progressBar').classList.remove('show');
+      document.getElementById('doneBtn').style.display = 'none';
+      document.getElementById('recBtn').style.display = 'none';
+      if (d.error) {
+        showMsg('Process error: ' + d.error, 'error');
+      } else {
+        showMsg('Processing audio — return to dashboard to see results', 'processing');
+        document.getElementById('backLink').classList.add('show');
+      }
+    })
+    .catch(function() {
+      document.getElementById('progressBar').classList.remove('show');
+      showMsg('Network error starting processing', 'error');
+    });
+}
+
+function showMsg(text, type) {
+  var msg = document.getElementById('statusMsg');
+  msg.textContent = text;
+  msg.className = 'status-msg show ' + type;
+}
+
+function cancelSession() {
+  if (!confirm('Cancel this session?')) return;
+  if (recording) stopRecording();
+  fetch('/api/ai-inventory/sessions/' + sessionId + '/cancel?token=' + encodeURIComponent(token), { method: 'POST' })
+    .then(function() { window.location.href = 'https://dashboard.rednun.com/ai-inventory'; })
+    .catch(function() { window.location.href = 'https://dashboard.rednun.com/ai-inventory'; });
+}
+</script>
+</body>
+</html>

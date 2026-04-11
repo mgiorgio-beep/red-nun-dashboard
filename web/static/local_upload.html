@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1C1C1E">
+<title>Red Nun — Local Upload</title>
+<style>
+:root {
+  --bg:     #1C1C1E;
+  --card:   rgba(58,58,60,0.5);
+  --border: rgba(255,255,255,0.1);
+  --text:   #F5F5F7;
+  --text2:  rgba(245,245,247,0.65);
+  --text3:  rgba(245,245,247,0.4);
+  --red:    #FF453A;
+  --green:  #30D158;
+  --blue:   #0A84FF;
+  --font:   'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; padding:20px; -webkit-font-smoothing:antialiased; }
+
+.container { max-width:420px; margin:0 auto; }
+
+.header {
+  text-align:center; margin-bottom:24px; padding:20px 0;
+  border-bottom:1px solid var(--border);
+}
+.header h1 { font-size:20px; font-weight:800; letter-spacing:-.3px; }
+.header p { font-size:13px; color:var(--text2); margin-top:6px; }
+
+.session-info {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:14px; padding:16px; margin-bottom:20px;
+}
+.session-info .label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; font-weight:600; margin-bottom:4px; }
+.session-info .value { font-size:15px; font-weight:700; }
+.info-row { display:flex; gap:16px; }
+.info-row > div { flex:1; }
+
+.upload-zone {
+  border:2px dashed rgba(255,255,255,.12); border-radius:16px;
+  background:rgba(44,44,46,0.5); padding:40px 20px;
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  cursor:pointer; transition:all .3s; margin-bottom:16px;
+}
+.upload-zone:active { border-color:var(--blue); background:rgba(10,132,255,0.05); }
+.upload-zone .icon { font-size:40px; margin-bottom:12px; opacity:.6; }
+.upload-zone .title { font-size:16px; font-weight:700; margin-bottom:4px; }
+.upload-zone .sub { font-size:12px; color:var(--text3); line-height:1.5; }
+input[type="file"] { display:none; }
+
+.file-list { margin-bottom:16px; }
+.file-item {
+  display:flex; align-items:center; justify-content:space-between;
+  background:var(--card); border:1px solid var(--border);
+  border-radius:10px; padding:10px 14px; margin-bottom:6px;
+  font-size:13px;
+}
+.file-item .fname { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.file-item .fsize { color:var(--text3); margin-left:8px; white-space:nowrap; }
+.file-item .fremove {
+  margin-left:10px; background:none; border:none; color:var(--red);
+  font-size:18px; cursor:pointer; padding:0 4px; font-weight:700;
+}
+
+.upload-btn {
+  width:100%; padding:16px; border-radius:14px; border:none;
+  background:var(--blue); color:#fff;
+  font-size:16px; font-weight:800; font-family:var(--font);
+  cursor:pointer; transition:all .2s; letter-spacing:-.2px;
+}
+.upload-btn:disabled { opacity:.4; cursor:not-allowed; }
+.upload-btn:active:not(:disabled) { transform:scale(.98); opacity:.9; }
+
+.done-btn {
+  width:100%; padding:16px; border-radius:14px; border:none;
+  background:var(--red); color:#fff;
+  font-size:16px; font-weight:800; font-family:var(--font);
+  cursor:pointer; transition:all .2s; letter-spacing:-.2px;
+  margin-top:12px; display:none;
+}
+.done-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+.progress-bar {
+  display:none; height:6px; border-radius:3px;
+  background:rgba(255,255,255,.06); margin:12px 0; overflow:hidden;
+}
+.progress-bar.show { display:block; }
+.progress-fill {
+  height:100%; background:var(--blue); border-radius:3px;
+  width:0; transition:width .3s;
+}
+
+.progress-label {
+  display:none; text-align:center; font-size:13px; color:var(--text2);
+  margin-bottom:8px; font-weight:600;
+}
+.progress-label.show { display:block; }
+
+.count-badge {
+  display:none; padding:14px 16px; border-radius:14px;
+  background:rgba(48,209,88,.08); border:1px solid rgba(48,209,88,.25);
+  text-align:center; margin-bottom:16px;
+}
+.count-badge .num { font-size:20px; font-weight:800; color:var(--green); }
+.count-badge .lbl { font-size:12px; color:var(--green); font-weight:600; }
+
+.status-msg {
+  display:none; text-align:center; padding:12px;
+  border-radius:12px; font-size:14px; font-weight:600; margin-top:16px;
+}
+.status-msg.show { display:block; }
+.status-msg.success { background:rgba(48,209,88,0.1); color:var(--green); border:1px solid rgba(48,209,88,0.2); }
+.status-msg.error { background:rgba(255,69,58,0.1); color:var(--red); border:1px solid rgba(255,69,58,0.2); }
+.status-msg.processing { background:rgba(10,132,255,0.1); color:var(--blue); border:1px solid rgba(10,132,255,0.2); }
+
+.back-link {
+  display:none; text-align:center; margin-top:20px;
+}
+.back-link.show { display:block; }
+.back-link a {
+  color:var(--blue); text-decoration:none; font-size:14px; font-weight:600;
+  padding:12px 24px; border:1px solid rgba(10,132,255,0.3);
+  border-radius:10px; display:inline-block;
+}
+
+.error-state { display:none; text-align:center; padding:60px 20px; }
+.error-state.show { display:block; }
+.error-state p { font-size:15px; color:var(--text2); line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Red Nun &mdash; Local Upload</h1>
+    <p>Direct upload via Chatham WiFi</p>
+  </div>
+
+  <div id="errorState" class="error-state">
+    <p>Missing session info.<br>Start a session from the dashboard first, then tap the local upload link.</p>
+  </div>
+
+  <div id="mainContent" style="display:none">
+    <div class="session-info">
+      <div class="info-row">
+        <div>
+          <div class="label">Session</div>
+          <div class="value" id="dispSession">&mdash;</div>
+        </div>
+        <div>
+          <div class="label">Location</div>
+          <div class="value" id="dispLocation">&mdash;</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Already uploaded badge -->
+    <div class="count-badge" id="countBadge">
+      <div class="num" id="countNum">0</div>
+      <div class="lbl" id="countLabel">files uploaded</div>
+    </div>
+
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">&#128228;</div>
+      <div class="title">Tap to select files</div>
+      <div class="sub">Select multiple recordings at once<br>Video: MP4, MOV &nbsp;|&nbsp; Audio: M4A, MP3, WAV</div>
+    </div>
+    <input type="file" id="fileInput" accept="video/*,audio/*,.mp4,.mov,.avi,.mkv,.webm,.wav,.mp3,.m4a,.aac,.ogg,.flac">
+
+    <div class="file-list" id="fileList"></div>
+
+    <button class="upload-btn" id="uploadBtn" disabled onclick="uploadAll()">Upload Files</button>
+
+    <div class="progress-label" id="progressLabel"></div>
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <button class="done-btn" id="doneBtn" onclick="doneRecording()">Done Recording</button>
+
+    <div class="status-msg" id="statusMsg"></div>
+    <div style="text-align:center;margin-top:20px">
+      <button onclick="cancelSession()" style="padding:12px 24px;border:1px solid rgba(255,69,58,0.3);border-radius:10px;background:none;color:var(--red);font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;">Cancel Session</button>
+    </div>
+    <div class="back-link" id="backLink">
+      <a href="https://dashboard.rednun.com/ai-inventory">Return to Smart Count</a>
+    </div>
+  </div>
+</div>
+
+<script>
+var params = new URLSearchParams(window.location.search);
+var sessionId = params.get('session');
+var token = params.get('token');
+var location_ = params.get('location') || '';
+var uploadedCount = 0;
+var selectedFiles = [];
+
+if (!sessionId || !token) {
+  document.getElementById('errorState').classList.add('show');
+} else {
+  document.getElementById('mainContent').style.display = '';
+  document.getElementById('dispSession').textContent = '#' + sessionId;
+  document.getElementById('dispLocation').textContent = location_ || 'Session ' + sessionId;
+}
+
+var fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', function() {
+  if (!fileInput.files.length) return;
+  selectedFiles = [fileInput.files[0]];
+  fileInput.value = '';
+  renderFileList();
+  // Auto-start upload
+  uploadAll();
+});
+
+function renderFileList() {
+  var list = document.getElementById('fileList');
+  var html = '';
+  for (var i = 0; i < selectedFiles.length; i++) {
+    var f = selectedFiles[i];
+    var sizeMB = (f.size / 1024 / 1024).toFixed(1);
+    html += '<div class="file-item">' +
+      '<span class="fname">' + f.name + '</span>' +
+      '<span class="fsize">' + sizeMB + ' MB</span>' +
+      '<button class="fremove" onclick="removeFile(' + i + ')">✕</button>' +
+    '</div>';
+  }
+  list.innerHTML = html;
+  document.getElementById('uploadBtn').disabled = selectedFiles.length === 0;
+  document.getElementById('uploadBtn').textContent = selectedFiles.length === 1
+    ? 'Upload 1 File'
+    : 'Upload ' + selectedFiles.length + ' Files';
+  // Clear status
+  document.getElementById('statusMsg').classList.remove('show');
+}
+
+function removeFile(idx) {
+  selectedFiles.splice(idx, 1);
+  renderFileList();
+}
+
+function uploadAll() {
+  if (!selectedFiles.length || !sessionId || !token) return;
+
+  var btn = document.getElementById('uploadBtn');
+  var bar = document.getElementById('progressBar');
+  var fill = document.getElementById('progressFill');
+  var label = document.getElementById('progressLabel');
+
+  btn.disabled = true;
+  document.getElementById('uploadZone').style.pointerEvents = 'none';
+  document.getElementById('uploadZone').style.opacity = '.4';
+
+  var total = selectedFiles.length;
+  var current = 0;
+
+  function uploadNext() {
+    if (current >= total) {
+      // All done — reset for more uploads
+      bar.classList.remove('show');
+      label.classList.remove('show');
+      selectedFiles = [];
+      document.getElementById('fileList').innerHTML = '';
+      btn.textContent = 'Upload Files';
+      btn.disabled = true;
+      btn.style.display = '';
+      document.getElementById('uploadZone').style.pointerEvents = '';
+      document.getElementById('uploadZone').style.opacity = '';
+      document.getElementById('uploadZone').style.display = '';
+      updateBadge(uploadedCount);
+      var doneBtn = document.getElementById('doneBtn');
+      doneBtn.style.display = 'block';
+      doneBtn.textContent = 'Done Recording \u2014 Process ' + uploadedCount + ' File' + (uploadedCount === 1 ? '' : 's');
+      var msg = document.getElementById('statusMsg');
+      msg.textContent = uploadedCount + ' file' + (uploadedCount === 1 ? '' : 's') + ' uploaded — add more or tap Done Recording';
+      msg.className = 'status-msg show success';
+      return;
+    }
+
+    var f = selectedFiles[current];
+    label.textContent = 'Uploading file ' + (current + 1) + ' of ' + total + ': ' + f.name;
+    label.classList.add('show');
+    bar.classList.add('show');
+    fill.style.width = '0%';
+
+    var fd = new FormData();
+    fd.append('video', f);
+
+    var uploadUrl = '/api/ai-inventory/sessions/' + sessionId + '/upload?token=' + encodeURIComponent(token);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', uploadUrl);
+
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable) {
+        var pct = Math.round(e.loaded / e.total * 100);
+        fill.style.width = pct + '%';
+      }
+    };
+
+    xhr.onload = function() {
+      try {
+        var d = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300 && !d.error) {
+          uploadedCount = d.upload_count || (uploadedCount + 1);
+          current++;
+          uploadNext();
+        } else {
+          uploadError('Error uploading ' + f.name + ': ' + (d.error || 'failed'));
+        }
+      } catch(e) {
+        uploadError('Bad response uploading ' + f.name);
+      }
+    };
+
+    xhr.onerror = function() {
+      uploadError('Network error uploading ' + f.name + ' — check WiFi');
+    };
+
+    xhr.send(fd);
+  }
+
+  function uploadError(text) {
+    bar.classList.remove('show');
+    label.classList.remove('show');
+    btn.disabled = false;
+    document.getElementById('uploadZone').style.pointerEvents = '';
+    document.getElementById('uploadZone').style.opacity = '';
+    var msg = document.getElementById('statusMsg');
+    msg.textContent = text;
+    msg.className = 'status-msg show error';
+  }
+
+  uploadNext();
+}
+
+function updateBadge(n) {
+  var badge = document.getElementById('countBadge');
+  document.getElementById('countNum').textContent = n;
+  document.getElementById('countLabel').textContent = n === 1 ? 'file uploaded' : 'files uploaded';
+  badge.style.display = n > 0 ? 'block' : 'none';
+}
+
+function cancelSession() {
+  if (!confirm('Cancel this session and discard all uploads?')) return;
+  fetch('/api/ai-inventory/sessions/' + sessionId + '/cancel?token=' + encodeURIComponent(token), { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success || d.error) {
+        window.location.href = 'https://dashboard.rednun.com/ai-inventory';
+      }
+    })
+    .catch(function() {
+      window.location.href = 'https://dashboard.rednun.com/ai-inventory';
+    });
+}
+
+function doneRecording() {
+  if (!sessionId || !token || uploadedCount < 1) return;
+
+  var doneBtn = document.getElementById('doneBtn');
+  doneBtn.disabled = true;
+  doneBtn.textContent = 'Starting processing...';
+
+  var processUrl = '/api/ai-inventory/sessions/' + sessionId + '/process?token=' + encodeURIComponent(token);
+
+  fetch(processUrl, { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var msg = document.getElementById('statusMsg');
+      if (d.error) {
+        doneBtn.disabled = false;
+        doneBtn.textContent = 'Done Recording \u2014 Process ' + uploadedCount + ' File' + (uploadedCount === 1 ? '' : 's');
+        msg.textContent = 'Error: ' + d.error;
+        msg.className = 'status-msg show error';
+        return;
+      }
+      doneBtn.style.display = 'none';
+      msg.textContent = 'Processing ' + (d.file_count || uploadedCount) + ' file' + ((d.file_count || uploadedCount) === 1 ? '' : 's') + ' — return to dashboard to see results';
+      msg.className = 'status-msg show processing';
+      document.getElementById('backLink').classList.add('show');
+    })
+    .catch(function() {
+      doneBtn.disabled = false;
+      doneBtn.textContent = 'Done Recording \u2014 Process ' + uploadedCount + ' File' + (uploadedCount === 1 ? '' : 's');
+      var msg = document.getElementById('statusMsg');
+      msg.textContent = 'Network error — try again';
+      msg.className = 'status-msg show error';
+    });
+}
+</script>
+</body>
+</html>

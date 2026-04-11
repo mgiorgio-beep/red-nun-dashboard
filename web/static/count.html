@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>Red Nun — Inventory Count</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.15);--text:#f5f5f7;--text2:rgba(245,245,247,0.6);
+  --text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;
+  --orange:#FF9F0A;--purple:#BF5AF2;--yellow:#FFD60A;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;min-height:100dvh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+.hdr{position:sticky;top:0;z-index:100;padding:calc(var(--safe-top) + 12px) 16px 12px;
+  background:rgba(10,10,12,0.85);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  border-bottom:1px solid var(--border)}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:0}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-logo{width:32px;height:32px;background:linear-gradient(135deg,var(--red),#FF6259);
+  border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:12px;color:#fff;flex-shrink:0}
+.hdr-title{font-size:17px;font-weight:700;letter-spacing:-0.3px}
+.hdr-sub{font-size:10px;color:var(--text3);font-weight:500}
+.back-btn{background:none;border:none;color:var(--blue);font-size:14px;font-weight:600;
+  cursor:pointer;padding:6px 0;text-decoration:none}
+
+/* Setup */
+.setup{padding:20px 16px;max-width:480px;margin:0 auto}
+.setup-title{font-size:28px;font-weight:800;letter-spacing:-0.5px;margin-bottom:6px}
+.setup-sub{font-size:14px;color:var(--text2);margin-bottom:28px;line-height:1.5}
+.setup-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:20px;margin-bottom:16px}
+.setup-label{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;
+  letter-spacing:0.8px;margin-bottom:10px}
+.loc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.loc-btn{padding:16px;border-radius:12px;background:var(--card2);border:2px solid var(--border);
+  color:var(--text);font-size:15px;font-weight:600;cursor:pointer;text-align:center;transition:all 0.2s}
+.loc-btn.sel{border-color:var(--red);background:rgba(255,69,58,0.1);color:var(--red)}
+.start-btn{width:100%;padding:16px;border-radius:14px;background:var(--red);color:#fff;
+  font-size:16px;font-weight:700;border:none;cursor:pointer;margin-top:24px;transition:all 0.2s}
+.start-btn:disabled{opacity:0.35;cursor:not-allowed}
+.start-btn:not(:disabled):active{transform:scale(0.98)}
+
+/* Count Screen */
+.count-screen{display:none}
+.search-wrap{padding:12px 16px 8px;position:relative}
+.search-input{width:100%;padding:10px 14px 10px 36px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:14px;outline:none}
+.search-input:focus{border-color:var(--blue)}
+.search-wrap svg{position:absolute;left:28px;top:50%;transform:translateY(-50%);opacity:0.3}
+
+.count-stats{display:flex;gap:10px;padding:8px 16px;overflow-x:auto;scrollbar-width:none}
+.count-stats::-webkit-scrollbar{display:none}
+.mini-stat{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:8px 14px;flex-shrink:0}
+.mini-stat-label{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase}
+.mini-stat-val{font-size:16px;font-weight:700;margin-top:2px}
+
+/* Section headers for storage locations */
+.section-header{position:sticky;top:68px;z-index:50;padding:10px 16px;
+  background:rgba(10,10,12,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.section-name{font-size:14px;font-weight:700;color:var(--blue)}
+.section-count{font-size:11px;color:var(--text3);font-weight:600}
+.section-icon{margin-right:6px}
+
+.product-list{padding:0 16px calc(var(--safe-bottom) + 80px)}
+.product-row{display:flex;align-items:center;gap:12px;padding:14px 0;
+  border-bottom:1px solid var(--border)}
+.product-info{flex:1;min-width:0}
+.product-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.product-meta{font-size:11px;color:var(--text3);margin-top:2px;display:flex;gap:8px;align-items:center}
+.product-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;flex-shrink:0}
+.tag-beer{background:rgba(255,159,10,0.15);color:var(--orange)}
+.tag-liquor{background:rgba(255,69,58,0.15);color:var(--red)}
+.tag-wine{background:rgba(191,90,242,0.15);color:var(--purple)}
+.tag-food{background:rgba(48,209,88,0.15);color:var(--green)}
+.tag-na_beverages{background:rgba(10,132,255,0.15);color:var(--blue)}
+.tag-other,.tag-supplies{background:rgba(255,255,255,0.08);color:var(--text3)}
+
+.qty-input{width:72px;padding:10px 8px;background:var(--card2);border:1.5px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:16px;font-weight:700;text-align:center;
+  outline:none;-moz-appearance:textfield;flex-shrink:0}
+.qty-input::-webkit-inner-spin-button,.qty-input::-webkit-outer-spin-button{-webkit-appearance:none}
+.qty-input:focus{border-color:var(--blue);background:rgba(10,132,255,0.08)}
+.qty-input.has-value{border-color:var(--green);background:rgba(48,209,88,0.08)}
+.qty-unit{font-size:10px;color:var(--text3);font-weight:600;text-align:center;width:72px;flex-shrink:0;margin-top:-2px}
+.product-prev{font-size:10px;color:var(--text3)}
+.product-prev b{color:var(--text2)}
+
+/* Jump nav - floating pills to jump between sections */
+.jump-nav{display:flex;gap:6px;padding:8px 16px;overflow-x:auto;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch}
+.jump-nav::-webkit-scrollbar{display:none}
+.jump-pill{padding:7px 12px;border-radius:16px;background:var(--card);border:1px solid var(--border);
+  color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;
+  flex-shrink:0;transition:all 0.15s}
+.jump-pill.active{border-color:var(--blue);background:rgba(10,132,255,0.12);color:var(--blue)}
+
+/* Save bar */
+.save-bar{position:fixed;bottom:0;left:0;right:0;padding:12px 16px calc(var(--safe-bottom) + 12px);
+  background:rgba(10,10,12,0.92);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  border-top:1px solid var(--border);display:flex;gap:10px;align-items:center;z-index:99}
+.save-info{flex:1;font-size:12px;color:var(--text2)}
+.save-info b{color:var(--text);font-weight:700}
+.save-btn{padding:12px 28px;border-radius:12px;background:var(--green);color:#000;
+  font-size:15px;font-weight:700;border:none;cursor:pointer;transition:all 0.15s}
+.save-btn:active{transform:scale(0.97)}
+.save-btn:disabled{opacity:0.35;cursor:not-allowed}
+.discard-btn{padding:12px 16px;border-radius:12px;background:var(--card);color:var(--red);
+  font-size:13px;font-weight:600;border:1px solid rgba(255,69,58,0.3);cursor:pointer}
+
+/* History */
+.history-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:16px;margin-bottom:10px}
+.history-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.history-date{font-size:14px;font-weight:700}
+.history-badge{font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px}
+.badge-complete{background:rgba(48,209,88,0.15);color:var(--green)}
+.history-meta{font-size:12px;color:var(--text2)}
+
+.empty{padding:60px 20px;text-align:center}
+.empty-icon{font-size:48px;margin-bottom:12px;opacity:0.3}
+.empty-text{font-size:15px;color:var(--text2);line-height:1.6}
+
+.toast{position:fixed;top:calc(var(--safe-top) + 80px);left:50%;transform:translateX(-50%) translateY(-20px);
+  background:var(--green);color:#000;padding:12px 24px;border-radius:12px;font-size:14px;
+  font-weight:700;opacity:0;transition:all 0.3s;z-index:200;pointer-events:none;
+  box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{background:var(--red);color:#fff}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.fade-up{animation:fadeUp 0.25s ease both}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <div class="hdr-left">
+      <div class="hdr-logo">RN</div>
+      <div>
+        <div class="hdr-title">Inventory Count</div>
+        <div class="hdr-sub" id="count-location-label">SELECT LOCATION</div>
+      </div>
+    </div>
+    <a href="/manage" class="back-btn">← Back</a>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ========== SETUP ========== -->
+<div class="setup" id="setup-screen">
+  <div class="setup-title">New Count</div>
+  <div class="setup-sub">Pick a location to start counting. Products are organized by storage area in shelf order.</div>
+
+  <div class="setup-card">
+    <div class="setup-label">Location</div>
+    <div class="loc-grid">
+      <button class="loc-btn" data-loc="dennis" onclick="pickLoc(this)">Dennis Port</button>
+      <button class="loc-btn" data-loc="chatham" onclick="pickLoc(this)">Chatham</button>
+    </div>
+  </div>
+
+  <button class="start-btn" id="start-btn" disabled onclick="startCount()">Start Count</button>
+
+  <div style="margin-top:32px">
+    <div class="setup-label" style="padding:0 4px">Recent Counts</div>
+    <div id="history-list">
+      <div class="empty" style="padding:30px 0"><div class="empty-icon">📋</div><div class="empty-text">No counts yet</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== COUNT ========== -->
+<div class="count-screen" id="count-screen">
+  <div class="jump-nav" id="jump-nav"></div>
+
+  <div class="search-wrap">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input class="search-input" id="search" placeholder="Search products..." oninput="renderCount()">
+  </div>
+
+  <div class="count-stats" id="count-stats"></div>
+  <div class="product-list" id="product-list"></div>
+
+  <div class="save-bar">
+    <button class="discard-btn" onclick="discardCount()">✕</button>
+    <div class="save-info"><b id="counted-num">0</b> of <span id="total-num">0</span> counted</div>
+    <button class="save-btn" id="save-btn" onclick="saveCount()">Save Count</button>
+  </div>
+</div>
+
+<script>
+const S = { location: null, sections: [], counts: {}, countId: null, totalProducts: 0 };
+
+function pickLoc(el) {
+  document.querySelectorAll('.loc-btn').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+  S.location = el.dataset.loc;
+  document.getElementById('start-btn').disabled = false;
+}
+
+// ============================================
+// START COUNT
+// ============================================
+async function startCount() {
+  if (!S.location) return;
+
+  const label = S.location === 'dennis' ? 'DENNIS PORT' : 'CHATHAM';
+  document.getElementById('count-location-label').textContent = label;
+
+  // Load count sheet organized by storage location
+  try {
+    const res = await fetch('/api/storage/count-sheet?location=' + S.location);
+    S.sections = await res.json();
+  } catch(e) {
+    showToast('Failed to load count sheet', true);
+    return;
+  }
+
+  if (S.sections.length === 0) {
+    showToast('No products assigned to storage areas. Go to Storage Layout to set up.', true);
+    return;
+  }
+
+  // Create count session
+  try {
+    const res = await fetch('/api/inventory/counts', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ location: S.location, notes: 'Full count' })
+    });
+    const data = await res.json();
+    S.countId = data.id;
+  } catch(e) {}
+
+  S.counts = {};
+  S.totalProducts = S.sections.reduce((sum, sec) => sum + sec.products.length, 0);
+
+  // Pre-fill with last counts (Smart Pre-Fill)
+  S.sections.forEach(sec => {
+    sec.products.forEach(p => {
+      if (p.current_qty !== null && p.current_qty !== undefined && p.current_qty > 0) {
+        S.counts[p.id] = p.current_qty;
+      }
+    });
+  });
+
+  // Build jump nav
+  document.getElementById('jump-nav').innerHTML = S.sections.map((sec, i) =>
+    '<button class="jump-pill' + (i === 0 ? ' active' : '') + '" onclick="jumpTo(' + i + ')">' +
+      sectionIcon(sec.location_name) + ' ' + sec.location_name + ' (' + sec.products.length + ')</button>'
+  ).join('');
+
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('count-screen').style.display = 'block';
+  document.getElementById('total-num').textContent = S.totalProducts;
+
+  renderCount();
+  updateStats();
+}
+
+function sectionIcon(name) {
+  const n = name.toLowerCase();
+  if (n.includes('walk-in') || n.includes('cooler')) return '❄️';
+  if (n.includes('freezer')) return '🧊';
+  if (n.includes('bar')) return '🍸';
+  if (n.includes('dry')) return '📦';
+  if (n.includes('front') || n.includes('line')) return '🍳';
+  return '📍';
+}
+
+function jumpTo(idx) {
+  const el = document.getElementById('section-' + idx);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('.jump-pill').forEach((p, i) => {
+      p.classList.toggle('active', i === idx);
+    });
+  }
+}
+
+// ============================================
+// RENDER
+// ============================================
+function renderCount() {
+  const search = (document.getElementById('search').value || '').toLowerCase();
+  const list = document.getElementById('product-list');
+  let html = '';
+
+  S.sections.forEach((sec, si) => {
+    let products = sec.products;
+    if (search) products = products.filter(p => p.name.toLowerCase().includes(search));
+    if (products.length === 0 && search) return;
+
+    // Section header
+    html += '<div class="section-header" id="section-' + si + '">' +
+      '<div class="section-name">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + '</div>' +
+      '<div class="section-count" id="sec-count-' + si + '">' + countedInSection(sec) + '/' + sec.products.length + '</div>' +
+    '</div>';
+
+    products.forEach((p, i) => {
+      const val = S.counts[p.id] !== undefined ? S.counts[p.id] : '';
+      const hasVal = val !== '';
+      const prev = p.current_qty;
+      const prevHtml = prev !== null && prev !== undefined
+        ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
+      const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
+
+      html += '<div class="product-row fade-up" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
+        '<div class="product-info">' +
+          '<div class="product-name">' + esc(p.name) + '</div>' +
+          '<div class="product-meta">' +
+            '<span class="product-tag ' + tagClass + '">' + catLabel(p.category) + '</span>' +
+            (p.current_price ? '<span>$' + Number(p.current_price).toFixed(2) + '</span>' : '') +
+            prevHtml +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align:center">' +
+          '<input class="qty-input' + (hasVal ? ' has-value' : '') + '" type="number" inputmode="decimal" step="0.5" ' +
+            'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + p.id + ',' + si + ',this)" data-pid="' + p.id + '">' +
+          '<div class="qty-unit">' + (p.inventory_unit || p.unit || 'ea') + '</div>' +
+        '</div>' +
+      '</div>';
+    });
+  });
+
+  if (!html) {
+    html = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">No products found</div></div>';
+  }
+
+  list.innerHTML = html;
+}
+
+function countedInSection(sec) {
+  return sec.products.filter(p => S.counts[p.id] !== undefined).length;
+}
+
+function setQty(pid, sectionIdx, el) {
+  const v = el.value.trim();
+  if (v === '') {
+    delete S.counts[pid];
+    el.classList.remove('has-value');
+  } else {
+    S.counts[pid] = parseFloat(v);
+    el.classList.add('has-value');
+  }
+  updateStats();
+  // Update section counter
+  const sec = S.sections[sectionIdx];
+  if (sec) {
+    const el2 = document.getElementById('sec-count-' + sectionIdx);
+    if (el2) el2.textContent = countedInSection(sec) + '/' + sec.products.length;
+  }
+}
+
+function updateStats() {
+  const counted = Object.keys(S.counts).length;
+  document.getElementById('counted-num').textContent = counted;
+  document.getElementById('total-num').textContent = S.totalProducts;
+
+  const pct = S.totalProducts > 0 ? Math.round(counted / S.totalProducts * 100) : 0;
+  let totalVal = 0;
+  for (const [pid, qty] of Object.entries(S.counts)) {
+    for (const sec of S.sections) {
+      const prod = sec.products.find(p => p.id == pid);
+      if (prod && prod.current_price) { totalVal += qty * prod.current_price; break; }
+    }
+  }
+
+  document.getElementById('count-stats').innerHTML =
+    '<div class="mini-stat"><div class="mini-stat-label">Progress</div><div class="mini-stat-val">' + pct + '%</div></div>' +
+    '<div class="mini-stat"><div class="mini-stat-label">Counted</div><div class="mini-stat-val">' + counted + '/' + S.totalProducts + '</div></div>' +
+    '<div class="mini-stat"><div class="mini-stat-label">Est. Value</div><div class="mini-stat-val">$' + totalVal.toLocaleString(undefined,{maximumFractionDigits:0}) + '</div></div>';
+}
+
+// ============================================
+// SAVE
+// ============================================
+async function saveCount() {
+  const counted = Object.keys(S.counts).length;
+  if (counted === 0) { showToast('No items counted yet', true); return; }
+
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  try {
+    const items = [];
+    for (const [pid, qty] of Object.entries(S.counts)) {
+      let unit = 'ea';
+      for (const sec of S.sections) {
+        const prod = sec.products.find(p => p.id == pid);
+        if (prod) { unit = prod.inventory_unit || prod.unit || 'ea'; break; }
+      }
+      items.push({ product_id: parseInt(pid), quantity: qty, unit });
+    }
+
+    const res = await fetch('/api/inventory/counts/batch', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ count_id: S.countId, location: S.location, items })
+    });
+    if (!res.ok) throw new Error('Save failed');
+
+    showToast('✓ ' + counted + ' items saved!');
+    setTimeout(() => {
+      document.getElementById('count-screen').style.display = 'none';
+      document.getElementById('setup-screen').style.display = 'block';
+      document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
+      loadHistory();
+    }, 1500);
+  } catch(e) {
+    showToast('Error saving count', true);
+    btn.disabled = false; btn.textContent = 'Save Count';
+  }
+}
+
+function discardCount() {
+  if (Object.keys(S.counts).length > 0 && !confirm('Discard this count?')) return;
+  document.getElementById('count-screen').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'block';
+  document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
+  document.getElementById('search').value = '';
+  S.counts = {};
+}
+
+// ============================================
+// HISTORY
+// ============================================
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/inventory/counts/history');
+    const data = await res.json();
+    const el = document.getElementById('history-list');
+    if (!data.length) {
+      el.innerHTML = '<div class="empty" style="padding:30px 0"><div class="empty-icon">📋</div><div class="empty-text">No counts yet</div></div>';
+      return;
+    }
+    el.innerHTML = data.slice(0, 10).map(c => {
+      const d = new Date(c.created_at);
+      const dateStr = d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+      const timeStr = d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+      const loc = c.location === 'dennis' ? 'Dennis' : 'Chatham';
+      return '<div class="history-card"><div class="history-top">' +
+        '<div class="history-date">' + dateStr + ' · ' + timeStr + '</div>' +
+        '<span class="history-badge badge-complete">Complete</span>' +
+        '</div><div class="history-meta">' + loc + ' · ' + (c.item_count || 0) + ' items</div></div>';
+    }).join('');
+  } catch(e) {}
+}
+
+function catLabel(c) { return {BEER:'Beer',LIQUOR:'Liquor',WINE:'Wine',FOOD:'Food',NA_BEVERAGES:'NA Bev',OTHER:'Other',SUPPLIES:'Supplies'}[c]||c; }
+function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+function showToast(msg,isError) {
+  const t=document.getElementById('toast');t.textContent=msg;
+  t.className='toast show'+(isError?' error':'');setTimeout(()=>t.className='toast',2500);
+}
+loadHistory();
+</script>
+</body>
+</html>
