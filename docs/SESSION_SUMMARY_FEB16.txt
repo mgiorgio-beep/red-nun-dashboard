@@ -1,0 +1,95 @@
+RED NUN ANALYTICS — SESSION SUMMARY
+Date: Monday February 16, 2026
+Droplet: ssh root@159.65.180.102
+App path: /opt/rednun
+No git repo on droplet — files deployed directly
+
+========================================
+SPORTS GUIDE — FIXES & IMPROVEMENTS
+========================================
+
+PROBLEM:
+Sports guide at dashboard.rednun.com/sports/public stuck on Sunday 2/15.
+The 5AM auto-scrape never ran and the FANZO session cookie had expired.
+
+----------------------------------------------------------------------
+FIX 1: CRON JOB (scheduler never started)
+----------------------------------------------------------------------
+setup_scheduler() lives inside "if __name__ == '__main__'" in server.py,
+but gunicorn imports the module — so APScheduler never starts.
+
+Solution: Added system cron job instead of relying on APScheduler.
+
+  0 10 * * * cd /opt/rednun && /opt/rednun/venv/bin/python3 -c \
+    'from sports_guide.fanzo_scraper import scrape_fanzo_guide; scrape_fanzo_guide()' \
+    >> /opt/rednun/sports_scrape.log 2>&1
+
+Runs at 10:00 UTC = 5:00 AM Eastern daily.
+Log: /opt/rednun/sports_scrape.log
+
+----------------------------------------------------------------------
+FIX 2: AUTO-AUTH VIA GMAIL IMAP (no more expiring cookies)
+----------------------------------------------------------------------
+Rewrote /opt/rednun/sports_guide/fanzo_scraper.py with auto-auth:
+  1. Try existing cookie from .env (fast path)
+  2. If expired, connect to Gmail IMAP (GMAIL_ADDRESS + GMAIL_APP_PASSWORD)
+  3. Search for latest FANZO/thedailyrail.com email
+  4. Extract guide link from email body
+  5. If no email, POST to FANZO login form, poll Gmail (6 attempts)
+  6. Follow link to get fresh session, scrape guide
+  7. Cache new PHPSESSID cookie in .env for next time
+Scraper is now self-healing — no manual cookie updates needed.
+
+----------------------------------------------------------------------
+BUG FIX 3: Q COLUMN OFFSET
+----------------------------------------------------------------------
+FANZO tables have QScore as first data column. Parser wasn't
+skipping it. Fix: si += 1 after notes button skip.
+
+----------------------------------------------------------------------
+BUG FIX 4: "View" APPENDED TO URL
+----------------------------------------------------------------------
+Regex grabbed trailing "View" from email link text.
+Fix: re.sub(r'(View|Launch|Click|Here|Guide)+$', '', link)
+
+----------------------------------------------------------------------
+BUG FIX 5: CHANNEL RENDERING IN TEMPLATE
+----------------------------------------------------------------------
+Template expected strings, scraper outputs dicts.
+Fixed: game.channels[i] -> game.channels[i].name
+       game.drtv[i] -> game.channels[i].drtv
+
+----------------------------------------------------------------------
+BUG FIX 6: MISSING SECTION TITLES
+----------------------------------------------------------------------
+Template: section.sport -> section.name
+
+========================================
+FILES MODIFIED ON DROPLET
+========================================
+/opt/rednun/sports_guide/fanzo_scraper.py — full rewrite
+/opt/rednun/sports_guide/templates/sports_guide.html — fixes
+System crontab — added sports scrape at 10 UTC
+
+========================================
+PENDING
+========================================
+- Merge streaming into sport sections (code written, not deployed)
+- APScheduler doesn't run under gunicorn — check Toast sync,
+  MarginEdge sync, weekly email jobs
+
+========================================
+KEY COMMANDS
+========================================
+Public guide:    https://dashboard.rednun.com/sports/public
+Manual refresh:  curl -X POST https://dashboard.rednun.com/sports/refresh
+Check cron log:  tail -20 /opt/rednun/sports_scrape.log
+Restart server:  pkill -f "gunicorn.*server:app" && sleep 2 && \
+  cd /opt/rednun && /opt/rednun/venv/bin/gunicorn \
+  --bind 127.0.0.1:8080 --workers 1 --timeout 120 server:app --daemon
+
+----------------------------------------------------------------------
+ADDITION: SHORT URL /guide
+----------------------------------------------------------------------
+Added route /guide in sports.py as alias for /sports/public.
+Access at: https://dashboard.rednun.com/guide
