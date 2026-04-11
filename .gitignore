@@ -1,0 +1,37 @@
+# runtime data
+*.db
+*.sqlite
+*.sqlite3
+data/
+invoice_images/
+invoice_images_archive/
+invoice_images_pre_reset/
+invoice_thumbnails/
+
+# secrets
+.env
+.env.*
+!.env.example
+*.qb_env
+tokens.json
+*.pickle
+google_credentials.json
+gmail_token.pickle
+google_token.pickle
+
+# backups & archives
+*.bak
+*.bak[0-9]
+*.bak_*
+*.archived
+*.zip
+
+# build / runtime
+__pycache__/
+*.pyc
+venv/
+node_modules/
+*.log
+
+# but NEVER ignore .gitkeep
+!.gitkeep
