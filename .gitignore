@@ -16,6 +16,7 @@ invoice_thumbnails/
 tokens.json
 *.pickle
 google_credentials.json
+credentials.json
 gmail_token.pickle
 google_token.pickle
 
