@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Nun Sports Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #1a1a1a; --card: #222; --red: #9B1B1B; --gold: #D4A843;
+            --gold-dim: rgba(212,168,67,0.12); --green: #22C55E;
+            --t1: #E8E8E8; --t2: #aaa; --t3: #777; --border: #333;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Oswald',sans-serif; background:var(--bg); color:var(--t1); -webkit-font-smoothing:antialiased; font-size:13px; text-transform:uppercase; letter-spacing:0.5px; }
+        .header {
+            background:linear-gradient(135deg,#1a0505 0%,var(--red) 50%,#1a0505 100%);
+            padding:10px 14px; border-bottom:2px solid var(--gold);
+            display:flex; align-items:center; justify-content:space-between;
+        }
+        .header-left { display:flex; align-items:center; gap:10px; }
+        .logo { background:rgba(0,0,0,.5); border:1px solid var(--gold); border-radius:4px; padding:2px 7px; font-size:14px; font-weight:700; letter-spacing:2px; color:var(--gold); }
+        .h-title { font-size:15px; font-weight:600; letter-spacing:2px; color:#fff; }
+        .h-sub { font-size:9px; font-weight:400; color:rgba(255,255,255,.5); letter-spacing:1px; }
+        .h-date { font-size:14px; font-weight:600; color:#fff; text-align:right; }
+        .h-dtv { font-size:8px; font-weight:400; color:rgba(255,255,255,.5); }
+        .stale { background:#7C2D12; color:#FED7AA; padding:6px 10px; text-align:center; font-size:11px; }
+        .no-data { text-align:center; padding:40px 10px; color:var(--t2); }
+        .no-data h2 { font-size:20px; font-weight:600; margin-bottom:8px; color:var(--t1); }
+        .content { padding:8px 6px 20px; }
+        .section { background:var(--card); border-radius:4px; margin-bottom:8px; overflow:hidden; border:1px solid var(--border); }
+        .sh { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-left:3px solid var(--red); }
+        .sh.fav { border-left-color:var(--gold); background:var(--gold-dim); }
+        .sh.str { border-left-color:#3B82F6; }
+        .sh-icon { font-size:14px; margin-right:6px; }
+        .sh-title { font-size:14px; font-weight:600; letter-spacing:1.5px; flex-grow:1; }
+        .sh-badge { background:rgba(255,255,255,.08); color:var(--t2); font-size:9px; padding:2px 7px; border-radius:10px; }
+        .game { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.04); gap:6px; }
+        .game:last-child { border-bottom:none; }
+        .game.fv { border-left:2px solid var(--gold); }
+        .g-time { font-weight:500; font-size:12px; width:55px; flex-shrink:0; }
+        .g-info { flex:1; min-width:0; }
+        .g-event { font-weight:600; font-size:12px; line-height:1.3; }
+        .g-detail { color:var(--t2); font-size:11px; font-weight:400; }
+        .g-sport { color:var(--t3); font-size:10px; font-weight:400; }
+        .g-ch { text-align:center; flex-shrink:0; min-width:50px; }
+        .g-ch-name { font-size:9px; color:var(--t2); font-weight:400; display:block; }
+        .g-ch-num { font-size:18px; font-weight:700; color:var(--gold); line-height:1; display:block; }
+        .g-ch-multi { margin-top:4px; padding-top:4px; border-top:1px solid var(--border); }
+        .sb { display:inline-block; padding:2px 6px; border-radius:3px; font-size:9px; font-weight:600; }
+        .sa { display:block; font-size:8px; color:var(--t3); margin-top:1px; text-align:center; font-weight:400; }
+        .footer { padding:12px 8px; text-align:center; border-top:1px solid var(--border); }
+        .f-up { font-size:9px; color:var(--t3); display:flex; align-items:center; justify-content:center; gap:4px; }
+        .pulse { width:5px; height:5px; background:var(--green); border-radius:50%; display:inline-block; animation:p 2s infinite; }
+        @keyframes p { 0%,100%{opacity:1} 50%{opacity:.4} }
+        a.full-link { display:inline-block; margin-top:8px; color:var(--gold); font-size:11px; font-weight:500; text-decoration:none; letter-spacing:1px; border:1px solid var(--gold); padding:5px 14px; border-radius:4px; }
+        a.full-link:hover { background:var(--gold); color:#000; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <img class="logo-icon" alt="Red Nun" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cline x1='224' y1='138' x2='185' y2='60' stroke='white' stroke-width='11' stroke-linecap='round'/%3E%3Cline x1='288' y1='138' x2='327' y2='60' stroke='white' stroke-width='11' stroke-linecap='round'/%3E%3Ccircle cx='185' cy='56' r='7' fill='white'/%3E%3Ccircle cx='327' cy='56' r='7' fill='white'/%3E%3Crect x='120' y='130' width='272' height='215' rx='24' ry='24' stroke='white' stroke-width='11' fill='none'/%3E%3Crect x='150' y='157' width='212' height='161' rx='14' ry='14' stroke='white' stroke-width='7' fill='none'/%3E%3Cline x1='198' y1='345' x2='185' y2='372' stroke='white' stroke-width='9' stroke-linecap='round'/%3E%3Cline x1='314' y1='345' x2='327' y2='372' stroke='white' stroke-width='9' stroke-linecap='round'/%3E%3Ctext x='256' y='440' text-anchor='middle' font-family='Arial Black,Arial,sans-serif' font-weight='900' font-size='68' fill='white' letter-spacing='5'%3ERED NUN%3C/text%3E%3C/svg%3E">
+            <div><div class="h-title">Sports Guide</div><div class="h-sub">Dennis Port & Chatham</div></div>
+        </div>
+        <div>
+            {% if data %}<div class="h-date">{{ data.date }}</div>{% endif %}
+            <div class="h-dtv">DirecTV &bull; Eastern</div>
+        </div>
+    </div>
+    {% if stale %}<div class="stale">&#9888; Guide may be outdated</div>{% endif %}
+    {% if not data %}
+    <div class="no-data"><h2>Guide Unavailable</h2><p>Updates daily at 5:00 AM</p></div>
+    {% else %}
+    <div class="content">
+        {% if data.favorites %}
+        <div class="section"><div class="sh fav"><span class="sh-icon">&#11088;</span><span class="sh-title">Favorites</span><span class="sh-badge">{{ data.favorites|length }}</span></div>
+        {% for g in data.favorites %}
+        <div class="game fv">
+            <div class="g-time">{{ g.time }}</div>
+            <div class="g-info">
+                <div class="g-event">{{ g.event }}</div>
+                <div class="g-detail">{% if g.detail %}vs {{ g.detail }}{% endif %}</div>
+                <div class="g-sport">{{ g.sport }}</div>
+            </div>
+            <div class="g-ch">
+                {% if g.is_streaming %}<span class="sb" style="background:{{ g.streaming_color|default('#666') }};color:{{ g.streaming_text_color|default('#fff') }}">{{ g.streaming_display|default(g.streaming_service) }}</span>
+                {% else %}{% for i in range(g.channels|length) %}<div{% if i > 0 %} class="g-ch-multi"{% endif %}><span class="g-ch-name">{{ g.channels[i] }}</span><span class="g-ch-num">{{ g.drtv[i] if i < g.drtv|length else '' }}</span></div>{% endfor %}{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if data.streaming %}
+        <div class="section"><div class="sh str"><span class="sh-icon">&#128225;</span><span class="sh-title">Streaming</span><span class="sh-badge">{{ data.streaming|length }}</span></div>
+        {% for g in data.streaming %}
+        <div class="game{% if g.is_favorite %} fv{% endif %}">
+            <div class="g-time">{{ g.time }}</div>
+            <div class="g-info">
+                <div class="g-event">{{ g.event }}</div>
+                <div class="g-detail">{{ g.detail }}</div>
+                <div class="g-sport">{{ g.sport }}</div>
+            </div>
+            <div class="g-ch"><span class="sb" style="background:{{ g.streaming_color|default('#666') }};color:{{ g.streaming_text_color|default('#fff') }}">{{ g.streaming_display|default(g.streaming_service) }}</span><span class="sa">{{ g.streaming_app|default('') }}</span></div>
+        </div>
+        {% endfor %}
+        </div>
+        {% endif %}
+
+        {% for section in data.sections %}
+        <div class="section"><div class="sh"><span class="sh-icon">{{ section.icon }}</span><span class="sh-title">{{ section.sport }}</span><span class="sh-badge">{{ section.game_count }}</span></div>
+        {% for g in section.games %}
+        <div class="game{% if g.is_favorite %} fv{% endif %}">
+            <div class="g-time">{{ g.time }}</div>
+            <div class="g-info">
+                <div class="g-event">{{ g.event }}</div>
+                <div class="g-detail">{% if g.detail %}{{ g.detail }}{% endif %}</div>
+            </div>
+            <div class="g-ch">
+                {% if g.is_streaming and g.streaming_display is defined %}<span class="sb" style="background:{{ g.streaming_color }};color:{{ g.streaming_text_color }}">{{ g.streaming_display }}</span><span class="sa">{{ g.streaming_app }}</span>
+                {% else %}{% for i in range(g.channels|length) %}<div{% if i > 0 %} class="g-ch-multi"{% endif %}><span class="g-ch-name">{{ g.channels[i] }}</span><span class="g-ch-num">{{ g.drtv[i] if i < g.drtv|length else '' }}</span></div>{% endfor %}{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    <div class="footer">
+        <div class="f-up"><span class="pulse"></span> Auto-Updated &bull; {{ data.updated_at[:16]|replace('T', ' ') }}</div>
+        <a class="full-link" href="https://dashboard.rednun.com/sports/public" target="_blank">View Full Guide &rarr;</a>
+    </div>
+    {% endif %}
+</body>
+</html>

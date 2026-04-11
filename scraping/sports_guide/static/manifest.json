@@ -1,0 +1,25 @@
+{
+  "name": "Sports Guide",
+  "short_name": "Sports Guide",
+  "description": "Live sports guide for Red Nun restaurants",
+  "start_url": "/guide",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0C0C0E",
+  "theme_color": "#9B1B1B",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/sports/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/sports/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
