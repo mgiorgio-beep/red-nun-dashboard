@@ -2,7 +2,7 @@ import sqlite3
 """
 Red Nun Analytics — Dashboard Server
 Flask app that serves the dashboard and provides JSON API endpoints
-for the frontend to consume. Now includes MarginEdge COGS data.
+for the frontend to consume.
 """
 
 import os
@@ -29,7 +29,6 @@ from reports.analytics import (
     get_weekly_summary,
     get_price_movers,
 )
-from export import generate_weekly_excel
 from routes.invoice_routes import invoice_bp
 from routes.catalog_routes import catalog_bp
 from routes.inventory_routes import inventory_bp
@@ -52,17 +51,10 @@ from staff.tv_power import tv_power_bp
 from routes.billpay_routes import billpay_bp
 from routes.payment_routes import payment_bp, init_payment_tables
 from integrations.invoices.processor import init_invoice_tables
-from email_report import send_weekly_report
 import secrets
 
 from routes.availability_routes import availability_bp
 from routes.application_routes import application_bp
-# MarginEdge imports (optional — graceful if not installed yet)
-try:
-    from marginedge_sync import init_me_tables, sync_all as me_sync_all
-    ME_AVAILABLE = True
-except ImportError:
-    ME_AVAILABLE = False
 
 load_dotenv()
 logging.basicConfig(
@@ -114,13 +106,6 @@ try:
     logger.info("Invoice scanner tables initialized")
 except Exception as e:
     logger.warning(f"Invoice table init failed: {e}")
-
-if ME_AVAILABLE:
-    try:
-        init_me_tables()
-        logger.info("MarginEdge tables initialized")
-    except Exception as e:
-        logger.warning(f"MarginEdge table init failed: {e}")
 
 try:
     init_specials_tables()
@@ -659,13 +644,6 @@ def api_cogs_pour_cost():
     })
 
 
-# ------------------------------------------------------------------
-# MarginEdge Sync Controls
-# ------------------------------------------------------------------
-
-
-
-
 @app.route("/api/invoices/me/<order_id>")
 def api_me_invoice_detail(order_id):
     """Get a MarginEdge invoice with its line items."""
@@ -711,18 +689,6 @@ def pending_count():
     count = scanned + me
     return jsonify({"count": count})
 
-@app.route("/api/sync/marginedge", methods=["POST"])
-def api_trigger_me_sync():
-    """Manually trigger a MarginEdge sync."""
-    if not ME_AVAILABLE:
-        return jsonify({"status": "error", "message": "MarginEdge module not installed"}), 400
-    try:
-        me_sync_all(invoice_days=30)
-        return jsonify({"status": "ok", "message": "MarginEdge sync complete"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
 # ------------------------------------------------------------------
 # Forecast Endpoint
 # ------------------------------------------------------------------
@@ -751,19 +717,6 @@ def api_weekly_summary():
     location, start, end = parse_filters()
     data = get_weekly_summary(start, end, location)
     return jsonify(data)
-
-
-# ------------------------------------------------------------------
-# Excel Export
-# ------------------------------------------------------------------
-
-@app.route("/api/export/weekly")
-def api_export_weekly():
-    location, start, end = parse_filters()
-    filepath = generate_weekly_excel(start, end, location)
-    directory = os.path.dirname(filepath)
-    filename = os.path.basename(filepath)
-    return send_from_directory(directory, filename, as_attachment=True)
 
 
 # ------------------------------------------------------------------
@@ -844,32 +797,10 @@ def setup_scheduler():
     )
     logger.info("Toast intraday sync: every 30 min, 10 AM - 1 AM")
 
-    # MarginEdge sync at 5:30 AM (daily, invoices don't change intraday)
-    if ME_AVAILABLE:
-        scheduler.add_job(
-            func=lambda: me_sync_all(invoice_days=30),
-            trigger="cron",
-            hour=5,
-            minute=30,
-            id="daily_me_sync",
-        )
-        logger.info("MarginEdge sync scheduled at 5:30 AM")
-
-    # Weekly email report Monday at 7:00 AM
-    scheduler.add_job(
-        func=send_weekly_report,
-        trigger="cron",
-        day_of_week="mon",
-        hour=7,
-        minute=0,
-        id="weekly_email",
-    )
-    logger.info("Weekly email report scheduled for Monday 7:00 AM")
-
     scheduler.add_job(func=scrape_fanzo_guide, trigger='cron', hour=5, minute=0, timezone='US/Eastern', id='fanzo_scrape')
     scheduler.add_job(fetch_all_odds, 'cron', hour='5,7,9,11,13,15,17,19,21,23', id='odds_fetch', replace_existing=True)
     scheduler.start()
-    logger.info("Scheduler started — Toast sync at 5:00 AM, weekly email Monday 7 AM")
+    logger.info("Scheduler started — Toast intraday sync, fanzo scrape, odds fetch")
 
 
 # ------------------------------------------------------------------
@@ -897,10 +828,6 @@ if __name__ == "__main__":
     setup_scheduler()
     port = int(os.getenv("DASHBOARD_PORT", 8080))
     logger.info(f"Starting Red Nun Analytics on port {port}")
-    if ME_AVAILABLE:
-        logger.info("MarginEdge integration: ACTIVE")
-    else:
-        logger.info("MarginEdge integration: NOT AVAILABLE (install marginedge_client.py)")
     app.run(host="0.0.0.0", port=port, debug=False)
 
 # ── Product Setup API ──────────────────────────────────────────

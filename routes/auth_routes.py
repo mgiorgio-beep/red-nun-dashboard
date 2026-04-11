@@ -20,39 +20,9 @@ def hash_password(password, salt):
 
 
 def notify_admin_login(username, full_name, role, ip_address):
-    """Notify admin of non-admin login via email and log."""
+    """Log a non-admin login. (Email notification removed in Phase 2.)"""
     try:
-        # Log to console/file
         logger.warning(f"🔔 NON-ADMIN LOGIN: {username} ({full_name}) - Role: {role} - IP: {ip_address}")
-
-        # Try to send email notification
-        try:
-            from email_report import send_email
-            import os
-
-            admin_email = os.getenv('ADMIN_EMAIL')
-            if admin_email:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                subject = f"🔔 Login Alert: {username}"
-                body = f"""
-A non-admin user has logged into Red Nun Analytics:
-
-Username: {username}
-Full Name: {full_name}
-Role: {role}
-IP Address: {ip_address}
-Time: {timestamp}
-
-View login history: http://159.65.180.102:8080/admin/logins
-                """
-
-                send_email(admin_email, subject, body)
-                logger.info(f"Login notification email sent to {admin_email}")
-        except ImportError:
-            logger.debug("Email notification not available")
-        except Exception as e:
-            logger.error(f"Failed to send login notification email: {e}")
-
     except Exception as e:
         logger.error(f"Error in notify_admin_login: {e}")
 

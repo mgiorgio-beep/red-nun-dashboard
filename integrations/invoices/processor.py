@@ -2541,36 +2541,23 @@ def get_invoice(invoice_id):
 
 
 def get_invoices(location=None, status=None, start_date=None, end_date=None, limit=50):
-    """Get invoices from both scanned and MarginEdge sources."""
+    """Get scanned invoices."""
     conn = get_connection()
     where_s = []
-    where_m = []
     params_s = []
-    params_m = []
     if location:
         where_s.append("location = ?")
         params_s.append(location)
-        where_m.append("location = ?")
-        params_m.append(location)
     if status:
         where_s.append("status = ?")
         params_s.append(status)
-        if status == 'confirmed':
-            where_m.append("status = 'CLOSED'")
-        elif status == 'pending':
-            where_m.append("status != 'CLOSED'")
     if start_date:
         where_s.append("invoice_date >= ?")
         params_s.append(start_date)
-        where_m.append("invoice_date >= ?")
-        params_m.append(start_date)
     if end_date:
         where_s.append("invoice_date <= ?")
         params_s.append(end_date)
-        where_m.append("invoice_date <= ?")
-        params_m.append(end_date)
     ws = "WHERE " + " AND ".join(where_s) if where_s else ""
-    wm = "WHERE " + " AND ".join(where_m) if where_m else ""
     sql = f"""
         SELECT id, NULL as order_id, location, vendor_name, invoice_number, invoice_date,
                total, category, status, created_at, confirmed_at, COALESCE(source, 'scanned') as source,
@@ -2579,18 +2566,10 @@ def get_invoices(location=None, status=None, start_date=None, end_date=None, lim
                COALESCE(discrepancy, 0.0) as discrepancy,
                COALESCE(needs_reconciliation, 0) as needs_reconciliation
         FROM scanned_invoices {ws}
-        UNION ALL
-        SELECT CAST(rowid AS INTEGER) as id, order_id, location, vendor_name, invoice_number, invoice_date,
-               order_total as total, 'FOOD' as category,
-               CASE WHEN status = 'CLOSED' THEN 'confirmed' ELSE 'pending' END as status,
-               synced_at as created_at, NULL as confirmed_at, 'marginedge' as source,
-               'unpaid' as payment_status, NULL as paid_date, NULL as payment_method, NULL as image_path, 0 as auto_confirmed,
-               0.0 as discrepancy, 0 as needs_reconciliation
-        FROM me_invoices {wm}
         ORDER BY invoice_date DESC
         LIMIT ?
     """
-    rows = conn.execute(sql, params_s + params_m + [limit]).fetchall()
+    rows = conn.execute(sql, params_s + [limit]).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -2731,7 +2710,7 @@ def get_price_alerts_for_invoice(invoice_id):
     """Compare each line item in an invoice against the most recent historical price.
 
     Returns a list of items where the price changed >= 5% vs the last known price
-    from either confirmed scanned invoices or MarginEdge invoices.
+    from confirmed scanned invoices.
     """
     conn = get_connection()
     items = conn.execute(
