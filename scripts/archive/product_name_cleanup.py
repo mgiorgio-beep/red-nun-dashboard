@@ -15,7 +15,7 @@ import os
 import argparse
 import requests
 from dotenv import load_dotenv
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 load_dotenv()
 

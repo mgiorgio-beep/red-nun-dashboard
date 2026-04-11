@@ -5,9 +5,9 @@ No automatic/background API calls.
 
 import logging
 from flask import Blueprint, jsonify, request
-from auth_routes import login_required
-from toast_client import ToastAPIClient
-from data_store import store_menus
+from routes.auth_routes import login_required
+from integrations.toast.toast_client import ToastAPIClient
+from integrations.toast.data_store import store_menus
 
 logger = logging.getLogger(__name__)
 

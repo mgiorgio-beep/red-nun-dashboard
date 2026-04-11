@@ -48,8 +48,8 @@ def section(title: str):
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
 
-from data_store import get_connection
-from inventory_ai_db import init_ai_inventory_tables
+from integrations.toast.data_store import get_connection
+from ai.inventory_ai_db import init_ai_inventory_tables
 
 init_ai_inventory_tables()   # idempotent — safe to call every run
 
@@ -93,7 +93,7 @@ def vision_item(name, qty, unit="case", pid=None, loc="Walk-in Cooler",
 
 # ── Import pipeline functions ──────────────────────────────────────────────────
 
-from inventory_ai_reconcile import (
+from ai.inventory_ai_reconcile import (
     reconcile_streams,
     cross_reference_history,
     create_draft_session,
@@ -502,7 +502,7 @@ def test5_api_endpoints():
 
     # Build a minimal test app — avoids all the cron/scheduler side-effects of server.py
     from flask import Flask
-    from inventory_ai_routes import ai_inventory_bp
+    from ai.inventory_ai_routes import ai_inventory_bp
 
     test_app = Flask(__name__, static_folder="static")
     test_app.config["TESTING"] = True

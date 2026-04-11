@@ -21,8 +21,8 @@ Usage:
 
 import sys
 import re
-from data_store import get_connection
-from invoice_processor import parse_pack_size
+from integrations.toast.data_store import get_connection
+from integrations.invoices.processor import parse_pack_size
 
 
 def extract_pack_from_name(product_name):

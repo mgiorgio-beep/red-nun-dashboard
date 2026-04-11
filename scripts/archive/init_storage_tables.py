@@ -4,7 +4,7 @@ Creates tables for managing storage locations and product-location mappings.
 """
 
 import sqlite3
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 def init_storage_tables():
     """Create storage location tables."""

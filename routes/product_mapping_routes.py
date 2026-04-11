@@ -6,8 +6,8 @@ vendor_item_links is the persistent mapping table.
 """
 import logging
 from flask import Blueprint, jsonify, request, send_from_directory
-from data_store import get_connection
-from auth_routes import login_required
+from integrations.toast.data_store import get_connection
+from routes.auth_routes import login_required
 
 logger = logging.getLogger(__name__)
 

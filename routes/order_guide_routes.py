@@ -9,7 +9,7 @@ POST /api/order-guide/search
 """
 import logging
 from flask import Blueprint, request, jsonify
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 logger = logging.getLogger(__name__)
 

@@ -4,8 +4,8 @@ Handles storage location management and product-location assignments.
 """
 
 from flask import Blueprint, jsonify, request
-from data_store import get_connection
-from auth_routes import login_required
+from integrations.toast.data_store import get_connection
+from routes.auth_routes import login_required
 
 storage_bp = Blueprint('storage', __name__)
 

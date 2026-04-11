@@ -14,7 +14,7 @@ import sqlite3
 import re
 from datetime import datetime
 from dotenv import load_dotenv
-from product_name_mapper import get_name_variants
+from routes.product_name_mapper import get_name_variants
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -2148,7 +2148,7 @@ def confirm_invoice(invoice_id, updated_data=None):
 
     # Auto-link vendor items using existing mappings, then fuzzy-match new ones
     try:
-        from product_mapping_routes import apply_existing_links, auto_match_vendor_items
+        from routes.product_mapping_routes import apply_existing_links, auto_match_vendor_items
         apply_existing_links(invoice_id, conn)
         conn.commit()
         auto_match_vendor_items(invoice_id=invoice_id)

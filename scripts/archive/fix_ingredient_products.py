@@ -7,7 +7,7 @@ Uses explicit manual mappings + conservative fuzzy matching.
 """
 
 import argparse
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 # Manual mappings: orphan_product_id -> good_product_id
 MANUAL_MAP = {

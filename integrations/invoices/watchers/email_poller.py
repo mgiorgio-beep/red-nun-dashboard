@@ -172,7 +172,7 @@ def _auto_orient_page(img, page_num=0):
 
 def process_email(msg):
     """Process a single email: extract attachments and run OCR."""
-    from invoice_processor import (
+    from integrations.invoices.processor import (
         extract_invoice_data, save_invoice, init_invoice_tables,
     )
 
@@ -336,7 +336,7 @@ def poll_inbox():
 
 if __name__ == "__main__":
     # Initialize tables if needed
-    from invoice_processor import init_invoice_tables
+    from integrations.invoices.processor import init_invoice_tables
     init_invoice_tables()
 
     poll_inbox()

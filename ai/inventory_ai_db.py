@@ -6,7 +6,7 @@ These tables sit alongside count_sessions / count_items — they do NOT replace 
 
 import logging
 import os
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 # ── Logging setup ────────────────────────────────────────────────────────────
 logger = logging.getLogger(__name__)

@@ -16,9 +16,9 @@ import uuid
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify, send_from_directory, session as flask_session
-from auth_routes import login_required
-from data_store import get_connection
-from inventory_ai_reconcile import confirm_session
+from routes.auth_routes import login_required
+from integrations.toast.data_store import get_connection
+from ai.inventory_ai_reconcile import confirm_session
 
 logger = logging.getLogger(__name__)
 
@@ -387,7 +387,7 @@ def session_process(session_id: int):
             conn3.close()
 
         try:
-            from inventory_ai_reconcile import process_inventory
+            from ai.inventory_ai_reconcile import process_inventory
             out_session_id = process_inventory(file_path, location)
             conn4 = get_connection()
             try:
@@ -519,7 +519,7 @@ def cancel_session(session_id: int):
             if token != row["token"]:
                 return jsonify({"error": "Invalid token"}), 403
         else:
-            from auth_routes import login_required as _lr
+            from routes.auth_routes import login_required as _lr
             # If no token, require login — check if user is authenticated
             from flask_login import current_user
             if not current_user.is_authenticated:
@@ -623,7 +623,7 @@ def upload():
 
     def _worker(task_id: str, file_path: str, location: str):
         try:
-            from inventory_ai_reconcile import process_inventory
+            from ai.inventory_ai_reconcile import process_inventory
             session_id = process_inventory(file_path, location)
             # Read back counts from DB
             conn = get_connection()

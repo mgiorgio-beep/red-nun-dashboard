@@ -11,7 +11,7 @@ from collections import defaultdict
 # Add parent dir for imports
 sys.path.insert(0, os.path.dirname(__file__))
 
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 LOCATION_NAMES = {"dennis": "Dennis Port", "chatham": "Chatham"}
 
@@ -212,7 +212,7 @@ def get_labor_forecast_comparison(location, target_date=None):
     fc = forecast_week(location, target_date)
 
     try:
-        from sevenshifts_client import get_labor_for_report
+        from integrations.sevenshifts.sevenshifts_client import get_labor_for_report
         start = fc["week_start"]
         end_dt = datetime.strptime(start, "%Y%m%d") + timedelta(days=6)
         end = end_dt.strftime("%Y%m%d")

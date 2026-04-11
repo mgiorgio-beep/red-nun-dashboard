@@ -19,7 +19,7 @@ from datetime import datetime
 sys.path.insert(0, '/opt/rednun')
 os.chdir('/opt/rednun')
 
-from invoice_processor import extract_invoice_data, save_invoice, get_connection, validate_invoice_extraction, confirm_invoice
+from integrations.invoices.processor import extract_invoice_data, save_invoice, get_connection, validate_invoice_extraction, confirm_invoice
 
 logging.basicConfig(
     level=logging.INFO,

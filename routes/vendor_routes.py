@@ -10,8 +10,8 @@ Mount: /api/vendor-items/* and /api/products/*/vendor-comparison
 
 import logging
 from flask import Blueprint, request, jsonify
-from data_store import get_connection
-from vendor_item_matcher import create_or_update_vendor_item
+from integrations.toast.data_store import get_connection
+from integrations.vendors.vendor_item_matcher import create_or_update_vendor_item
 
 logger = logging.getLogger(__name__)
 

@@ -164,7 +164,7 @@ def update_board():
 def sync_toast_specials():
     """Pull specials from Toast POS and return structured board data."""
     try:
-        from toast_client import ToastAPIClient
+        from integrations.toast.toast_client import ToastAPIClient
         client = ToastAPIClient()
         location = (request.json or {}).get('location', 'chatham')
         menus = client.get_menus(location)

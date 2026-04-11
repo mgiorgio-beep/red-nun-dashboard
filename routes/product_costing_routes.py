@@ -4,7 +4,7 @@ Kept for backward compatibility. New pipeline uses canonical_product_routes.py.
 """
 
 from flask import Blueprint, jsonify, request
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 product_costing_bp = Blueprint('product_costing', __name__, url_prefix='/api/product-costing')
 

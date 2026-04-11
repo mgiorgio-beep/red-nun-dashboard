@@ -20,7 +20,7 @@ Table: product_name_map
 import re
 import sys
 import logging
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 logger = logging.getLogger(__name__)
 

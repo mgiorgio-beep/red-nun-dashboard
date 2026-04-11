@@ -9,7 +9,7 @@ import os
 import re
 sys.path.insert(0, os.path.dirname(__file__))
 
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 try:
     from rapidfuzz import fuzz

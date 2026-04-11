@@ -14,7 +14,7 @@ Thresholds:
 import logging
 from datetime import datetime
 from rapidfuzz import fuzz, process
-from product_name_mapper import normalize, shares_key_token
+from routes.product_name_mapper import normalize, shares_key_token
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ def create_or_update_vendor_item(product_id, invoice_item, vendor_name, conn):
 
     Returns: vendor_item_id
     """
-    from product_helpers import parse_pack_size
+    from routes.product_helpers import parse_pack_size
 
     description = invoice_item.get("product_name", "")
     price       = invoice_item.get("unit_price") or invoice_item.get("total_price")

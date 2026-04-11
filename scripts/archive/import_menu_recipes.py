@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.insert(0, '/opt/rednun')
 
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 # Full CSV data embedded
 MENU_ITEMS = [

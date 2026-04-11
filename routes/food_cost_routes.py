@@ -13,8 +13,8 @@ GET /api/inventory/food-cost/daily-sales       Daily sales drill-down
 """
 
 from flask import Blueprint, jsonify, request
-from data_store import get_connection
-from auth_routes import login_required
+from integrations.toast.data_store import get_connection
+from routes.auth_routes import login_required
 
 food_cost_bp = Blueprint("food_cost_bp", __name__)
 

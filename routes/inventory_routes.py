@@ -4,8 +4,8 @@ Handles products, vendors, inventory, and recipes
 """
 
 from flask import Blueprint, jsonify, request
-from data_store import get_connection
-from auth_routes import login_required
+from integrations.toast.data_store import get_connection
+from routes.auth_routes import login_required
 from datetime import datetime
 
 inventory_bp = Blueprint('inventory', __name__, url_prefix='/api/inventory')
@@ -1439,7 +1439,7 @@ def bulk_save_ingredients(recipe_id):
 @inventory_bp.route('/recipes/<int:recipe_id>/cost-breakdown', methods=['GET'])
 def get_recipe_cost_breakdown(recipe_id):
     """Get full recipe cost breakdown using vendor item prices."""
-    from recipe_costing import cost_recipe
+    from integrations.recipes.recipe_costing import cost_recipe
     conn = get_connection()
     try:
         result = cost_recipe(recipe_id, conn)
@@ -1453,7 +1453,7 @@ def get_recipe_cost_breakdown(recipe_id):
 @inventory_bp.route('/recipes/cost-all', methods=['POST'])
 def recalculate_all_recipes():
     """Recalculate costs for all active recipes."""
-    from recipe_costing import cost_all_recipes
+    from integrations.recipes.recipe_costing import cost_all_recipes
     conn = get_connection()
     try:
         result = cost_all_recipes(conn)
@@ -1465,7 +1465,7 @@ def recalculate_all_recipes():
 @inventory_bp.route('/recipes/<int:recipe_id>/menu-price', methods=['PUT'])
 def update_recipe_menu_price(recipe_id):
     """Update menu price and servings, then recalculate cost."""
-    from recipe_costing import cost_recipe
+    from integrations.recipes.recipe_costing import cost_recipe
     data = request.json or {}
     conn = get_connection()
     try:

@@ -21,7 +21,7 @@ import os
 import re
 from datetime import datetime, timezone
 
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 logger = logging.getLogger(__name__)
@@ -801,7 +801,7 @@ def process_inventory(file_path: str, location: str = "Chatham") -> int:
         video_path = file_path
         logger.info("process_inventory: starting vision engine on %s", file_path)
         try:
-            from inventory_ai_vision import process_video
+            from ai.inventory_ai_vision import process_video
             vision_items = process_video(file_path)
             logger.info("process_inventory: vision engine returned %d items", len(vision_items))
         except Exception as exc:
@@ -811,7 +811,7 @@ def process_inventory(file_path: str, location: str = "Chatham") -> int:
     # ── Audio pass ────────────────────────────────────────────────────────
     logger.info("process_inventory: starting audio engine on %s", file_path)
     try:
-        from inventory_ai_audio import (
+        from ai.inventory_ai_audio import (
             extract_audio_from_video,
             transcribe_audio,
             parse_inventory_transcript,

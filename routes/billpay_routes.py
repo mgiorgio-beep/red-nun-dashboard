@@ -10,8 +10,8 @@ import logging
 from datetime import datetime, date
 
 from flask import Blueprint, jsonify, request, send_file, send_from_directory
-from data_store import get_connection
-from auth_routes import login_required
+from integrations.toast.data_store import get_connection
+from routes.auth_routes import login_required
 
 logger = logging.getLogger(__name__)
 

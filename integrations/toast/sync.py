@@ -6,8 +6,8 @@ Supports initial historical load and daily incremental syncs.
 
 import logging
 from datetime import datetime, timedelta, date
-from toast_client import ToastAPIClient
-from data_store import (
+from integrations.toast.toast_client import ToastAPIClient
+from integrations.toast.data_store import (
     init_db, store_orders, store_time_entries,
     store_employees, store_menus, get_connection,
 )

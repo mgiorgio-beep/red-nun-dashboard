@@ -4,8 +4,8 @@ import sys, os, logging
 sys.path.insert(0, '/opt/rednun')
 os.chdir('/opt/rednun')
 
-from sync import DataSync
-from data_store import get_connection
+from integrations.toast.sync import DataSync
+from integrations.toast.data_store import get_connection
 from datetime import date, timedelta
 
 logging.basicConfig(

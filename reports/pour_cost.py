@@ -115,7 +115,7 @@ def get_beverage_revenue(location, start_date, end_date):
     Get beverage revenue from Toast order items, classified by type.
     Returns dict with beer_rev, liquor_rev, wine_rev, total_bev_rev, food_rev.
     """
-    from data_store import get_connection
+    from integrations.toast.data_store import get_connection
     conn = get_connection()
 
     rows = conn.execute("""
@@ -159,7 +159,7 @@ def get_pour_cost(location, start_date, end_date, manual_bwl=None):
     for accurate category-level COGS (BEER, LIQUOR, WINE).
     Falls back to 30-day rolling me_cogs_summary if no line items.
     """
-    from data_store import get_connection
+    from integrations.toast.data_store import get_connection
 
     bev = get_beverage_revenue(location, start_date, end_date)
     conn = get_connection()

@@ -8,15 +8,15 @@ for the frontend to consume. Now includes MarginEdge COGS data.
 import os
 import logging
 from datetime import datetime, timedelta
-from thermostat import get_thermostats, set_setpoint
+from integrations.thermostat.thermostat import get_thermostats, set_setpoint
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 
-from data_store import init_db, get_connection
-from sync import DataSync
-from analytics import (
+from integrations.toast.data_store import init_db, get_connection
+from integrations.toast.sync import DataSync
+from reports.analytics import (
     get_daily_revenue,
     get_revenue_by_daypart,
     get_sales_mix,
@@ -30,33 +30,33 @@ from analytics import (
     get_price_movers,
 )
 from export import generate_weekly_excel
-from invoice_routes import invoice_bp
-from catalog_routes import catalog_bp
-from inventory_routes import inventory_bp
-from product_mapping_routes import mapping_bp
-from inventory_ai_routes import ai_inventory_bp
-from auth_routes import auth_bp, login_required
-from storage_routes import storage_bp
-from order_guide_routes import order_guide_bp
-from specials_routes import specials_bp, init_specials_tables
-from food_cost_routes import food_cost_bp
-from vendor_routes import vendor_bp
-from voice_recipe_routes import voice_recipe_bp
-from pmix_routes import pmix_bp
-from product_costing_routes import product_costing_bp
-from menu_routes import menu_bp
-from canonical_product_routes import canonical_product_bp
+from routes.invoice_routes import invoice_bp
+from routes.catalog_routes import catalog_bp
+from routes.inventory_routes import inventory_bp
+from routes.product_mapping_routes import mapping_bp
+from ai.inventory_ai_routes import ai_inventory_bp
+from routes.auth_routes import auth_bp, login_required
+from routes.storage_routes import storage_bp
+from routes.order_guide_routes import order_guide_bp
+from routes.specials_routes import specials_bp, init_specials_tables
+from routes.food_cost_routes import food_cost_bp
+from routes.vendor_routes import vendor_bp
+from routes.voice_recipe_routes import voice_recipe_bp
+from routes.pmix_routes import pmix_bp
+from routes.product_costing_routes import product_costing_bp
+from routes.menu_routes import menu_bp
+from routes.canonical_product_routes import canonical_product_bp
 from sports_guide import sports_bp, scrape_fanzo_guide
 from staff.staff import staff_bp
 from staff.tv_power import tv_power_bp
-from billpay_routes import billpay_bp
-from payment_routes import payment_bp, init_payment_tables
-from invoice_processor import init_invoice_tables
+from routes.billpay_routes import billpay_bp
+from routes.payment_routes import payment_bp, init_payment_tables
+from integrations.invoices.processor import init_invoice_tables
 from email_report import send_weekly_report
 import secrets
 
-from availability_routes import availability_bp
-from application_routes import application_bp
+from routes.availability_routes import availability_bp
+from routes.application_routes import application_bp
 # MarginEdge imports (optional — graceful if not installed yet)
 try:
     from marginedge_sync import init_me_tables, sync_all as me_sync_all
@@ -731,7 +731,7 @@ def api_trigger_me_sync():
 def api_forecast():
     """Get revenue forecast for next week."""
     try:
-        from forecast import forecast_week
+        from reports.forecast import forecast_week
         location = request.args.get("location")
         locations = [location] if location else ["dennis", "chatham"]
         result = {}

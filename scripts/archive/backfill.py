@@ -1,6 +1,6 @@
 """Backfill 12 months of Toast order + labor data."""
 from datetime import date, timedelta
-from sync import DataSync
+from integrations.toast.sync import DataSync
 import time
 
 ds = DataSync()

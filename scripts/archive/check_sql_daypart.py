@@ -1,4 +1,4 @@
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 c = get_connection()
 

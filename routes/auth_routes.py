@@ -4,7 +4,7 @@ Handles login, logout, and session management.
 """
 
 from flask import Blueprint, render_template_string, request, redirect, session, jsonify
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 import hashlib
 from functools import wraps
 from datetime import datetime

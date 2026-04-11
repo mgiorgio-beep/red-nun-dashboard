@@ -27,7 +27,7 @@ from datetime import datetime
 import requests
 from dotenv import load_dotenv
 
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 # ── Environment ───────────────────────────────────────────────────────────────
 load_dotenv()

@@ -18,7 +18,7 @@ MANUAL RUN: python3 auto_fill_pack_contains.py [--dry-run]
 
 import re
 import argparse
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 # Conversion factors
 GAL_TO_FLOZ = 128.0

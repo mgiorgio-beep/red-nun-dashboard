@@ -13,7 +13,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, send_from_directory
 from PIL import Image
 
-from invoice_processor import (
+from integrations.invoices.processor import (
     init_invoice_tables,
     extract_invoice_data,
     verify_math_errors,
@@ -36,11 +36,11 @@ from invoice_processor import (
     parse_vtinfo_csv_invoice,
     generate_csv_thumbnail,
 )
-from data_store import get_connection
-from vendor_item_matcher import process_invoice_items
-from invoice_anomaly import analyze_invoice_for_anomalies
-from recipe_costing import cost_all_recipes
-from data_store import get_connection as _get_conn
+from integrations.toast.data_store import get_connection
+from integrations.vendors.vendor_item_matcher import process_invoice_items
+from reports.invoice_anomaly import analyze_invoice_for_anomalies
+from integrations.recipes.recipe_costing import cost_all_recipes
+from integrations.toast.data_store import get_connection as _get_conn
 import threading
 
 def _run_cost_all():
@@ -1056,7 +1056,7 @@ def api_create_manual_invoice():
                           "total_price": other_charge, "category_type": "NON_COGS"})
 
         # Determine category from vendor
-        from invoice_processor import categorize_vendor
+        from integrations.invoices.processor import categorize_vendor
         category = categorize_vendor(vendor_name)
 
         # Compute subtotal from items
@@ -1225,7 +1225,7 @@ def serve_invoice_thumbnail(invoice_id):
     thumb_path = f"/opt/rednun/invoice_thumbnails/{base_name}.jpg"
     if not os.path.exists(thumb_path):
         # Try to generate it on the fly
-        from invoice_processor import generate_thumbnail
+        from integrations.invoices.processor import generate_thumbnail
         thumb_path = generate_thumbnail(image_path)
     if not thumb_path or not os.path.exists(thumb_path):
         return jsonify({"error": "No thumbnail available"}), 404

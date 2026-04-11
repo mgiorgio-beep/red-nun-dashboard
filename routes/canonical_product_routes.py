@@ -6,8 +6,8 @@ Replaces the old product_costing_routes.py for Product Setup UI.
 """
 
 from flask import Blueprint, jsonify, request
-from data_store import get_connection
-from auth_routes import login_required
+from integrations.toast.data_store import get_connection
+from routes.auth_routes import login_required
 
 canonical_product_bp = Blueprint('canonical_products', __name__)
 

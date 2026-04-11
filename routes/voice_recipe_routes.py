@@ -16,9 +16,9 @@ import requests
 from flask import Blueprint, request, jsonify
 from dotenv import load_dotenv
 
-from data_store import get_connection
-from vendor_item_matcher import match_vendor_item_to_product
-from recipe_costing import cost_recipe
+from integrations.toast.data_store import get_connection
+from integrations.vendors.vendor_item_matcher import match_vendor_item_to_product
+from integrations.recipes.recipe_costing import cost_recipe
 
 load_dotenv()
 logger = logging.getLogger(__name__)

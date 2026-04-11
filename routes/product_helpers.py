@@ -19,7 +19,7 @@ def get_or_create_product(name, category='FOOD', conn=None):
     """Get or create a canonical product in the products table.
     Returns products.id."""
     if not conn:
-        from data_store import get_connection
+        from integrations.toast.data_store import get_connection
         conn = get_connection()
 
     row = conn.execute(
@@ -44,7 +44,7 @@ def find_vendor_item(vendor_name, vendor_product_name, vendor_item_code=None, co
     Tries vendor_item_code first (exact match), then vendor_name + description.
     Returns dict or None."""
     if not conn:
-        from data_store import get_connection
+        from integrations.toast.data_store import get_connection
         conn = get_connection()
 
     # Path 1: vendor_item_code match (most reliable)
@@ -93,7 +93,7 @@ def upsert_vendor_item(vendor_name, vendor_product_name, purchase_price,
     Returns vendor_items.id
     """
     if not conn:
-        from data_store import get_connection
+        from integrations.toast.data_store import get_connection
         conn = get_connection()
 
     today = datetime.now().strftime("%Y-%m-%d")
@@ -203,7 +203,7 @@ def get_product_cost(product_id, conn=None):
     or None if no pricing available.
     """
     if not conn:
-        from data_store import get_connection
+        from integrations.toast.data_store import get_connection
         conn = get_connection()
 
     row = conn.execute("""

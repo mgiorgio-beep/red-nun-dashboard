@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from data_store import get_connection
-from pmix_matcher import suggest_pmix_mappings
+from integrations.toast.data_store import get_connection
+from ai.pmix_matcher import suggest_pmix_mappings
 
 pmix_bp = Blueprint('pmix_bp', __name__)
 
@@ -307,7 +307,7 @@ def menu_item_detail():
 @pmix_bp.route('/api/pmix/recalc-costs', methods=['POST'])
 def recalc_all_costs():
     """Recalculate costs for all active recipes."""
-    from recipe_costing import cost_all_recipes
+    from integrations.recipes.recipe_costing import cost_all_recipes
     conn = get_connection()
     try:
         result = cost_all_recipes(conn)

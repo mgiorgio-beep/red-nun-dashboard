@@ -18,7 +18,7 @@ from datetime import datetime
 
 from flask import Blueprint, jsonify, request, send_file
 
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 logger = logging.getLogger(__name__)
 

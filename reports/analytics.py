@@ -6,7 +6,7 @@ Computes revenue, labor, pour cost, and sales mix metrics from stored Toast data
 import sqlite3
 import logging
 from datetime import datetime, timedelta
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ MarginEdge imports and scanned invoices.
 
 import logging
 from flask import Blueprint, request, jsonify, send_from_directory
-from data_store import get_connection
+from integrations.toast.data_store import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ def api_catalog_vendors():
     location = request.args.get("location")
     search = request.args.get("q", "").strip().lower()
     conn = get_connection()
-    from invoice_processor import categorize_vendor
+    from integrations.invoices.processor import categorize_vendor
 
     vendor_map = {}
 
