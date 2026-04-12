@@ -79,3 +79,9 @@ python-telegram-bot==22.7
 
 # Sonos integration (from MEMORY.md - venue music tab)
 soco
+
+# Dependencies missing from original freeze but required at runtime
+pdfplumber
+reportlab
+websocket-client
+PyYAML
