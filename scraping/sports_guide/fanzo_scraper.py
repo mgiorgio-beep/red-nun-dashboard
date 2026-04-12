@@ -158,7 +158,7 @@ def fetch_guide_html():
     raise Exception("FANZO fetch failed (%d)" % r.status_code)
 
 def _save_cookie(nc):
-    ep = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+    ep = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env')
     try:
         with open(ep,'r') as f: lines = f.readlines()
         found = False

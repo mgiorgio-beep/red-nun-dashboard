@@ -101,6 +101,6 @@ def _make_key(away, home):
 
 if __name__ == '__main__':
     from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env'))
     API_KEY = os.environ.get('ODDS_API_KEY', '')
     fetch_odds()

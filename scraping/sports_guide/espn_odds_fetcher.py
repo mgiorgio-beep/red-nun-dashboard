@@ -166,7 +166,7 @@ def fetch_all_odds():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     from dotenv import load_dotenv
-    load_dotenv("/opt/rednun/.env")
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env'))
     result = fetch_all_odds()
     print(f"\n✅ Fetched odds for {result['count']} games")
     for key, val in list(result['games'].items())[:8]:
