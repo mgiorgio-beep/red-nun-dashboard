@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-content = open('/opt/rednun/email_invoice_poller.py').read()
+content = open('/opt/red-nun-dashboard/email_invoice_poller.py').read()
 
 old = '        saved += 1\n\n    return saved'
 new = '''        saved += 1
@@ -36,5 +36,5 @@ if old not in content:
     print('Found "return saved" at index:', idx)
     print('Context:', repr(content[idx-50:idx+20]))
 else:
-    open('/opt/rednun/email_invoice_poller.py', 'w').write(content.replace(old, new))
+    open('/opt/red-nun-dashboard/email_invoice_poller.py', 'w').write(content.replace(old, new))
     print('Done')

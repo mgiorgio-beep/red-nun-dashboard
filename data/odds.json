@@ -1,0 +1,782 @@
+{
+  "updated": "2026-04-12T07:00:23.085861",
+  "sources": "ESPN (DraftKings) + The Odds API (UFC)",
+  "count": 82,
+  "games": {
+    "Orlando Magic vs Boston Celtics": {
+      "spread": "ORL -12.5",
+      "overUnder": 219.5,
+      "provider": "Draft Kings",
+      "home": "Boston Celtics",
+      "away": "Orlando Magic",
+      "league": "nba",
+      "event_id": "401811041",
+      "source": "espn"
+    },
+    "Washington Wizards vs Cleveland Cavaliers": {
+      "spread": "CLE -10.5",
+      "overUnder": 236.5,
+      "provider": "Draft Kings",
+      "home": "Cleveland Cavaliers",
+      "away": "Washington Wizards",
+      "league": "nba",
+      "event_id": "401811042",
+      "source": "espn"
+    },
+    "Detroit Pistons vs Indiana Pacers": {
+      "spread": "DET -14.5",
+      "overUnder": 229.5,
+      "provider": "Draft Kings",
+      "home": "Indiana Pacers",
+      "away": "Detroit Pistons",
+      "league": "nba",
+      "event_id": "401811043",
+      "source": "espn"
+    },
+    "Atlanta Hawks vs Miami Heat": {
+      "spread": "MIA -4.5",
+      "overUnder": 242.5,
+      "provider": "Draft Kings",
+      "home": "Miami Heat",
+      "away": "Atlanta Hawks",
+      "league": "nba",
+      "event_id": "401811044",
+      "source": "espn"
+    },
+    "Charlotte Hornets vs New York Knicks": {
+      "spread": "CHA -13.5",
+      "overUnder": 218.5,
+      "provider": "Draft Kings",
+      "home": "New York Knicks",
+      "away": "Charlotte Hornets",
+      "league": "nba",
+      "event_id": "401811045",
+      "source": "espn"
+    },
+    "Milwaukee Bucks vs Philadelphia 76ers": {
+      "spread": "PHI -15.5",
+      "overUnder": 226.5,
+      "provider": "Draft Kings",
+      "home": "Philadelphia 76ers",
+      "away": "Milwaukee Bucks",
+      "league": "nba",
+      "event_id": "401811046",
+      "source": "espn"
+    },
+    "Brooklyn Nets vs Toronto Raptors": {
+      "spread": "TOR -22.5",
+      "overUnder": 219.5,
+      "provider": "Draft Kings",
+      "home": "Toronto Raptors",
+      "away": "Brooklyn Nets",
+      "league": "nba",
+      "event_id": "401811047",
+      "source": "espn"
+    },
+    "Chicago Bulls vs Dallas Mavericks": {
+      "spread": "DAL -6.5",
+      "overUnder": 246.5,
+      "provider": "Draft Kings",
+      "home": "Dallas Mavericks",
+      "away": "Chicago Bulls",
+      "league": "nba",
+      "event_id": "401811048",
+      "source": "espn"
+    },
+    "Memphis Grizzlies vs Houston Rockets": {
+      "spread": "HOU -13.5",
+      "overUnder": 225.5,
+      "provider": "Draft Kings",
+      "home": "Houston Rockets",
+      "away": "Memphis Grizzlies",
+      "league": "nba",
+      "event_id": "401811049",
+      "source": "espn"
+    },
+    "New Orleans Pelicans vs Minnesota Timberwolves": {
+      "spread": "MIN -6.5",
+      "overUnder": 236.5,
+      "provider": "Draft Kings",
+      "home": "Minnesota Timberwolves",
+      "away": "New Orleans Pelicans",
+      "league": "nba",
+      "event_id": "401811050",
+      "source": "espn"
+    },
+    "Phoenix Suns vs Oklahoma City Thunder": {
+      "spread": "OKC -5.5",
+      "overUnder": 213.5,
+      "provider": "Draft Kings",
+      "home": "Oklahoma City Thunder",
+      "away": "Phoenix Suns",
+      "league": "nba",
+      "event_id": "401811051",
+      "source": "espn"
+    },
+    "Denver Nuggets vs San Antonio Spurs": {
+      "spread": "SA -11.5",
+      "overUnder": 233.5,
+      "provider": "Draft Kings",
+      "home": "San Antonio Spurs",
+      "away": "Denver Nuggets",
+      "league": "nba",
+      "event_id": "401811052",
+      "source": "espn"
+    },
+    "Utah Jazz vs Los Angeles Lakers": {
+      "spread": "LAL -14.5",
+      "overUnder": 236.5,
+      "provider": "Draft Kings",
+      "home": "Los Angeles Lakers",
+      "away": "Utah Jazz",
+      "league": "nba",
+      "event_id": "401811053",
+      "source": "espn"
+    },
+    "Golden State Warriors vs LA Clippers": {
+      "spread": "LAC -5.5",
+      "overUnder": 225.5,
+      "provider": "Draft Kings",
+      "home": "LA Clippers",
+      "away": "Golden State Warriors",
+      "league": "nba",
+      "event_id": "401811054",
+      "source": "espn"
+    },
+    "Sacramento Kings vs Portland Trail Blazers": {
+      "spread": "POR -16.5",
+      "overUnder": 228.5,
+      "provider": "Draft Kings",
+      "home": "Portland Trail Blazers",
+      "away": "Sacramento Kings",
+      "league": "nba",
+      "event_id": "401811055",
+      "source": "espn"
+    },
+    "Pittsburgh Penguins vs Washington Capitals": {
+      "spread": "WSH -162",
+      "overUnder": 6.5,
+      "provider": "Draft Kings",
+      "home": "Washington Capitals",
+      "away": "Pittsburgh Penguins",
+      "league": "nhl",
+      "event_id": "401803627",
+      "source": "espn"
+    },
+    "Montreal Canadiens vs New York Islanders": {
+      "spread": "NYI -110",
+      "overUnder": 6.5,
+      "provider": "Draft Kings",
+      "home": "New York Islanders",
+      "away": "Montreal Canadiens",
+      "league": "nhl",
+      "event_id": "401803628",
+      "source": "espn"
+    },
+    "Boston Bruins vs Columbus Blue Jackets": {
+      "spread": "CBJ -142",
+      "overUnder": 6.5,
+      "provider": "Draft Kings",
+      "home": "Columbus Blue Jackets",
+      "away": "Boston Bruins",
+      "league": "nhl",
+      "event_id": "401803629",
+      "source": "espn"
+    },
+    "Ottawa Senators vs New Jersey Devils": {
+      "spread": "OTT -130",
+      "overUnder": 6.5,
+      "provider": "Draft Kings",
+      "home": "New Jersey Devils",
+      "away": "Ottawa Senators",
+      "league": "nhl",
+      "event_id": "401803630",
+      "source": "espn"
+    },
+    "Vancouver Canucks vs Anaheim Ducks": {
+      "spread": "ANA -305",
+      "overUnder": 6.5,
+      "provider": "Draft Kings",
+      "home": "Anaheim Ducks",
+      "away": "Vancouver Canucks",
+      "league": "nhl",
+      "event_id": "401803631",
+      "source": "espn"
+    },
+    "Utah Mammoth vs Calgary Flames": {
+      "spread": "UTAH -162",
+      "overUnder": 5.5,
+      "provider": "Draft Kings",
+      "home": "Calgary Flames",
+      "away": "Utah Mammoth",
+      "league": "nhl",
+      "event_id": "401803632",
+      "source": "espn"
+    },
+    "Arizona Diamondbacks vs Philadelphia Phillies": {
+      "spread": "PHI -143",
+      "overUnder": 8.5,
+      "provider": "DraftKings",
+      "home": "Philadelphia Phillies",
+      "away": "Arizona Diamondbacks",
+      "league": "mlb",
+      "event_id": "401814907",
+      "source": "espn"
+    },
+    "San Francisco Giants vs Baltimore Orioles": {
+      "spread": "BAL -131",
+      "overUnder": 8.5,
+      "provider": "DraftKings",
+      "home": "Baltimore Orioles",
+      "away": "San Francisco Giants",
+      "league": "mlb",
+      "event_id": "401814913",
+      "source": "espn"
+    },
+    "Minnesota Twins vs Toronto Blue Jays": {
+      "spread": "TOR -118",
+      "overUnder": 8.0,
+      "provider": "DraftKings",
+      "home": "Toronto Blue Jays",
+      "away": "Minnesota Twins",
+      "league": "mlb",
+      "event_id": "401814911",
+      "source": "espn"
+    },
+    "Los Angeles Angels vs Cincinnati Reds": {
+      "spread": "CIN -112",
+      "overUnder": 8.5,
+      "provider": "DraftKings",
+      "home": "Cincinnati Reds",
+      "away": "Los Angeles Angels",
+      "league": "mlb",
+      "event_id": "401814906",
+      "source": "espn"
+    },
+    "Athletics vs New York Mets": {
+      "spread": "NYM -171",
+      "overUnder": 8.0,
+      "provider": "DraftKings",
+      "home": "New York Mets",
+      "away": "Athletics",
+      "league": "mlb",
+      "event_id": "401814908",
+      "source": "espn"
+    },
+    "Miami Marlins vs Detroit Tigers": {
+      "spread": "DET -207",
+      "overUnder": 6.5,
+      "provider": "DraftKings",
+      "home": "Detroit Tigers",
+      "away": "Miami Marlins",
+      "league": "mlb",
+      "event_id": "401814910",
+      "source": "espn"
+    },
+    "New York Yankees vs Tampa Bay Rays": {
+      "spread": "NYY -156",
+      "overUnder": 7.5,
+      "provider": "DraftKings",
+      "home": "Tampa Bay Rays",
+      "away": "New York Yankees",
+      "league": "mlb",
+      "event_id": "401814912",
+      "source": "espn"
+    },
+    "Chicago White Sox vs Kansas City Royals": {
+      "spread": "KC -194",
+      "overUnder": 9.0,
+      "provider": "DraftKings",
+      "home": "Kansas City Royals",
+      "away": "Chicago White Sox",
+      "league": "mlb",
+      "event_id": "401814915",
+      "source": "espn"
+    },
+    "Washington Nationals vs Milwaukee Brewers": {
+      "spread": "MIL -207",
+      "overUnder": 8.0,
+      "provider": "DraftKings",
+      "home": "Milwaukee Brewers",
+      "away": "Washington Nationals",
+      "league": "mlb",
+      "event_id": "401814917",
+      "source": "espn"
+    },
+    "Boston Red Sox vs St. Louis Cardinals": {
+      "spread": "BOS -126",
+      "overUnder": 8.5,
+      "provider": "DraftKings",
+      "home": "St. Louis Cardinals",
+      "away": "Boston Red Sox",
+      "league": "mlb",
+      "event_id": "401814914",
+      "source": "espn"
+    },
+    "Pittsburgh Pirates vs Chicago Cubs": {
+      "spread": "CHC -136",
+      "overUnder": 12.5,
+      "provider": "DraftKings",
+      "home": "Chicago Cubs",
+      "away": "Pittsburgh Pirates",
+      "league": "mlb",
+      "event_id": "401814916",
+      "source": "espn"
+    },
+    "Colorado Rockies vs San Diego Padres": {
+      "spread": "SD -240",
+      "overUnder": 7.5,
+      "provider": "DraftKings",
+      "home": "San Diego Padres",
+      "away": "Colorado Rockies",
+      "league": "mlb",
+      "event_id": "401814918",
+      "source": "espn"
+    },
+    "Houston Astros vs Seattle Mariners": {
+      "spread": "SEA -156",
+      "overUnder": 8.0,
+      "provider": "DraftKings",
+      "home": "Seattle Mariners",
+      "away": "Houston Astros",
+      "league": "mlb",
+      "event_id": "401814919",
+      "source": "espn"
+    },
+    "Texas Rangers vs Los Angeles Dodgers": {
+      "spread": "LAD -131",
+      "overUnder": 8.5,
+      "provider": "DraftKings",
+      "home": "Los Angeles Dodgers",
+      "away": "Texas Rangers",
+      "league": "mlb",
+      "event_id": "401814920",
+      "source": "espn"
+    },
+    "Cleveland Guardians vs Atlanta Braves": {
+      "spread": "ATL -199",
+      "overUnder": 7.5,
+      "provider": "DraftKings",
+      "home": "Atlanta Braves",
+      "away": "Cleveland Guardians",
+      "league": "mlb",
+      "event_id": "401814909",
+      "source": "espn"
+    },
+    "Orlando City SC vs Columbus Crew": {
+      "spread": "CLB -1.5",
+      "overUnder": 3.5,
+      "provider": "DraftKings",
+      "home": "Columbus Crew",
+      "away": "Orlando City SC",
+      "league": "usa.1",
+      "event_id": "761542",
+      "source": "espn"
+    },
+    "Mitch Raposo vs Allan Nascimento": {
+      "spread": "Allan Nascimento ML -255",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Allan Nascimento",
+      "away": "Mitch Raposo",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Charles Jourdain vs Kyler Phillips": {
+      "spread": "Charles Jourdain ML -170",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Kyler Phillips",
+      "away": "Charles Jourdain",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Darya Zheleznyakova vs Melissa Croden": {
+      "spread": "Melissa Croden ML -160",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Melissa Croden",
+      "away": "Darya Zheleznyakova",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Dennis Buzukja vs M\u00e1rcio Barbosa": {
+      "spread": "M\u00e1rcio Barbosa ML -400",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "M\u00e1rcio Barbosa",
+      "away": "Dennis Buzukja",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Gauge Young vs Thiago Moises": {
+      "spread": "Gauge Young ML -132",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Thiago Moises",
+      "away": "Gauge Young",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Gilbert Burns vs Mike Malott": {
+      "spread": "Mike Malott ML -450",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Mike Malott",
+      "away": "Gilbert Burns",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Tanner Boser vs Gokhan Saricam": {
+      "spread": "Gokhan Saricam ML -170",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Gokhan Saricam",
+      "away": "Tanner Boser",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "J.J. Aldrich vs Jamey-Lyn Horth": {
+      "spread": "Jamey-Lyn Horth ML -210",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Jamey-Lyn Horth",
+      "away": "J.J. Aldrich",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Jai Herbert vs Mandel Nallo": {
+      "spread": "Mandel Nallo ML -155",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Mandel Nallo",
+      "away": "Jai Herbert",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Karine Silva vs Jasmine Jasudavicius": {
+      "spread": "Jasmine Jasudavicius ML -270",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Jasmine Jasudavicius",
+      "away": "Karine Silva",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "John Castaneda vs Mark Vologdin": {
+      "spread": "Mark Vologdin ML -131",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Mark Vologdin",
+      "away": "John Castaneda",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Robert Valentin vs Julien Leblanc": {
+      "spread": "Julien Leblanc ML -130",
+      "overUnder": null,
+      "provider": "FanDuel",
+      "home": "Julien Leblanc",
+      "away": "Robert Valentin",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Dione Barbosa vs Dennis Buzukja": {
+      "spread": "Dione Barbosa ML -410",
+      "overUnder": null,
+      "provider": "FanDuel",
+      "home": "Dennis Buzukja",
+      "away": "Dione Barbosa",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Carlos Prates vs Jack Della Maddalena": {
+      "spread": "Carlos Prates ML -120",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Jack Della Maddalena",
+      "away": "Carlos Prates",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Sean Strickland vs Khamzat Chimaev": {
+      "spread": "Khamzat Chimaev ML -500",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Khamzat Chimaev",
+      "away": "Sean Strickland",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Jeremy Stephens vs King Green": {
+      "spread": "King Green ML -300",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "King Green",
+      "away": "Jeremy Stephens",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Bogdan Guskov vs Jan Blachowicz": {
+      "spread": "Bogdan Guskov ML -145",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Jan Blachowicz",
+      "away": "Bogdan Guskov",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Joaquin Buckley vs Sean Brady": {
+      "spread": "Sean Brady ML -200",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Sean Brady",
+      "away": "Joaquin Buckley",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Waldo Cortes-Acosta vs Alexander Volkov": {
+      "spread": "Alexander Volkov ML -180",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Alexander Volkov",
+      "away": "Waldo Cortes-Acosta",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Tatsuro Taira vs Joshua Van": {
+      "spread": "Tatsuro Taira ML -180",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Joshua Van",
+      "away": "Tatsuro Taira",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Philipe Lins vs Francis Ngannou": {
+      "spread": "Francis Ngannou ML -1500",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Francis Ngannou",
+      "away": "Philipe Lins",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Gina Carano vs Ronda Rousey": {
+      "spread": "Ronda Rousey ML -500",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Ronda Rousey",
+      "away": "Gina Carano",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Mike Perry vs Nate Diaz": {
+      "spread": "Mike Perry ML -200",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Nate Diaz",
+      "away": "Mike Perry",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Ilia Topuria vs Islam Makhachev": {
+      "spread": "Islam Makhachev ML -234",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Islam Makhachev",
+      "away": "Ilia Topuria",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Carlos Ulberg vs Alex Pereira": {
+      "spread": "Alex Pereira ML -185",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Alex Pereira",
+      "away": "Carlos Ulberg",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Jiri Prochazka vs Alex Pereira": {
+      "spread": "Alex Pereira ML -300",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Alex Pereira",
+      "away": "Jiri Prochazka",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Jon Jones vs Alex Pereira": {
+      "spread": "Jon Jones ML -250",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Alex Pereira",
+      "away": "Jon Jones",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Carlos Ulberg vs Magomed Ankalaev": {
+      "spread": "Magomed Ankalaev ML -250",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Magomed Ankalaev",
+      "away": "Carlos Ulberg",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Josh Hokit vs Derrick Lewis": {
+      "spread": "Josh Hokit ML -250",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Derrick Lewis",
+      "away": "Josh Hokit",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Steve Garcia Jr. vs Diego Lopes": {
+      "spread": "Diego Lopes ML -185",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Diego Lopes",
+      "away": "Steve Garcia Jr.",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Kyle Daukaus vs Bo Nickal": {
+      "spread": "Bo Nickal ML -310",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Bo Nickal",
+      "away": "Kyle Daukaus",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Michael Chandler vs Mauricio Ruffy": {
+      "spread": "Mauricio Ruffy ML -625",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Mauricio Ruffy",
+      "away": "Michael Chandler",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Aiemann Zahabi vs Sean O'Malley": {
+      "spread": "Sean O'Malley ML -395",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Sean O'Malley",
+      "away": "Aiemann Zahabi",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Ciryl Gane vs Alex Pereira": {
+      "spread": "Ciryl Gane ML -115",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Alex Pereira",
+      "away": "Ciryl Gane",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Justin Gaethje vs Ilia Topuria": {
+      "spread": "Ilia Topuria ML -650",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Ilia Topuria",
+      "away": "Justin Gaethje",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Natalia Silva vs Valentina Shevchenko": {
+      "spread": "Valentina Shevchenko ML -250",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Valentina Shevchenko",
+      "away": "Natalia Silva",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Joshua Van vs Alexandre Pantoja": {
+      "spread": "Alexandre Pantoja ML -180",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Alexandre Pantoja",
+      "away": "Joshua Van",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Ciryl Gane vs Tom Aspinall": {
+      "spread": "Tom Aspinall ML -192",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Tom Aspinall",
+      "away": "Ciryl Gane",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Michael Morales vs Islam Makhachev": {
+      "spread": "Islam Makhachev ML -315",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Islam Makhachev",
+      "away": "Michael Morales",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Mackenzie Dern vs Weili Zhang": {
+      "spread": "Weili Zhang ML -450",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Weili Zhang",
+      "away": "Mackenzie Dern",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Petr Yan vs Merab Dvalishvili": {
+      "spread": "Petr Yan ML -175",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Merab Dvalishvili",
+      "away": "Petr Yan",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Arman Tsarukyan vs Ilia Topuria": {
+      "spread": "Ilia Topuria ML -190",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Ilia Topuria",
+      "away": "Arman Tsarukyan",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Jorge Masvidal vs Conor McGregor": {
+      "spread": "Conor McGregor ML -145",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Conor McGregor",
+      "away": "Jorge Masvidal",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Conor McGregor vs Michael Chandler": {
+      "spread": "Michael Chandler ML -120",
+      "overUnder": null,
+      "provider": "DraftKings",
+      "home": "Michael Chandler",
+      "away": "Conor McGregor",
+      "league": "ufc",
+      "source": "odds-api"
+    },
+    "Kamaru Usman vs Islam Makhachev": {
+      "spread": "Islam Makhachev ML -330",
+      "overUnder": null,
+      "provider": "BetOnline.ag",
+      "home": "Islam Makhachev",
+      "away": "Kamaru Usman",
+      "league": "ufc",
+      "source": "odds-api"
+    }
+  }
+}

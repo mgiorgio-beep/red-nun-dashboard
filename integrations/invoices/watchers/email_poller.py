@@ -11,7 +11,7 @@ Location detection:
   - Default: Dennis Port
 
 Run via cron every 5 minutes:
-  */5 * * * * cd /opt/rednun && /opt/rednun/venv/bin/python email_poller.py >> /var/log/rednun_email.log 2>&1
+  */5 * * * * cd /opt/rednun && /opt/red-nun-dashboard/venv/bin/python email_poller.py >> /var/log/rednun_email.log 2>&1
 """
 
 import os

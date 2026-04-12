@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 tv_power_bp = Blueprint('tv_power', __name__)
 
-CONFIG_PATH = '/opt/rednun/data/tv_power.json'
+CONFIG_PATH = '/opt/red-nun-dashboard/data/tv_power.json'
 DEFAULT_SPECIALS_URL = 'http://10.1.10.83:8080/staff/specials/tv'
 
 

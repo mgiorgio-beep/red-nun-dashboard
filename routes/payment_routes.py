@@ -822,7 +822,7 @@ _USFOODS_COMPANY_MAP = {
     "Chatham": "Red Nun Chatham #200",
 }
 
-_PYTHON = "/opt/rednun/venv/bin/python3"
+_PYTHON = "/opt/red-nun-dashboard/venv/bin/python3"
 _PAYMENT_LOG_DIR = os.path.expanduser("~/vendor-scrapers/logs")
 _PAYMENT_STATE_FILE = os.path.expanduser("~/vendor-scrapers/logs/payment_scraper_state.json")
 _payment_lock = threading.Lock()

@@ -8,7 +8,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-DATA_FILE = '/opt/rednun/data/odds.json'
+DATA_FILE = '/opt/red-nun-dashboard/data/odds.json'
 
 ESPN_LEAGUES = [
     ("football", "nfl"),

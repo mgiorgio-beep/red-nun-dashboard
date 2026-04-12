@@ -7,6 +7,14 @@ invoice_images/
 invoice_images_archive/
 invoice_images_pre_reset/
 invoice_thumbnails/
+payroll_checks/
+thermostat_cache.json
+drive_processed.txt
+session_journal.json
+.invoice_watcher_manifest.json
+.email_poller_manifest.json
+monitoring/.down_state.json
+scraping/data/
 
 # secrets
 .env

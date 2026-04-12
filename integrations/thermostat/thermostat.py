@@ -7,7 +7,7 @@ import subprocess
 
 logger = logging.getLogger(__name__)
 
-CACHE_FILE = '/opt/rednun/thermostat_cache.json'
+CACHE_FILE = '/opt/red-nun-dashboard/thermostat_cache.json'
 CACHE_TTL = 600  # 10 min - cron runs every 5
 
 def get_thermostats():
@@ -45,7 +45,7 @@ for lid, loc in c.locations_by_id.items():
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
         if 'OK' in result.stdout:
             # Refresh cache
-            subprocess.Popen(['/opt/rednun/venv/bin/python3', '/opt/rednun/thermostat_fetch.py'])
+            subprocess.Popen(['/opt/red-nun-dashboard/venv/bin/python3', '/opt/red-nun-dashboard/integrations/thermostat/thermostat_fetch.py'])
             return {"success": True}
         else:
             return {"error": result.stderr or "Unknown error"}

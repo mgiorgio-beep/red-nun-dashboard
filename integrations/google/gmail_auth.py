@@ -24,8 +24,8 @@ os.chdir('/opt/rednun')
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-CREDENTIALS_FILE = '/opt/rednun/google_credentials.json'
-TOKEN_FILE       = '/opt/rednun/gmail_token.pickle'
+CREDENTIALS_FILE = '/opt/red-nun-dashboard/integrations/google/credentials.json'
+TOKEN_FILE       = '/opt/red-nun-dashboard/integrations/google/gmail_token.pickle'
 
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',

@@ -833,7 +833,7 @@ def validate_invoice_extraction(data):
 
 
 
-def generate_thumbnail(image_path, thumbnail_dir='/opt/rednun/invoice_thumbnails', max_width=400):
+def generate_thumbnail(image_path, thumbnail_dir='/opt/red-nun-dashboard/invoice_thumbnails', max_width=400):
     """
     Generate a thumbnail from an invoice image or PDF.
     
@@ -902,7 +902,7 @@ def generate_thumbnail(image_path, thumbnail_dir='/opt/rednun/invoice_thumbnails
 
 def generate_csv_thumbnail(invoice_id, vendor_name, invoice_number, invoice_date,
                            total, item_count, source_label='CSV',
-                           thumbnail_dir='/opt/rednun/invoice_thumbnails',
+                           thumbnail_dir='/opt/red-nun-dashboard/invoice_thumbnails',
                            line_items=None, ship_to_address=None):
     """Generate a professional invoice-style image for CSV-imported invoices.
 

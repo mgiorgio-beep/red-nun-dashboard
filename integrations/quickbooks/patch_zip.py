@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Patch email_invoice_poller.py to handle zip attachments from ScanSnap."""
-content = open('/opt/rednun/email_invoice_poller.py').read()
+content = open('/opt/red-nun-dashboard/email_invoice_poller.py').read()
 
 # Find the exact string to replace
 search = "        if len(data) < 1000:\n            continue  # skip tiny icons / signatures\n        attachments.append({"
@@ -37,5 +37,5 @@ else:
                 continue
         attachments.append({"""
     content = content.replace(old, new)
-    open('/opt/rednun/email_invoice_poller.py', 'w').write(content)
+    open('/opt/red-nun-dashboard/email_invoice_poller.py', 'w').write(content)
     print('Done')

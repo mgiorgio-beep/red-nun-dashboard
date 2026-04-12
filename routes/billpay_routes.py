@@ -813,7 +813,7 @@ def upload_signature():
     if not f.filename:
         return jsonify({"error": "No file selected"}), 400
 
-    sig_dir = "/opt/rednun/check_assets"
+    sig_dir = "/opt/red-nun-dashboard/integrations/quickbooks/check_assets"
     os.makedirs(sig_dir, exist_ok=True)
     sig_path = os.path.join(sig_dir, "signature.png")
 
@@ -830,7 +830,7 @@ def upload_signature():
 @login_required
 def signature_preview():
     """Serve the uploaded signature image."""
-    sig_path = "/opt/rednun/check_assets/signature.png"
+    sig_path = "/opt/red-nun-dashboard/integrations/quickbooks/check_assets/signature.png"
     if not os.path.exists(sig_path):
         return jsonify({"error": "No signature uploaded"}), 404
     return send_file(sig_path, mimetype="image/png")
@@ -1085,7 +1085,7 @@ def create_payroll_check():
     location = request.form.get("location", "chatham")
 
     # Save the uploaded PDF
-    payroll_dir = "/opt/rednun/payroll_checks"
+    payroll_dir = "/opt/red-nun-dashboard/payroll_checks"
     os.makedirs(payroll_dir, exist_ok=True)
     safe_name = f"payroll_{datetime.now().strftime('%Y%m%d%H%M%S')}_{pdf_file.filename}"
     safe_name = safe_name.replace(" ", "_")
@@ -1391,7 +1391,7 @@ def view_generated_check_pdf(check_id):
 def download_batch_payroll():
     """Download a generated batch payroll checks PDF."""
     path = request.args.get("path", "")
-    if not path or not os.path.exists(path) or not path.startswith("/opt/rednun/payroll_checks/"):
+    if not path or not os.path.exists(path) or not path.startswith("/opt/red-nun-dashboard/payroll_checks/"):
         return jsonify({"error": "File not found"}), 404
     return send_file(path, mimetype="application/pdf",
                      download_name=f"payroll_checks_{date.today().isoformat()}.pdf")
@@ -1462,7 +1462,7 @@ def print_all_payroll():
         })
 
     # Generate and store the PDF
-    payroll_dir = "/opt/rednun/payroll_checks"
+    payroll_dir = "/opt/red-nun-dashboard/payroll_checks"
     os.makedirs(payroll_dir, exist_ok=True)
     output_path = os.path.join(payroll_dir,
         f"printed_checks_{location}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf")

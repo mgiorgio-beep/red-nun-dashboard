@@ -18,11 +18,11 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-load_dotenv("/opt/rednun/.env")
+load_dotenv("/opt/red-nun-dashboard/.env")
 
 RECIPIENT = "mgiorgio@rednun.com"
 DASHBOARD_URL = "https://dashboard.rednun.com"
-STATE_FILE = Path("/opt/rednun/monitoring/.down_state.json")
+STATE_FILE = Path("/opt/red-nun-dashboard/monitoring/.down_state.json")
 TIMEOUT = 15
 
 

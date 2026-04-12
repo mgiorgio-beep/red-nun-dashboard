@@ -76,7 +76,7 @@ for f in py_files:
 
 if not main_app:
     fail("Cannot find main Flask app file (no Flask(__name__) found)",
-         "Search manually: grep -rl 'Flask(' /opt/rednun/*.py")
+         "Search manually: grep -rl 'Flask(' /opt/red-nun-dashboard/*.py")
 else:
     ok(f"Main app found: {main_app}")
 
@@ -140,7 +140,7 @@ if not active_db:
             break
 
 if not active_db:
-    fail("No database file found!", "Check: ls /opt/rednun/*.db")
+    fail("No database file found!", "Check: ls /opt/red-nun-dashboard/*.db")
 else:
     ok(f"Active database: {active_db}")
     
@@ -415,7 +415,7 @@ if bak_files:
 else:
     ok("No stale backup files in main directory")
 
-# Check /opt/rednun/backups/ size
+# Check /opt/red-nun-dashboard/backups/ size
 backups_dir = os.path.join(REDNUN_DIR, 'backups')
 if os.path.exists(backups_dir):
     total_backup_size = 0

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Local Invoice Watcher — Monitor /opt/rednun/invoice_images/ for new files
+Local Invoice Watcher — Monitor /opt/red-nun-dashboard/invoice_images/ for new files
 and trigger OCR via invoice_processor.py.
 
 Replaces drive_invoice_watcher.py for the Beelink local deployment.
 Tracks processed files in a manifest so it never re-processes the same file.
 
 Run via cron every 5 minutes:
-  */5 * * * * cd /opt/rednun && source venv/bin/activate && python local_invoice_watcher.py >> /opt/rednun/invoice_watcher.log 2>&1
+  */5 * * * * cd /opt/rednun && source venv/bin/activate && python local_invoice_watcher.py >> /opt/red-nun-dashboard/invoice_watcher.log 2>&1
 """
 import os
 import sys
@@ -29,8 +29,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-INTAKE_DIR = '/opt/rednun/invoice_images'
-MANIFEST_PATH = '/opt/rednun/.invoice_watcher_manifest.json'
+INTAKE_DIR = '/opt/red-nun-dashboard/invoice_images'
+MANIFEST_PATH = '/opt/red-nun-dashboard/.invoice_watcher_manifest.json'
 DELAY_BETWEEN = 3  # seconds between API calls to avoid rate limits
 
 SUPPORTED_TYPES = {

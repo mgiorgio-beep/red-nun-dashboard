@@ -2,7 +2,7 @@
 """Populate session_journal.json with historical sessions 0-28."""
 import json, os
 
-journal_path = '/opt/rednun/session_journal.json'
+journal_path = '/opt/red-nun-dashboard/session_journal.json'
 
 # Load existing journal
 try:
@@ -216,7 +216,7 @@ historical = [
         "session": "30A",
         "date": "2026-03-04",
         "title": "WireGuard VPN + Samba Share",
-        "summary": "WireGuard VPN installed on Beelink (wg0, UDP 51820, 10.8.0.0/24). Client config generated for home Windows machine. Samba share configured: //10.1.10.83/invoices → /opt/rednun/invoice_images. ScanSnap can scan directly to share over LAN.",
+        "summary": "WireGuard VPN installed on Beelink (wg0, UDP 51820, 10.8.0.0/24). Client config generated for home Windows machine. Samba share configured: //10.1.10.83/invoices → /opt/red-nun-dashboard/invoice_images. ScanSnap can scan directly to share over LAN.",
         "files_changed": ["/etc/wireguard/wg0.conf", "/etc/samba/smb.conf"]
     },
     {

@@ -45,7 +45,7 @@ for loc_id, loc_name in LOCATIONS.items():
         })
     result[loc_name] = devices
 
-with open('/opt/rednun/thermostat_cache.json', 'w') as f:
+with open('/opt/red-nun-dashboard/thermostat_cache.json', 'w') as f:
     json.dump({"data": result, "ts": __import__('time').time()}, f)
 
 print(f"OK: {sum(len(v) for v in result.values())} devices")

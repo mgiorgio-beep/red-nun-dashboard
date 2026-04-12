@@ -657,13 +657,13 @@ def check_production_readiness():
 
     # 2. Blueprint registered in server.py
     import re
-    with open("/opt/rednun/server.py") as f:
+    with open("/opt/red-nun-dashboard/server.py") as f:
         srv = f.read()
     p("ai_inventory_bp imported in server.py",   "from inventory_ai_routes import ai_inventory_bp" in srv)
     p("ai_inventory_bp registered in server.py", "app.register_blueprint(ai_inventory_bp)" in srv)
 
     # 3. inventory_intake/ folder exists
-    intake = "/opt/rednun/inventory_intake"
+    intake = "/opt/red-nun-dashboard/inventory_intake"
     p("inventory_intake/ folder exists", os.path.isdir(intake))
 
     # 4. No orphaned /tmp/rednun_frames_* directories
@@ -674,10 +674,10 @@ def check_production_readiness():
 
     # 5. ai_inventory.html exists in static/
     p("static/ai_inventory.html exists",
-      os.path.isfile("/opt/rednun/static/ai_inventory.html"))
+      os.path.isfile("/opt/red-nun-dashboard/static/ai_inventory.html"))
 
     # 6. sidebar.js has Smart Count entry
-    with open("/opt/rednun/static/sidebar.js") as f:
+    with open("/opt/red-nun-dashboard/static/sidebar.js") as f:
         sidebar = f.read()
     p("sidebar.js has 'Smart Count' entry", "Smart Count" in sidebar)
     p("sidebar.js has /ai-inventory path",  "/ai-inventory" in sidebar)
@@ -695,7 +695,7 @@ def check_production_readiness():
         "inventory_ai_routes.py",
     ]
     for fname in ai_files:
-        path = f"/opt/rednun/{fname}"
+        path = f"/opt/red-nun-dashboard/{fname}"
         if os.path.isfile(path):
             with open(path) as f:
                 content = f.read()

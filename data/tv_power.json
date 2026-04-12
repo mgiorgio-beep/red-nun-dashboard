@@ -1,0 +1,18 @@
+{
+  "fire_tvs": [
+    {
+      "name": "Bar",
+      "ip": "10.1.10.120",
+      "specials_url": "http://10.1.10.83:8080/staff/specials/tv?size=bar"
+    },
+    {
+      "name": "Dining Room",
+      "ip": "10.1.10.145"
+    }
+  ],
+  "adb_port": 5555,
+  "schedule_on": "11:00",
+  "schedule_off": "21:00",
+  "schedule_enabled": false,
+  "specials_url": "http://10.1.10.83:8080/staff/specials/tv"
+}

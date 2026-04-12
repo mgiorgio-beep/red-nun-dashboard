@@ -27,7 +27,7 @@ staff_bp = Blueprint('staff', __name__,
     static_folder='static',
     static_url_path='/staff/static')
 
-DATA_DIR = '/opt/rednun/data'
+DATA_DIR = '/opt/red-nun-dashboard/data'
 
 ROKU_APP_IDS = {
     'ESPN+': '34376', 'ESPN App': '34376',

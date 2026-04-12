@@ -1222,14 +1222,14 @@ def serve_invoice_thumbnail(invoice_id):
         return jsonify({"error": "No image available"}), 404
     # Derive thumbnail path from image filename
     base_name = os.path.splitext(os.path.basename(image_path))[0]
-    thumb_path = f"/opt/rednun/invoice_thumbnails/{base_name}.jpg"
+    thumb_path = f"/opt/red-nun-dashboard/invoice_thumbnails/{base_name}.jpg"
     if not os.path.exists(thumb_path):
         # Try to generate it on the fly
         from integrations.invoices.processor import generate_thumbnail
         thumb_path = generate_thumbnail(image_path)
     if not thumb_path or not os.path.exists(thumb_path):
         return jsonify({"error": "No thumbnail available"}), 404
-    return send_from_directory("/opt/rednun/invoice_thumbnails", os.path.basename(thumb_path))
+    return send_from_directory("/opt/red-nun-dashboard/invoice_thumbnails", os.path.basename(thumb_path))
 
 
 # ─── Vendor Session Status ────────────────────────────────────────────────────
@@ -1332,7 +1332,7 @@ _SCRAPER_REGISTRY = {
     "craft_collective": ("Craft Collective", os.path.expanduser("~/vendor-scrapers/craft-collective"), "scraper.py", "Craft Collective Inc"),
 }
 
-_PYTHON = "/opt/rednun/venv/bin/python3"
+_PYTHON = "/opt/red-nun-dashboard/venv/bin/python3"
 _IMPORT_SCRIPT = os.path.expanduser("~/vendor-scrapers/common/import_downloads.py")
 _SCRAPER_LOG_DIR = os.path.expanduser("~/vendor-scrapers/logs")
 _SCRAPER_STATE_FILE = os.path.expanduser("~/vendor-scrapers/logs/scraper_state.json")

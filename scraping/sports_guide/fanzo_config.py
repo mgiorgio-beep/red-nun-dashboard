@@ -36,5 +36,5 @@ SPORT_ICONS = {
     'Favorites': '\u2b50',
 }
 
-DATA_DIR = '/opt/rednun/data'
+DATA_DIR = '/opt/red-nun-dashboard/data'
 SPORTS_GUIDE_JSON = os.path.join(DATA_DIR, 'sports_guide.json')

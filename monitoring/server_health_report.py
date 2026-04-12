@@ -20,10 +20,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv("/opt/rednun/.env")
+load_dotenv("/opt/red-nun-dashboard/.env")
 
 RECIPIENT = "mgiorgio@rednun.com"
-DB_PATH = "/opt/rednun/toast_data.db"
+DB_PATH = "/opt/red-nun-dashboard/toast_data.db"
 BACKUP_DIR = "/opt/backups"
 SERVICES = ["rednun", "nginx"]
 DASHBOARD_HOST = "dashboard.rednun.com"

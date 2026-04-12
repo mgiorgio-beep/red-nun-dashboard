@@ -3,13 +3,13 @@
 Email Invoice Poller — Gmail API (modular pipeline)
 
 Watches Gmail for unread emails with invoice attachments and saves them
-to /opt/rednun/invoice_images/. Does NOT run OCR — that is handled
+to /opt/red-nun-dashboard/invoice_images/. Does NOT run OCR — that is handled
 separately by local_invoice_watcher.py (runs every 5 minutes via cron).
 
 Requires gmail_token.pickle with gmail.readonly + gmail.modify scopes.
 Run gmail_auth.py once to create the token.
 
-Manifest: /opt/rednun/.email_poller_manifest.json  (deduplication by Gmail message ID)
+Manifest: /opt/red-nun-dashboard/.email_poller_manifest.json  (deduplication by Gmail message ID)
 
 Location detection (highest priority first):
   1. To/Delivered-To contains +dennis or +chatham
@@ -41,9 +41,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-GMAIL_TOKEN_PATH = '/opt/rednun/gmail_token.pickle'
-INTAKE_DIR       = '/opt/rednun/invoice_images'
-MANIFEST_PATH    = '/opt/rednun/.email_poller_manifest.json'
+GMAIL_TOKEN_PATH = '/opt/red-nun-dashboard/integrations/google/gmail_token.pickle'
+INTAKE_DIR       = '/opt/red-nun-dashboard/invoice_images'
+MANIFEST_PATH    = '/opt/red-nun-dashboard/.email_poller_manifest.json'
 
 GMAIL_SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',

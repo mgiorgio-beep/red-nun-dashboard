@@ -1158,9 +1158,9 @@ def api_today_snapshot():
 @app.route('/invoice_thumbnails/<filename>')
 def serve_invoice_thumbnail(filename):
     """Serve invoice thumbnail images"""
-    return send_from_directory('/opt/rednun/invoice_thumbnails', filename)
+    return send_from_directory('/opt/red-nun-dashboard/invoice_thumbnails', filename)
 
 @app.route('/invoice_images/<filename>')
 def serve_invoice_image(filename):
     """Serve full-size invoice images"""
-    return send_from_directory('/opt/rednun/invoice_images', filename)
+    return send_from_directory('/opt/red-nun-dashboard/invoice_images', filename)

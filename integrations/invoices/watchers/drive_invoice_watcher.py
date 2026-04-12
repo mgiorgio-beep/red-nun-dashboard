@@ -16,9 +16,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 logger = logging.getLogger(__name__)
 
 FOLDER_ID = '175w8j4FQ1j-4NMvPAVE7Dt4BVNxtA5Mc'
-TOKEN_PATH = '/opt/rednun/google_token.pickle'
-DOWNLOAD_DIR = '/opt/rednun/invoice_images'
-PROCESSED_FILE = '/opt/rednun/drive_processed.txt'
+TOKEN_PATH = '/opt/red-nun-dashboard/integrations/google/google_token.pickle'
+DOWNLOAD_DIR = '/opt/red-nun-dashboard/invoice_images'
+PROCESSED_FILE = '/opt/red-nun-dashboard/drive_processed.txt'
 
 def get_service():
     with open(TOKEN_PATH, 'rb') as f:
