@@ -45,7 +45,7 @@ from routes.pmix_routes import pmix_bp
 from routes.product_costing_routes import product_costing_bp
 from routes.menu_routes import menu_bp
 from routes.canonical_product_routes import canonical_product_bp
-from sports_guide import sports_bp, scrape_fanzo_guide
+from scraping.sports_guide import sports_bp, scrape_fanzo_guide
 from staff.staff import staff_bp
 from staff.tv_power import tv_power_bp
 from routes.billpay_routes import billpay_bp
