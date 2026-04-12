@@ -46,6 +46,7 @@ from routes.product_costing_routes import product_costing_bp
 from routes.menu_routes import menu_bp
 from routes.canonical_product_routes import canonical_product_bp
 from scraping.sports_guide import sports_bp, scrape_fanzo_guide
+from scraping.sports_guide.espn_odds_fetcher import fetch_all_odds
 from staff.staff import staff_bp
 from staff.tv_power import tv_power_bp
 from routes.billpay_routes import billpay_bp
@@ -797,7 +798,7 @@ def setup_scheduler():
     )
     logger.info("Toast intraday sync: every 30 min, 10 AM - 1 AM")
 
-    scheduler.add_job(func=scrape_fanzo_guide, trigger='cron', hour=5, minute=0, timezone='US/Eastern', id='fanzo_scrape')
+    scheduler.add_job(func=scrape_fanzo_guide, trigger='cron', hour=5, minute=0, timezone='America/New_York', id='fanzo_scrape')
     scheduler.add_job(fetch_all_odds, 'cron', hour='5,7,9,11,13,15,17,19,21,23', id='odds_fetch', replace_existing=True)
     scheduler.start()
     logger.info("Scheduler started — Toast intraday sync, fanzo scrape, odds fetch")
@@ -824,8 +825,22 @@ def api_thermostat_set():
     result = set_setpoint(location, device_id, heat_sp, cool_sp)
     return jsonify(result)
 
-if __name__ == "__main__":
+# Start scheduler in exactly one gunicorn worker (or in dev mode).
+# filelock ensures only the first process to grab the lock runs jobs;
+# the lock auto-releases when that process exits so another worker
+# can pick it up on restart.
+import filelock as _filelock
+
+_sched_lock = _filelock.FileLock("/tmp/rednun_scheduler.lock", timeout=0)
+try:
+    _sched_lock.acquire(blocking=False)
     setup_scheduler()
+    app._scheduler_lock = _sched_lock  # prevent GC from closing the FD
+    logger.info("Scheduler started in this worker (lock acquired)")
+except _filelock.Timeout:
+    logger.info("Scheduler running in another worker (lock held)")
+
+if __name__ == "__main__":
     port = int(os.getenv("DASHBOARD_PORT", 8080))
     logger.info(f"Starting Red Nun Analytics on port {port}")
     app.run(host="0.0.0.0", port=port, debug=False)

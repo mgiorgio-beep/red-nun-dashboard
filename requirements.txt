@@ -85,3 +85,4 @@ pdfplumber
 reportlab
 websocket-client
 PyYAML
+tzdata
