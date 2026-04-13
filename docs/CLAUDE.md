@@ -352,3 +352,20 @@ Pages that are **mobile-primary** (desktop shows "mobile only" or simplified vie
 - **Email alert:** matt@rednun.com on submission
 - **PDF naming:** Lastname_Firstname.pdf
 - **Auto-close:** 10-second countdown after submission
+
+## ⛔ DNS — NEVER TOUCH rednun.com
+**DO NOT modify the  DNS record or the  CNAME under any circumstances.**
+
+-  is a CNAME to  and MUST remain **DNS-only (proxied: False)** in Cloudflare. Proxying it through Cloudflare breaks Toast online ordering completely.
+-  points to the restaurant's web host (162.120.94.90) — not this server. Do not touch it.
+- **Toast online ordering going down = direct revenue loss.** This mistake cost ,000 in lost orders.
+- The only DNS the DDNS script should ever update is .
+
+
+## NEVER TOUCH rednun.com DNS
+**DO NOT modify the `rednun.com` DNS record or `www.rednun.com` CNAME under any circumstances.**
+
+- `www.rednun.com` is a CNAME to `sites.toasttab.com` and MUST stay **proxied: False** (DNS-only) in Cloudflare. Proxying it through Cloudflare breaks Toast online ordering completely.
+- `rednun.com` points to the restaurant web host (162.120.94.90) — not this server. Do not touch it.
+- Toast ordering going down = direct revenue loss. This mistake cost $1,000 in lost orders.
+- The DDNS script (`monitoring/ddns.py`) must only ever update `dashboard.rednun.com`. Nothing else.
