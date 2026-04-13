@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, urllib.request, json
 from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 ZONE_ID = os.getenv('CF_ZONE_ID')
 RECORD_NAME = 'dashboard.rednun.com'

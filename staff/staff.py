@@ -50,6 +50,9 @@ DEFAULT_TVS = [
 def _load_sports_data():
     """Load sports guide data (same source as /guide)."""
     path = os.path.join(DATA_DIR, 'sports_guide.json')
+    if not os.path.exists(path):
+        # Scraper saves to scraping/data/
+        path = os.path.join(os.path.dirname(DATA_DIR), 'scraping', 'data', 'sports_guide.json')
     if os.path.exists(path):
         with open(path) as f:
             return json.load(f)
