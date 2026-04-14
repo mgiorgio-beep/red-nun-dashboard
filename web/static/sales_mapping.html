@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Mapping — Red Nun Dashboard</title>
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+:root {
+  --bg: #f5f7fa; --card-bg: #ffffff; --border: #e5e7eb; --border2: #d1d5db;
+  --text: #111827; --text2: #6b7280; --text3: #9ca3af;
+  --blue: #2563eb; --green: #16a34a; --red: #dc2626; --orange: #d97706;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+
+.page-wrap { max-width: 860px; margin: 0 auto; padding: 32px 24px 60px; }
+.page-header { margin-bottom: 28px; }
+.page-header h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.page-header p  { font-size: 14px; color: var(--text2); }
+
+.loc-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+.loc-bar label { font-size: 13px; font-weight: 600; color: var(--text2); }
+.loc-btn { padding: 5px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border2); background: #fff; color: var(--text2); transition: all .15s; }
+.loc-btn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+
+.card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; margin-bottom: 20px; }
+.card-header { padding: 14px 20px; border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase;
+  letter-spacing: .05em; background: #f9fafb; }
+
+.map-table { width: 100%; border-collapse: collapse; }
+.map-table td { padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+.map-table tr:last-child td { border-bottom: none; }
+.map-table tr:hover td { background: rgba(0,0,0,0.02); }
+
+.line-name { font-weight: 600; font-size: 13px; }
+.hint-text  { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+.side-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px;
+  font-weight: 700; letter-spacing: .04em; }
+.side-badge.credit { background: #dcfce7; color: #166534; }
+.side-badge.debit  { background: #dbeafe; color: #1e40af; }
+
+.acct-select { width: 100%; padding: 7px 10px; border: 1px solid var(--border2);
+  border-radius: 6px; font-size: 13px; background: #fff; color: var(--text);
+  cursor: pointer; outline: none; }
+.acct-select:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
+.acct-select.mapped { border-color: #86efac; background: #f0fdf4; }
+
+.save-bar { display: flex; align-items: center; gap: 12px; padding: 16px 0 0; }
+.btn { padding: 9px 20px; border-radius: 7px; font-size: 14px; font-weight: 600;
+  cursor: pointer; border: none; transition: all .15s; }
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+.save-msg { font-size: 13px; color: var(--green); font-weight: 500; display: none; }
+.save-msg.error { color: var(--red); }
+.unmapped-count { font-size: 13px; color: var(--orange); font-weight: 500; }
+
+.td-name { width: 38%; }
+.td-side  { width: 80px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="layout"><aside class="sidebar"></aside></div>
+<main class="main-content">
+<div class="page-wrap">
+
+  <div class="page-header">
+    <h1>Sales Mapping</h1>
+    <p>Map each journal line to a QuickBooks account. Saved mappings apply to all future journal entries.</p>
+  </div>
+
+  <div class="loc-bar">
+    <label>Location:</label>
+    <button class="loc-btn active" id="locChatham" onclick="switchLoc('chatham')">Chatham</button>
+    <button class="loc-btn" id="locDennis" onclick="switchLoc('dennis')">Dennis Port</button>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Credits — Sales &amp; Tax</div>
+    <table class="map-table"><tbody id="creditsBody"></tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Debits — Tenders &amp; Discounts</div>
+    <table class="map-table"><tbody id="debitsBody"></tbody></table>
+  </div>
+
+  <div class="save-bar">
+    <button class="btn btn-primary" id="saveBtn" onclick="saveMapping()">Save Mapping</button>
+    <span class="unmapped-count" id="unmappedCount"></span>
+    <span class="save-msg" id="saveMsg"></span>
+  </div>
+
+</div>
+</main>
+
+<script src="/static/sidebar.js"></script>
+<script>
+var loc = 'chatham';
+var accounts = [];
+var lines = [];
+
+async function init() {
+  var results = await Promise.all([
+    fetch('/api/sales-journal/accounts').then(function(r){ return r.json(); }),
+    fetch('/api/sales-journal/mapping?location=' + loc).then(function(r){ return r.json(); }),
+  ]);
+  accounts = results[0];
+  lines = results[1];
+  render();
+}
+
+function switchLoc(newLoc) {
+  loc = newLoc;
+  document.getElementById('locChatham').classList.toggle('active', loc === 'chatham');
+  document.getElementById('locDennis').classList.toggle('active', loc === 'dennis');
+  fetch('/api/sales-journal/mapping?location=' + loc)
+    .then(function(r){ return r.json(); })
+    .then(function(data){ lines = data; render(); });
+}
+
+function buildOptions(selectedId) {
+  var groups = {};
+  accounts.forEach(function(a) {
+    if (!groups[a.account_type]) groups[a.account_type] = [];
+    groups[a.account_type].push(a);
+  });
+  var html = '<option value="">— Select account —</option>';
+  Object.keys(groups).sort().forEach(function(type) {
+    html += '<optgroup label="' + type + '">';
+    groups[type].forEach(function(a) {
+      var sel = (a.id === selectedId) ? ' selected' : '';
+      html += '<option value="' + a.id + '"' + sel + '>' + a.name + '</option>';
+    });
+    html += '</optgroup>';
+  });
+  return html;
+}
+
+function rowsHtml(arr) {
+  return arr.map(function(l) {
+    return '<tr>' +
+      '<td class="td-name">' +
+        '<div class="line-name">' + l.journal_name + '</div>' +
+        '<div class="hint-text">' + l.hint + '</div>' +
+      '</td>' +
+      '<td class="td-side"><span class="side-badge ' + l.side + '">' + l.side.toUpperCase() + '</span></td>' +
+      '<td><select class="acct-select' + (l.qbo_account ? ' mapped' : '') + '" ' +
+        'data-jname="' + l.journal_name + '" onchange="onSelectChange(this)">' +
+        buildOptions(l.qbo_account) +
+        '</select></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function render() {
+  var credits = lines.filter(function(l){ return l.side === 'credit'; });
+  var debits  = lines.filter(function(l){ return l.side === 'debit'; });
+  document.getElementById('creditsBody').innerHTML = rowsHtml(credits);
+  document.getElementById('debitsBody').innerHTML  = rowsHtml(debits);
+  updateUnmapped();
+}
+
+function onSelectChange(sel) {
+  sel.classList.toggle('mapped', !!sel.value);
+  updateUnmapped();
+  document.getElementById('saveMsg').style.display = 'none';
+}
+
+function updateUnmapped() {
+  var selects = document.querySelectorAll('.acct-select');
+  var unmapped = Array.from(selects).filter(function(s){ return !s.value; }).length;
+  var el = document.getElementById('unmappedCount');
+  el.textContent = unmapped > 0 ? (unmapped + ' line' + (unmapped > 1 ? 's' : '') + ' not yet mapped') : '';
+}
+
+async function saveMapping() {
+  var btn = document.getElementById('saveBtn');
+  var msg = document.getElementById('saveMsg');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  msg.style.display = 'none';
+
+  var mappings = Array.from(document.querySelectorAll('.acct-select')).map(function(s) {
+    return { journal_name: s.dataset.jname, qbo_account: s.value || null };
+  });
+
+  try {
+    var r = await fetch('/api/sales-journal/mapping', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({location: loc, mappings: mappings}),
+    }).then(function(r){ return r.json(); });
+
+    msg.textContent = 'Saved ' + r.saved + ' mappings.';
+    msg.className = 'save-msg';
+    msg.style.display = 'inline';
+  } catch(e) {
+    msg.textContent = 'Save failed.';
+    msg.className = 'save-msg error';
+    msg.style.display = 'inline';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Save Mapping';
+}
+
+init();
+</script>
+</body>
+</html>

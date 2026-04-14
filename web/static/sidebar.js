@@ -17,6 +17,7 @@ catalog:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke
 analytics:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>',
 mgmt:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
 invoices:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
+accounting:'<svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/></svg>',
 billpay:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>'
 };
 var chevron='<svg class="rn-chevron" viewBox="0 0 20 20" fill="currentColor"><path d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"/></svg>';
@@ -59,7 +60,13 @@ var sections=[
   {id:'nav-bp-checksetup',label:'Check Setup',page:'/manage',tab:'bp-checksetup'},
   {id:'nav-bp-payroll',label:'Payroll',page:'/manage',tab:'bp-payroll'}
 ]}
-];
+,
+{id:'sec-accounting',label:'Accounting',icon:'accounting',children:[
+  {id:'nav-acct-entries',label:'Sales Entries',page:'/sales-journal'},
+  {id:'nav-acct-export',label:'Export',page:'/sales-journal?tab=export'},
+  {id:'nav-acct-mapping',label:'Sales Mapping',page:'/sales-mapping'},
+  {id:'nav-acct-payaccts',label:'Payment Accounts',page:'/payment-accounts'}
+]}];
 function buildSidebar(){
 var h='<div class="rn-sb-logo"><div class="rn-sb-logo-icon">RN</div><div><div class="rn-sb-logo-text">Red Nun</div><div class="rn-sb-logo-sub">Dashboard</div></div></div>';
 h+='<nav class="rn-sb-nav">';
@@ -98,6 +105,7 @@ if(path==='/ai-inventory')return 'nav-aicount';
 if(path==='/order-guide')return 'nav-orderguide';
 if(path==='/specials-admin')return 'nav-specials';
 if(path==='/payments')return 'nav-payments';
+if(path==='/sales-journal'){var sp=new URLSearchParams(window.location.search);return sp.get('tab')==='export'?'nav-acct-export':'nav-acct-entries';}
 return 'nav-overview';
 }
 function setActiveItem(id){
@@ -131,7 +139,8 @@ for(var i=0;i<sections.length;i++){
 }
 function handleNavClick(item){
 var page=item.page;var tab=item.tab;var cur=window.location.pathname;
-if(cur===page||(cur==='/'&&page==='/')){
+var curFull=cur+window.location.search;
+if(curFull===page||(cur===''&&page==='/')){
   if(page==='/'){
     if(typeof window.switchTab==='function')window.switchTab(tab);
     else{window.location.hash=tab;window.location.reload()}
@@ -139,6 +148,8 @@ if(cur===page||(cur==='/'&&page==='/')){
     if(typeof window.showView==='function'){window.showView(tab);localStorage.setItem('manageView',tab)}
   }else if(page==='/invoices'){
     if(typeof window.showView==='function'){window.showView(tab);localStorage.setItem('invoiceView',tab)}
+  }else if(page==='/sales-journal'){
+    if(typeof window.backToList==='function')window.backToList();
   }
   setActiveItem(item.id);closeMobile();return;
 }

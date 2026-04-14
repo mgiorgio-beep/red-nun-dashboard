@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Red Nun — Sales Journal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+:root {
+  --bg: #f5f7fa; --sidebar-bg: #ffffff; --card-bg: #ffffff;
+  --border: #e5e7eb; --border2: #d1d5db;
+  --text: #111827; --text2: #6b7280; --text3: #9ca3af;
+  --red: #FF453A; --green: #16a34a; --blue: #2563eb;
+  --orange: #d97706; --purple: #7c3aed; --yellow: #ca8a04;
+  --status-posted: #16a34a; --status-ready: #2563eb;
+  --status-attention: #d97706; --status-error: #dc2626; --status-pending: #6b7280;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',sans-serif; color:var(--text); height:100vh; overflow:hidden; }
+.layout { display:flex; height:100vh; }
+
+/* Sidebar */
+.sidebar { width:240px; background:var(--sidebar-bg); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; overflow-y:auto; }
+.sidebar-header { padding:20px; border-bottom:1px solid var(--border); }
+.sidebar-logo { font-size:20px; font-weight:700; color:var(--red); display:flex; align-items:center; gap:10px; }
+.logo-icon { width:34px;height:34px;background:linear-gradient(135deg,var(--red),#FF6259);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;box-shadow:0 4px 12px rgba(255,69,58,0.3); }
+.sidebar-nav { flex:1; padding:12px 0; }
+.nav-item { padding:10px 20px; display:flex; align-items:center; gap:12px; color:var(--text2); cursor:pointer; transition:all 0.2s; border-left:3px solid transparent; text-decoration:none; font-size:14px; }
+.nav-item:hover { background:rgba(255,255,255,0.03); color:var(--text); }
+.nav-item.active { background:rgba(255,69,58,0.1); color:var(--red); border-left-color:var(--red); }
+.nav-icon { width:20px; height:20px; opacity:0.8; flex-shrink:0; }
+/* Collapsible accounting section */
+.nav-parent { padding:10px 20px; display:flex; align-items:center; gap:12px; color:var(--text2); cursor:pointer; transition:all 0.2s; border-left:3px solid transparent; font-size:14px; font-weight:600; user-select:none; }
+.nav-parent:hover { background:rgba(255,255,255,0.03); color:var(--text); }
+.nav-parent.open { color:var(--text); }
+.nav-chevron { margin-left:auto; transition:transform 0.2s; opacity:0.5; }
+.nav-parent.open .nav-chevron { transform:rotate(90deg); }
+.nav-children { display:none; }
+.nav-children.open { display:block; }
+.nav-child { padding:8px 20px 8px 52px; display:flex; align-items:center; gap:8px; color:var(--text2); cursor:pointer; font-size:13px; transition:all 0.2s; text-decoration:none; border-left:3px solid transparent; }
+.nav-child:hover { background:rgba(255,255,255,0.03); color:var(--text); }
+.nav-child.active { color:var(--red); border-left-color:var(--red); background:rgba(255,69,58,0.08); }
+.nav-child.disabled { opacity:0.35; cursor:not-allowed; pointer-events:none; }
+
+/* Main */
+.main-content { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+/* Page tabs */
+.page-tabs { background:rgba(28,28,30,0.85); backdrop-filter:blur(30px); border-bottom:1px solid var(--border); display:flex; gap:4px; padding:12px 24px; flex-shrink:0; }
+.page-tab { padding:8px 16px; border-radius:8px; background:transparent; border:1px solid transparent; color:var(--text2); font-size:13px; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block; transition:all 0.2s; }
+.page-tab:hover { background:var(--card-bg); border-color:var(--border); }
+.page-tab.active { background:rgba(255,69,58,0.1); border-color:rgba(255,69,58,0.3); color:var(--red); }
+
+/* Top bar */
+.top-bar { padding:16px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--sidebar-bg); flex-shrink:0; }
+.top-bar-left { display:flex; flex-direction:column; gap:4px; }
+.page-title { font-size:22px; font-weight:700; }
+.last-run { font-size:12px; color:var(--text3); }
+.top-bar-right { display:flex; align-items:center; gap:10px; }
+
+/* Tabs (Sales Log / Export Queue) */
+.tab-bar { display:flex; gap:4px; border-bottom:1px solid var(--border); padding:0 24px; background:var(--sidebar-bg); flex-shrink:0; }
+.tab-btn { padding:12px 16px; font-size:13px; font-weight:600; color:var(--text2); cursor:pointer; border:none; background:none; border-bottom:2px solid transparent; transition:all 0.2s; display:flex; align-items:center; gap:6px; }
+.tab-btn:hover { color:var(--text); }
+.tab-btn.active { color:var(--text); border-bottom-color:var(--red); }
+.tab-badge { background:rgba(255,69,58,0.15); color:var(--red); border-radius:12px; padding:2px 7px; font-size:11px; font-weight:700; }
+
+/* Filters bar */
+.filters-bar { padding:12px 24px; display:flex; align-items:center; gap:10px; background:var(--bg); border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap; }
+.search-input { padding:8px 12px; background:var(--card-bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; width:240px; }
+.search-input:focus { outline:none; border-color:var(--blue); }
+.date-pill { display:flex; align-items:center; gap:6px; padding:7px 12px; background:var(--card-bg); border:1px solid var(--border); border-radius:8px; font-size:13px; cursor:pointer; color:var(--text2); transition:all 0.2s; }
+.date-pill:hover { border-color:var(--border2); color:var(--text); }
+.date-pill svg { opacity:0.5; }
+.date-pill-x { opacity:0.4; cursor:pointer; margin-left:2px; }
+.date-pill-x:hover { opacity:1; }
+.filter-chip { padding:6px 12px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--text2); transition:all 0.2s; }
+.filter-chip:hover { border-color:var(--border2); color:var(--text); }
+.filter-chip.active { border-color:var(--blue); color:var(--blue); background:rgba(59,130,246,0.1); }
+.filter-spacer { flex:1; }
+
+/* Date range picker dropdown */
+.date-picker-wrap { position:relative; }
+.date-picker-dropdown { display:none; position:absolute; top:calc(100% + 6px); left:0; background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:16px; z-index:200; width:560px; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
+.date-picker-dropdown.open { display:block; }
+.date-picker-months { display:flex; gap:24px; }
+.cal-month { flex:1; }
+.cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.cal-title { font-size:13px; font-weight:600; }
+.cal-nav { background:none; border:none; color:var(--text2); cursor:pointer; font-size:16px; padding:4px 8px; border-radius:6px; }
+.cal-nav:hover { background:rgba(255,255,255,0.06); }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.cal-day-header { text-align:center; font-size:10px; color:var(--text3); padding:4px 0; font-weight:600; text-transform:uppercase; }
+.cal-day { text-align:center; padding:6px 4px; font-size:12px; cursor:pointer; border-radius:6px; transition:all 0.15s; }
+.cal-day:hover { background:rgba(255,255,255,0.08); }
+.cal-day.other-month { color:var(--text3); }
+.cal-day.in-range { background:rgba(59,130,246,0.15); border-radius:0; }
+.cal-day.range-start,.cal-day.range-end { background:var(--blue); color:#fff; border-radius:6px; }
+.cal-day.today { font-weight:700; color:var(--blue); }
+.cal-day.empty { cursor:default; }
+.quick-selects { display:flex; flex-direction:column; gap:6px; margin-top:14px; border-top:1px solid var(--border); padding-top:14px; }
+.quick-row { display:flex; gap:6px; }
+.quick-btn { flex:1; padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.04); border:1px solid var(--border); color:var(--text2); font-size:12px; font-weight:500; cursor:pointer; text-align:center; transition:all 0.15s; }
+.quick-btn:hover { background:rgba(255,255,255,0.08); color:var(--text); }
+
+/* Warning banner */
+.stale-banner { display:none; margin:12px 24px 0; padding:12px 16px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:10px; display:flex; align-items:center; gap:10px; font-size:13px; }
+.stale-banner.visible { display:flex; }
+.stale-banner-dismiss { margin-left:auto; background:none; border:none; color:var(--text2); cursor:pointer; font-size:18px; line-height:1; }
+
+/* Scroll area */
+.list-view { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
+.detail-view { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
+.scroll-area { flex:1; overflow-y:auto; padding:20px 24px; }
+
+/* Table */
+.table-card { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.data-table { width:100%; border-collapse:collapse; }
+.data-table th { text-align:left; padding:12px 14px; font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.data-table th.sortable { cursor:pointer; user-select:none; }
+.data-table th.sortable:hover { color:var(--text2); }
+.data-table th.sort-asc::after { content:" ↑"; }
+.data-table th.sort-desc::after { content:" ↓"; }
+.data-table td { padding:12px 14px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+.data-table tbody tr:last-child td { border-bottom:none; }
+.data-table tbody tr:hover { background:rgba(0,0,0,0.03); }
+.data-table tfoot td { padding:12px 14px; font-size:12px; color:var(--text2); font-weight:600; border-top:1px solid var(--border); background:rgba(0,0,0,0.02); }
+.mono { font-family:'Courier New',monospace; font-size:13px; letter-spacing:0.5px; }
+.right { text-align:right; }
+.currency { font-variant-numeric:tabular-nums; }
+
+/* Status pills */
+.pill { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+.pill::before { content:''; width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.pill-posted { background:rgba(34,197,94,0.12); color:var(--status-posted); }
+.pill-posted::before { background:var(--status-posted); }
+.pill-ready { background:rgba(59,130,246,0.12); color:var(--status-ready); }
+.pill-ready::before { background:var(--status-ready); }
+.pill-needs_attention,.pill-attention { background:rgba(245,158,11,0.12); color:var(--status-attention); }
+.pill-needs_attention::before,.pill-attention::before { background:var(--status-attention); }
+.pill-error { background:rgba(239,68,68,0.12); color:var(--status-error); }
+.pill-error::before { background:var(--status-error); }
+.pill-pending { background:rgba(107,114,128,0.12); color:var(--status-pending); }
+.pill-pending::before { background:var(--status-pending); }
+.balanced-yes { color:var(--green); font-size:12px; font-weight:600; }
+.balanced-no { color:var(--red); font-size:12px; font-weight:600; }
+
+/* Buttons */
+.btn { padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px; }
+.btn-primary { background:var(--red); color:#fff; }
+.btn-primary:hover { background:#ff5a50; }
+.btn-primary:disabled { opacity:0.35; cursor:not-allowed; }
+.btn-secondary { background:var(--card-bg); color:var(--text); border:1px solid var(--border); }
+.btn-secondary:hover { background:rgba(255,255,255,0.05); }
+.btn-blue { background:rgba(59,130,246,0.15); color:var(--status-ready); border:1px solid rgba(59,130,246,0.3); }
+.btn-blue:hover { background:rgba(59,130,246,0.25); }
+.btn-blue:disabled { opacity:0.35; cursor:not-allowed; }
+.btn-danger { background:rgba(239,68,68,0.1); color:var(--status-error); border:1px solid rgba(239,68,68,0.3); }
+.btn-danger:hover { background:rgba(239,68,68,0.2); }
+.btn-sm { padding:5px 10px; font-size:12px; }
+.btn-icon { padding:6px; border-radius:6px; }
+.spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin 0.6s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Pagination */
+.pagination { display:flex; align-items:center; justify-content:space-between; padding:14px 0 0; }
+.page-info { font-size:12px; color:var(--text3); }
+.page-btns { display:flex; gap:6px; }
+
+/* Checkbox */
+input[type="checkbox"] { width:16px; height:16px; cursor:pointer; accent-color:var(--blue); }
+
+/* Bulk toolbar */
+.bulk-toolbar { display:none; align-items:center; gap:10px; padding:10px 16px; background:rgba(59,130,246,0.08); border-bottom:1px solid rgba(59,130,246,0.2); font-size:13px; }
+.bulk-toolbar.visible { display:flex; }
+
+/* Empty state */
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 24px; gap:12px; color:var(--text3); text-align:center; }
+.empty-icon { font-size:40px; margin-bottom:4px; }
+.empty-title { font-size:16px; font-weight:600; color:var(--text2); }
+.empty-sub { font-size:13px; }
+
+/* Detail view */
+.detail-view { display:none; flex:1; overflow:hidden; flex-direction:column; }
+.detail-view.active { display:flex; }
+.list-view { display:flex; flex-direction:column; flex:1; overflow:hidden; }
+.list-view.hidden { display:none; }
+
+.detail-header { padding:20px 24px; border-bottom:1px solid var(--border); background:var(--sidebar-bg); flex-shrink:0; }
+.detail-header-top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.detail-meta { display:flex; flex-direction:column; gap:6px; }
+.detail-title { font-size:20px; font-weight:700; display:flex; align-items:center; gap:10px; }
+.detail-sub { font-size:13px; color:var(--text2); display:flex; gap:20px; flex-wrap:wrap; }
+.detail-sub span { display:flex; gap:6px; align-items:center; }
+.detail-sub .label { color:var(--text3); }
+.detail-actions { display:flex; gap:8px; flex-shrink:0; }
+
+/* Error block */
+.error-block { margin:12px 24px; padding:12px 14px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:10px; font-size:13px; }
+.error-block summary { cursor:pointer; color:var(--status-error); font-weight:600; list-style:none; display:flex; align-items:center; gap:6px; }
+.error-block summary::marker { display:none; }
+.error-msg { margin-top:8px; color:var(--text2); padding-left:20px; }
+
+/* Journal table */
+.journal-table-wrap { flex:1; overflow:hidden; display:flex; flex-direction:column; padding:20px 24px; }
+.journal-card { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; flex:1; }
+.unmapped-banner { padding:10px 16px; background:rgba(245,158,11,0.1); border-bottom:1px solid rgba(245,158,11,0.2); font-size:13px; color:var(--status-attention); display:none; }
+.unmapped-banner.visible { display:block; }
+.journal-table-scroll { flex:1; overflow-y:auto; }
+.journal-table { width:100%; border-collapse:collapse; }
+.journal-table th { text-align:left; padding:10px 14px; font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; border-bottom:1px solid var(--border); background:var(--card-bg); position:sticky; top:0; z-index:2; }
+.journal-table td { padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; }
+.journal-table tbody tr:last-child td { border-bottom:none; }
+.journal-table tfoot td { padding:12px 14px; font-weight:700; font-size:13px; border-top:2px solid var(--border); background:rgba(255,255,255,0.015); position:sticky; bottom:0; }
+.unmapped-row { background:rgba(245,158,11,0.05); }
+.unmapped-row td { border-bottom:1px solid rgba(245,158,11,0.12); }
+.unmapped-icon { color:var(--status-attention); font-size:14px; }
+.balance-ok { color:var(--status-posted); }
+.balance-bad { color:var(--status-error); }
+.account-select { padding:6px 10px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; width:100%; max-width:300px; }
+.account-select:focus { outline:none; border-color:var(--blue); }
+.num-input { padding:6px 10px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; width:110px; text-align:right; }
+.num-input:focus { outline:none; border-color:var(--blue); }
+.memo-input { padding:6px 10px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; width:100%; }
+.memo-input:focus { outline:none; border-color:var(--blue); }
+
+/* Footer action bar */
+.detail-footer { padding:14px 24px; border-top:1px solid var(--border); display:flex; align-items:center; gap:10px; background:var(--sidebar-bg); flex-shrink:0; }
+.footer-spacer { flex:1; }
+
+/* Toast notifications */
+.toast-container { position:fixed; bottom:24px; right:24px; display:flex; flex-direction:column; gap:10px; z-index:9999; pointer-events:none; }
+.toast { padding:12px 18px; border-radius:10px; font-size:13px; font-weight:500; max-width:360px; display:flex; align-items:center; gap:10px; animation:slideIn 0.3s ease; pointer-events:all; }
+.toast-success { background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.3); color:#4ade80; }
+.toast-error { background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); color:#f87171; }
+.toast-info { background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); color:#93c5fd; }
+@keyframes slideIn { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+@keyframes fadeOut { to { opacity:0; transform:translateX(20px); } }
+
+/* Modal */
+.modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:500; align-items:center; justify-content:center; }
+.modal-backdrop.active { display:flex; }
+.modal { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:24px; max-width:440px; width:90%; }
+.modal-title { font-size:18px; font-weight:700; margin-bottom:10px; }
+.modal-body { color:var(--text2); font-size:14px; margin-bottom:20px; line-height:1.5; }
+.modal-footer { display:flex; gap:10px; justify-content:flex-end; }
+
+/* Location switcher */
+.loc-switcher { display:flex; gap:4px; background:rgba(255,255,255,0.04); border-radius:8px; padding:3px; border:1px solid var(--border); }
+.loc-btn { padding:5px 12px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all 0.2s; }
+.loc-btn.active { background:var(--red); color:#fff; }
+
+/* ── sidebar.js integration: layout fix ────────────────────────────────── */
+.rn-main {
+  display: flex !important; flex-direction: column !important;
+  overflow: hidden !important;
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <div class="logo-icon">RN</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;letter-spacing:-0.3px">Red Nun</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Accounting</div>
+        </div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Analytics
+      </a>
+      <a href="/manage" class="nav-item">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        Management
+      </a>
+      <a href="/invoices" class="nav-item">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Invoices
+      </a>
+      <!-- Accounting collapsible parent -->
+      <div class="nav-parent open" id="nav-accounting" onclick="toggleAccounting()">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+        Accounting
+        <svg class="nav-chevron" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="nav-children open" id="accounting-children">
+        <a href="/sales-journal" class="nav-child active">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10"/></svg>
+          Sales Journal
+        </a>
+        <span class="nav-child disabled">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Bills <span style="font-size:10px;opacity:0.5;margin-left:4px">soon</span>
+        </span>
+        <span class="nav-child disabled">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+          Payments <span style="font-size:10px;opacity:0.5;margin-left:4px">soon</span>
+        </span>
+      </div>
+    </nav>
+  </aside>
+</div>
+
+<!-- Main Content -->
+<main class="main-content">
+    <!-- Page tabs -->
+    <nav class="page-tabs">
+      <a href="/" class="page-tab">Analytics</a>
+      <a href="/manage" class="page-tab">Management</a>
+      <a href="/invoices" class="page-tab">Invoices</a>
+      <a href="/catalog" class="page-tab">Catalog</a>
+      <a href="/sales-journal" class="page-tab active">Sales Journal</a>
+    </nav>
+
+    <!-- Top bar -->
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <div class="page-title">Sales Journal</div>
+        <div class="last-run" id="lastRunLabel">Last run: checking…</div>
+      </div>
+      <div class="top-bar-right">
+        <div class="loc-switcher">
+          <button class="loc-btn" id="locDennis" onclick="switchLocation('dennis')">Dennis Port</button>
+          <button class="loc-btn active" id="locChatham" onclick="switchLocation('chatham')">Chatham</button>
+        </div>
+        <button class="btn btn-secondary" onclick="openExportPicker()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Export as CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- List View -->
+    <div class="list-view" id="listView">
+      <!-- Tabs -->
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tabLog" onclick="switchTab('log')">Sales Log</button>
+        <button class="tab-btn" id="tabQueue" onclick="switchTab('queue')">
+          Export Failures <span class="tab-badge" id="queueBadge" style="display:none">0</span>
+        </button>
+      </div>
+
+      <!-- Filters -->
+      <div class="filters-bar">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search entries…" oninput="onSearch()">
+
+        <div class="date-picker-wrap" id="datePickerWrap">
+          <div class="date-pill" id="datePill" onclick="toggleDatePicker()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <span id="datePillText">This Period</span>
+            <span class="date-pill-x" id="datePillX" onclick="clearDateFilter(event)" style="display:none">✕</span>
+          </div>
+          <div class="date-picker-dropdown" id="datePickerDropdown">
+            <div class="date-picker-months">
+              <div class="cal-month" id="calLeft"></div>
+              <div class="cal-month" id="calRight"></div>
+            </div>
+            <div class="quick-selects">
+              <div class="quick-row">
+                <button class="quick-btn" onclick="quickSelect('this-week')">This Week</button>
+                <button class="quick-btn" onclick="quickSelect('this-period')">This Period</button>
+                <button class="quick-btn" onclick="quickSelect('this-year')">This Year</button>
+                <button class="quick-btn" onclick="quickSelect('this-quarter')">This Quarter</button>
+              </div>
+              <div class="quick-row">
+                <button class="quick-btn" onclick="quickSelect('last-week')">Last Week</button>
+                <button class="quick-btn" onclick="quickSelect('last-period')">Last Period</button>
+                <button class="quick-btn" onclick="quickSelect('last-year')">Last Year</button>
+                <button class="quick-btn" onclick="quickSelect('last-quarter')">Last Quarter</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Queue-only filter chips -->
+        <div id="queueFilters" style="display:none;display:flex;gap:6px;">
+          <button class="filter-chip active" id="chipAll" onclick="setQueueFilter('all')">All</button>
+          <button class="filter-chip" id="chipReady" onclick="setQueueFilter('ready')">Ready <span id="chipReadyN"></span></button>
+          <button class="filter-chip" id="chipAttention" onclick="setQueueFilter('needs_attention')">Needs Attention <span id="chipAttentionN"></span></button>
+          <button class="filter-chip" id="chipError" onclick="setQueueFilter('error')">Error <span id="chipErrorN"></span></button>
+        </div>
+
+        <div class="filter-spacer"></div>
+
+        <!-- Push All Ready (queue only) -->
+        <button class="btn btn-blue btn-sm" id="pushAllReadyBtn" onclick="pushAllReady()" style="display:none">Push All Ready</button>
+      </div>
+
+      <!-- Stale banner -->
+      <div class="stale-banner" id="staleBanner">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <span id="staleBannerText"></span>
+        <button class="stale-banner-dismiss" onclick="dismissStaleBanner()">✕</button>
+      </div>
+
+      <!-- Bulk toolbar -->
+      <div class="bulk-toolbar" id="bulkToolbar">
+        <span id="bulkCount">0 selected</span>
+        <button class="btn btn-blue btn-sm" onclick="pushSelected()">Push Selected to QBO</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
+      </div>
+
+      <!-- Scroll area -->
+      <div class="scroll-area">
+        <div class="table-card">
+          <table class="data-table" id="entriesTable">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody">
+              <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text3);">Loading…</td></tr>
+            </tbody>
+            <tfoot id="tableFoot"></tfoot>
+          </table>
+        </div>
+        <div class="pagination" id="paginationBar"></div>
+      </div>
+    </div>
+
+    <!-- Detail View -->
+    <div class="detail-view" id="detailView">
+      <div class="detail-header">
+        <div class="detail-header-top">
+          <div class="detail-meta">
+            <div class="detail-title">
+              <button onclick="backToList()" style="background:none;border:1px solid var(--border);color:var(--text2);cursor:pointer;padding:5px 10px;border-radius:6px;display:flex;align-items:center;gap:4px;font-size:13px;" title="Back to list">
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                Back
+              </button>
+              <span class="mono" id="detailJeName">—</span>
+              <span id="detailStatusPill"></span>
+            </div>
+            <div class="detail-sub">
+              <span><span class="label">Sales Date:</span> <span id="detailDate">—</span></span>
+              <span><span class="label">Location:</span> <span id="detailLocation">—</span></span>
+              <span><span class="label">Last Sync:</span> <span id="detailLastSync">—</span></span>
+            </div>
+          </div>
+          <div class="detail-actions" id="detailActions"></div>
+        </div>
+      </div>
+
+      <!-- Error block -->
+      <details class="error-block" id="errorBlock" style="display:none;">
+        <summary>
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          QBO Error — click to expand
+        </summary>
+        <div class="error-msg" id="errorMsg"></div>
+      </details>
+
+      <!-- Unmapped banner -->
+      <div class="unmapped-banner" id="unmappedBanner"></div>
+
+      <!-- Journal table -->
+      <div class="journal-table-wrap">
+        <div class="journal-card">
+          <div class="journal-table-scroll">
+            <table class="journal-table">
+              <thead>
+                <tr>
+                  <th style="width:220px">General Journal Name</th>
+                  <th>QBO Account</th>
+                  <th>Memo</th>
+                  <th class="right" style="width:120px">Debit</th>
+                  <th class="right" style="width:120px">Credit</th>
+                </tr>
+              </thead>
+              <tbody id="journalBody"></tbody>
+              <tfoot id="journalFoot"></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer action bar -->
+      <div class="detail-footer">
+        <button class="btn btn-secondary" id="editBtn" onclick="enterEditMode()">Edit</button>
+        <button class="btn btn-primary" id="saveBtn" onclick="saveEntry()" style="display:none">Save</button>
+        <button class="btn btn-secondary" id="cancelBtn" onclick="cancelEdit()" style="display:none">Cancel</button>
+        <div class="footer-spacer"></div>
+        <button class="btn btn-secondary" onclick="exportEntryCSV()">
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Export CSV
+        </button>
+        <button class="btn btn-blue" id="pushBtn" onclick="pushCurrentEntry()">
+          Push to QuickBooks
+        </button>
+        <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+      </div>
+    </div>
+</main>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Delete confirm modal -->
+<div class="modal-backdrop" id="deleteModal">
+  <div class="modal">
+    <div class="modal-title">Delete Journal Entry</div>
+    <div class="modal-body" id="deleteModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="doDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let state = {
+  location: 'chatham',
+  tab: 'log',          // 'log' | 'queue'
+  queueFilter: 'all',
+  page: 1,
+  search: '',
+  start: null,
+  end: null,
+  dateLabel: 'This Period',
+  entries: [],
+  total: 0,
+  queueBadge: {},
+  selectedIds: new Set(),
+  staleDismissed: false,
+  // Detail
+  currentEntry: null,
+  editMode: false,
+  editData: [],          // mutable line items during edit
+  qboAccounts: [],
+};
+
+const LOC_NAMES = {dennis: 'Dennis Port', chatham: 'Chatham'};
+const fmt = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtDate = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('en-US', {month:'2-digit',day:'2-digit',year:'numeric'}) : '—';
+const toISO = d => d.toISOString().slice(0,10);
+
+// Default date range = this period (current month)
+function getDefaultRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = now;
+  return { start: toISO(start), end: toISO(end), label: 'This Period' };
+}
+
+// ============================================================
+// Init
+// ============================================================
+async function initSalesJournal() {
+  const def = getDefaultRange();
+  state.start = def.start;
+  state.end = def.end;
+  state.dateLabel = def.label;
+  document.getElementById('datePillText').textContent = def.label;
+
+  // Restore saved location
+  const saved = localStorage.getItem('sj_location');
+  if (saved) switchLocation(saved, false);
+
+  await loadLastRun();
+  await loadAccounts();
+  await loadEntries();
+  setupOutsideClick();
+}
+
+// ============================================================
+// Location switcher
+// ============================================================
+function switchLocation(loc, reload = true) {
+  state.location = loc;
+  state.page = 1;
+  state.selectedIds.clear();
+  localStorage.setItem('sj_location', loc);
+  document.getElementById('locDennis').classList.toggle('active', loc === 'dennis');
+  document.getElementById('locChatham').classList.toggle('active', loc === 'chatham');
+  if (reload) loadEntries();
+}
+
+// ============================================================
+// Last run
+// ============================================================
+async function loadLastRun() {
+  try {
+    const r = await fetch('/api/sales-journal/last-run').then(r => r.json());
+    const el = document.getElementById('lastRunLabel');
+    if (!r.last_run) { el.textContent = 'No runs recorded yet'; return; }
+    const d = new Date(r.last_run + 'Z');
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const time = d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZone:'America/New_York'});
+    el.textContent = isToday
+      ? `Last run: Today at ${time}`
+      : `Last run: ${d.toLocaleDateString('en-US', {timeZone:'America/New_York'})} at ${time}`;
+  } catch(e) {
+    document.getElementById('lastRunLabel').textContent = 'Last run: unknown';
+  }
+}
+
+// ============================================================
+// QBO Accounts
+// ============================================================
+async function loadAccounts() {
+  try {
+    state.qboAccounts = await fetch('/api/sales-journal/accounts').then(r => r.json());
+  } catch(e) { state.qboAccounts = []; }
+}
+
+// ============================================================
+// Load entries list
+// ============================================================
+async function loadEntries() {
+  const isQueue = state.tab === 'queue';
+  const params = new URLSearchParams({
+    location: state.location,
+    start: state.start,
+    end: state.end,
+    page: state.page,
+    search: state.search,
+    queue: isQueue ? 'true' : 'false',
+  });
+  if (isQueue && state.queueFilter !== 'all') params.set('status', state.queueFilter);
+
+  try {
+    const data = await fetch(`/api/sales-journal/entries?${params}`).then(r => r.json());
+    state.entries = data.entries || [];
+    state.total = data.total || 0;
+    state.queueBadge = data.queue_badge || {};
+
+    renderTable();
+    renderPagination();
+    updateQueueBadge(data.queue_total || 0, data.queue_badge || {});
+
+    // Stale banner
+    if (!state.staleDismissed) await checkStaleBanner();
+  } catch(e) {
+    console.error('loadEntries error:', e);
+  }
+}
+
+// ============================================================
+// Render table
+// ============================================================
+function renderTable() {
+  const isQueue = state.tab === 'queue';
+  const head = document.getElementById('tableHead');
+  const body = document.getElementById('tableBody');
+  const foot = document.getElementById('tableFoot');
+
+  // Header
+  if (isQueue) {
+    head.innerHTML = `<tr>
+      <th style="width:36px"><input type="checkbox" id="chkAll" onchange="toggleAll(this)"></th>
+      <th>Date</th><th>JE Name</th><th>Description</th>
+      <th class="right">Total</th><th>Sync Status</th><th>Last Sync</th><th>Actions</th>
+    </tr>`;
+  } else {
+    head.innerHTML = `<tr>
+      <th class="sortable sort-desc" onclick="sortByDate()">Entry Date</th>
+      <th>JE Name</th><th>Balanced?</th>
+      <th class="right">Total Debits</th><th class="right">Total Credits</th>
+      <th class="right">Total Sales</th><th>Status</th><th>Actions</th>
+    </tr>`;
+  }
+
+  // Body
+  if (!state.entries.length) {
+    const cols = isQueue ? 8 : 8;
+    body.innerHTML = `<tr><td colspan="${cols}">
+      <div class="empty-state">
+        <div class="empty-icon">${isQueue ? '✅' : '📋'}</div>
+        <div class="empty-title">${isQueue ? 'All caught up — no entries waiting to post.' : 'No sales entries found for this date range.'}</div>
+      </div>
+    </td></tr>`;
+    foot.innerHTML = '';
+    return;
+  }
+
+  let totalD = 0, totalC = 0, totalS = 0;
+
+  if (isQueue) {
+    body.innerHTML = state.entries.map(e => {
+      const checked = state.selectedIds.has(e.id) ? 'checked' : '';
+      const canPush = e.status === 'ready';
+      return `<tr>
+        <td><input type="checkbox" value="${e.id}" ${checked} onchange="toggleRow(${e.id}, this)"></td>
+        <td>${fmtDate(e.entry_date)}</td>
+        <td><span class="mono">${e.je_name || '—'}</span></td>
+        <td style="color:var(--text2)">Daily Sales Journal</td>
+        <td class="right currency">${fmt(e.total_credits)}</td>
+        <td>${statusPill(e.status)}</td>
+        <td style="color:var(--text3);font-size:12px">${e.last_sync_attempt ? new Date(e.last_sync_attempt+'Z').toLocaleString('en-US',{timeZone:'America/New_York'}) : '—'}</td>
+        <td style="display:flex;gap:6px;flex-wrap:nowrap">
+          <button class="btn btn-secondary btn-sm" onclick="openEntry(${e.id})">View</button>
+          ${canPush ? `<button class="btn btn-blue btn-sm" onclick="quickPush(${e.id}, this)">Push to QBO</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+    totalS = state.entries.reduce((a,e) => a + (e.total_credits||0), 0);
+    foot.innerHTML = `<tr><td colspan="4">Total Items: ${state.entries.length}</td><td class="right currency">${fmt(totalS)}</td><td colspan="3"></td></tr>`;
+  } else {
+    body.innerHTML = state.entries.map(e => {
+      totalD += e.total_debits || 0;
+      totalC += e.total_credits || 0;
+      totalS += e.total_credits || 0;
+      const canPush = e.status === 'ready';
+      return `<tr class="clickable-row" onclick="openEntry(${e.id})" style="cursor:pointer">
+        <td>${fmtDate(e.entry_date)}</td>
+        <td><span class="mono">${e.je_name || '—'}</span></td>
+        <td>${e.balanced ? '<span class="balanced-yes">✓ Yes</span>' : '<span class="balanced-no">✗ No</span>'}</td>
+        <td class="right currency">${fmt(e.total_debits)}</td>
+        <td class="right currency">${fmt(e.total_credits)}</td>
+        <td class="right currency">${fmt(e.total_credits)}</td>
+        <td>${statusPill(e.status)}</td>
+        <td onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-wrap:nowrap">
+          ${canPush ? `<button class="btn btn-blue btn-sm" onclick="quickPush(${e.id}, this)">Push to QBO</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+    foot.innerHTML = `<tr>
+      <td>Total Items: ${state.entries.length}</td><td></td><td></td>
+      <td class="right currency">${fmt(totalD)}</td>
+      <td class="right currency">${fmt(totalC)}</td>
+      <td class="right currency">${fmt(totalS)}</td>
+      <td colspan="2"></td>
+    </tr>`;
+  }
+}
+
+function statusPill(status) {
+  const labels = {posted:'Posted',ready:'Ready',needs_attention:'Needs Attention',error:'Error',pending:'Pending'};
+  const cls = status === 'needs_attention' ? 'pill-attention' : `pill-${status}`;
+  return `<span class="pill ${cls}">${labels[status] || status}</span>`;
+}
+
+// ============================================================
+// Pagination
+// ============================================================
+function renderPagination() {
+  const totalPages = Math.ceil(state.total / 30);
+  const bar = document.getElementById('paginationBar');
+  if (totalPages <= 1) { bar.innerHTML = ''; return; }
+  bar.innerHTML = `
+    <span class="page-info">Page ${state.page} of ${totalPages} (${state.total} entries)</span>
+    <div class="page-btns">
+      <button class="btn btn-secondary btn-sm" onclick="changePage(${state.page-1})" ${state.page===1?'disabled':''}>← Prev</button>
+      <button class="btn btn-secondary btn-sm" onclick="changePage(${state.page+1})" ${state.page===totalPages?'disabled':''}>Next →</button>
+    </div>`;
+}
+
+function changePage(p) { state.page = p; loadEntries(); }
+
+// ============================================================
+// Tabs
+// ============================================================
+function switchTab(tab) {
+  state.tab = tab;
+  state.page = 1;
+  state.queueFilter = 'all';
+  state.selectedIds.clear();
+  document.getElementById('tabLog').classList.toggle('active', tab === 'log');
+  document.getElementById('tabQueue').classList.toggle('active', tab === 'queue');
+  const qf = document.getElementById('queueFilters');
+  const pushAll = document.getElementById('pushAllReadyBtn');
+  if (tab === 'queue') {
+    qf.style.display = 'flex';
+    pushAll.style.display = '';
+  } else {
+    qf.style.display = 'none';
+    pushAll.style.display = 'none';
+  }
+  updateBulkToolbar();
+  loadEntries();
+}
+
+function updateQueueBadge(total, badge) {
+  const el = document.getElementById('queueBadge');
+  if (total > 0) { el.textContent = total; el.style.display = ''; }
+  else el.style.display = 'none';
+  // Update chip counts
+  const ready = badge.ready || 0;
+  const att = badge.needs_attention || 0;
+  const err = badge.error || 0;
+  document.getElementById('chipReadyN').textContent = ready ? `(${ready})` : '';
+  document.getElementById('chipAttentionN').textContent = att ? `(${att})` : '';
+  document.getElementById('chipErrorN').textContent = err ? `(${err})` : '';
+}
+
+function setQueueFilter(f) {
+  state.queueFilter = f;
+  state.page = 1;
+  ['All','Ready','Attention','Error'].forEach(x => {
+    const el = document.getElementById('chip'+x);
+    if (el) el.classList.remove('active');
+  });
+  const chipMap = {all:'chipAll',ready:'chipReady',needs_attention:'chipAttention',error:'chipError'};
+  const el = document.getElementById(chipMap[f]);
+  if (el) el.classList.add('active');
+  loadEntries();
+}
+
+// ============================================================
+// Search
+// ============================================================
+let searchTimer;
+function onSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.search = document.getElementById('searchInput').value;
+    state.page = 1;
+    loadEntries();
+  }, 300);
+}
+
+// ============================================================
+// Selection
+// ============================================================
+function toggleRow(id, cb) {
+  if (cb.checked) state.selectedIds.add(id); else state.selectedIds.delete(id);
+  updateBulkToolbar();
+}
+function toggleAll(cb) {
+  state.entries.forEach(e => { if(cb.checked) state.selectedIds.add(e.id); else state.selectedIds.delete(e.id); });
+  document.querySelectorAll('#tableBody input[type="checkbox"]').forEach(c => c.checked = cb.checked);
+  updateBulkToolbar();
+}
+function clearSelection() {
+  state.selectedIds.clear();
+  document.querySelectorAll('#tableBody input[type="checkbox"]').forEach(c => c.checked = false);
+  const ca = document.getElementById('chkAll'); if (ca) ca.checked = false;
+  updateBulkToolbar();
+}
+function updateBulkToolbar() {
+  const n = state.selectedIds.size;
+  const bar = document.getElementById('bulkToolbar');
+  bar.classList.toggle('visible', n > 0 && state.tab === 'queue');
+  document.getElementById('bulkCount').textContent = `${n} selected`;
+}
+
+// ============================================================
+// Stale banner
+// ============================================================
+async function checkStaleBanner() {
+  try {
+    const p = new URLSearchParams({location: state.location, start: state.start, end: state.end});
+    const d = await fetch(`/api/sales-journal/stale-count?${p}`).then(r => r.json());
+    const total = d.total || 0;
+    const banner = document.getElementById('staleBanner');
+    if (total > 0 && !state.staleDismissed) {
+      const parts = [];
+      if (d.ready) parts.push(`${d.ready} Ready`);
+      if (d.needs_attention) parts.push(`${d.needs_attention} Needs Attention`);
+      if (d.error) parts.push(`${d.error} Error`);
+      document.getElementById('staleBannerText').textContent =
+        `There are important items (${parts.join(', ')}) that pre-date your date range selection.`;
+      banner.classList.add('visible');
+    } else {
+      banner.classList.remove('visible');
+    }
+  } catch(e) {}
+}
+function dismissStaleBanner() {
+  state.staleDismissed = true;
+  document.getElementById('staleBanner').classList.remove('visible');
+}
+
+// ============================================================
+// Quick push (from list)
+// ============================================================
+async function quickPush(id, btn) {
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<div class="spinner"></div>';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/sales-journal/entries/${id}/push`, {method:'POST'}).then(r => r.json());
+    if (r.success) {
+      toast('success', `Entry posted to QuickBooks.`);
+      loadEntries();
+    } else {
+      toast('error', `QBO upload failed: ${r.error}`);
+      btn.innerHTML = orig;
+      btn.disabled = false;
+    }
+  } catch(e) {
+    toast('error', 'Request failed.');
+    btn.innerHTML = orig;
+    btn.disabled = false;
+  }
+}
+
+async function pushSelected() {
+  const ids = [...state.selectedIds];
+  if (!ids.length) return;
+  const r = await fetch('/api/sales-journal/entries/bulk-push', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids})
+  }).then(r => r.json());
+  const ok = r.filter(x => x.success).length;
+  const fail = r.length - ok;
+  if (ok) toast('success', `${ok} entr${ok===1?'y':'ies'} posted.`);
+  if (fail) toast('error', `${fail} entr${fail===1?'y':'ies'} failed.`);
+  clearSelection();
+  loadEntries();
+}
+
+async function pushAllReady() {
+  const readyIds = state.entries.filter(e => e.status === 'ready').map(e => e.id);
+  if (!readyIds.length) { toast('info', 'No READY entries to push.'); return; }
+  const r = await fetch('/api/sales-journal/entries/bulk-push', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids: readyIds})
+  }).then(r => r.json());
+  const ok = r.filter(x => x.success).length;
+  if (ok) toast('success', `${ok} entr${ok===1?'y':'ies'} posted.`);
+  const fail = r.filter(x => !x.success);
+  if (fail.length) toast('error', `${fail.length} failed.`);
+  loadEntries();
+}
+
+// ============================================================
+// Entry Detail
+// ============================================================
+async function openEntry(id) {
+  try {
+    const entry = await fetch(`/api/sales-journal/entries/${id}`).then(r => r.json());
+    state.currentEntry = entry;
+    state.editMode = false;
+    document.getElementById('listView').classList.add('hidden');
+    document.getElementById('detailView').classList.add('active');
+    renderDetail();
+  } catch(e) {
+    toast('error', 'Failed to load entry.');
+  }
+}
+
+function backToList() {
+  state.currentEntry = null;
+  state.editMode = false;
+  document.getElementById('detailView').classList.remove('active');
+  document.getElementById('listView').classList.remove('hidden');
+}
+
+function renderDetail() {
+  const e = state.currentEntry;
+  if (!e) return;
+
+  document.getElementById('detailJeName').textContent = e.je_name || '—';
+  document.getElementById('detailStatusPill').innerHTML = statusPill(e.status);
+  document.getElementById('detailDate').textContent = fmtDate(e.entry_date);
+  document.getElementById('detailLocation').textContent = LOC_NAMES[e.location] || e.location;
+  document.getElementById('detailLastSync').textContent = e.last_sync_attempt
+    ? new Date(e.last_sync_attempt+'Z').toLocaleString('en-US',{timeZone:'America/New_York'})
+    : 'Never';
+
+  // Error block
+  const eb = document.getElementById('errorBlock');
+  if (e.qbo_error && e.status === 'error') {
+    eb.style.display = '';
+    document.getElementById('errorMsg').textContent = e.qbo_error;
+  } else {
+    eb.style.display = 'none';
+  }
+
+  // Unmapped banner
+  const unmapped = (e.line_items || []).filter(li => !li.mapped).length;
+  const ub = document.getElementById('unmappedBanner');
+  if (unmapped > 0) {
+    ub.classList.add('visible');
+    ub.textContent = `⚠ ${unmapped} line item${unmapped>1?'s are':' is'} unmapped and must be resolved before posting.`;
+  } else {
+    ub.classList.remove('visible');
+    ub.textContent = '';
+  }
+
+  renderJournalTable();
+  renderDetailActions();
+}
+
+function renderJournalTable() {
+  const e = state.currentEntry;
+  const items = state.editMode ? state.editData : (e.line_items || []);
+  const body = document.getElementById('journalBody');
+  const foot = document.getElementById('journalFoot');
+
+  body.innerHTML = items.map((li, idx) => {
+    const isUnmapped = !li.mapped && !li.qbo_account;
+    const rowClass = isUnmapped ? 'unmapped-row' : '';
+    const unmappedIcon = isUnmapped ? '<span class="unmapped-icon" title="Unmapped">⚠</span>' : '';
+
+    if (state.editMode) {
+      const accountOpts = buildAccountOptions(li.qbo_account);
+      const debitVal = li.debit != null ? li.debit : '';
+      const creditVal = li.credit != null ? li.credit : '';
+      return `<tr class="${rowClass}">
+        <td>${unmappedIcon} ${escHtml(li.journal_name)}</td>
+        <td><select class="account-select" onchange="updateLineAccount(${idx}, this.value)">${accountOpts}</select></td>
+        <td><input class="memo-input" value="${escHtml(li.memo||'')}" oninput="updateLineMemo(${idx}, this.value)"></td>
+        <td class="right"><input class="num-input" type="number" step="0.01" value="${debitVal}" oninput="updateLineDebit(${idx}, this.value)" placeholder="—"></td>
+        <td class="right"><input class="num-input" type="number" step="0.01" value="${creditVal}" oninput="updateLineCredit(${idx}, this.value)" placeholder="—"></td>
+      </tr>`;
+    } else {
+      const accountCell = isUnmapped
+        ? `<select class="account-select" onchange="fixUnmappedLine(${state.currentEntry.id}, ${JSON.stringify(li.journal_name)}, this.value, this)">${buildAccountOptionsById('')}</select>`
+        : escHtml(li.qbo_account || '');
+      return `<tr class="${rowClass}">
+        <td>${unmappedIcon} ${escHtml(li.journal_name)}</td>
+        <td>${accountCell}</td>
+        <td style="color:var(--text3)">${escHtml(li.memo||'')}</td>
+        <td class="right currency">${li.debit != null ? fmt(li.debit) : ''}</td>
+        <td class="right currency">${li.credit != null ? fmt(li.credit) : ''}</td>
+      </tr>`;
+    }
+  }).join('');
+
+  // Totals footer
+  const totalD = items.reduce((a,li) => a + (li.debit||0), 0);
+  const totalC = items.reduce((a,li) => a + (li.credit||0), 0);
+  const balanced = Math.abs(totalD - totalC) < 0.02;
+  const balanceIcon = balanced
+    ? '<span class="balance-ok">✓ Balanced</span>'
+    : `<span class="balance-bad">✗ Off by ${fmt(Math.abs(totalD-totalC))}</span>`;
+
+  foot.innerHTML = `<tr>
+    <td colspan="3">${balanceIcon}</td>
+    <td class="right currency">${fmt(totalD)}</td>
+    <td class="right currency">${fmt(totalC)}</td>
+  </tr>`;
+}
+
+function buildAccountOptionsById(selectedId) {
+  let opts = '<option value="">— Select account —</option>';
+  const types = {};
+  state.qboAccounts.forEach(a => {
+    if (!types[a.account_type]) types[a.account_type] = [];
+    types[a.account_type].push(a);
+  });
+  Object.keys(types).sort().forEach(type => {
+    opts += `<optgroup label="${escHtml(type)}">`;
+    types[type].forEach(a => {
+      const sel = a.id === selectedId ? 'selected' : '';
+      opts += `<option value="${escHtml(a.id)}" ${sel}>${escHtml(a.name)}</option>`;
+    });
+    opts += '</optgroup>';
+  });
+  return opts;
+}
+
+async function fixUnmappedLine(entryId, journalName, accountId, selectEl) {
+  if (!accountId) return;
+  selectEl.disabled = true;
+  try {
+    const res = await fetch(`/api/sales-journal/entries/${entryId}/fix-mapping`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({journal_name: journalName, qbo_account: accountId})
+    });
+    const data = await res.json();
+    if (data.success) {
+      // Refresh the entry detail
+      await openEntry(entryId);
+      // Also refresh the entries list so status badge updates
+      loadEntries();
+    } else {
+      alert('Error saving mapping: ' + (data.error || 'unknown'));
+      selectEl.disabled = false;
+    }
+  } catch(e) {
+    alert('Network error');
+    selectEl.disabled = false;
+  }
+}
+
+function buildAccountOptions(selected) {
+  let opts = '<option value="">— Select account —</option>';
+  state.qboAccounts.forEach(a => {
+    const label = a.fully_qualified_name || a.name;
+    const sel = label === selected ? 'selected' : '';
+    opts += `<option value="${escHtml(label)}" ${sel}>${escHtml(label)}</option>`;
+  });
+  // If selected isn't in accounts, add it as an option
+  if (selected && !state.qboAccounts.find(a => (a.fully_qualified_name||a.name) === selected)) {
+    opts += `<option value="${escHtml(selected)}" selected>${escHtml(selected)}</option>`;
+  }
+  return opts;
+}
+
+function renderDetailActions() {
+  const e = state.currentEntry;
+  const canPush = e.balanced && !(e.line_items||[]).some(li => !li.mapped);
+  const pushBtn = document.getElementById('pushBtn');
+  if (e.status === 'posted') {
+    pushBtn.textContent = '✓ Posted';
+    pushBtn.disabled = true;
+    pushBtn.className = 'btn btn-secondary';
+  } else {
+    pushBtn.textContent = 'Push to QuickBooks';
+    pushBtn.disabled = !canPush;
+    pushBtn.className = 'btn btn-blue';
+  }
+}
+
+// ============================================================
+// Edit mode
+// ============================================================
+function enterEditMode() {
+  state.editMode = true;
+  state.editData = JSON.parse(JSON.stringify(state.currentEntry.line_items || []));
+  document.getElementById('editBtn').style.display = 'none';
+  document.getElementById('saveBtn').style.display = '';
+  document.getElementById('cancelBtn').style.display = '';
+  renderJournalTable();
+}
+
+function cancelEdit() {
+  state.editMode = false;
+  state.editData = [];
+  document.getElementById('editBtn').style.display = '';
+  document.getElementById('saveBtn').style.display = 'none';
+  document.getElementById('cancelBtn').style.display = 'none';
+  renderJournalTable();
+}
+
+function updateLineAccount(idx, val) {
+  state.editData[idx].qbo_account = val || null;
+  state.editData[idx].mapped = !!val;
+  recalcEditTotals();
+}
+function updateLineMemo(idx, val) { state.editData[idx].memo = val; }
+function updateLineDebit(idx, val) {
+  state.editData[idx].debit = val ? parseFloat(val) : null;
+  recalcEditTotals();
+}
+function updateLineCredit(idx, val) {
+  state.editData[idx].credit = val ? parseFloat(val) : null;
+  recalcEditTotals();
+}
+function recalcEditTotals() {
+  const totalD = state.editData.reduce((a,li) => a + (li.debit||0), 0);
+  const totalC = state.editData.reduce((a,li) => a + (li.credit||0), 0);
+  const balanced = Math.abs(totalD - totalC) < 0.02;
+  // Update footer in place
+  const foot = document.getElementById('journalFoot');
+  if (foot) {
+    const balanceIcon = balanced
+      ? '<span class="balance-ok">✓ Balanced</span>'
+      : `<span class="balance-bad">✗ Off by ${fmt(Math.abs(totalD-totalC))}</span>`;
+    foot.innerHTML = `<tr>
+      <td colspan="3">${balanceIcon}</td>
+      <td class="right currency">${fmt(totalD)}</td>
+      <td class="right currency">${fmt(totalC)}</td>
+    </tr>`;
+  }
+}
+
+async function saveEntry() {
+  const id = state.currentEntry.id;
+  try {
+    const r = await fetch(`/api/sales-journal/entries/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({line_items: state.editData}),
+    }).then(r => r.json());
+
+    // Merge back
+    state.currentEntry.line_items = state.editData;
+    state.currentEntry.total_debits = r.total_debits;
+    state.currentEntry.total_credits = r.total_credits;
+    state.currentEntry.balanced = r.balanced;
+    state.currentEntry.status = r.status;
+
+    cancelEdit();
+    renderDetail();
+    toast('success', 'Changes saved.');
+  } catch(e) {
+    toast('error', 'Save failed.');
+  }
+}
+
+// ============================================================
+// Push from detail view
+// ============================================================
+async function pushCurrentEntry() {
+  const id = state.currentEntry.id;
+  const btn = document.getElementById('pushBtn');
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<div class="spinner"></div>';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch(`/api/sales-journal/entries/${id}/push`, {method:'POST'}).then(r => r.json());
+    if (r.success) {
+      state.currentEntry.status = 'posted';
+      state.currentEntry.qbo_txn_id = r.txn_id;
+      state.currentEntry.qbo_error = null;
+      renderDetail();
+      toast('success', `${state.currentEntry.je_name} posted to QuickBooks.`);
+    } else {
+      state.currentEntry.status = 'error';
+      state.currentEntry.qbo_error = r.error;
+      renderDetail();
+      toast('error', `QBO upload failed for ${state.currentEntry.je_name}. See entry for details.`);
+    }
+  } catch(e) {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    toast('error', 'Request failed.');
+  }
+}
+
+// ============================================================
+// Delete
+// ============================================================
+function confirmDelete() {
+  const e = state.currentEntry;
+  document.getElementById('deleteModalBody').textContent =
+    `Delete journal entry for ${e.je_name}? This cannot be undone.`;
+  document.getElementById('deleteModal').classList.add('active');
+}
+function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('active'); }
+async function doDelete() {
+  closeDeleteModal();
+  const id = state.currentEntry.id;
+  await fetch(`/api/sales-journal/entries/${id}`, {method:'DELETE'});
+  toast('info', 'Entry deleted.');
+  backToList();
+  loadEntries();
+}
+
+// ============================================================
+// Export
+// ============================================================
+function openExportPicker() {
+  const url = `/api/sales-journal/export?location=${state.location}&start=${state.start}&end=${state.end}`;
+  window.location.href = url;
+}
+
+function exportEntryCSV() {
+  const e = state.currentEntry;
+  if (!e) return;
+  const rows = [['General Journal Name','QBO Account','Memo','Debit','Credit']];
+  (e.line_items||[]).forEach(li => {
+    rows.push([li.journal_name, li.qbo_account||'', li.memo||'',
+      li.debit!=null?li.debit:'', li.credit!=null?li.credit:'']);
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${e.je_name}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// Date picker
+// ============================================================
+let calState = { leftYear: null, leftMonth: null, rangeStart: null, rangeEnd: null, selecting: false };
+
+function toggleDatePicker() {
+  const dd = document.getElementById('datePickerDropdown');
+  dd.classList.toggle('open');
+  if (dd.classList.contains('open')) renderCalendars();
+}
+
+function setupOutsideClick() {
+  document.addEventListener('click', e => {
+    const wrap = document.getElementById('datePickerWrap');
+    if (!wrap.contains(e.target)) {
+      document.getElementById('datePickerDropdown').classList.remove('open');
+    }
+  });
+}
+
+function renderCalendars() {
+  const now = new Date();
+  if (!calState.leftYear) {
+    calState.leftYear = now.getFullYear();
+    calState.leftMonth = now.getMonth() - 1;
+    if (calState.leftMonth < 0) { calState.leftMonth = 11; calState.leftYear--; }
+  }
+  if (state.start) calState.rangeStart = state.start;
+  if (state.end) calState.rangeEnd = state.end;
+  renderCal('calLeft', calState.leftYear, calState.leftMonth);
+  let ry = calState.leftYear, rm = calState.leftMonth + 1;
+  if (rm > 11) { rm = 0; ry++; }
+  renderCal('calRight', ry, rm);
+}
+
+function renderCal(containerId, year, month) {
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const container = document.getElementById(containerId);
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const today = toISO(new Date());
+
+  let html = `<div class="cal-header">
+    ${containerId==='calLeft' ? `<button class="cal-nav" onclick="calNav(-1)">‹</button>` : '<div></div>'}
+    <div class="cal-title">${months[month]} ${year}</div>
+    ${containerId==='calRight' ? `<button class="cal-nav" onclick="calNav(1)">›</button>` : '<div></div>'}
+  </div>`;
+
+  html += '<div class="cal-grid">';
+  ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d => {
+    html += `<div class="cal-day-header">${d}</div>`;
+  });
+  for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    let cls = 'cal-day';
+    if (iso === today) cls += ' today';
+    if (calState.rangeStart && calState.rangeEnd) {
+      if (iso === calState.rangeStart) cls += ' range-start';
+      else if (iso === calState.rangeEnd) cls += ' range-end';
+      else if (iso > calState.rangeStart && iso < calState.rangeEnd) cls += ' in-range';
+    } else if (iso === calState.rangeStart) cls += ' range-start';
+    html += `<div class="${cls}" onclick="calClick('${iso}')">${d}</div>`;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function calNav(dir) {
+  calState.leftMonth += dir;
+  if (calState.leftMonth > 11) { calState.leftMonth = 0; calState.leftYear++; }
+  if (calState.leftMonth < 0) { calState.leftMonth = 11; calState.leftYear--; }
+  renderCalendars();
+}
+
+function calClick(iso) {
+  if (!calState.selecting || !calState.rangeStart) {
+    calState.rangeStart = iso;
+    calState.rangeEnd = null;
+    calState.selecting = true;
+  } else {
+    if (iso < calState.rangeStart) {
+      calState.rangeEnd = calState.rangeStart;
+      calState.rangeStart = iso;
+    } else {
+      calState.rangeEnd = iso;
+    }
+    calState.selecting = false;
+    applyDateRange(calState.rangeStart, calState.rangeEnd, `${calState.rangeStart} — ${calState.rangeEnd}`);
+  }
+  renderCalendars();
+}
+
+function applyDateRange(start, end, label) {
+  state.start = start;
+  state.end = end;
+  state.dateLabel = label;
+  state.page = 1;
+  state.staleDismissed = false;
+  document.getElementById('datePillText').textContent = label;
+  document.getElementById('datePillX').style.display = '';
+  document.getElementById('datePickerDropdown').classList.remove('open');
+  loadEntries();
+}
+
+function clearDateFilter(e) {
+  e.stopPropagation();
+  const def = getDefaultRange();
+  calState.rangeStart = def.start;
+  calState.rangeEnd = def.end;
+  applyDateRange(def.start, def.end, def.label);
+  document.getElementById('datePillX').style.display = 'none';
+}
+
+function quickSelect(key) {
+  const now = new Date();
+  let start, end, label;
+  const y = now.getFullYear(), m = now.getMonth();
+  if (key === 'this-week') {
+    const day = now.getDay();
+    start = toISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() - day));
+    end = toISO(now); label = 'This Week';
+  } else if (key === 'this-period') {
+    start = toISO(new Date(y, m, 1)); end = toISO(now); label = 'This Period';
+  } else if (key === 'this-year') {
+    start = `${y}-01-01`; end = toISO(now); label = 'This Year';
+  } else if (key === 'this-quarter') {
+    const q = Math.floor(m/3)*3;
+    start = toISO(new Date(y, q, 1)); end = toISO(now); label = 'This Quarter';
+  } else if (key === 'last-week') {
+    const day = now.getDay();
+    const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day - 7);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    start = toISO(mon); end = toISO(sun); label = 'Last Week';
+  } else if (key === 'last-period') {
+    start = toISO(new Date(y, m-1, 1)); end = toISO(new Date(y, m, 0)); label = 'Last Period';
+  } else if (key === 'last-year') {
+    start = `${y-1}-01-01`; end = `${y-1}-12-31`; label = 'Last Year';
+  } else if (key === 'last-quarter') {
+    const q = Math.floor(m/3)*3;
+    const lqs = q === 0 ? new Date(y-1, 9, 1) : new Date(y, q-3, 1);
+    const lqe = q === 0 ? new Date(y-1, 12, 0) : new Date(y, q, 0);
+    start = toISO(lqs); end = toISO(lqe); label = 'Last Quarter';
+  }
+  calState.rangeStart = start;
+  calState.rangeEnd = end;
+  applyDateRange(start, end, label);
+}
+
+// ============================================================
+// Toast notifications
+// ============================================================
+function toast(type, msg) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.animation = 'fadeOut 0.3s ease forwards';
+    setTimeout(() => el.remove(), 300);
+  }, 4000);
+}
+
+// ============================================================
+// Sidebar toggle
+// ============================================================
+function toggleAccounting() {
+  const parent = document.getElementById('nav-accounting');
+  const children = document.getElementById('accounting-children');
+  parent.classList.toggle('open');
+  children.classList.toggle('open');
+}
+
+// ============================================================
+// Sort (date only)
+// ============================================================
+function sortByDate() {
+  // Toggle handled server-side via page reload for now
+  // Could add client-side sort here if needed
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+// Start
+// ============================================================
+// Auto-switch tab based on URL param
+(function() {
+  var sp = new URLSearchParams(window.location.search);
+  if (sp.get('tab') === 'export') {
+    setTimeout(function() { if (typeof switchTab === 'function') switchTab('queue'); }, 300);
+  }
+})();
+
+initSalesJournal();
+</script>
+<script src="/static/sidebar.js"></script>
+</body>
+</html>

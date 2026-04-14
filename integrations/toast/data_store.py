@@ -314,6 +314,20 @@ def store_orders(location, business_date, orders):
                 datetime.now().isoformat(),
             ))
 
+            # Deduplicate payments: Toast sometimes returns the same charge twice with
+            # different GUIDs. Drop extras where sum of payments would exceed order total.
+            deduped = []
+            running_total = 0.0
+            for pay_data in payments_to_insert:
+                pay_amt = float(pay_data[6] or 0)
+                if total_amount > 0 and running_total + pay_amt > total_amount + 0.01:
+                    logger.warning("Skipping duplicate payment guid=%s amt=%s (order total=%.2f, running=%.2f)",
+                                   pay_data[0], pay_amt, total_amount, running_total)
+                    continue
+                running_total += pay_amt
+                deduped.append(pay_data)
+            payments_to_insert = deduped
+
             # THEN insert payments (use the adjusted business date)
             for pay_data in payments_to_insert:
                 # Update the business_date in payment data to match the order's adjusted date

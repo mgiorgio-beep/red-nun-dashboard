@@ -56,6 +56,8 @@ import secrets
 
 from routes.availability_routes import availability_bp
 from routes.application_routes import application_bp
+from routes.daily_sales_routes import daily_sales_bp
+from reports.sales_journal import init_sales_journal_tables, run_daily_journal, send_weekly_unresolved_summary
 
 load_dotenv()
 logging.basicConfig(
@@ -98,6 +100,7 @@ app.register_blueprint(billpay_bp)
 app.register_blueprint(payment_bp)
 app.register_blueprint(availability_bp)
 app.register_blueprint(application_bp)
+app.register_blueprint(daily_sales_bp)
 
 # Initialize database
 init_db()
@@ -116,6 +119,10 @@ except Exception as e:
 
 try:
     init_payment_tables()
+    try:
+        init_sales_journal_tables()
+    except Exception as e:
+        import logging; logging.getLogger(__name__).warning(f'Sales journal table init failed: {e}')
 except Exception as e:
     logger.warning(f"Payment table init failed: {e}")
 
@@ -800,6 +807,10 @@ def setup_scheduler():
 
     scheduler.add_job(func=scrape_fanzo_guide, trigger='cron', hour=5, minute=0, timezone='America/New_York', id='fanzo_scrape')
     scheduler.add_job(fetch_all_odds, 'cron', hour='5,7,9,11,13,15,17,19,21,23', id='odds_fetch', replace_existing=True)
+    # Daily Sales Journal: generate entries at 5:00 AM ET
+    scheduler.add_job(func=run_daily_journal, trigger='cron', hour=5, minute=0, timezone='America/New_York', id='daily_sales_journal', replace_existing=True)
+    # Sales Journal: weekly unresolved summary Monday 7:00 AM ET
+    scheduler.add_job(func=send_weekly_unresolved_summary, trigger='cron', day_of_week='mon', hour=7, minute=5, timezone='America/New_York', id='weekly_journal_summary', replace_existing=True)
     scheduler.start()
     logger.info("Scheduler started — Toast intraday sync, fanzo scrape, odds fetch")
 
