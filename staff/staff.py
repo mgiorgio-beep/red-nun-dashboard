@@ -312,6 +312,39 @@ def dtv_tune():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@staff_bp.route('/staff/api/tvs/sync', methods=['POST'])
+def sync_tv_channels():
+    """Poll each DirecTV box for its current channel via SHEF getTuned.
+    Updates tvs.json so the sports guide reflects reality on page load."""
+    tvs = _load_tvs()
+    port = 8080  # SHEF port
+    results = []
+    changed = False
+    for tv in tvs:
+        dtv_ip = tv.get('dtv_ip', '').strip()
+        if not dtv_ip:
+            continue
+        try:
+            r = http_requests.get(
+                'http://{}:{}/tv/getTuned'.format(dtv_ip, port),
+                timeout=3
+            )
+            if r.status_code == 200:
+                data = r.json()
+                major = str(data.get('major', ''))
+                if major and major != tv.get('channel', ''):
+                    tv['channel'] = major
+                    changed = True
+                results.append({'name': tv.get('name', dtv_ip), 'channel': major, 'ok': True})
+            else:
+                results.append({'name': tv.get('name', dtv_ip), 'ok': False, 'error': 'HTTP {}'.format(r.status_code)})
+        except Exception as e:
+            results.append({'name': tv.get('name', dtv_ip), 'ok': False, 'error': str(e)})
+    if changed:
+        _save_tvs(tvs)
+    return jsonify({'ok': True, 'tvs': tvs, 'synced': results})
+
+
 @staff_bp.route('/staff/api/dtv/key', methods=['POST'])
 def dtv_key():
     """Send a remote key press to a DirecTV receiver via SHEF."""

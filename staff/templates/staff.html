@@ -951,6 +951,10 @@ var yttvChannels = {};
 fetch('/staff/api/tvs').then(function(r){return r.json()}).then(function(data){
     tvList = data;
     updateBadges();
+    // Sync current channels from DirecTV boxes (picks up channels tuned outside the app)
+    fetch('/staff/api/tvs/sync', {method:'POST'}).then(function(r){return r.json()}).then(function(s){
+        if(s.ok && s.tvs) { tvList = s.tvs; updateBadges(); }
+    }).catch(function(){});
 }).catch(function(){});
 fetch('/staff/api/roku/apps').then(function(r){return r.json()}).then(function(data){
     rokuAppIds = data;
@@ -967,8 +971,8 @@ function loadAutotunes() {
 loadAutotunes();
 setInterval(function(){ loadAutotunes(); }, 30000);
 setInterval(function(){
-    fetch('/staff/api/tvs').then(function(r){return r.json()}).then(function(data){
-        tvList = data; updateBadges();
+    fetch('/staff/api/tvs/sync', {method:'POST'}).then(function(r){return r.json()}).then(function(s){
+        if(s.ok && s.tvs) { tvList = s.tvs; updateBadges(); }
     }).catch(function(){});
 }, 30000);
 

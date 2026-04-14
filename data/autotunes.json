@@ -1,0 +1,26 @@
+[
+  {
+    "tv_id": "bar-middle",
+    "game_id": "New Jersey Devils_vs_Boston Bruins_1776207600",
+    "channel": "628",
+    "start_ts": 1776207600,
+    "game_label": "New Jersey Devils vs Boston Bruins",
+    "tv_name": "Bar Middle",
+    "is_stream": false,
+    "stream_name": "",
+    "fired": false,
+    "created_at": 1776182982
+  },
+  {
+    "tv_id": "bar-right",
+    "game_id": "Chicago Cubs_vs_Philadelphia Phillies_1776205800",
+    "channel": "246",
+    "start_ts": 1776205800,
+    "game_label": "Chicago Cubs vs Philadelphia Phillies",
+    "tv_name": "Bar Right",
+    "is_stream": false,
+    "stream_name": "",
+    "fired": false,
+    "created_at": 1776185033
+  }
+]

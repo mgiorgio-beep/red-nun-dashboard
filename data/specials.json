@@ -1,0 +1,40 @@
+{
+  "title": "Today's Specials",
+  "footer": "",
+  "font": "Rock Salt",
+  "titleColor": "white",
+  "soupColor": "white",
+  "appColor": "blue",
+  "soup": {
+    "name": "Italian Wedding",
+    "desc": "",
+    "price": "",
+    "eightySixed": false
+  },
+  "appetizer": {
+    "name": "Buffalo Cauliflower",
+    "desc": "With bleu cheese",
+    "price": "$13",
+    "eightySixed": false
+  },
+  "items": [
+    {
+      "name": "Meatball Sub",
+      "desc": "Served with fries",
+      "price": "$18",
+      "color": "green"
+    },
+    {
+      "name": "Pasta Lunch Special",
+      "desc": "Beef and pork ragu over fettuccine with garlic bread",
+      "price": "$14",
+      "color": "yellow"
+    },
+    {
+      "name": "Beer Battered Haddock",
+      "desc": "Served with fries, coleslaw, and tartar",
+      "price": "$18",
+      "color": "pink"
+    }
+  ]
+}

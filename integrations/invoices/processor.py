@@ -1703,17 +1703,18 @@ def parse_vtinfo_csv_invoice(csv_data, filename=None, location=None):
     det_location = location or 'dennis'
 
     if filename:
-        # vtinfo_colonial_chatham_542237_20260323.csv
-        m = re.match(r'vtinfo_(lknife|colonial)_(chatham|dennis)_(\d+)_(\d{8})', filename)
+        # vtinfo_colonial_chatham_542237_20260323.csv  (or NODATE if date extraction failed)
+        m = re.match(r'vtinfo_(lknife|colonial)_(chatham|dennis)_(\d+)_(\d{8}|NODATE)', filename)
         if m:
             vendor_code, loc, inv_num, date_str = m.groups()
             vendor_name = 'L. Knife & Son' if vendor_code == 'lknife' else 'Colonial Wholesale'
             det_location = loc
             invoice_number = inv_num
-            try:
-                invoice_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
-            except ValueError:
-                invoice_date = date_str
+            if date_str != 'NODATE':
+                try:
+                    invoice_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
+                except ValueError:
+                    invoice_date = ''
 
     reader = csv_mod.reader(io.StringIO(text))
     header = next(reader)

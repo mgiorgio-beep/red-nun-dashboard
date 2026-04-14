@@ -1,0 +1,50 @@
+[
+  {
+    "channel": "218",
+    "dtv_ip": "10.1.10.87",
+    "id": "bar-left",
+    "name": "Bar Left",
+    "roku_ip": "10.1.10.227",
+    "samsung_ip": ""
+  },
+  {
+    "channel": "207",
+    "dtv_ip": "10.1.10.58",
+    "id": "bar-middle",
+    "name": "Bar Middle",
+    "roku_ip": "",
+    "samsung_ip": ""
+  },
+  {
+    "channel": "628",
+    "dtv_ip": "10.1.10.29",
+    "id": "bar-right",
+    "name": "Bar Right",
+    "roku_ip": "10.1.10.88",
+    "samsung_ip": ""
+  },
+  {
+    "channel": "208",
+    "dtv_ip": "10.1.10.208",
+    "id": "dr-left",
+    "name": "DR Left",
+    "roku_ip": "",
+    "samsung_ip": ""
+  },
+  {
+    "channel": "207",
+    "dtv_ip": "10.1.10.93",
+    "id": "dr-middle",
+    "name": "DR Middle",
+    "roku_ip": "10.1.10.154",
+    "samsung_ip": ""
+  },
+  {
+    "channel": "206",
+    "dtv_ip": "10.1.10.199",
+    "id": "dr-right",
+    "name": "DR Right",
+    "roku_ip": "10.1.10.118",
+    "samsung_ip": ""
+  }
+]
