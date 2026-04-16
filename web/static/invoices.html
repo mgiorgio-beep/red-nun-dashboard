@@ -1136,12 +1136,6 @@ input[type="file"] { display: none; }
 </div>
 
 <!-- Bottom Nav -->
-<div id="meReviewView" class="me-review" style="display:none">
-  <div class="me-rv-header"><div class="me-rv-title">Invoice Review</div><button class="me-rv-back" onclick="closeMeReview()">&larr; Back</button></div>
-  <div class="me-rv-info" id="meRvInfo"></div>
-  <table class="me-rv-table"><thead><tr><th>Product</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Total</th><th>Category</th></tr></thead><tbody id="meRvItems"></tbody></table>
-  <div class="me-rv-actions"><button class="me-rv-btn me-rv-btn-cancel" onclick="closeMeReview()">Back</button><button class="me-rv-btn me-rv-btn-save" onclick="approveInvoice()">&#10003; Approve Invoice</button></div>
-</div>
 <nav class="bottom-nav">
   <button class="nav-tab nav-scan-tab active" onclick="showView('scan',this)">
     <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" class="nav-icon"><path d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg>Scan
@@ -1192,7 +1186,7 @@ function showView(view, btn) {
   const pageTitle = document.querySelector('.history-view h2');
   if (pageTitle) pageTitle.textContent = view === 'pending' ? 'Pending Review' : 'Invoice History';
   // Hide ALL views first (covers review, meReview, scan, history, reports, reconcile)
-  document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.me-review,.reconcile-view').forEach(function(el){
+  document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.reconcile-view').forEach(function(el){
     el.style.display = 'none';
     el.classList.remove('active');
     el.classList.add('hidden');
@@ -1627,7 +1621,7 @@ function showReview(data) {
   }
 
   // Fetch and inject price change alerts for scanned invoices
-  if (data.id && data.source !== 'marginedge') {
+  if (data.id) {
     loadPriceAlerts(data.id);
   }
 }
@@ -2230,18 +2224,12 @@ async function viewInvoice(id, source, orderId) {
   if (_b) { _b.disabled = false; _b.textContent = 'Confirm & Save'; _b.style.opacity = '1'; }
   try {
     let resp, data;
-    if (source === 'marginedge' && orderId) {
-      resp = await fetch('/api/invoices/me/' + orderId);
-      data = await resp.json();
-      data.source = 'marginedge';
-    } else {
-      resp = await fetch('/api/invoices/' + id);
-      data = await resp.json();
-      data.source = 'scanned';
-    }
+    resp = await fetch('/api/invoices/' + id);
+    data = await resp.json();
+    data.source = 'scanned';
     currentInvoice = data;
     // Hide ALL views explicitly (inline styles override class-based display)
-    document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.me-review,.reconcile-view').forEach(function(el){
+    document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.reconcile-view').forEach(function(el){
       el.style.display = 'none';
       el.classList.remove('active');
     });
@@ -2250,7 +2238,7 @@ async function viewInvoice(id, source, orderId) {
       showReconcile(data);
       return;
     }
-    if (data.source === 'marginedge') { showMeReview(data); } else { showReview(data); }
+    showReview(data);
   } catch(e) {
     console.error(e);
     toast('Error loading invoice');
@@ -2546,56 +2534,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() { showView(saved); }, 150);
   }
 });
-
-function showMeReview(data) {
-  console.log('showMeReview called', data.vendor_name, data.items ? data.items.length : 0);
-  document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.scan-section,.bottom-nav').forEach(function(v){v.style.display='none';});
-  var rv = $('meReviewView');
-  rv.style.display = 'block';
-  rv.style.minHeight = '500px';
-  var mainScroll = document.querySelector('.rn-main'); if(mainScroll) mainScroll.scrollTop = 0;
-  var total = data.order_total || data.total || 0;
-  var itemTotal = 0;
-  (data.items || []).forEach(function(it) { itemTotal += (it.total_price || 0); });
-  var diff = Math.abs(total - itemTotal);
-  var diffHtml = diff > 0.01 ? '<div class="me-rv-field"><label>Difference</label><div class="val" style="color:#FF453A">$' + diff.toFixed(2) + '</div></div>' : '';
-  $('meRvInfo').innerHTML =
-    '<div class="me-rv-field"><label>Vendor</label><div class="val">' + (data.vendor_name || 'Unknown') + '</div></div>' +
-    '<div class="me-rv-field"><label>Invoice #</label><div class="val">' + (data.invoice_number || 'N/A') + '</div></div>' +
-    '<div class="me-rv-field"><label>Date</label><div class="val">' + (data.invoice_date || 'N/A') + '</div></div>' +
-    '<div class="me-rv-field"><label>Invoice Total</label><div class="val">$' + Number(total).toFixed(2) + '</div></div>' +
-    '<div class="me-rv-field"><label>Line Item Total</label><div class="val">$' + itemTotal.toFixed(2) + '</div></div>' +
-    diffHtml;
-  var items = data.items || [];
-  if (!items.length) {
-    $('meRvItems').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:rgba(245,245,247,0.5)">No line items found</td></tr>';
-    return;
-  }
-  $('meRvItems').innerHTML = items.map(function(item, i) {
-    return '<tr>' +
-      '<td>' + (item.product_name || '') + '</td>' +
-      '<td style="text-align:center">' + (item.quantity || 0) + '</td>' +
-      '<td class="me-rv-total">$' + Number(item.unit_price || 0).toFixed(2) + '</td>' +
-      '<td class="me-rv-total">$' + Number(item.total_price || 0).toFixed(2) + '</td>' +
-      '<td>' + (item.category_type || '') + '</td>' +
-      '</tr>';
-  }).join('');
-}
-function closeMeReview() {
-  $('meReviewView').style.display = 'none';
-  document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view').forEach(function(v){v.style.display='';});
-  showView('history');
-}
-function approveInvoice() {
-  if (!currentInvoice) return;
-  var orderId = currentInvoice.order_id;
-  fetch('/api/invoices/me/' + orderId + '/approve', {method:'POST'})
-    .then(function(r){return r.json()})
-    .then(function(d){
-      toast('Invoice approved');
-      closeMeReview();
-    }).catch(function(){toast('Error approving')});
-}
 
 // ── Image lightbox ──────────────────────────────────────────────────
 function openInvoiceImage(id, imagePath) {

@@ -1,7 +1,7 @@
 # Red Nun — Claude Code Guide
 
 ## What This Is
-Custom restaurant platform replacing MarginEdge ($363/mo).
+Custom restaurant analytics platform.
 Two locations: Dennis Port & Chatham, Cape Cod, MA.
 Live at: https://dashboard.rednun.com
 
@@ -15,7 +15,7 @@ Live at: https://dashboard.rednun.com
 - **Database:** SQLite WAL mode → toast_data.db (1.1GB)
 - **Frontend:** Vanilla HTML/JS/CSS, dark theme (#020617 bg)
 - **AI/OCR:** Anthropic Claude API (claude-sonnet-4, max_tokens 16384) — invoice OCR and inventory vision
-- **Data Sources:** Toast POS, MarginEdge (legacy), 7shifts, Honeywell
+- **Data Sources:** Toast POS, 7shifts, Honeywell
 
 ## Key Files
 - `server.py` — Main Flask app, blueprint registration, all core routes
@@ -77,9 +77,6 @@ that support dict-style access.
 ### Invoice System
 - `scanned_invoices` — 131 invoices (OCR + CSV + manual). Columns include: invoice_type (one_time/recurring/credit), recurring_frequency, recurring_day, source (scanned/manual/csv), payment_status, needs_reconciliation, discrepancy. Vendors: US Foods (31), PFG (34), Martignetti (18), SG (11), Craft Collective (20), Colonial (8), L. Knife (5), others (4).
 - `scanned_invoice_items` — Line items per invoice (product_name, quantity, unit, unit_price, total_price, category_type, pack_size, canonical_product_name, auto_linked)
-- `me_invoices` — 0 rows (wiped, ME migration data gone for good)
-- `me_invoice_items` — 0 rows (wiped)
-
 ### Product & Inventory (existing manual system)
 - `product_inventory_settings` — 0 rows (wiped). Rebuilds from confirmed invoices via auto-populate.
 - `products` — 0 rows (wiped)
@@ -235,7 +232,6 @@ Playwright-based scrapers that log into vendor portals, download invoices (PDF o
 
 ## Cron Jobs
 - Toast sync: */10 min during business hours (run_sync.sh)
-- MarginEdge sync: daily 10:30 AM
 - Email poller: */5 min (NOTE: currently duplicated — two identical entries)
 - Drive invoice watcher: */5 min
 - Thermostat fetch: */5 min

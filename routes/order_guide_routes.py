@@ -43,7 +43,7 @@ def api_order_guide_search():
         like_clauses = " AND ".join(["LOWER(product_name) LIKE ?" for _ in words])
         like_params = [f"%{w}%" for w in words]
 
-        # UNION both invoice sources; keep most recent price per product+vendor combo
+        # Keep most recent price per product+vendor combo from scanned invoices
         sql = f"""
             WITH combined AS (
                 SELECT si.product_name, i.vendor_name,
@@ -52,13 +52,6 @@ def api_order_guide_search():
                 JOIN scanned_invoices i ON si.invoice_id = i.id
                 WHERE i.status = 'confirmed'
                   AND si.unit_price > 0
-                  AND {like_clauses}
-                UNION ALL
-                SELECT mi.product_name, inv.vendor_name,
-                       mi.unit_price, mi.unit, inv.invoice_date
-                FROM me_invoice_items mi
-                JOIN me_invoices inv ON mi.order_id = inv.order_id
-                WHERE mi.unit_price > 0
                   AND {like_clauses}
             ),
             ranked AS (
@@ -76,7 +69,7 @@ def api_order_guide_search():
         """
 
         try:
-            rows = conn.execute(sql, like_params * 2).fetchall()
+            rows = conn.execute(sql, like_params).fetchall()
         except Exception as e:
             logger.error(f"Order guide query error for '{term}': {e}")
             rows = []

@@ -99,14 +99,17 @@ def api_list_entries():
     ).fetchone()
     total = count_row["n"] if count_row else 0
 
-    # Paginated rows
+    # Paginated rows — join orders for actual net sales (SUM of net_amount)
     offset = (page - 1) * PAGE_SIZE
     rows = conn.execute(f"""
-        SELECT id, entry_date, je_name, balanced, total_debits, total_credits,
-               status, last_sync_attempt, qbo_txn_id
-        FROM qb_journal_entries
+        SELECT e.id, e.entry_date, e.je_name, e.balanced, e.total_debits, e.total_credits,
+               e.status, e.last_sync_attempt, e.qbo_txn_id,
+               COALESCE((SELECT SUM(o.net_amount) FROM orders o
+                         WHERE o.location = e.location
+                           AND o.business_date = REPLACE(e.entry_date, '-', '')), 0) AS net_sales
+        FROM qb_journal_entries e
         WHERE {where_sql}
-        ORDER BY entry_date DESC
+        ORDER BY e.entry_date DESC
         LIMIT ? OFFSET ?
     """, params + [PAGE_SIZE, offset]).fetchall()
 
@@ -440,7 +443,7 @@ def api_stale_count():
         SELECT status, COUNT(*) as n
         FROM qb_journal_entries
         WHERE location=? AND entry_type='sales_journal'
-          AND status != 'posted'
+          AND status IN ('needs_attention', 'error')
           AND (entry_date < ? OR entry_date > ?)
         GROUP BY status
     """, (location, start, end)).fetchall()
@@ -448,7 +451,7 @@ def api_stale_count():
 
     counts = {r["status"]: r["n"] for r in rows}
     return jsonify({
-        "ready": counts.get("ready", 0),
+        "ready": 0,
         "needs_attention": counts.get("needs_attention", 0),
         "error": counts.get("error", 0),
         "total": sum(counts.values()),

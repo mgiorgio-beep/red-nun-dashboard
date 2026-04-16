@@ -1,18 +1,22 @@
-# Net Sales Calculation Investigation
+# Net Sales Calculation
 
-## Current Status (Feb 15, 2026)
-Chatham Feb 13 comparison:
-- Our formula: `total_amount - tax_amount - tip_amount` = **$4,241.99**
-- Toast reports: **$4,061.00**
-- **Difference: $180.99**
+## Formula (Fixed Apr 16, 2026)
+**Toast Net Sales = SUM of `check.amount` for non-voided, non-deleted checks.**
 
-With discounts subtracted: $4,160.32 (closer, off by $99)
+`check.amount` is Toast's authoritative net sales figure: gross sales minus discounts
+and refunds, excluding tax and tip. This matches the "Net Sales" line on Toast's
+Sales Summary screen exactly.
 
-## Root Cause
-Toast's raw JSON has a check-level `amount` field that represents net sales BEFORE tax/tip are added. We're calculating backwards from `total_amount`, which may introduce rounding errors or miss edge cases.
+Stored in `orders.net_amount`. All reports (`morning_report`, `analytics`, `forecast`)
+now use `SUM(net_amount)` instead of the old `total_amount - tax_amount - tip_amount`.
 
-## Fix Required
-Extract and store the check-level `amount` field from Toast API response (inside checks[] array). This is the authoritative net sales figure.
+## Previous Issue
+The old formula `total_amount - tax_amount - tip_amount` overcounted because it
+included voided check amounts still present in the order-level totals.
 
-## Workaround
-Current formula is close enough for analytics. $181 variance on $4k = 4.5% error.
+- Dennis 4/15: old formula = $5,390.49, Toast = $5,333.94, difference = $56.55
+- Chatham 2/13: old formula = $4,241.99, Toast = $4,061.00, difference = $180.99
+
+## Backfill
+All 66,491 existing orders backfilled from `raw_json` on 2026-04-16.
+New orders populated correctly via `data_store.store_orders()`.

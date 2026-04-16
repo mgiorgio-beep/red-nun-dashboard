@@ -194,7 +194,6 @@ VENDOR_CATEGORIES = {
     "dennisport village": "NON_COGS",
     "caron group": "NON_COGS",
     "robert b. our": "NON_COGS",
-    "marginedge": "NON_COGS",
 }
 
 
@@ -2732,26 +2731,16 @@ def get_price_alerts_for_invoice(invoice_id):
         placeholders = ",".join("?" * len(lower_variants))
 
         row = conn.execute(f"""
-            WITH history AS (
-                SELECT sii.unit_price, si.invoice_date
-                FROM scanned_invoice_items sii
-                JOIN scanned_invoices si ON sii.invoice_id = si.id
-                WHERE LOWER(sii.product_name) IN ({placeholders})
-                  AND sii.invoice_id != ?
-                  AND sii.unit_price > 0
-                  AND si.status = 'confirmed'
-                UNION ALL
-                SELECT mii.unit_price, mi.invoice_date
-                FROM me_invoice_items mii
-                JOIN me_invoices mi ON mii.order_id = mi.order_id
-                WHERE LOWER(mii.product_name) IN ({placeholders})
-                  AND mii.unit_price > 0
-            )
-            SELECT unit_price, invoice_date
-            FROM history
-            ORDER BY invoice_date DESC
+            SELECT sii.unit_price, si.invoice_date
+            FROM scanned_invoice_items sii
+            JOIN scanned_invoices si ON sii.invoice_id = si.id
+            WHERE LOWER(sii.product_name) IN ({placeholders})
+              AND sii.invoice_id != ?
+              AND sii.unit_price > 0
+              AND si.status = 'confirmed'
+            ORDER BY si.invoice_date DESC
             LIMIT 1
-        """, (*lower_variants, invoice_id, *lower_variants)).fetchone()
+        """, (*lower_variants, invoice_id)).fetchone()
 
         if not row:
             continue

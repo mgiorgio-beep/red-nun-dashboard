@@ -211,25 +211,32 @@ def store_orders(location, business_date, orders):
             # Collect line items and payments to insert AFTER the order
             items_to_insert = []
             payments_to_insert = []
+            seen_pay_guids = set()
 
             for check in checks:
                 total_amount += check.get("totalAmount", 0) or 0
                 tax_amount += check.get("taxAmount", 0) or 0
 
-                # Collect payments
+                # Collect payments (deduplicate by GUID — Toast can
+                # list the same payment under multiple checks;
+                # skip DENIED/VOIDED attempts)
                 for payment in check.get("payments", []) or []:
-                    tip_amount += payment.get("tipAmount", 0) or 0
-
                     pay_guid = payment.get("guid", "")
-                    if pay_guid:
-                        payments_to_insert.append((
-                            pay_guid, guid, location, business_date,
-                            payment.get("type", ""),
-                            payment.get("cardType", ""),
-                            payment.get("amount", 0) or 0,
-                            payment.get("tipAmount", 0) or 0,
-                            payment.get("refundAmount", 0) or 0,
-                        ))
+                    if not pay_guid or pay_guid in seen_pay_guids:
+                        continue
+                    pay_status = (payment.get("paymentStatus") or "").upper()
+                    if pay_status in ("DENIED", "VOIDED"):
+                        continue
+                    seen_pay_guids.add(pay_guid)
+                    tip_amount += payment.get("tipAmount", 0) or 0
+                    payments_to_insert.append((
+                        pay_guid, guid, location, business_date,
+                        payment.get("type", ""),
+                        payment.get("cardType", ""),
+                        payment.get("amount", 0) or 0,
+                        payment.get("tipAmount", 0) or 0,
+                        payment.get("refundAmount", 0) or 0,
+                    ))
 
                 # Extract applied discounts
                 for discount in check.get("appliedDiscounts", []) or []:
@@ -255,21 +262,14 @@ def store_orders(location, business_date, orders):
                     ))
 
             # Calculate net_amount (matches Toast "Net Sales" exactly)
-            # = sum of preDiscountPrice for all items, minus all discounts (item + check level)
+            # = sum of check.amount for non-voided/non-deleted checks
+            # check.amount is Toast's authoritative net sales (gross - discounts - refunds, excl tax/tip)
             net_amount_val = 0
             if not order.get("deleted") and not order.get("voided"):
                 for chk in checks:
-                    if chk.get("voided"): continue
-                    # Sum item pre-discount prices
-                    for sel in (chk.get("selections") or []):
-                        if sel.get("voided"): continue
-                        net_amount_val += (sel.get("preDiscountPrice", 0) or 0)
-                        # Subtract item-level discounts
-                        for disc in (sel.get("appliedDiscounts") or []):
-                            net_amount_val -= abs(disc.get("discountAmount", 0) or 0)
-                    # Subtract check-level discounts (comps, manager discounts)
-                    for disc in (chk.get("appliedDiscounts") or []):
-                        net_amount_val -= abs(disc.get("discountAmount", 0) or 0)
+                    if chk.get("voided") or chk.get("deleted"):
+                        continue
+                    net_amount_val += chk.get("amount", 0) or 0
             net_amount_val = round(net_amount_val, 2)
 
             # Dining option
@@ -313,20 +313,6 @@ def store_orders(location, business_date, orders):
                 net_amount_val, json.dumps(order),
                 datetime.now().isoformat(),
             ))
-
-            # Deduplicate payments: Toast sometimes returns the same charge twice with
-            # different GUIDs. Drop extras where sum of payments would exceed order total.
-            deduped = []
-            running_total = 0.0
-            for pay_data in payments_to_insert:
-                pay_amt = float(pay_data[6] or 0)
-                if total_amount > 0 and running_total + pay_amt > total_amount + 0.01:
-                    logger.warning("Skipping duplicate payment guid=%s amt=%s (order total=%.2f, running=%.2f)",
-                                   pay_data[0], pay_amt, total_amount, running_total)
-                    continue
-                running_total += pay_amt
-                deduped.append(pay_data)
-            payments_to_insert = deduped
 
             # THEN insert payments (use the adjusted business date)
             for pay_data in payments_to_insert:

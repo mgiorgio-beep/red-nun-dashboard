@@ -342,11 +342,7 @@ def cross_reference_history(items: list, location: str) -> list:
                 continue
 
             # ── Purchase history (last 30 days) ───────────────────────────
-            # Join me_invoice_items → me_invoices on order_id+location.
-            # me_invoice_items has no product_id FK to product_inventory_settings,
-            # so match by product_name LIKE (using the DB product_name as pattern).
             try:
-                # Get the canonical product name from the catalog
                 row = conn.execute(
                     "SELECT product_name FROM product_inventory_settings WHERE id = ?",
                     (pid,)
@@ -355,13 +351,13 @@ def cross_reference_history(items: list, location: str) -> list:
                     pname = row["product_name"]
                     purchases = conn.execute(
                         """
-                        SELECT COALESCE(SUM(ii.quantity), 0) as total_qty
-                        FROM me_invoice_items ii
-                        JOIN me_invoices i
-                          ON ii.order_id = i.order_id AND ii.location = i.location
-                        WHERE i.invoice_date >= date('now', '-30 days')
-                          AND i.location = ?
-                          AND LOWER(ii.product_name) LIKE LOWER(?)
+                        SELECT COALESCE(SUM(sii.quantity), 0) as total_qty
+                        FROM scanned_invoice_items sii
+                        JOIN scanned_invoices si ON sii.invoice_id = si.id
+                        WHERE si.invoice_date >= date('now', '-30 days')
+                          AND si.location = ?
+                          AND si.status = 'confirmed'
+                          AND LOWER(sii.product_name) LIKE LOWER(?)
                         """,
                         (db_location, f"%{pname[:20]}%")
                     ).fetchone()

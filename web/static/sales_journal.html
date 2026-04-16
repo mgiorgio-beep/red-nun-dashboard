@@ -105,7 +105,7 @@ body { font-family:'Inter',sans-serif; color:var(--text); height:100vh; overflow
 .quick-btn:hover { background:rgba(255,255,255,0.08); color:var(--text); }
 
 /* Warning banner */
-.stale-banner { display:none; margin:12px 24px 0; padding:12px 16px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:10px; display:flex; align-items:center; gap:10px; font-size:13px; }
+.stale-banner { display:none; margin:12px 24px 0; padding:12px 16px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:10px; align-items:center; gap:10px; font-size:13px; }
 .stale-banner.visible { display:flex; }
 .stale-banner-dismiss { margin-left:auto; background:none; border:none; color:var(--text2); cursor:pointer; font-size:18px; line-height:1; }
 
@@ -664,7 +664,7 @@ function renderTable() {
       <th class="sortable sort-desc" onclick="sortByDate()">Entry Date</th>
       <th>JE Name</th><th>Balanced?</th>
       <th class="right">Total Debits</th><th class="right">Total Credits</th>
-      <th class="right">Total Sales</th><th>Status</th><th>Actions</th>
+      <th class="right">Net Sales</th><th>Status</th><th>Actions</th>
     </tr>`;
   }
 
@@ -692,7 +692,7 @@ function renderTable() {
         <td>${fmtDate(e.entry_date)}</td>
         <td><span class="mono">${e.je_name || '—'}</span></td>
         <td style="color:var(--text2)">Daily Sales Journal</td>
-        <td class="right currency">${fmt(e.total_credits)}</td>
+        <td class="right currency">${fmt(e.net_sales || 0)}</td>
         <td>${statusPill(e.status)}</td>
         <td style="color:var(--text3);font-size:12px">${e.last_sync_attempt ? new Date(e.last_sync_attempt+'Z').toLocaleString('en-US',{timeZone:'America/New_York'}) : '—'}</td>
         <td style="display:flex;gap:6px;flex-wrap:nowrap">
@@ -701,13 +701,13 @@ function renderTable() {
         </td>
       </tr>`;
     }).join('');
-    totalS = state.entries.reduce((a,e) => a + (e.total_credits||0), 0);
+    totalS = state.entries.reduce((a,e) => a + (e.net_sales||0), 0);
     foot.innerHTML = `<tr><td colspan="4">Total Items: ${state.entries.length}</td><td class="right currency">${fmt(totalS)}</td><td colspan="3"></td></tr>`;
   } else {
     body.innerHTML = state.entries.map(e => {
       totalD += e.total_debits || 0;
       totalC += e.total_credits || 0;
-      totalS += e.total_credits || 0;
+      totalS += e.net_sales || 0;
       const canPush = e.status === 'ready';
       return `<tr class="clickable-row" onclick="openEntry(${e.id})" style="cursor:pointer">
         <td>${fmtDate(e.entry_date)}</td>
@@ -715,7 +715,7 @@ function renderTable() {
         <td>${e.balanced ? '<span class="balanced-yes">✓ Yes</span>' : '<span class="balanced-no">✗ No</span>'}</td>
         <td class="right currency">${fmt(e.total_debits)}</td>
         <td class="right currency">${fmt(e.total_credits)}</td>
-        <td class="right currency">${fmt(e.total_credits)}</td>
+        <td class="right currency">${fmt(e.net_sales || 0)}</td>
         <td>${statusPill(e.status)}</td>
         <td onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-wrap:nowrap">
           ${canPush ? `<button class="btn btn-blue btn-sm" onclick="quickPush(${e.id}, this)">Push to QBO</button>` : ''}
@@ -1003,7 +1003,7 @@ function renderJournalTable() {
       </tr>`;
     } else {
       const accountCell = isUnmapped
-        ? `<select class="account-select" onchange="fixUnmappedLine(${state.currentEntry.id}, ${JSON.stringify(li.journal_name)}, this.value, this)">${buildAccountOptionsById('')}</select>`
+        ? `<select class="account-select" onchange='fixUnmappedLine(${state.currentEntry.id}, ${JSON.stringify(li.journal_name)}, this.value, this)'>${buildAccountOptionsById('')}</select>`
         : escHtml(li.qbo_account || '');
       return `<tr class="${rowClass}">
         <td>${unmappedIcon} ${escHtml(li.journal_name)}</td>

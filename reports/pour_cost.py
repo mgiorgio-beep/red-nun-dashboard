@@ -155,9 +155,7 @@ def get_pour_cost(location, start_date, end_date, manual_bwl=None):
     """
     Calculate pour cost: beverage COGS / beverage revenue.
 
-    Uses MarginEdge invoice line items joined with product categories
-    for accurate category-level COGS (BEER, LIQUOR, WINE).
-    Falls back to 30-day rolling me_cogs_summary if no line items.
+    Uses scanned invoice line items for category-level COGS (BEER, LIQUOR, WINE).
     """
     from integrations.toast.data_store import get_connection
 
@@ -174,41 +172,29 @@ def get_pour_cost(location, start_date, end_date, manual_bwl=None):
         wine_cogs = 0
         period_label = f"{start_date} to {end_date}"
     else:
-        # Try line-item level COGS first
         try:
             rows = conn.execute("""
-                SELECT ii.category_type, SUM(ii.total_price) as cost
-                FROM me_invoice_items ii
-                JOIN me_invoices i ON ii.order_id = i.order_id AND ii.location = i.location
-                WHERE ii.location = ? AND i.invoice_date >= ? AND i.invoice_date <= ?
-                  AND ii.category_type IN ('BEER', 'LIQUOR', 'WINE')
-                GROUP BY ii.category_type
+                SELECT sii.category_type, SUM(sii.total_price) as cost
+                FROM scanned_invoice_items sii
+                JOIN scanned_invoices si ON sii.invoice_id = si.id
+                WHERE si.location = ? AND si.invoice_date >= ? AND si.invoice_date <= ?
+                  AND si.status = 'confirmed'
+                  AND sii.category_type IN ('BEER', 'LIQUOR', 'WINE')
+                GROUP BY sii.category_type
             """, (location, sd, ed)).fetchall()
 
-            if rows:
-                beer_cogs = sum(r["cost"] for r in rows if r["category_type"] == "BEER")
-                liquor_cogs = sum(r["cost"] for r in rows if r["category_type"] == "LIQUOR")
-                wine_cogs = sum(r["cost"] for r in rows if r["category_type"] == "WINE")
-                total_bev_cogs = beer_cogs + liquor_cogs + wine_cogs
-                period_label = f"{start_date} to {end_date} (line-item)"
-            else:
-                raise ValueError("No line items")
+            beer_cogs = sum(r["cost"] or 0 for r in rows if r["category_type"] == "BEER")
+            liquor_cogs = sum(r["cost"] or 0 for r in rows if r["category_type"] == "LIQUOR")
+            wine_cogs = sum(r["cost"] or 0 for r in rows if r["category_type"] == "WINE")
+            total_bev_cogs = beer_cogs + liquor_cogs + wine_cogs
+            period_label = f"{start_date} to {end_date}"
 
         except Exception:
-            # Fall back to 30-day rolling from me_cogs_summary
-            try:
-                row = conn.execute("""
-                    SELECT SUM(total_cost) as bwl_cost
-                    FROM me_cogs_summary
-                    WHERE location = ? AND category_type IN ('LIQUOR', 'BEER')
-                """, (location,)).fetchone()
-                total_bev_cogs = row["bwl_cost"] or 0
-            except Exception:
-                total_bev_cogs = 0
+            total_bev_cogs = 0
             beer_cogs = 0
             liquor_cogs = 0
             wine_cogs = 0
-            period_label = "30-day rolling (vendor-level)"
+            period_label = f"{start_date} to {end_date}"
 
     total_bev_rev = bev["total_bev_rev"]
     pour_cost_pct = (total_bev_cogs / total_bev_rev * 100) if total_bev_rev > 0 else 0

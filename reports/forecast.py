@@ -38,7 +38,7 @@ def get_daily_history(location, weeks_back=12):
 
     rows = conn.execute("""
         SELECT business_date,
-               SUM(total_amount - tax_amount - tip_amount) as net_rev,
+               SUM(net_amount) as net_rev,
                COUNT(*) as orders
         FROM orders
         WHERE location = ? AND business_date >= ?

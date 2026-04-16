@@ -156,8 +156,8 @@ else:
     critical_tables = {
         'orders': 'Toast POS orders',
         'product_inventory_settings': 'Product catalog (431+ items)',
-        'me_invoices': 'MarginEdge invoices (107+)',
-        'me_invoice_items': 'MarginEdge line items (936+)',
+        'scanned_invoices': 'Scanned invoices (OCR + CSV + manual)',
+        'scanned_invoice_items': 'Scanned invoice line items',
     }
     
     for table, desc in critical_tables.items():

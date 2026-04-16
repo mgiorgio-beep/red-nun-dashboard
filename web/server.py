@@ -57,6 +57,7 @@ import secrets
 from routes.availability_routes import availability_bp
 from routes.application_routes import application_bp
 from routes.daily_sales_routes import daily_sales_bp
+from routes.morning_report_routes import morning_report_bp
 from reports.sales_journal import init_sales_journal_tables, run_daily_journal, send_weekly_unresolved_summary
 
 load_dotenv()
@@ -101,6 +102,7 @@ app.register_blueprint(payment_bp)
 app.register_blueprint(availability_bp)
 app.register_blueprint(application_bp)
 app.register_blueprint(daily_sales_bp)
+app.register_blueprint(morning_report_bp)
 
 # Initialize database
 init_db()
@@ -357,7 +359,6 @@ def api_pour_cost_bartender():
 
 
 # ------------------------------------------------------------------
-# MarginEdge COGS Endpoints
 @app.route("/api/revenue/topsellers")
 def api_top_sellers():
     loc = request.args.get("location", "")
@@ -385,301 +386,6 @@ def api_price_movers():
 
 # ------------------------------------------------------------------
 
-@app.route("/api/cogs/summary")
-def api_cogs_summary():
-    location = request.args.get("location")
-    start = request.args.get("start")
-    end = request.args.get("end")
-    if start and len(start) == 8:
-        start = f"{start[:4]}-{start[4:6]}-{start[6:8]}"
-    if end and len(end) == 8:
-        end = f"{end[:4]}-{end[4:6]}-{end[6:8]}"
-    if not start or not end:
-        end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    else:
-        start_date = start
-        end_date = end
-    conn = get_connection()
-    where = "WHERE invoice_date >= ? AND invoice_date <= ?"
-    params = [start_date, end_date]
-    if location:
-        where += " AND location = ?"
-        params.append(location)
-    rows = conn.execute("SELECT vendor_name, SUM(order_total) as total, COUNT(*) as cnt FROM me_invoices " + where + " GROUP BY vendor_name ORDER BY total DESC", params).fetchall()
-    hints = {"southern glazer": "LIQUOR", "l. knife": "LIQUOR", "martignetti": "LIQUOR", "atlantic beverage": "LIQUOR", "horizon beverage": "LIQUOR", "colonial wholesale": "BEER", "craft collective": "BEER", "cape cod beer": "BEER", "us foods": "FOOD", "reinhart": "FOOD", "performance food": "FOOD", "chefs warehouse": "FOOD", "cape fish": "FOOD", "sysco": "FOOD", "cintas": "NON_COGS", "unifirst": "NON_COGS", "cozzini": "NON_COGS", "rooter": "NON_COGS", "dennisport village": "NON_COGS", "caron group": "NON_COGS", "robert b. our": "NON_COGS", "marginedge": "NON_COGS"}
-    cats = {}
-    for row in rows:
-        vname = (row["vendor_name"] or "").lower()
-        matched = "OTHER"
-        for hint, cat in hints.items():
-            if hint in vname:
-                matched = cat
-                break
-        if matched not in cats:
-            cats[matched] = {"total": 0, "invoices": 0}
-        cats[matched]["total"] += row["total"]
-        cats[matched]["invoices"] += row["cnt"]
-    conn.close()
-    total = sum(c["total"] for c in cats.values())
-    result = []
-    for cat, data in sorted(cats.items(), key=lambda x: -x[1]["total"]):
-        result.append({"category_type": cat, "total_cost": round(data["total"], 2), "invoice_count": data["invoices"], "pct_of_total": round((data["total"] / total * 100), 1) if total > 0 else 0})
-    return jsonify({"period_start": start_date, "period_end": end_date, "total_cost": round(total, 2), "categories": result})
-
-
-@app.route("/api/cogs/products")
-def api_cogs_products():
-    """
-    Get product costs from MarginEdge by category type.
-    Useful for seeing all liquor/beer/wine products with their latest prices.
-    """
-    location = request.args.get("location", "dennis")
-    category_type = request.args.get("type")  # LIQUOR, BEER, WINE, FOOD, etc.
-
-    conn = get_connection()
-
-    if category_type:
-        rows = conn.execute("""
-            SELECT product_name, category_name, category_type,
-                   latest_price, report_by_unit
-            FROM me_products
-            WHERE location = ? AND category_type = ?
-            ORDER BY product_name
-        """, (location, category_type.upper())).fetchall()
-    else:
-        rows = conn.execute("""
-            SELECT product_name, category_name, category_type,
-                   latest_price, report_by_unit
-            FROM me_products
-            WHERE location = ? AND category_type IN
-                  ('LIQUOR','BEER','WINE','NA_BEVERAGES','FOOD')
-            ORDER BY category_type, product_name
-        """, (location,)).fetchall()
-
-    conn.close()
-    return jsonify([dict(r) for r in rows])
-
-
-@app.route("/api/cogs/vendors")
-def api_cogs_vendors():
-    location = request.args.get("location", "dennis")
-    category = request.args.get("category", "")
-    start = request.args.get("start")
-    end = request.args.get("end")
-    if start and len(start) == 8:
-        start = f"{start[:4]}-{start[4:6]}-{start[6:8]}"
-    if end and len(end) == 8:
-        end = f"{end[:4]}-{end[4:6]}-{end[6:8]}"
-    if not start or not end:
-        end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    else:
-        start_date = start
-        end_date = end
-    food_hints = ["us foods", "reinhart", "performance food", "chefs warehouse", "cape fish", "sysco"]
-    bev_hints = ["southern glazer", "l. knife", "martignetti", "atlantic beverage", "horizon beverage", "colonial wholesale", "craft collective", "cape cod beer"]
-    conn = get_connection()
-    rows = conn.execute("""
-        SELECT vendor_name, COUNT(*) as invoice_count,
-               SUM(order_total) as total_spent,
-               MIN(invoice_date) as first_invoice,
-               MAX(invoice_date) as last_invoice
-        FROM me_invoices
-        WHERE location = ? AND invoice_date >= ? AND invoice_date <= ?
-        GROUP BY vendor_name
-        ORDER BY total_spent DESC
-    """, (location, start_date, end_date)).fetchall()
-    conn.close()
-    result = [dict(r) for r in rows]
-    if category == "food":
-        result = [r for r in result if any(h in r["vendor_name"].lower() for h in food_hints)]
-    elif category == "bev":
-        result = [r for r in result if any(h in r["vendor_name"].lower() for h in bev_hints)]
-    return jsonify(result)
-
-@app.route("/api/cogs/invoices")
-def api_cogs_invoices():
-    """
-    Get recent invoices from MarginEdge.
-    """
-    location = request.args.get("location", "dennis")
-    days = int(request.args.get("days", 30))
-    limit = int(request.args.get("limit", 50))
-
-    conn = get_connection()
-    end_date = datetime.now().strftime("%Y-%m-%d")
-    start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-
-    rows = conn.execute("""
-        SELECT order_id, vendor_name, invoice_number, invoice_date,
-               order_total, status
-        FROM me_invoices
-        WHERE location = ? AND invoice_date >= ? AND invoice_date <= ?
-        ORDER BY invoice_date DESC
-        LIMIT ?
-    """, (location, start_date, end_date, limit)).fetchall()
-
-    conn.close()
-    return jsonify([dict(r) for r in rows])
-
-
-@app.route("/api/cogs/spending")
-def api_cogs_spending_trend():
-    """
-    Get daily/weekly spending trend from MarginEdge invoices.
-    Groups invoice totals by week for trend charts.
-    """
-    location = request.args.get("location")
-    days = int(request.args.get("days", 90))
-
-    conn = get_connection()
-    end_date = datetime.now().strftime("%Y-%m-%d")
-    start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-
-    if location:
-        rows = conn.execute("""
-            SELECT
-                strftime('%Y-W%W', invoice_date) as week,
-                MIN(invoice_date) as week_start,
-                SUM(order_total) as total_spent,
-                COUNT(*) as invoice_count
-            FROM me_invoices
-            WHERE location = ? AND invoice_date >= ? AND invoice_date <= ?
-            GROUP BY week
-            ORDER BY week
-        """, (location, start_date, end_date)).fetchall()
-    else:
-        rows = conn.execute("""
-            SELECT
-                strftime('%Y-W%W', invoice_date) as week,
-                MIN(invoice_date) as week_start,
-                SUM(order_total) as total_spent,
-                COUNT(*) as invoice_count
-            FROM me_invoices
-            WHERE invoice_date >= ? AND invoice_date <= ?
-            GROUP BY week
-            ORDER BY week
-        """, (start_date, end_date)).fetchall()
-
-    conn.close()
-    return jsonify([dict(r) for r in rows])
-
-
-@app.route("/api/cogs/pourcost")
-def api_cogs_pour_cost():
-    """
-    Calculate actual pour cost using MarginEdge COGS + Toast revenue.
-    Compares what you spent on beverages (MarginEdge) vs what you sold (Toast).
-    """
-    location, start, end = parse_filters()
-
-    conn = get_connection()
-    # Convert YYYYMMDD → YYYY-MM-DD for me_cogs_summary period comparison
-    start_iso = f"{start[:4]}-{start[4:6]}-{start[6:8]}"
-    end_iso = f"{end[:4]}-{end[4:6]}-{end[6:8]}"
-
-    # Get beverage COGS from MarginEdge — include periods overlapping requested range
-    if location:
-        cogs_rows = conn.execute("""
-            SELECT category_type, total_cost
-            FROM me_cogs_summary
-            WHERE location = ?
-              AND category_type IN ('LIQUOR', 'BEER', 'WINE')
-              AND period_end >= ?
-              AND period_start <= ?
-        """, (location, start_iso, end_iso)).fetchall()
-    else:
-        cogs_rows = conn.execute("""
-            SELECT category_type, SUM(total_cost) as total_cost
-            FROM me_cogs_summary
-            WHERE category_type IN ('LIQUOR', 'BEER', 'WINE')
-              AND period_end >= ?
-              AND period_start <= ?
-            GROUP BY category_type
-        """, (start_iso, end_iso)).fetchall()
-
-    # Get total beverage revenue from Toast (start/end are YYYYMMDD)
-    # (This is a simplified approach — ideally we'd match by bev category)
-    if location:
-        rev_row = conn.execute("""
-            SELECT SUM(total_amount - tax_amount) as net_revenue
-            FROM orders
-            WHERE location = ? AND business_date >= ? AND business_date <= ?
-        """, (location, start, end)).fetchone()
-    else:
-        rev_row = conn.execute("""
-            SELECT SUM(total_amount - tax_amount) as net_revenue
-            FROM orders
-            WHERE business_date >= ? AND business_date <= ?
-        """, (start, end)).fetchone()
-
-    conn.close()
-
-    # Calculate pour costs
-    bev_cogs = {}
-    total_bev_cost = 0
-    for r in cogs_rows:
-        cost = r["total_cost"] or 0
-        bev_cogs[r["category_type"]] = cost
-        total_bev_cost += cost
-
-    total_revenue = (rev_row["net_revenue"] or 0) if rev_row else 0
-
-    # Estimate beverage revenue as ~30% of total (industry standard)
-    # This will be refined once we have Toast menu category mapping
-    est_bev_revenue = total_revenue * 0.30
-
-    overall_pour_pct = (total_bev_cost / est_bev_revenue * 100) if est_bev_revenue > 0 else 0
-
-    return jsonify({
-        "period_start": start_iso,
-        "period_end": end_iso,
-        "total_revenue": round(total_revenue, 2),
-        "est_bev_revenue": round(est_bev_revenue, 2),
-        "bev_cogs": {k: round(v, 2) for k, v in bev_cogs.items()},
-        "total_bev_cost": round(total_bev_cost, 2),
-        "pour_cost_pct": round(overall_pour_pct, 1),
-        "categories": [
-            {
-                "type": cat,
-                "cost": round(cost, 2),
-                "pct_of_bev_rev": round((cost / est_bev_revenue * 100), 1) if est_bev_revenue > 0 else 0,
-            }
-            for cat, cost in bev_cogs.items()
-        ],
-        "note": "Beverage revenue estimated at 30% of total. Refine with Toast menu category mapping."
-    })
-
-
-@app.route("/api/invoices/me/<order_id>")
-def api_me_invoice_detail(order_id):
-    """Get a MarginEdge invoice with its line items."""
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    inv = conn.execute("SELECT * FROM me_invoices WHERE order_id = ?", (order_id,)).fetchone()
-    if not inv:
-        return jsonify({"error": "Invoice not found"}), 404
-    items = conn.execute("""
-        SELECT product_name, quantity, unit, unit_price, total_price, category_type
-        FROM me_invoice_items WHERE order_id = ?
-        ORDER BY product_name
-    """, (order_id,)).fetchall()
-    conn.close()
-    result = dict(inv)
-    result['items'] = [dict(i) for i in items]
-    return jsonify(result)
-
-
-@app.route("/api/invoices/me/<order_id>/approve", methods=["POST"])
-def approve_me_invoice(order_id):
-    """Mark a MarginEdge invoice as reviewed/approved."""
-    conn = get_connection()
-    conn.execute("UPDATE me_invoices SET status = 'CLOSED' WHERE order_id = ?", (order_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok"})
-
 
 @app.route("/api/inventory/product-settings/unreviewed-count")
 def unreviewed_product_count():
@@ -691,10 +397,8 @@ def unreviewed_product_count():
 @app.route("/api/invoices/pending-count")
 def pending_count():
     conn = get_connection()
-    c = conn.cursor()
-    scanned = c.execute("SELECT COUNT(*) FROM scanned_invoices WHERE status = 'pending' OR status = 'review'").fetchone()[0]
-    me = c.execute("SELECT COUNT(*) FROM me_invoices WHERE status != 'CLOSED'").fetchone()[0]
-    count = scanned + me
+    count = conn.execute("SELECT COUNT(*) FROM scanned_invoices WHERE status = 'pending' OR status = 'review'").fetchone()[0]
+    conn.close()
     return jsonify({"count": count})
 
 # ------------------------------------------------------------------
@@ -766,24 +470,10 @@ def api_sync_status():
         LIMIT 50
     """).fetchall()
 
-    # Also include MarginEdge sync history
-    me_rows = []
-    try:
-        me_rows = conn.execute("""
-            SELECT location, data_type, started_at, completed_at,
-                   record_count, status
-            FROM me_sync_log
-            ORDER BY completed_at DESC
-            LIMIT 20
-        """).fetchall()
-    except Exception:
-        pass  # Table might not exist yet
-
     conn.close()
 
     return jsonify({
         "toast": [dict(r) for r in rows],
-        "marginedge": [dict(r) for r in me_rows],
     })
 
 
@@ -865,41 +555,13 @@ def get_product_settings():
     conn.row_factory = sqlite3.Row
     location = request.args.get("location", "dennis")
     
-    # Get products with latest price info from ME
     rows = conn.execute("""
-        SELECT ps.*, 
-               mp.category_name as me_category_name,
-               mp.category_type as me_category_type,
-               mp.report_by_unit as me_unit,
-               mp.latest_price as me_latest_price
+        SELECT ps.*
         FROM product_inventory_settings ps
-        LEFT JOIN me_products mp ON LOWER(TRIM(ps.product_name)) = LOWER(TRIM(mp.product_name))
-            AND mp.location = ?
         ORDER BY ps.reviewed ASC, ps.product_name ASC
-    """, (location,)).fetchall()
-    
-    products = []
-    for r in rows:
-        products.append({
-            "id": r["id"],
-            "product_name": r["product_name"],
-            "vendor_name": r["vendor_name"],
-            "ordering_unit": r["ordering_unit"],
-            "inventory_unit": r["inventory_unit"],
-            "case_pack_size": r["case_pack_size"],
-            "category": r["category"],
-            "skip_inventory": r["skip_inventory"],
-            "reviewed": r["reviewed"],
-            "purchase_price": r["purchase_price"],
-            "contains_qty": r["contains_qty"],
-            "contains_unit": r["contains_unit"],
-            "cost_per_unit": r["cost_per_unit"],
-            "notes": r["notes"],
-            "me_category_name": r["me_category_name"],
-            "me_category_type": r["me_category_type"],
-            "me_unit": r["me_unit"],
-            "me_latest_price": r["me_latest_price"]
-        })
+    """).fetchall()
+
+    products = [dict(r) for r in rows]
     conn.close()
     return jsonify(products)
 

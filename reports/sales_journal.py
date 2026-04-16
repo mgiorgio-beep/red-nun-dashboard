@@ -236,9 +236,10 @@ def _get_declared_cash_tips(location: str, entry_date: str, client=None) -> floa
 def build_journal_entry(location: str, entry_date: str) -> dict:
     """
     Build a journal entry for the given location and date from Toast data.
-    - Category labels come from salesCategory.guid in raw order JSON
-    - Amounts use orders.net_amount proportionally split by category
-    - Discount = sum(preDiscountPrice - price) across all items
+    - Gross sales per category from preDiscountPrice (true gross)
+    - Discounts from appliedDiscounts arrays (item + check level)
+    - Service charges from appliedServiceCharges (Non-Grat / Popmenu)
+    - Tax pulled directly from orders, never recomputed
     - Tenders include tips (payments.amount + tip_amount)
     """
     import json as _json
@@ -256,11 +257,12 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
     if not sc_map:
         sc_map = _sync_sales_categories(location)
 
-    # Parse raw order JSON: get category ratios (using price) and discount (preDisc - price)
-    cat_price = {}    # label -> sum of price (line totals, already includes qty)
-    cat_predisc = {}  # label -> sum of preDiscountPrice (line totals; > price = discount)
-    total_price = 0.0
-    total_predisc = 0.0
+    # --- Parse raw order JSON: gross sales, discounts, service charges, tax ---
+    cat_gross = {}          # label -> sum of preDiscountPrice (TRUE gross per category)
+    total_item_disc = 0.0   # item-level discounts (selection.appliedDiscounts)
+    total_check_disc = 0.0  # check-level discounts (check.appliedDiscounts)
+    service_charges = 0.0   # non-gratuity service charges (Popmenu, Non-Grat, etc.)
+    tax = 0.0               # from check.taxAmount (filtered, not orders table)
 
     order_rows = conn.execute(
         "SELECT raw_json FROM orders WHERE location=? AND business_date=?",
@@ -274,8 +276,15 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
             data = _json.loads(row[0])
         except Exception:
             continue
-        for check in data.get("checks", []):
-            for sel in check.get("selections", []):
+        if data.get("deleted") or data.get("voided"):
+            continue
+        for check in data.get("checks", []) or []:
+            if check.get("voided"):
+                continue
+            tax += float(check.get("taxAmount", 0) or 0)
+
+            # --- Selections (line items) ---
+            for sel in check.get("selections", []) or []:
                 if sel.get("voided"):
                     continue
                 sc = sel.get("salesCategory") or {}
@@ -289,22 +298,40 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
                     else:
                         label = _categorize(name)
 
-                p  = float(sel.get("price") or 0)
-                pd = float(sel.get("preDiscountPrice") or p)
-                qty = float(sel.get("quantity") or 1)
+                # preDiscountPrice IS the gross (before any discounts)
+                gross = float(sel.get("preDiscountPrice") or sel.get("price") or 0)
+                cat_gross[label] = cat_gross.get(label, 0) + gross
 
-                # price = line total (not per-unit); preDiscountPrice = line total or list price
-                # for single-qty discounted items. Neither should be multiplied by qty.
-                cat_price[label]  = cat_price.get(label, 0)  + p
-                cat_predisc[label] = cat_predisc.get(label, 0) + pd
-                total_price   += p
-                total_predisc += pd
+                # Item-level discount = preDiscountPrice - price (reliable;
+                # appliedDiscounts array can have duplicate entries on some locations).
+                # Only count when appliedDiscounts is present (price=0 without discounts
+                # means combo/included item, not a discount).
+                if sel.get("appliedDiscounts"):
+                    post = float(sel.get("price") or 0)
+                    if gross > post + 0.001:
+                        total_item_disc += gross - post
 
-    # Actual discount = preDiscountPrice - price (from Toast's own data)
-    actual_discount = round(total_predisc - total_price, 2)
+            # --- Check-level discounts (comps, manager discounts) ---
+            for disc in check.get("appliedDiscounts") or []:
+                d_amt = disc.get("nonTaxDiscountAmount")
+                if d_amt is None:
+                    d_amt = disc.get("discountAmount", 0)
+                total_check_disc += abs(float(d_amt or 0))
 
-    # Fallback: use order_items if raw JSON empty
-    if not cat_price:
+            # --- Service charges (Non-Grat / Popmenu — NOT gratuities) ---
+            for sc_item in check.get("appliedServiceCharges") or []:
+                if not sc_item.get("gratuity"):
+                    service_charges += float(sc_item.get("chargeAmount", 0) or 0)
+
+    total_discount = round(total_item_disc + total_check_disc, 2)
+    service_charges = round(service_charges, 2)
+
+    # Round gross per category
+    for cat in cat_gross:
+        cat_gross[cat] = round(cat_gross[cat], 2)
+
+    # Fallback: use order_items table if raw JSON yielded nothing
+    if not cat_gross:
         items = conn.execute("""
             SELECT item_name, SUM(price * quantity) AS revenue
             FROM order_items
@@ -314,39 +341,11 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
         """, (location, td)).fetchall()
         for row in items:
             cat = _categorize(row["item_name"])
-            cat_price[cat] = cat_price.get(cat, 0) + (row["revenue"] or 0)
-            total_price += (row["revenue"] or 0)
-        actual_discount = 0.0
+            cat_gross[cat] = cat_gross.get(cat, 0) + (row["revenue"] or 0)
+        total_discount = 0.0
 
-    # Order-level net amount (authoritative: what was actually billed, post-discount)
-    ord_row = conn.execute("""
-        SELECT SUM(total_amount) - SUM(tax_amount) - SUM(tip_amount) AS net,
-               SUM(tax_amount) AS tax
-        FROM orders WHERE location = ? AND business_date = ?
-    """, (location, td)).fetchone()
-    net_total = float(ord_row["net"] or 0) if ord_row else 0
-    tax       = float(ord_row["tax"] or 0) if ord_row else 0
-
-    # Allocate net_total proportionally by category using price ratios
-    net_by_cat = {}
-    if total_price > 0:
-        for cat, p in cat_price.items():
-            net_by_cat[cat] = net_total * p / total_price
-
-    # Rounding correction: assign remainder to largest category
-    if net_by_cat:
-        allocated = sum(net_by_cat.values())
-        remainder = round(net_total - allocated, 2)
-        largest = max(net_by_cat, key=net_by_cat.get)
-        net_by_cat[largest] = net_by_cat[largest] + remainder
-
-    # Gross-up: add per-category discount (preDiscountPrice - price) to credits
-    # This gives us GROSS sales per category (like ME), with discount posted as separate debit
-    if actual_discount > 0:
-        for cat, pd in cat_predisc.items():
-            disc = round(pd - cat_price.get(cat, 0), 2)
-            if disc > 0:
-                net_by_cat[cat] = net_by_cat.get(cat, 0) + disc
+    # Tax was accumulated from check.taxAmount above (excludes voided/deleted)
+    tax = round(tax, 2)
 
     # CC tips from payments table
     tips_row = conn.execute("""
@@ -390,14 +389,14 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
             "sort_order": len(line_items),
         })
 
-    # CREDITS: Net sales by category (proportionally allocated from net_amount)
+    # CREDITS: Gross sales by category (direct from preDiscountPrice)
     for cat in ["Beer", "Wine", "Liquor", "NA Beverage", "Food"]:
-        amt = net_by_cat.get(cat, 0)
+        amt = cat_gross.get(cat, 0)
         if amt > 0:
-            add_line(f"Gross Sales: {cat}", credit=round(amt, 2))
+            add_line(f"Gross Sales: {cat}", credit=amt)
 
     # CREDIT: Gift card sales (liability, not revenue — maps to Gift Certificates account)
-    gc_sold = net_by_cat.get("Gift Card Sold", 0)
+    gc_sold = cat_gross.get("Gift Card Sold", 0)
     if gc_sold > 0:
         add_line("Summary: Gift Card Sold", credit=round(gc_sold, 2))
 
@@ -408,6 +407,10 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
     # CREDIT: Tips
     if tips > 0:
         add_line("Summary: Tips", credit=tips)
+
+    # CREDIT: Service charges (Non-Grat / Popmenu)
+    if service_charges > 0:
+        add_line("Summary: Non-Grat", credit=service_charges)
 
     # DEBITS: Tenders (full amount including tips)
     CARD_LABELS = {
@@ -448,15 +451,17 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
     for key, amt in tender_map.items():
         add_line(key, debit=amt)
 
-    # Adjusting entry: balance_gap = credits - tenders (includes actual discounts
-    # plus any order/payment mismatches like gift card sales, refunds, comps)
+    # DEBIT: Discounts (explicitly computed from Toast appliedDiscounts arrays)
+    if total_discount > 0:
+        add_line("Discounts: Total", debit=total_discount)
+
+    # Balance check — any residual gap is rounding; adjust smallest possible
     total_credits_built = sum((li["credit"] or 0) for li in line_items)
-    total_tenders       = sum((li["debit"]  or 0) for li in line_items)
-    balance_gap = round(total_credits_built - total_tenders, 2)
+    total_debits_built  = sum((li["debit"]  or 0) for li in line_items)
+    balance_gap = round(total_credits_built - total_debits_built, 2)
     if balance_gap > 0.005:
-        add_line("Discounts: Total", debit=balance_gap)
+        add_line("Summary: Other", debit=balance_gap)
     elif balance_gap < -0.005:
-        # Payments > revenue (refunds/overpayments) — credit to balance
         add_line("Summary: Other", credit=abs(balance_gap))
 
     total_debits  = sum((li["debit"]  or 0) for li in line_items)

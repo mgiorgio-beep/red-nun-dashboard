@@ -2,7 +2,7 @@
 Product Name Mapper — Red Nun Analytics
 
 Bridges scanned invoice product names (US Foods ALL-CAPS format) to
-MarginEdge product names (Title Case abbreviated format) using fuzzy matching.
+canonical product names in the products table using fuzzy matching.
 
 Usage:
     python3 product_name_mapper.py                 # generate mappings + print report
@@ -11,8 +11,8 @@ Usage:
 
 Table: product_name_map
   source_name   — name as it appears in the invoice table
-  source_table  — 'scanned_invoice_items' or 'me_invoice_items'
-  canonical_name — normalized/ME canonical name (NULL if no match found)
+  source_table  — 'scanned_invoice_items'
+  canonical_name — normalized canonical name (NULL if no match found)
   confidence    — rapidfuzz WRatio score
   verified      — 1=human confirmed, 0=auto-generated
 """
@@ -101,8 +101,8 @@ def generate_mappings(reset=False):
     Build product_name_map entries for all distinct scanned invoice product names.
 
     For each scanned name:
-      - Find the best matching ME name via rapidfuzz WRatio
-      - Score >= SCORE_AUTO (80): auto-map (canonical_name = ME name)
+      - Find the best matching canonical name (from products table) via rapidfuzz WRatio
+      - Score >= SCORE_AUTO (80): auto-map
       - Score >= SCORE_REVIEW (60): map but leave verified=0 (needs human review)
       - Score < SCORE_REVIEW: canonical_name=NULL (no good match found)
 
@@ -129,10 +129,10 @@ def generate_mappings(reset=False):
         ).fetchall()
     ]
 
-    # Load all distinct ME product names (these are the canonical targets)
-    me_names = [
+    # Load canonical product names from products table
+    canonical_names = [
         r[0] for r in conn.execute(
-            "SELECT DISTINCT product_name FROM me_invoice_items WHERE product_name IS NOT NULL"
+            "SELECT DISTINCT name FROM products WHERE name IS NOT NULL"
         ).fetchall()
     ]
 
@@ -143,11 +143,11 @@ def generate_mappings(reset=False):
         ).fetchall()
     )
 
-    # Normalized ME names for matching
-    me_normalized = [normalize(n) for n in me_names]
+    # Normalized canonical names for matching
+    canonical_normalized = [normalize(n) for n in canonical_names]
 
     print(f"Scanned names: {len(scanned_names)}")
-    print(f"ME names: {len(me_names)}")
+    print(f"Canonical names: {len(canonical_names)}")
     print(f"Already mapped: {len(already_mapped)}")
     print()
 
@@ -165,10 +165,10 @@ def generate_mappings(reset=False):
             stats["no_match"] += 1
             continue
 
-        # Find best ME name match
+        # Find best canonical name match
         result = process.extractOne(
             norm_scanned,
-            me_normalized,
+            canonical_normalized,
             scorer=fuzz.WRatio,
             score_cutoff=0,
         )
@@ -179,20 +179,20 @@ def generate_mappings(reset=False):
             stats["no_match"] += 1
         else:
             matched_norm, score, idx = result
-            me_name = me_names[idx]
+            canon_name = canonical_names[idx]
 
             # Sanity check: require at least one shared token of 3+ chars.
             # This prevents WRatio false-positives on abbreviated strings
             # (e.g., BEEF→High Life 1/2bbl, PICKLE→crayon, etc.)
-            if score >= SCORE_REVIEW and not shares_key_token(scanned_name, me_name):
+            if score >= SCORE_REVIEW and not shares_key_token(scanned_name, canon_name):
                 canonical = None
                 score = 0.0
                 stats["no_match"] += 1
             elif score >= SCORE_AUTO:
-                canonical = me_name
+                canonical = canon_name
                 stats["auto"] += 1
             elif score >= SCORE_REVIEW:
-                canonical = me_name
+                canonical = canon_name
                 stats["review"] += 1
             else:
                 canonical = None

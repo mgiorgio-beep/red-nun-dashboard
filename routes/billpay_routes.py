@@ -97,6 +97,8 @@ def get_billpay_invoices():
         where.append("(si.balance > 0 OR si.balance IS NULL)")
     elif status == "partial":
         where.append("si.payment_status = 'partial'")
+    elif status == "pending_review":
+        where.append("si.payment_status = 'pending_review'")
     elif status == "paid":
         where.append("(si.payment_status = 'paid' OR si.balance <= 0)")
     elif status == "overdue":

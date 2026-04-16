@@ -43,7 +43,7 @@ def get_daily_revenue(location=None, start_date=None, end_date=None):
         SELECT
             business_date,
             location,
-            SUM(total_amount - tax_amount - tip_amount) as net_revenue,
+            SUM(net_amount) as net_revenue,
             SUM(tax_amount) as tax,
             SUM(tip_amount) as tips,
             SUM(discount_amount) as discounts,
@@ -98,9 +98,9 @@ def get_revenue_by_daypart(location=None, start_date=None, end_date=None):
                 ELSE 'Dinner'
             END as daypart,
             location,
-            SUM(total_amount - tax_amount - tip_amount) as revenue,
+            SUM(net_amount) as revenue,
             COUNT(*) as order_count,
-            ROUND(AVG(total_amount - tax_amount - tip_amount), 2) as avg_check
+            ROUND(AVG(net_amount), 2) as avg_check
         FROM orders
         {where_sql}
         AND opened_at IS NOT NULL AND opened_at != ''
@@ -239,7 +239,7 @@ def get_labor_summary(location=None, start_date=None, end_date=None):
 
     # Get matching revenue for labor % calculation
     rev_query = f"""
-        SELECT SUM(total_amount) as total_revenue
+        SELECT SUM(net_amount) as total_revenue
         FROM orders
         {orders_where}
     """
@@ -312,7 +312,7 @@ def get_daily_labor(location=None, start_date=None, end_date=None):
             END as labor_pct
         FROM time_entries t
         LEFT JOIN (
-            SELECT business_date, location, SUM(total_amount) as revenue
+            SELECT business_date, location, SUM(net_amount) as revenue
             FROM orders
             WHERE json_extract(raw_json, '$.deleted') != 1
               AND json_extract(raw_json, '$.voided') != 1
@@ -400,9 +400,9 @@ def get_server_performance(location=None, start_date=None, end_date=None, limit=
             COALESCE(e.first_name || ' ' || SUBSTR(e.last_name, 1, 1) || '.', 
                      'Unknown') as server_name,
             o.location,
-            SUM(o.total_amount) as total_sales,
+            SUM(o.net_amount) as total_sales,
             COUNT(*) as order_count,
-            ROUND(AVG(o.total_amount), 2) as avg_check,
+            ROUND(AVG(o.net_amount), 2) as avg_check,
             SUM(o.tip_amount) as total_tips,
             ROUND(AVG(o.tip_amount), 2) as avg_tip
         FROM orders o
@@ -553,7 +553,6 @@ def get_price_movers(location=None, limit=5):
 
     query = """
     WITH combined AS (
-        -- Scanned invoice items: map to canonical name where available
         SELECT sii.product_name,
                sii.unit_price,
                si.invoice_date,
@@ -565,15 +564,6 @@ def get_price_movers(location=None, limit=5):
            AND pnm.source_table = 'scanned_invoice_items'
            AND pnm.canonical_name IS NOT NULL
         WHERE si.status IN ('confirmed', 'pending') AND sii.unit_price > 0
-        UNION ALL
-        -- ME invoice items: already in canonical form
-        SELECT mii.product_name,
-               mii.unit_price,
-               mi.invoice_date,
-               mii.product_name AS group_name
-        FROM me_invoice_items mii
-        JOIN me_invoices mi ON mii.order_id = mi.order_id
-        WHERE mii.unit_price > 0
     ),
     price_history AS (
         SELECT group_name, unit_price, invoice_date,
