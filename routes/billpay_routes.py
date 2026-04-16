@@ -1795,3 +1795,396 @@ def export_check_register():
     fname = f"check_register_{date.today().isoformat()}.xlsx"
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                      download_name=fname, as_attachment=True)
+
+
+# ─────────────────────────────────────────────
+#  RECURRING BILLS
+# ─────────────────────────────────────────────
+
+def init_recurring_tables():
+    """Create recurring_bills and recurring_bill_payments tables if not exist."""
+    conn = get_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS recurring_bills (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_name TEXT NOT NULL,
+            description TEXT,
+            amount REAL NOT NULL,
+            frequency TEXT NOT NULL DEFAULT 'monthly',
+            start_date TEXT,
+            due_day INTEGER DEFAULT 1,
+            payment_method TEXT DEFAULT 'check',
+            payable_to TEXT,
+            location TEXT DEFAULT 'dennis',
+            active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS recurring_bill_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bill_id INTEGER NOT NULL,
+            due_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'paid',
+            paid_date TEXT,
+            skipped_date TEXT,
+            amount_paid REAL,
+            check_number TEXT,
+            payment_method TEXT,
+            memo TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY(bill_id) REFERENCES recurring_bills(id)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _next_due_date(frequency, start_date, due_day):
+    """Calculate the next due date for a recurring bill from today."""
+    from datetime import date as ddate, timedelta
+    import calendar as _cal
+    today = ddate.today()
+    try:
+        sd = ddate.fromisoformat(start_date) if start_date else today
+    except ValueError:
+        sd = today
+
+    due_day = int(due_day or 1)
+
+    if frequency == 'weekly':
+        d = sd
+        while d <= today:
+            d += timedelta(weeks=1)
+        return d.isoformat()
+
+    if frequency == 'biweekly':
+        d = sd
+        while d <= today:
+            d += timedelta(weeks=2)
+        return d.isoformat()
+
+    if frequency == 'monthly':
+        yr, mo = today.year, today.month
+        # Try this month's due day
+        last_day = _cal.monthrange(yr, mo)[1]
+        d = ddate(yr, mo, min(due_day, last_day))
+        if d <= today:
+            # Move to next month
+            mo += 1
+            if mo > 12:
+                mo = 1; yr += 1
+            last_day = _cal.monthrange(yr, mo)[1]
+            d = ddate(yr, mo, min(due_day, last_day))
+        return d.isoformat()
+
+    if frequency == 'quarterly':
+        d = sd
+        while d <= today:
+            mo = d.month + 3
+            yr = d.year + (mo - 1) // 12
+            mo = (mo - 1) % 12 + 1
+            import calendar as _cal2
+            last_day = _cal2.monthrange(yr, mo)[1]
+            d = ddate(yr, mo, min(due_day, last_day))
+        return d.isoformat()
+
+    if frequency == 'semiannual':
+        d = sd
+        while d <= today:
+            mo = d.month + 6
+            yr = d.year + (mo - 1) // 12
+            mo = (mo - 1) % 12 + 1
+            import calendar as _cal3
+            last_day = _cal3.monthrange(yr, mo)[1]
+            d = ddate(yr, mo, min(due_day, last_day))
+        return d.isoformat()
+
+    if frequency == 'annual':
+        d = sd
+        while d <= today:
+            d = ddate(d.year + 1, d.month, d.day)
+        return d.isoformat()
+
+    return today.isoformat()
+
+
+def _is_due_on(bill, target_date_str):
+    """Return True if bill is due on or before target_date and not yet paid/skipped for that period."""
+    from datetime import date as ddate, timedelta
+    import calendar as _cal
+    try:
+        target = ddate.fromisoformat(target_date_str)
+    except ValueError:
+        return False
+
+    freq = bill['frequency']
+    start_str = bill['start_date']
+    due_day = int(bill['due_day'] or 1)
+
+    try:
+        start = ddate.fromisoformat(start_str) if start_str else ddate(target.year, target.month, 1)
+    except ValueError:
+        start = ddate(target.year, target.month, 1)
+
+    if target < start:
+        return False
+
+    # Enumerate all due dates from start up to target
+    due_dates = []
+    d = start
+    while d <= target:
+        due_dates.append(d)
+        if freq == 'weekly':
+            d += timedelta(weeks=1)
+        elif freq == 'biweekly':
+            d += timedelta(weeks=2)
+        elif freq == 'monthly':
+            mo = d.month + 1
+            yr = d.year + (mo - 1) // 12
+            mo = (mo - 1) % 12 + 1
+            last_day = _cal.monthrange(yr, mo)[1]
+            d = ddate(yr, mo, min(due_day, last_day))
+        elif freq == 'quarterly':
+            mo = d.month + 3
+            yr = d.year + (mo - 1) // 12
+            mo = (mo - 1) % 12 + 1
+            last_day = _cal.monthrange(yr, mo)[1]
+            d = ddate(yr, mo, min(due_day, last_day))
+        elif freq == 'semiannual':
+            mo = d.month + 6
+            yr = d.year + (mo - 1) // 12
+            mo = (mo - 1) % 12 + 1
+            last_day = _cal.monthrange(yr, mo)[1]
+            d = ddate(yr, mo, min(due_day, last_day))
+        elif freq == 'annual':
+            d = ddate(d.year + 1, d.month, d.day)
+        else:
+            break
+
+    if not due_dates:
+        return False
+
+    # Use the latest due date that is <= target
+    candidate = max(dd for dd in due_dates if dd <= target)
+    return candidate.isoformat()
+
+
+@billpay_bp.route("/api/billpay/recurring", methods=["GET"])
+@admin_or_accountant_required
+def get_recurring_bills():
+    include_inactive = request.args.get("include_inactive") == "1"
+    conn = get_connection()
+    where = [] if include_inactive else ["active = 1"]
+    sql = "SELECT * FROM recurring_bills" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY vendor_name"
+    rows = conn.execute(sql).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        b = dict(r)
+        b['next_due_date'] = _next_due_date(b['frequency'], b['start_date'], b['due_day'])
+        result.append(b)
+    return jsonify(result)
+
+
+@billpay_bp.route("/api/billpay/recurring/<int:bill_id>", methods=["GET"])
+@admin_or_accountant_required
+def get_recurring_bill(bill_id):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM recurring_bills WHERE id = ?", (bill_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    b = dict(row)
+    b['next_due_date'] = _next_due_date(b['frequency'], b['start_date'], b['due_day'])
+    return jsonify(b)
+
+
+@billpay_bp.route("/api/billpay/recurring", methods=["POST"])
+@admin_or_accountant_required
+def create_recurring_bill():
+    data = request.get_json(silent=True) or {}
+    vendor_name = data.get("vendor_name", "").strip()
+    amount = float(data.get("amount") or 0)
+    if not vendor_name or amount <= 0:
+        return jsonify({"error": "vendor_name and amount required"}), 400
+    conn = get_connection()
+    cur = conn.execute("""
+        INSERT INTO recurring_bills (vendor_name, description, amount, frequency,
+            start_date, due_day, payment_method, payable_to, location, active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (vendor_name, data.get("description",""), amount,
+          data.get("frequency","monthly"), data.get("start_date"),
+          int(data.get("due_day") or 1), data.get("payment_method","check"),
+          data.get("payable_to",""), data.get("location","dennis"),
+          int(data.get("active", 1))))
+    new_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "id": new_id}), 201
+
+
+@billpay_bp.route("/api/billpay/recurring/<int:bill_id>", methods=["PUT"])
+@admin_or_accountant_required
+def update_recurring_bill(bill_id):
+    data = request.get_json(silent=True) or {}
+    conn = get_connection()
+    conn.execute("""
+        UPDATE recurring_bills SET vendor_name=?, description=?, amount=?, frequency=?,
+            start_date=?, due_day=?, payment_method=?, payable_to=?, location=?, active=?,
+            updated_at=datetime('now')
+        WHERE id=?
+    """, (data.get("vendor_name",""), data.get("description",""),
+          float(data.get("amount") or 0), data.get("frequency","monthly"),
+          data.get("start_date"), int(data.get("due_day") or 1),
+          data.get("payment_method","check"), data.get("payable_to",""),
+          data.get("location","dennis"), int(data.get("active",1)), bill_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
+
+
+@billpay_bp.route("/api/billpay/recurring/<int:bill_id>", methods=["DELETE"])
+@admin_required
+def delete_recurring_bill(bill_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM recurring_bill_payments WHERE bill_id = ?", (bill_id,))
+    conn.execute("DELETE FROM recurring_bills WHERE id = ?", (bill_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
+
+
+@billpay_bp.route("/api/billpay/recurring/due", methods=["GET"])
+@admin_or_accountant_required
+def get_recurring_due():
+    """Return bills due on or before a given date that haven't been paid/skipped."""
+    target_date = request.args.get("date") or date.today().isoformat()
+    location = request.args.get("location")
+    conn = get_connection()
+    where = ["active = 1"]
+    params = []
+    if location:
+        where.append("(location = ? OR location = 'both')")
+        params.append(location)
+    rows = conn.execute(
+        "SELECT * FROM recurring_bills WHERE " + " AND ".join(where), params
+    ).fetchall()
+
+    result = []
+    for r in rows:
+        b = dict(r)
+        due_date_str = _is_due_on(b, target_date)
+        if not due_date_str:
+            continue
+        # Check if already paid or skipped for this due date
+        existing = conn.execute(
+            "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=?",
+            (b['id'], due_date_str)
+        ).fetchone()
+        if existing:
+            continue
+        b['due_date'] = due_date_str
+        result.append(b)
+
+    conn.close()
+    return jsonify(result)
+
+
+@billpay_bp.route("/api/billpay/recurring/<int:bill_id>/pay", methods=["POST"])
+@admin_or_accountant_required
+def pay_recurring_bill(bill_id):
+    data = request.get_json(silent=True) or {}
+    paid_date = data.get("paid_date") or date.today().isoformat()
+    amount_paid = float(data.get("amount_paid") or 0)
+    check_number = data.get("check_number", "")
+    payment_method = data.get("payment_method", "check")
+    memo = data.get("memo", "")
+
+    conn = get_connection()
+    bill = conn.execute("SELECT * FROM recurring_bills WHERE id = ?", (bill_id,)).fetchone()
+    if not bill:
+        conn.close()
+        return jsonify({"error": "Bill not found"}), 404
+
+    due_date = _is_due_on(dict(bill), paid_date)
+    if not due_date:
+        due_date = paid_date
+
+    # Check for duplicate
+    dup = conn.execute(
+        "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=?",
+        (bill_id, due_date)
+    ).fetchone()
+    if dup:
+        conn.close()
+        return jsonify({"error": "Already recorded for this period"}), 400
+
+    conn.execute("""
+        INSERT INTO recurring_bill_payments
+            (bill_id, due_date, status, paid_date, amount_paid, check_number, payment_method, memo)
+        VALUES (?, ?, 'paid', ?, ?, ?, ?, ?)
+    """, (bill_id, due_date, paid_date, amount_paid, check_number, payment_method, memo))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"}), 201
+
+
+@billpay_bp.route("/api/billpay/recurring/<int:bill_id>/skip", methods=["POST"])
+@admin_or_accountant_required
+def skip_recurring_bill(bill_id):
+    data = request.get_json(silent=True) or {}
+    skipped_date = data.get("skipped_date") or date.today().isoformat()
+
+    conn = get_connection()
+    bill = conn.execute("SELECT * FROM recurring_bills WHERE id = ?", (bill_id,)).fetchone()
+    if not bill:
+        conn.close()
+        return jsonify({"error": "Bill not found"}), 404
+
+    due_date = _is_due_on(dict(bill), skipped_date)
+    if not due_date:
+        due_date = skipped_date
+
+    dup = conn.execute(
+        "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=?",
+        (bill_id, due_date)
+    ).fetchone()
+    if dup:
+        conn.close()
+        return jsonify({"error": "Already recorded for this period"}), 400
+
+    conn.execute("""
+        INSERT INTO recurring_bill_payments
+            (bill_id, due_date, status, skipped_date)
+        VALUES (?, ?, 'skipped', ?)
+    """, (bill_id, due_date, skipped_date))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"}), 201
+
+
+@billpay_bp.route("/api/billpay/recurring/payments", methods=["GET"])
+@admin_or_accountant_required
+def get_recurring_payments():
+    location = request.args.get("location")
+    conn = get_connection()
+    where = []
+    params = []
+    if location:
+        where.append("(rb.location = ? OR rb.location = 'both')")
+        params.append(location)
+    sql = """
+        SELECT rbp.id, rb.vendor_name, rb.description, rbp.due_date, rbp.status,
+               rbp.paid_date, rbp.skipped_date, rbp.amount_paid, rbp.check_number,
+               rbp.payment_method, rbp.memo
+        FROM recurring_bill_payments rbp
+        JOIN recurring_bills rb ON rb.id = rbp.bill_id
+    """
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY rbp.due_date DESC, rb.vendor_name"
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])

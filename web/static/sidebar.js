@@ -57,6 +57,7 @@ var sections=[
   {id:'nav-bp-outstanding',label:'Outstanding',page:'/manage',tab:'billpay'},
   {id:'nav-payments',label:'Payments',page:'/payments'},
   {id:'nav-bp-vendors',label:'Vendor Setup',page:'/manage',tab:'bp-vendors'},
+  {id:'nav-bp-recurring',label:'Recurring Bills',page:'/manage',tab:'bp-recurring'},
   {id:'nav-bp-checksetup',label:'Check Setup',page:'/manage',tab:'bp-checksetup'},
   {id:'nav-bp-payroll',label:'Payroll',page:'/manage',tab:'bp-payroll'}
 ]}
@@ -98,7 +99,7 @@ if(path==='/'||path==='/index.html'){
 }
 if(path==='/manage'){
   var view=localStorage.getItem('manageView')||'dashboard';
-  var vm={dashboard:'nav-dashboard',products:'nav-products',vendors:'nav-vendors',inv:'nav-inventory',recipes:'nav-recipes','prepared-items':'nav-prepared','recipe-analysis':'nav-menuanalysis','recipe-viewer':'nav-recipeviewer',prodsetup:'nav-prodsetup',settings:'nav-settings','recipe-edit':'nav-recipes','prepared-edit':'nav-prepared','data-export':'nav-dataexport','user-accounts':'nav-users',orderguide:'nav-orderguide','pmix-mapping':'nav-pmixmapping',billpay:'nav-bp-outstanding','bp-payments':'nav-bp-payments','bp-vendors':'nav-bp-vendors','bp-checksetup':'nav-bp-checksetup','bp-payroll':'nav-bp-payroll'};
+  var vm={dashboard:'nav-dashboard',products:'nav-products',vendors:'nav-vendors',inv:'nav-inventory',recipes:'nav-recipes','prepared-items':'nav-prepared','recipe-analysis':'nav-menuanalysis','recipe-viewer':'nav-recipeviewer',prodsetup:'nav-prodsetup',settings:'nav-settings','recipe-edit':'nav-recipes','prepared-edit':'nav-prepared','data-export':'nav-dataexport','user-accounts':'nav-users',orderguide:'nav-orderguide','pmix-mapping':'nav-pmixmapping',billpay:'nav-bp-outstanding','bp-payments':'nav-bp-payments','bp-vendors':'nav-bp-vendors','bp-recurring':'nav-bp-recurring','bp-checksetup':'nav-bp-checksetup','bp-payroll':'nav-bp-payroll'};
   return vm[view]||'nav-dashboard';
 }
 if(path==='/invoices'){var iv=localStorage.getItem('invoiceView')||'history';var ivm={history:'nav-invhistory',scan:'nav-scan',pending:'nav-pending'};return ivm[iv]||'nav-invhistory';}
@@ -254,7 +255,7 @@ setTimeout(function(){
   if(typeof orig==='function'){window.showView=function(v){orig(v);
     if(curPath==='/manage'){
       localStorage.setItem('manageView',v);
-      var vm={dashboard:'nav-dashboard',products:'nav-products',vendors:'nav-vendors',inv:'nav-inventory',recipes:'nav-recipes','prepared-items':'nav-prepared','recipe-analysis':'nav-menuanalysis','recipe-viewer':'nav-recipeviewer',prodsetup:'nav-prodsetup',settings:'nav-settings','recipe-edit':'nav-recipes','prepared-edit':'nav-prepared','data-export':'nav-dataexport','user-accounts':'nav-users',orderguide:'nav-orderguide','pmix-mapping':'nav-pmixmapping',billpay:'nav-bp-outstanding','bp-payments':'nav-bp-payments','bp-vendors':'nav-bp-vendors','bp-checksetup':'nav-bp-checksetup','bp-payroll':'nav-bp-payroll'};
+      var vm={dashboard:'nav-dashboard',products:'nav-products',vendors:'nav-vendors',inv:'nav-inventory',recipes:'nav-recipes','prepared-items':'nav-prepared','recipe-analysis':'nav-menuanalysis','recipe-viewer':'nav-recipeviewer',prodsetup:'nav-prodsetup',settings:'nav-settings','recipe-edit':'nav-recipes','prepared-edit':'nav-prepared','data-export':'nav-dataexport','user-accounts':'nav-users',orderguide:'nav-orderguide','pmix-mapping':'nav-pmixmapping',billpay:'nav-bp-outstanding','bp-payments':'nav-bp-payments','bp-vendors':'nav-bp-vendors','bp-recurring':'nav-bp-recurring','bp-checksetup':'nav-bp-checksetup','bp-payroll':'nav-bp-payroll'};
       setActiveItem(vm[v]||'nav-dashboard');
     } else if(curPath==='/invoices'){
       localStorage.setItem('invoiceView',v);

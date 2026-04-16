@@ -50,7 +50,7 @@ from scraping.sports_guide import sports_bp, scrape_fanzo_guide
 from scraping.sports_guide.espn_odds_fetcher import fetch_all_odds
 from staff.staff import staff_bp
 from staff.tv_power import tv_power_bp
-from routes.billpay_routes import billpay_bp
+from routes.billpay_routes import billpay_bp, init_recurring_tables
 from routes.payment_routes import payment_bp, init_payment_tables
 from integrations.invoices.processor import init_invoice_tables
 import secrets
@@ -129,6 +129,12 @@ try:
         import logging; logging.getLogger(__name__).warning(f'Sales journal table init failed: {e}')
 except Exception as e:
     logger.warning(f"Payment table init failed: {e}")
+
+try:
+    init_recurring_tables()
+    logger.info("Recurring bills tables initialized")
+except Exception as e:
+    logger.warning(f"Recurring bills table init failed: {e}")
 
 
 # ------------------------------------------------------------------

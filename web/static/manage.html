@@ -1798,8 +1798,9 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
       <!-- Vendor Setup -->
       <div class="view" id="view-bp-vendors">
         <div class="content-area" style="max-width:1000px">
-          <div class="card" style="margin-bottom:16px;padding:12px 16px">
+          <div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;align-items:center;gap:12px">
             <input type="text" id="bp-vendor-search" placeholder="Search vendors..." oninput="bpFilterVendorList()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px;width:100%;max-width:300px">
+            <button onclick="openVendorModal()" style="padding:8px 18px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap">+ Add Vendor</button>
           </div>
           <div class="card">
             <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -1935,6 +1936,109 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
               <tbody id="pr-table-body"></tbody>
             </table>
             <div id="pr-empty" style="display:none;text-align:center;padding:40px;color:var(--text3);font-size:13px">No payroll checks yet. Click "+ Upload Payroll Check" to get started.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recurring Bills -->
+      <div class="view" id="view-bp-recurring">
+        <div class="content-area" style="max-width:1000px">
+          <!-- Sub-tabs -->
+          <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center">
+            <button id="rc-tab-queue" onclick="rcShowTab('queue')" style="padding:7px 16px;border-radius:8px;border:none;background:#38bdf8;color:#020617;font-weight:600;font-size:13px;cursor:pointer">Check Queue</button>
+            <button id="rc-tab-bills" onclick="rcShowTab('bills')" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer">Recurring Bills</button>
+            <button id="rc-tab-history" onclick="rcShowTab('history')" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer">History</button>
+            <div style="flex:1"></div>
+            <button id="rc-btn-print" onclick="rcPrintChecks()" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer">🖨 Print Checks</button>
+            <button id="rc-btn-add" onclick="rcOpenModal(null)" style="padding:7px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:600;font-size:13px;cursor:pointer;display:none">+ Add Bill</button>
+          </div>
+
+          <!-- Queue sub-tab -->
+          <div id="rc-sub-queue">
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+              <input type="date" id="rc-queue-date" onchange="rcLoadQueue()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
+              <select id="rc-queue-loc" onchange="rcLoadQueue()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
+                <option value="">Both Locations</option>
+                <option value="dennis">Dennis Port</option>
+                <option value="chatham">Chatham</option>
+              </select>
+              <span id="rc-queue-info" style="color:var(--text3);font-size:13px"></span>
+            </div>
+            <div id="rc-stats-row" style="display:none;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+              <div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:6px">Due</div><div style="font-size:22px;font-weight:700;color:#111827" id="rc-stat-count">0</div></div>
+              <div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:6px">Total</div><div style="font-size:22px;font-weight:700;color:#111827" id="rc-stat-total">$0</div></div>
+              <div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:6px">Next Check #</div><div style="font-size:18px;font-weight:700;color:#111827;display:flex;align-items:center;gap:6px"><span id="rc-stat-checknum">—</span><button onclick="rcEditCheckNum()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px">✏️</button></div></div>
+            </div>
+            <div class="card">
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead><tr style="border-bottom:1px solid var(--border)">
+                  <th style="padding:10px 12px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Vendor</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Description</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Due</th>
+                  <th style="padding:10px 8px;text-align:right;color:var(--text3);font-weight:600;font-size:11px">Amount</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Pay To</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Method</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Loc</th>
+                  <th style="padding:10px 8px"></th>
+                </tr></thead>
+                <tbody id="rc-queue-tbody"></tbody>
+              </table>
+              <div id="rc-queue-empty" style="display:none;text-align:center;padding:40px;color:var(--text3);font-size:13px">✅ No bills due on this date</div>
+            </div>
+          </div>
+
+          <!-- Bills sub-tab -->
+          <div id="rc-sub-bills" style="display:none">
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <span style="font-size:14px;font-weight:600;color:#111827">Recurring Bills</span>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" id="rc-show-inactive" onchange="rcLoadBills()"> Show inactive</label>
+                  <button onclick="rcOpenModal(null)" style="padding:7px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:600;font-size:13px;cursor:pointer">+ Add Bill</button>
+                </div>
+              </div>
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead><tr style="border-bottom:1px solid var(--border)">
+                  <th style="padding:10px 12px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Vendor</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Description</th>
+                  <th style="padding:10px 8px;text-align:right;color:var(--text3);font-weight:600;font-size:11px">Amount</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Frequency</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Next Due</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Method</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Loc</th>
+                  <th style="padding:10px 8px"></th>
+                </tr></thead>
+                <tbody id="rc-bills-tbody"></tbody>
+              </table>
+              <div id="rc-bills-empty" style="display:none;text-align:center;padding:40px;color:var(--text3);font-size:13px">No recurring bills yet — click "+ Add Bill" to get started</div>
+            </div>
+          </div>
+
+          <!-- History sub-tab -->
+          <div id="rc-sub-history" style="display:none">
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <span style="font-size:14px;font-weight:600;color:#111827">Payment History</span>
+                <select id="rc-hist-loc" onchange="rcLoadHistory()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
+                  <option value="">Both Locations</option>
+                  <option value="dennis">Dennis Port</option>
+                  <option value="chatham">Chatham</option>
+                </select>
+              </div>
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead><tr style="border-bottom:1px solid var(--border)">
+                  <th style="padding:10px 12px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Vendor</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Description</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Due Date</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Paid</th>
+                  <th style="padding:10px 8px;text-align:right;color:var(--text3);font-weight:600;font-size:11px">Amount</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Check #</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Method</th>
+                </tr></thead>
+                <tbody id="rc-history-tbody"></tbody>
+              </table>
+              <div id="rc-history-empty" style="display:none;text-align:center;padding:40px;color:var(--text3);font-size:13px">No payment history yet</div>
+            </div>
           </div>
         </div>
       </div>
@@ -2344,7 +2448,8 @@ function showView(view) {
     'bp-payments': 'Bill Pay — Payments',
     'bp-vendors': 'Bill Pay — Vendor Setup',
     'bp-checksetup': 'Bill Pay — Check Setup',
-    'bp-payroll': 'Bill Pay — Payroll'
+    'bp-payroll': 'Bill Pay — Payroll',
+    'bp-recurring': 'Bill Pay — Recurring Bills'
   };
   document.getElementById('pageTitle').textContent = titles[view] || view;
 
@@ -2366,6 +2471,7 @@ function showView(view) {
     case 'bp-vendors': bpLoadVendors(); break;
     case 'bp-checksetup': bpLoadCheckConfig(); break;
     case 'bp-payroll': prLoadPayrollChecks(); break;
+    case 'bp-recurring': rcInit(); break;
   }
 }
 
@@ -4368,7 +4474,8 @@ function initPage() {
     'bp-payments': 'Bill Pay — Payments',
     'bp-vendors': 'Bill Pay — Vendor Setup',
     'bp-checksetup': 'Bill Pay — Check Setup',
-    'bp-payroll': 'Bill Pay — Payroll'
+    'bp-payroll': 'Bill Pay — Payroll',
+    'bp-recurring': 'Bill Pay — Recurring Bills'
   };
   document.getElementById('pageTitle').textContent = titles[savedView] || savedView;
 
@@ -4391,6 +4498,7 @@ function initPage() {
       case 'bp-vendors': if (typeof bpLoadVendors === 'function') bpLoadVendors(); break;
       case 'bp-checksetup': if (typeof bpLoadCheckConfig === 'function') bpLoadCheckConfig(); break;
       case 'bp-payroll': if (typeof prLoadPayrollChecks === 'function') prLoadPayrollChecks(); break;
+      case 'bp-recurring': if (typeof rcInit === 'function') rcInit(); break;
     }
   }
 }
@@ -6276,6 +6384,379 @@ function bpInit() {
   bpLoadVendorFilter();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  RECURRING BILLS
+// ═══════════════════════════════════════════════════════════════
+
+var _rcBills = [];
+var _rcCurrentTab = 'queue';
+
+function rcInit() {
+  rcShowTab('queue');
+}
+
+function rcShowTab(tab) {
+  _rcCurrentTab = tab;
+  ['queue','bills','history'].forEach(function(t) {
+    var sub = document.getElementById('rc-sub-' + t);
+    var btn = document.getElementById('rc-tab-' + t);
+    if (sub) sub.style.display = t === tab ? '' : 'none';
+    if (btn) {
+      if (t === tab) {
+        btn.style.background = '#38bdf8'; btn.style.color = '#020617';
+        btn.style.border = 'none';
+      } else {
+        btn.style.background = 'transparent'; btn.style.color = 'var(--text2)';
+        btn.style.border = '1px solid var(--border)';
+      }
+    }
+  });
+  var addBtn = document.getElementById('rc-btn-add');
+  var printBtn = document.getElementById('rc-btn-print');
+  if (addBtn) addBtn.style.display = tab === 'bills' ? '' : 'none';
+  if (printBtn) printBtn.style.display = tab === 'queue' ? '' : 'none';
+  if (tab === 'queue') rcLoadQueue();
+  else if (tab === 'bills') rcLoadBills();
+  else if (tab === 'history') rcLoadHistory();
+}
+
+async function rcLoadQueue() {
+  var dateEl = document.getElementById('rc-queue-date');
+  if (!dateEl) return;
+  if (!dateEl.value) {
+    var today = new Date();
+    dateEl.value = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  }
+  var date = dateEl.value;
+  var loc = (document.getElementById('rc-queue-loc') || {}).value || '';
+  try {
+    var params = 'date=' + date;
+    if (loc) params += '&location=' + loc;
+    var r = await fetch('/api/billpay/recurring/due?' + params);
+    var bills = await r.json();
+    var tbody = document.getElementById('rc-queue-tbody');
+    var empty = document.getElementById('rc-queue-empty');
+    var stats = document.getElementById('rc-stats-row');
+    if (!bills.length) {
+      if (tbody) tbody.innerHTML = '';
+      if (empty) empty.style.display = '';
+      if (stats) stats.style.display = 'none';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    if (stats) { stats.style.display = 'grid'; }
+    var total = bills.reduce(function(s,b){ return s + (b.amount||0); }, 0);
+    var countEl = document.getElementById('rc-stat-count');
+    var totalEl = document.getElementById('rc-stat-total');
+    var cnEl = document.getElementById('rc-stat-checknum');
+    if (countEl) countEl.textContent = bills.length;
+    if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
+    if (cnEl) cnEl.textContent = rcGetNextCheckNum(loc || 'dennis');
+    if (tbody) tbody.innerHTML = bills.map(function(b) {
+      var locLabel = b.location === 'chatham' ? 'Chatham' : 'Dennis';
+      return '<tr style="border-bottom:1px solid var(--border)">' +
+        '<td style="padding:8px 12px;font-weight:500;color:#111827">' + (b.vendor_name||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (b.description||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (b.due_date||'—') + '</td>' +
+        '<td style="padding:8px;text-align:right;font-weight:600;color:#111827">$' + (b.amount||0).toFixed(2) + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (b.payable_to||b.vendor_name||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (b.payment_method||'check') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + locLabel + '</td>' +
+        '<td style="padding:8px;white-space:nowrap">' +
+          '<button onclick="rcPayBill(' + b.id + ',\'' + date + '\')" style="padding:4px 10px;border-radius:6px;border:none;background:rgba(34,197,94,0.15);color:#22c55e;font-size:12px;font-weight:600;cursor:pointer;margin-right:4px">Pay</button>' +
+          '<button onclick="rcSkipBill(' + b.id + ',\'' + date + '\')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">Skip</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+  } catch(e) { console.error('rcLoadQueue error:', e); }
+}
+
+async function rcLoadBills() {
+  var showInactive = (document.getElementById('rc-show-inactive') || {}).checked;
+  try {
+    var r = await fetch('/api/billpay/recurring' + (showInactive ? '?include_inactive=1' : ''));
+    _rcBills = await r.json();
+    var tbody = document.getElementById('rc-bills-tbody');
+    var empty = document.getElementById('rc-bills-empty');
+    if (!_rcBills.length) {
+      if (tbody) tbody.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    var freqLabel = {monthly:'Monthly',weekly:'Weekly',biweekly:'Bi-Weekly',quarterly:'Quarterly',annual:'Annual',semiannual:'Semi-Annual'};
+    if (tbody) tbody.innerHTML = _rcBills.map(function(b) {
+      var locLabel = b.location === 'chatham' ? 'Chatham' : (b.location === 'both' ? 'Both' : 'Dennis');
+      var activeStyle = b.active ? '' : 'opacity:0.5;';
+      return '<tr style="border-bottom:1px solid var(--border);' + activeStyle + '">' +
+        '<td style="padding:8px 12px;font-weight:500;color:#111827">' + (b.vendor_name||'—') + (!b.active ? ' <span style="font-size:10px;color:var(--text3)">(inactive)</span>' : '') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (b.description||'—') + '</td>' +
+        '<td style="padding:8px;text-align:right;font-weight:600;color:#111827">$' + (b.amount||0).toFixed(2) + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (freqLabel[b.frequency]||b.frequency||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (b.next_due_date||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (b.payment_method||'check') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + locLabel + '</td>' +
+        '<td style="padding:8px;white-space:nowrap">' +
+          '<button onclick="rcOpenModal(' + b.id + ')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:12px;cursor:pointer;margin-right:4px">Edit</button>' +
+          '<button onclick="rcDeleteBill(' + b.id + ')" style="padding:4px 10px;border-radius:6px;border:none;background:rgba(239,68,68,0.12);color:#ef4444;font-size:12px;cursor:pointer">Del</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+  } catch(e) { console.error('rcLoadBills error:', e); }
+}
+
+async function rcLoadHistory() {
+  var loc = (document.getElementById('rc-hist-loc') || {}).value || '';
+  try {
+    var params = loc ? 'location=' + loc : '';
+    var r = await fetch('/api/billpay/recurring/payments' + (params ? '?' + params : ''));
+    var rows = await r.json();
+    var tbody = document.getElementById('rc-history-tbody');
+    var empty = document.getElementById('rc-history-empty');
+    if (!rows.length) {
+      if (tbody) tbody.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    if (tbody) tbody.innerHTML = rows.map(function(p) {
+      return '<tr style="border-bottom:1px solid var(--border)">' +
+        '<td style="padding:8px 12px;font-weight:500;color:#111827">' + (p.vendor_name||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (p.description||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (p.due_date||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (p.paid_date||p.skipped_date||'—') + '</td>' +
+        '<td style="padding:8px;text-align:right;font-weight:600;color:#111827">' + (p.status==='skipped'?'<span style="color:var(--text3)">Skipped</span>':'$'+(p.amount_paid||0).toFixed(2)) + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (p.check_number||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + (p.payment_method||'—') + '</td>' +
+      '</tr>';
+    }).join('');
+  } catch(e) { console.error('rcLoadHistory error:', e); }
+}
+
+function rcGetNextCheckNum(loc) {
+  return localStorage.getItem('rc_next_check_' + (loc||'dennis')) || '1001';
+}
+
+function rcSetNextCheckNum(loc, num) {
+  localStorage.setItem('rc_next_check_' + (loc||'dennis'), String(num));
+}
+
+function rcEditCheckNum() {
+  var loc = (document.getElementById('rc-queue-loc') || {}).value || 'dennis';
+  var cur = rcGetNextCheckNum(loc);
+  var val = prompt('Set next check number for ' + (loc==='chatham'?'Chatham':'Dennis Port') + ':', cur);
+  if (val && !isNaN(val)) {
+    rcSetNextCheckNum(loc, val.trim());
+    var el = document.getElementById('rc-stat-checknum');
+    if (el) el.textContent = val.trim();
+  }
+}
+
+async function rcPayBill(billId, date) {
+  var bill = null;
+  try {
+    var r = await fetch('/api/billpay/recurring/' + billId);
+    bill = await r.json();
+  } catch(e) {}
+  var loc = bill ? (bill.location || 'dennis') : 'dennis';
+  var nextCheck = rcGetNextCheckNum(loc);
+  document.getElementById('rc-pay-bill-id').value = billId;
+  document.getElementById('rc-pay-date').value = date || new Date().toISOString().slice(0,10);
+  document.getElementById('rc-pay-amount').value = bill ? (bill.amount||'').toString() : '';
+  document.getElementById('rc-pay-check').value = nextCheck;
+  document.getElementById('rc-pay-method').value = bill ? (bill.payment_method||'check') : 'check';
+  document.getElementById('rc-pay-memo').value = '';
+  document.getElementById('rc-pay-vendor').textContent = bill ? (bill.vendor_name||'') : '';
+  document.getElementById('rc-pay-modal').style.display = 'flex';
+}
+
+async function rcSubmitPay() {
+  var billId = document.getElementById('rc-pay-bill-id').value;
+  var date = document.getElementById('rc-pay-date').value;
+  var amount = parseFloat(document.getElementById('rc-pay-amount').value) || 0;
+  var checkNum = document.getElementById('rc-pay-check').value.trim();
+  var method = document.getElementById('rc-pay-method').value;
+  var memo = document.getElementById('rc-pay-memo').value;
+  if (!date || !amount) { alert('Date and amount are required'); return; }
+  try {
+    var r = await fetch('/api/billpay/recurring/' + billId + '/pay', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({paid_date:date,amount_paid:amount,check_number:checkNum,payment_method:method,memo:memo})
+    });
+    var d = await r.json();
+    if (!r.ok) { alert(d.error||'Failed to record payment'); return; }
+    // Auto-increment check number
+    if (method === 'check' && checkNum && !isNaN(checkNum)) {
+      var loc = (document.getElementById('rc-queue-loc')||{}).value||'dennis';
+      rcSetNextCheckNum(loc, parseInt(checkNum) + 1);
+    }
+    document.getElementById('rc-pay-modal').style.display = 'none';
+    rcLoadQueue();
+    if (method === 'check') {
+      if (confirm('Payment recorded! Print check for $' + amount.toFixed(2) + ' check #' + checkNum + '?')) {
+        rcPrintSingleCheck({vendor_name: document.getElementById('rc-pay-vendor').textContent, amount:amount, check_number:checkNum, memo:memo, date:date});
+      }
+    }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function rcSkipBill(billId, date) {
+  if (!confirm('Skip this bill for ' + date + '?')) return;
+  try {
+    var r = await fetch('/api/billpay/recurring/' + billId + '/skip', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({skipped_date: date})
+    });
+    if (r.ok) rcLoadQueue();
+    else { var d = await r.json(); alert(d.error||'Failed to skip'); }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function rcDeleteBill(billId) {
+  if (!confirm('Delete this recurring bill?')) return;
+  try {
+    var r = await fetch('/api/billpay/recurring/' + billId, { method: 'DELETE' });
+    if (r.ok) rcLoadBills();
+    else { var d = await r.json(); alert(d.error||'Failed to delete'); }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function rcOpenModal(billId) {
+  var modal = document.getElementById('rc-bill-modal');
+  var titleEl = document.getElementById('rc-modal-title');
+  document.getElementById('rc-bill-id').value = '';
+  document.getElementById('rc-bill-vendor').value = '';
+  document.getElementById('rc-bill-desc').value = '';
+  document.getElementById('rc-bill-amount').value = '';
+  document.getElementById('rc-bill-freq').value = 'monthly';
+  document.getElementById('rc-bill-startdate').value = '';
+  document.getElementById('rc-bill-dueday').value = '1';
+  document.getElementById('rc-bill-method').value = 'check';
+  document.getElementById('rc-bill-payto').value = '';
+  document.getElementById('rc-bill-loc').value = 'dennis';
+  document.getElementById('rc-bill-active').checked = true;
+  // Load vendor list
+  try {
+    var vr = await fetch('/api/billpay/vendors');
+    var vd = await vr.json();
+    var sel = document.getElementById('rc-bill-vendor');
+    sel.innerHTML = '<option value="">— Select Vendor —</option>' +
+      (vd.vendors||[]).map(function(v){ return '<option value="' + v.vendor_name + '">' + v.vendor_name + '</option>'; }).join('');
+  } catch(e) {}
+  if (billId) {
+    try {
+      var r = await fetch('/api/billpay/recurring/' + billId);
+      var b = await r.json();
+      if (titleEl) titleEl.textContent = 'Edit Recurring Bill';
+      document.getElementById('rc-bill-id').value = b.id;
+      document.getElementById('rc-bill-vendor').value = b.vendor_name || '';
+      document.getElementById('rc-bill-desc').value = b.description || '';
+      document.getElementById('rc-bill-amount').value = b.amount || '';
+      document.getElementById('rc-bill-freq').value = b.frequency || 'monthly';
+      document.getElementById('rc-bill-startdate').value = b.start_date || '';
+      document.getElementById('rc-bill-dueday').value = b.due_day || '1';
+      document.getElementById('rc-bill-method').value = b.payment_method || 'check';
+      document.getElementById('rc-bill-payto').value = b.payable_to || '';
+      document.getElementById('rc-bill-loc').value = b.location || 'dennis';
+      document.getElementById('rc-bill-active').checked = !!b.active;
+    } catch(e) {}
+  } else {
+    if (titleEl) titleEl.textContent = 'Add Recurring Bill';
+  }
+  modal.style.display = 'flex';
+}
+
+async function rcSaveBill() {
+  var billId = document.getElementById('rc-bill-id').value;
+  var data = {
+    vendor_name: document.getElementById('rc-bill-vendor').value,
+    description: document.getElementById('rc-bill-desc').value,
+    amount: parseFloat(document.getElementById('rc-bill-amount').value) || 0,
+    frequency: document.getElementById('rc-bill-freq').value,
+    start_date: document.getElementById('rc-bill-startdate').value,
+    due_day: parseInt(document.getElementById('rc-bill-dueday').value) || 1,
+    payment_method: document.getElementById('rc-bill-method').value,
+    payable_to: document.getElementById('rc-bill-payto').value,
+    location: document.getElementById('rc-bill-loc').value,
+    active: document.getElementById('rc-bill-active').checked ? 1 : 0
+  };
+  if (!data.vendor_name || !data.amount) { alert('Vendor and amount are required'); return; }
+  try {
+    var url = billId ? '/api/billpay/recurring/' + billId : '/api/billpay/recurring';
+    var method = billId ? 'PUT' : 'POST';
+    var r = await fetch(url, {method:method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    var d = await r.json();
+    if (!r.ok) { alert(d.error||'Failed to save'); return; }
+    document.getElementById('rc-bill-modal').style.display = 'none';
+    rcLoadBills();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function rcPrintChecks() {
+  var dateEl = document.getElementById('rc-queue-date');
+  var loc = (document.getElementById('rc-queue-loc')||{}).value || 'dennis';
+  var date = dateEl ? dateEl.value : new Date().toISOString().slice(0,10);
+  try {
+    var params = 'date=' + date;
+    if (loc) params += '&location=' + loc;
+    var r = await fetch('/api/billpay/recurring/due?' + params);
+    var bills = await r.json();
+    if (!bills.length) { alert('No bills due on this date'); return; }
+    var checkNum = parseInt(rcGetNextCheckNum(loc)) || 1001;
+    var checksHTML = bills.map(function(b) {
+      var cn = checkNum++;
+      return rcCheckHTML(b.payable_to||b.vendor_name, b.amount, cn, date, b.description||'');
+    }).join('<div style="page-break-after:always"></div>');
+    rcSetNextCheckNum(loc, checkNum);
+    var el = document.getElementById('rc-stat-checknum');
+    if (el) el.textContent = checkNum;
+    var win = window.open('', '_blank');
+    win.document.write('<html><head><title>Checks</title><style>body{font-family:Arial,sans-serif}@media print{body{margin:0}}</style></head><body>' + checksHTML + '</body></html>');
+    win.document.close();
+    win.print();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+function rcPrintSingleCheck(b) {
+  var win = window.open('', '_blank');
+  var html = rcCheckHTML(b.vendor_name, b.amount, b.check_number, b.date, b.memo||'');
+  win.document.write('<html><head><title>Check</title><style>body{font-family:Arial,sans-serif}@media print{body{margin:0}}</style></head><body>' + html + '</body></html>');
+  win.document.close();
+  win.print();
+}
+
+function rcCheckHTML(payTo, amount, checkNum, date, memo) {
+  var dollars = Math.floor(amount);
+  var cents = Math.round((amount - dollars) * 100);
+  var ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  var tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  function numToWords(n) {
+    if (n === 0) return 'Zero';
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n/10)] + (n%10 ? '-'+ones[n%10] : '');
+    return ones[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' ' + numToWords(n%100) : '');
+  }
+  var amountWords = numToWords(dollars) + ' and ' + String(cents).padStart(2,'0') + '/100 Dollars';
+  return '<div style="border:2px solid #000;padding:24px;max-width:680px;margin:20px auto;font-size:14px">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:16px">' +
+      '<div><strong style="font-size:16px">Red Nun Restaurant</strong><br><span style="font-size:12px;color:#555">Check #' + checkNum + '</span></div>' +
+      '<div style="text-align:right"><strong>Date:</strong> ' + date + '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:12px"><strong>Pay to the order of:</strong> <span style="border-bottom:1px solid #000;display:inline-block;min-width:300px;padding-bottom:2px">' + (payTo||'') + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:12px">' +
+      '<div style="flex:1;border-bottom:1px solid #000;padding-bottom:2px">' + amountWords + '</div>' +
+      '<div style="margin-left:16px;border:1px solid #000;padding:4px 12px;font-weight:700;font-size:16px">$' + amount.toFixed(2) + '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:16px;display:flex;justify-content:space-between">' +
+      '<div><strong>Memo:</strong> <span style="border-bottom:1px solid #000;display:inline-block;min-width:200px">' + (memo||'') + '</span></div>' +
+      '<div><strong>Authorized Signature:</strong> <span style="border-bottom:1px solid #000;display:inline-block;min-width:180px">&nbsp;</span></div>' +
+    '</div>' +
+    '<div style="border-top:1px dashed #999;margin-top:8px;padding-top:8px;font-size:11px;color:#999;text-align:center">Red Nun Restaurant — ' + (date) + ' — Check #' + checkNum + '</div>' +
+  '</div>';
+}
+
 </script>
 
 <style>
@@ -7579,6 +8060,124 @@ async function maRecalcCosts() {
     </div>
     <div style="font-size:11px;color:var(--text3,#555);margin-top:10px">
       Can also be set permanently in Product Setup &rarr; Units of Measure.
+    </div>
+  </div>
+</div>
+
+<!-- ── Recurring Bills: Pay Modal ── -->
+<div id="rc-pay-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1100;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 0">
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:440px;margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="color:#111827;margin:0;font-size:15px">Record Payment — <span id="rc-pay-vendor"></span></h3>
+      <button onclick="document.getElementById('rc-pay-modal').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">&times;</button>
+    </div>
+    <input type="hidden" id="rc-pay-bill-id">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Payment Date</label>
+        <input type="date" id="rc-pay-date" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Amount</label>
+        <input type="number" id="rc-pay-amount" step="0.01" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Method</label>
+        <select id="rc-pay-method" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+          <option value="check">Check</option>
+          <option value="ach">ACH</option>
+          <option value="portal">Portal</option>
+          <option value="credit_card">Credit Card</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Check #</label>
+        <input type="text" id="rc-pay-check" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Memo</label>
+        <input type="text" id="rc-pay-memo" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button onclick="rcSubmitPay()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Record Payment</button>
+      <button onclick="document.getElementById('rc-pay-modal').style.display='none'" style="padding:10px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:13px;cursor:pointer">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Recurring Bills: Add/Edit Modal ── -->
+<div id="rc-bill-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1100;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 0">
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:500px;margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="color:#111827;margin:0;font-size:15px" id="rc-modal-title">Add Recurring Bill</h3>
+      <button onclick="document.getElementById('rc-bill-modal').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">&times;</button>
+    </div>
+    <input type="hidden" id="rc-bill-id">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Vendor</label>
+        <select id="rc-bill-vendor" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+          <option value="">— Select Vendor —</option>
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Description / Bill Name</label>
+        <input type="text" id="rc-bill-desc" placeholder="e.g. Monthly Rent, Electric Bill" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Amount ($)</label>
+        <input type="number" id="rc-bill-amount" step="0.01" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Frequency</label>
+        <select id="rc-bill-freq" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+          <option value="monthly">Monthly</option>
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Bi-Weekly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="semiannual">Semi-Annual</option>
+          <option value="annual">Annual</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Start Date</label>
+        <input type="date" id="rc-bill-startdate" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Due Day of Month</label>
+        <input type="number" id="rc-bill-dueday" min="1" max="31" value="1" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Payment Method</label>
+        <select id="rc-bill-method" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+          <option value="check">Check</option>
+          <option value="ach">ACH</option>
+          <option value="portal">Portal</option>
+          <option value="credit_card">Credit Card</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Location</label>
+        <select id="rc-bill-loc" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+          <option value="dennis">Dennis Port</option>
+          <option value="chatham">Chatham</option>
+          <option value="both">Both</option>
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Payable To (if different from vendor)</label>
+        <input type="text" id="rc-bill-payto" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#111827;cursor:pointer">
+          <input type="checkbox" id="rc-bill-active" checked> Active
+        </label>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button onclick="rcSaveBill()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Save Bill</button>
+      <button onclick="document.getElementById('rc-bill-modal').style.display='none'" style="padding:10px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:13px;cursor:pointer">Cancel</button>
     </div>
   </div>
 </div>
