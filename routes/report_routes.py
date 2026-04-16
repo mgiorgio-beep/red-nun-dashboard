@@ -389,11 +389,12 @@ def report_ap_aging():
             COALESCE(bp.total_paid, 0) as paid
         FROM scanned_invoices si
         LEFT JOIN (
-            SELECT invoice_id, SUM(amount) as total_paid
-            FROM billpay_payments
-            WHERE status != 'voided'
-            GROUP BY invoice_id
-        ) bp ON bp.invoice_id = si.id
+            SELECT vpi.invoice_number, SUM(vpi.amount_paid) as total_paid
+            FROM vendor_payment_invoices vpi
+            JOIN vendor_payments vp ON vp.id = vpi.payment_id
+            WHERE vp.status NOT IN ('void', 'voided', 'failed')
+            GROUP BY vpi.invoice_number
+        ) bp ON bp.invoice_number = si.invoice_number COLLATE NOCASE
         WHERE si.location = ? AND si.status = 'confirmed'
         ORDER BY si.vendor_name, si.invoice_date
     """, (location,)).fetchall()
@@ -497,36 +498,48 @@ def report_payment_history():
     conn = get_connection()
     rows = conn.execute("""
         SELECT
-            bp.payment_date,
-            si.vendor_name,
-            si.invoice_number,
-            bp.amount,
-            bp.method,
-            bp.check_number,
-            bp.memo
-        FROM billpay_payments bp
-        LEFT JOIN scanned_invoices si ON si.id = bp.invoice_id
-        WHERE (si.location = ? OR si.location IS NULL)
-          AND bp.payment_date >= ? AND bp.payment_date <= ?
-          AND bp.status != 'voided'
-        ORDER BY bp.payment_date, si.vendor_name
+            vp.payment_date,
+            vp.vendor,
+            vpi.invoice_number,
+            vp.payment_total as amount,
+            vp.payment_method as method,
+            vp.check_number,
+            vp.memo,
+            vp.source,
+            vp.status
+        FROM vendor_payments vp
+        LEFT JOIN vendor_payment_invoices vpi ON vpi.payment_id = vp.id
+        WHERE (vp.location = ? OR vp.location IS NULL)
+          AND vp.payment_date >= ? AND vp.payment_date <= ?
+          AND vp.status NOT IN ('void', 'voided', 'failed')
+        ORDER BY vp.payment_date, vp.vendor
     """, (location, start, end)).fetchall()
     conn.close()
 
-    headers = ["Date", "Vendor", "Invoice #", "Amount", "Method", "Check #", "Memo"]
+    headers = ["Date", "Vendor", "Invoice #", "Amount", "Method", "Source", "Check #", "Memo"]
     data = []
     total = 0
+    seen = set()
     for r in rows:
+        # Each vendor_payment may appear multiple times (one per linked invoice)
+        pmt_key = (r["payment_date"], r["vendor"], r["amount"], r["method"])
+        inv = r["invoice_number"] or ""
+        if pmt_key in seen:
+            # Extra invoice row — no amount
+            if inv:
+                data.append(["", "", inv, "", "", "", "", ""])
+            continue
+        seen.add(pmt_key)
         amt = r["amount"] or 0
         total += amt
         data.append([
-            r["payment_date"], r["vendor_name"] or "—", r["invoice_number"] or "—",
-            _fmt_money(amt), r["method"] or "—", r["check_number"] or "—",
-            r["memo"] or "",
+            r["payment_date"], r["vendor"] or "—", inv or "—",
+            _fmt_money(amt), r["method"] or "—", r["source"] or "—",
+            r["check_number"] or "—", r["memo"] or "",
         ])
 
     if data:
-        data.append(["TOTAL", "", "", _fmt_money(total), "", "", ""])
+        data.append(["TOTAL", "", "", _fmt_money(total), "", "", "", ""])
 
     title = f"Payment History — {loc_label} — {start} to {end}"
     fname = f"Payments_{location}_{start}_to_{end}"
@@ -778,3 +791,95 @@ def report_sales_journal():
     if fmt == "pdf":
         return _pdf_response(title, headers, data, fname + ".pdf", landscape=True)
     return _csv_response(data, headers, fname + ".csv")
+
+
+# ------------------------------------------------------------------
+# Google Drive upload — wraps any report as a Google Sheet
+# ------------------------------------------------------------------
+
+DRIVE_TOKEN_PATH = "/opt/red-nun-dashboard/integrations/google/google_token.pickle"
+
+def _get_drive_service():
+    """Build a Google Drive API service, refreshing the token if needed."""
+    import pickle
+    from googleapiclient.discovery import build
+    from google.auth.transport.requests import Request
+
+    with open(DRIVE_TOKEN_PATH, "rb") as f:
+        creds = pickle.load(f)
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        with open(DRIVE_TOKEN_PATH, "wb") as f:
+            pickle.dump(creds, f)
+    return build("drive", "v3", credentials=creds)
+
+
+@report_bp.route("/api/reports/drive_upload")
+@login_required
+def report_drive_upload():
+    """Generate a report as CSV, upload to Google Drive as a Sheet, return the URL."""
+    from googleapiclient.http import MediaIoBaseUpload
+    from werkzeug.datastructures import ImmutableMultiDict
+
+    report_key = request.args.get("report")
+    if not report_key:
+        return jsonify({"error": "Missing report parameter"}), 400
+
+    report_funcs = {
+        "daily_sales": report_daily_sales,
+        "monthly_sales": report_monthly_sales,
+        "sales_tax": report_sales_tax,
+        "ap_aging": report_ap_aging,
+        "vendor_spend": report_vendor_spend,
+        "payment_history": report_payment_history,
+        "cogs": report_cogs,
+        "pour_cost": report_pour_cost,
+        "invoice_detail": report_invoice_detail,
+        "sales_journal": report_sales_journal,
+    }
+    func = report_funcs.get(report_key)
+    if not func:
+        return jsonify({"error": f"Unknown report: {report_key}"}), 400
+
+    # Call the report handler with format forced to csv
+    location = request.args.get("location", "dennis")
+    start = request.args.get("start", "")
+    end = request.args.get("end", "")
+
+    original_args = request.args
+    request.args = ImmutableMultiDict({
+        "location": location, "start": start, "end": end, "format": "csv",
+    })
+    try:
+        csv_response = func()
+    except Exception as e:
+        logger.exception("Drive upload — report generation failed")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        request.args = original_args
+
+    csv_bytes = csv_response.get_data()
+
+    # Sheet name
+    report_info = next((r for r in REPORT_CATALOG if r["key"] == report_key), None)
+    title = report_info["title"] if report_info else report_key
+    loc_label = LOC_LABELS.get(location, location)
+    sheet_name = f"{title} — {loc_label} — {start} to {end}"
+
+    try:
+        service = _get_drive_service()
+        file_metadata = {
+            "name": sheet_name,
+            "mimeType": "application/vnd.google-apps.spreadsheet",
+        }
+        media = MediaIoBaseUpload(
+            io.BytesIO(csv_bytes), mimetype="text/csv", resumable=False,
+        )
+        created = service.files().create(
+            body=file_metadata, media_body=media, fields="id",
+        ).execute()
+        file_id = created["id"]
+        return jsonify({"url": f"https://docs.google.com/spreadsheets/d/{file_id}"})
+    except Exception as e:
+        logger.exception("Drive upload failed")
+        return jsonify({"error": f"Google Drive upload failed: {e}"}), 500

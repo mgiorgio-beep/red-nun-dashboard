@@ -95,6 +95,7 @@
         <select id="cfg-format">
           <option value="csv">CSV</option>
           <option value="pdf">PDF</option>
+          <option value="sheets">Google Sheets</option>
         </select>
       </div>
       <div>
@@ -207,6 +208,21 @@ async function generate() {
 
   if (!start || !end) { toast('Please select a date range'); btn.disabled = false; btn.textContent = 'Download'; return; }
 
+  if (format === 'sheets') {
+    btn.textContent = 'Opening in Drive...';
+    const url = `/api/reports/drive_upload?report=${selectedReport}&location=${location}&start=${start}&end=${end}`;
+    try {
+      const r = await fetch(url);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Drive upload failed');
+      window.open(d.url, '_blank');
+    } catch (e) {
+      toast(e.message);
+    }
+    btn.disabled = false; btn.textContent = 'Download';
+    return;
+  }
+
   const url = `/api/reports/${selectedReport}?location=${location}&start=${start}&end=${end}&format=${format}`;
 
   try {
@@ -216,7 +232,6 @@ async function generate() {
     const blob = await r.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    // Extract filename from Content-Disposition header
     const cd = r.headers.get('Content-Disposition') || '';
     const match = cd.match(/filename=(.+)/);
     a.download = match ? match[1] : `report.${format}`;

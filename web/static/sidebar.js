@@ -107,7 +107,9 @@ if(path==='/order-guide')return 'nav-orderguide';
 if(path==='/specials-admin')return 'nav-specials';
 if(path==='/payments')return 'nav-payments';
 if(path==='/sales-journal'){var sp=new URLSearchParams(window.location.search);return sp.get('tab')==='export'?'nav-acct-export':'nav-acct-entries';}
-return 'nav-overview';
+if(path==='/reports')return 'nav-acct-reports';
+if(path==='/sales-mapping')return 'nav-acct-mapping';
+return 'nav-dashboard';
 }
 function setActiveItem(id){
 document.querySelectorAll('.rn-sb-child').forEach(function(el){el.classList.toggle('active',el.id===id)});
@@ -300,16 +302,20 @@ fetch('/api/auth/check').then(function(r){return r.json()}).then(function(u){
     // Hide Vendor Scrapers nav item (admin only)
     var vs=document.getElementById('nav-vendorstatus');
     if(vs)vs.style.display='none';
-    // Hide Sales Mapping + Payment Accounts (admin only)
+    // Hide Sales Mapping, Payment Accounts, Export (admin only)
     var sm=document.getElementById('nav-acct-mapping');
     if(sm)sm.style.display='none';
     var pa=document.getElementById('nav-acct-payaccts');
     if(pa)pa.style.display='none';
+    var ex=document.getElementById('nav-acct-export');
+    if(ex)ex.style.display='none';
     // Manager: hide Bill Pay entirely
     if(u.role==='manager'){
       var bp=document.getElementById('sec-billpay');
       if(bp)bp.style.display='none';
     }
+    // Re-run active item highlighting after hiding so section stays open
+    setActiveItem(getActiveId());
   }
 
   // Admin sidebar section
