@@ -23,9 +23,9 @@ from num2words import num2words
 
 logger = logging.getLogger(__name__)
 
-ASSETS_DIR = "/opt/rednun/check_assets"
-MICR_FONT_PATH = os.path.join(ASSETS_DIR, "micr-e13b.ttf")
-SIGNATURE_PATH = os.path.join(ASSETS_DIR, "signature.png")
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "integrations", "quickbooks", "check_assets")
+MICR_FONT_PATH = os.path.abspath(os.path.join(ASSETS_DIR, "micr-e13b.ttf"))
+SIGNATURE_PATH = os.path.abspath(os.path.join(ASSETS_DIR, "signature.png"))
 
 # Page dimensions
 PAGE_W = 612  # pt
