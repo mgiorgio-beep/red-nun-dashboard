@@ -266,5 +266,213 @@ async function init() {
 
 init();
 </script>
+
+<!-- ── PAYROLL SECTION ──────────────────────────────────────────────────── -->
+<style>
+.pr-section { max-width: 960px; margin: 32px auto 0; padding: 0 20px 40px; }
+.pr-section-title { font-size: 16px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+.pr-section-sub { font-size: 12px; color: #9ca3af; margin-bottom: 20px; }
+.pr-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.pr-select { padding: 7px 10px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; color: #111827; font-size: 13px; font-family: inherit; }
+.pr-run-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.pr-run-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+.pr-run-header:hover { background: #f9fafb; }
+.pr-run-actions { display: flex; gap: 8px; padding: 10px 16px; background: #f8fafc; border-top: 1px solid #f1f5f9; flex-wrap: wrap; }
+.pr-run-actions a { padding: 5px 12px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; color: #374151; font-size: 11px; font-weight: 600; text-decoration: none; }
+.pr-run-actions a.primary { background: #38bdf8; border-color: #38bdf8; color: #020617; }
+.pr-emp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pr-emp-table th { padding: 7px 12px; text-align: left; color: #6b7280; font-weight: 500; background: #f8fafc; border-bottom: 1px solid #e5e7eb; }
+.pr-emp-table td { padding: 7px 12px; border-bottom: 1px solid #f1f5f9; color: #111827; }
+.pr-ytd-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 16px; }
+.pr-ytd-table th { padding: 8px 12px; text-align: left; background: #1e293b; color: #e2e8f0; font-weight: 600; }
+.pr-ytd-table td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; }
+.pr-ytd-table tr:last-child td { font-weight: 700; background: #f8fafc; }
+</style>
+
+<div class="pr-section">
+  <div class="pr-section-title">Payroll</div>
+  <div class="pr-section-sub">All payroll runs by location. Download QBO journal entries, per-run summaries, and YTD totals for your accountant.</div>
+
+  <div class="pr-controls">
+    <select class="pr-select" id="pr-rpt-location" onchange="prRptLoad()">
+      <option value="chatham">Chatham</option>
+      <option value="dennisport">Dennis Port</option>
+    </select>
+    <select class="pr-select" id="pr-rpt-year" onchange="prRptLoad()"></select>
+    <button class="rp-btn rp-btn-ghost" onclick="prRptLoadYTD()" style="font-size:13px">Load YTD Summary</button>
+  </div>
+
+  <div id="pr-rpt-runs"></div>
+  <div id="pr-rpt-empty" style="display:none;text-align:center;padding:40px;color:#9ca3af;font-size:13px">No payroll runs found for this selection.</div>
+
+  <!-- YTD Summary table -->
+  <div id="pr-rpt-ytd-wrap" style="display:none;margin-top:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:14px;font-weight:600;color:#111827">YTD Summary — <span id="pr-rpt-ytd-label"></span></div>
+      <a id="pr-rpt-ytd-dl" href="#" style="font-size:12px;color:#38bdf8;text-decoration:none;font-weight:600">Download CSV</a>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="pr-ytd-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Runs</th>
+            <th style="text-align:right">YTD Gross</th>
+            <th style="text-align:right">YTD Wages</th>
+            <th style="text-align:right">YTD Tips</th>
+            <th style="text-align:right">YTD EE Taxes</th>
+            <th style="text-align:right">YTD ER Taxes</th>
+            <th style="text-align:right">YTD Net</th>
+          </tr>
+        </thead>
+        <tbody id="pr-rpt-ytd-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // Populate year selector
+  var yearSel = document.getElementById('pr-rpt-year');
+  var yr = new Date().getFullYear();
+  for (var y = yr; y >= yr - 3; y--) {
+    var o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    yearSel.appendChild(o);
+  }
+
+  window.prRptLoad = async function() {
+    var loc  = document.getElementById('pr-rpt-location').value;
+    var year = document.getElementById('pr-rpt-year').value;
+    var wrap = document.getElementById('pr-rpt-runs');
+    var empty = document.getElementById('pr-rpt-empty');
+    wrap.innerHTML = '<div style="padding:20px;color:#9ca3af;font-size:13px">Loading...</div>';
+    try {
+      var r    = await fetch('/api/payroll/report/runs?location=' + loc + '&year=' + year);
+      var runs = await r.json();
+      if (!runs.length) { wrap.innerHTML = ''; empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      var html = '';
+      runs.forEach(function(run) {
+        var locLabel = run.location === 'chatham' ? 'Chatham' : 'Dennis Port';
+        html += '<div class="pr-run-card">';
+        html += '<div class="pr-run-header" onclick="prRptToggle(' + run.id + ',this)">';
+        html += '<div style="flex:1">';
+        html += '<div style="font-size:13px;font-weight:600;color:#111827">' + locLabel + ' — Pay Date: ' + (run.pay_date||'') + '</div>';
+        html += '<div style="font-size:11px;color:#9ca3af;margin-top:2px">Period: ' + (run.pay_period_start||'') + ' — ' + (run.pay_period_end||'') + ' &nbsp;|&nbsp; ' + (run.employee_count||0) + ' employees &nbsp;|&nbsp; ' + (run.check_count||0) + ' checks</div>';
+        html += '</div>';
+        html += '<div style="text-align:right">';
+        html += '<div style="font-size:13px;font-weight:700;color:#111827">Gross $' + (run.total_gross||0).toFixed(2) + '</div>';
+        html += '<div style="font-size:12px;color:#22c55e;font-weight:600">Net $' + (run.total_net||0).toFixed(2) + '</div>';
+        html += '</div>';
+        html += '<span style="color:#9ca3af;font-size:14px" id="prr-arrow-' + run.id + '">&#9660;</span>';
+        html += '</div>';
+        html += '<div class="pr-run-actions">';
+        if (run.checks_pdf_path) html += '<a class="primary" href="/api/payroll/runs/' + run.id + '/checks-pdf" target="_blank">Checks PDF</a>';
+        html += '<a href="/api/payroll/runs/' + run.id + '/qbo-csv">QBO Journal Entry</a>';
+        html += '<a href="/api/payroll/runs/' + run.id + '/summary-csv">Employee Summary</a>';
+        html += '<a href="/api/payroll/runs/' + run.id + '/ytd-csv">YTD CSV</a>';
+        html += '<a href="/api/payroll/runs/' + run.id + '/zip">All Files (ZIP)</a>';
+        html += '</div>';
+        html += '<div id="prr-detail-' + run.id + '" style="display:none">';
+        html += '<table class="pr-emp-table"><thead><tr>';
+        html += '<th>Employee</th><th>Method</th><th>Hours</th>';
+        html += '<th style="text-align:right">Gross</th><th style="text-align:right">EE Taxes</th>';
+        html += '<th style="text-align:right">Net</th><th>Check #</th>';
+        html += '</tr></thead><tbody id="prr-emps-' + run.id + '">';
+        html += '<tr><td colspan="7" style="padding:16px;text-align:center;color:#9ca3af">Loading...</td></tr>';
+        html += '</tbody></table></div>';
+        html += '</div>';
+      });
+      wrap.innerHTML = html;
+    } catch(e) {
+      wrap.innerHTML = '<div style="padding:20px;color:#dc2626">Error loading payroll runs</div>';
+    }
+  };
+
+  window.prRptToggle = async function(runId, el) {
+    var detail = document.getElementById('prr-detail-' + runId);
+    var arrow  = document.getElementById('prr-arrow-' + runId);
+    var open = detail.style.display !== 'none';
+    detail.style.display = open ? 'none' : 'block';
+    if (arrow) arrow.innerHTML = open ? '&#9660;' : '&#9650;';
+    if (!open) {
+      var tbody = document.getElementById('prr-emps-' + runId);
+      try {
+        var r    = await fetch('/api/payroll/runs/' + runId);
+        var data = await r.json();
+        var checks = data.checks || [];
+        if (!checks.length) { tbody.innerHTML = '<tr><td colspan="7" style="padding:16px;text-align:center;color:#9ca3af">No employees</td></tr>'; return; }
+        var html = '';
+        checks.forEach(function(c) {
+          var method = (c.payment_method||'Manual').toLowerCase() === 'direct deposit' ? 'Direct Deposit' : 'Check';
+          var tips = ((c.paycheck_tips||0) + (c.cash_tips||0));
+          html += '<tr>';
+          html += '<td style="font-weight:500">' + (c.employee_name||'') + '</td>';
+          html += '<td style="color:#6b7280">' + method + '</td>';
+          html += '<td>' + (c.total_hours||0).toFixed(2) + '</td>';
+          html += '<td style="text-align:right">$' + (c.gross_pay||0).toFixed(2) + '</td>';
+          html += '<td style="text-align:right;color:#dc2626">$' + (c.ee_taxes||0).toFixed(2) + '</td>';
+          html += '<td style="text-align:right;color:#16a34a;font-weight:600">$' + (c.net_pay||0).toFixed(2) + '</td>';
+          html += '<td>' + (c.check_number || (method === 'Direct Deposit' ? 'DD' : '—')) + '</td>';
+          html += '</tr>';
+        });
+        tbody.innerHTML = html;
+      } catch(e) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:16px;text-align:center;color:#dc2626">Error loading</td></tr>';
+      }
+    }
+  };
+
+  window.prRptLoadYTD = async function() {
+    var loc  = document.getElementById('pr-rpt-location').value;
+    var year = document.getElementById('pr-rpt-year').value;
+    var wrap = document.getElementById('pr-rpt-ytd-wrap');
+    var body = document.getElementById('pr-rpt-ytd-body');
+    document.getElementById('pr-rpt-ytd-label').textContent = (loc === 'chatham' ? 'Chatham' : 'Dennis Port') + ' ' + year;
+    document.getElementById('pr-rpt-ytd-dl').href = '/api/payroll/report/ytd?location=' + loc + '&year=' + year + '&format=csv';
+    wrap.style.display = 'block';
+    body.innerHTML = '<tr><td colspan="8" style="padding:16px;color:#9ca3af">Loading...</td></tr>';
+    try {
+      var r    = await fetch('/api/payroll/report/ytd?location=' + loc + '&year=' + year);
+      var rows = await r.json();
+      if (!rows.length) { body.innerHTML = '<tr><td colspan="8" style="padding:16px;color:#9ca3af">No data</td></tr>'; return; }
+      var totGross=0, totWages=0, totTips=0, totEE=0, totER=0, totNet=0;
+      var html = '';
+      rows.forEach(function(row) {
+        var tips = (row.ytd_paycheck_tips||0) + (row.ytd_cash_tips||0);
+        totGross += row.ytd_gross||0; totWages += row.ytd_wages||0; totTips += tips;
+        totEE += row.ytd_ee_taxes||0; totER += row.ytd_er_taxes||0; totNet += row.ytd_net||0;
+        html += '<tr>';
+        html += '<td style="font-weight:500">' + (row.employee_name||'') + '</td>';
+        html += '<td>' + (row.payroll_count||0) + '</td>';
+        html += '<td style="text-align:right">$' + (row.ytd_gross||0).toFixed(2) + '</td>';
+        html += '<td style="text-align:right">$' + (row.ytd_wages||0).toFixed(2) + '</td>';
+        html += '<td style="text-align:right">$' + tips.toFixed(2) + '</td>';
+        html += '<td style="text-align:right;color:#dc2626">$' + (row.ytd_ee_taxes||0).toFixed(2) + '</td>';
+        html += '<td style="text-align:right;color:#92400e">$' + (row.ytd_er_taxes||0).toFixed(2) + '</td>';
+        html += '<td style="text-align:right;color:#16a34a;font-weight:600">$' + (row.ytd_net||0).toFixed(2) + '</td>';
+        html += '</tr>';
+      });
+      // Totals row
+      html += '<tr>';
+      html += '<td>TOTAL</td><td></td>';
+      html += '<td style="text-align:right">$' + totGross.toFixed(2) + '</td>';
+      html += '<td style="text-align:right">$' + totWages.toFixed(2) + '</td>';
+      html += '<td style="text-align:right">$' + totTips.toFixed(2) + '</td>';
+      html += '<td style="text-align:right;color:#dc2626">$' + totEE.toFixed(2) + '</td>';
+      html += '<td style="text-align:right;color:#92400e">$' + totER.toFixed(2) + '</td>';
+      html += '<td style="text-align:right;color:#16a34a">$' + totNet.toFixed(2) + '</td>';
+      html += '</tr>';
+      body.innerHTML = html;
+    } catch(e) {
+      body.innerHTML = '<tr><td colspan="8" style="padding:16px;color:#dc2626">Error loading YTD data</td></tr>';
+    }
+  };
+
+  prRptLoad();
+})();
+</script>
 </body>
 </html>

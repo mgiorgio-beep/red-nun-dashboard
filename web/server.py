@@ -51,6 +51,7 @@ from scraping.sports_guide.espn_odds_fetcher import fetch_all_odds
 from staff.staff import staff_bp
 from staff.tv_power import tv_power_bp
 from routes.billpay_routes import billpay_bp, init_recurring_tables
+from routes.payroll_routes import payroll_bp, init_payroll_tables
 from routes.payment_routes import payment_bp, init_payment_tables
 from integrations.invoices.processor import init_invoice_tables
 import secrets
@@ -99,6 +100,7 @@ app.register_blueprint(canonical_product_bp)
 app.register_blueprint(staff_bp)
 app.register_blueprint(tv_power_bp)
 app.register_blueprint(billpay_bp)
+app.register_blueprint(payroll_bp)
 app.register_blueprint(payment_bp)
 app.register_blueprint(availability_bp)
 app.register_blueprint(application_bp)
@@ -135,6 +137,12 @@ try:
     logger.info("Recurring bills tables initialized")
 except Exception as e:
     logger.warning(f"Recurring bills table init failed: {e}")
+
+try:
+    init_payroll_tables()
+    logger.info("Payroll tables initialized")
+except Exception as e:
+    logger.warning(f"Payroll table init failed: {e}")
 
 
 # ------------------------------------------------------------------
