@@ -1802,23 +1802,41 @@ def export_check_register():
 # ─────────────────────────────────────────────
 
 def init_recurring_tables():
-    """Create recurring_bills and recurring_bill_payments tables if not exist."""
+    """Create recurring_bills, recurring_bill_lines, and recurring_bill_payments tables."""
     conn = get_connection()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS recurring_bills (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             vendor_name TEXT NOT NULL,
             description TEXT,
-            amount REAL NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
             frequency TEXT NOT NULL DEFAULT 'monthly',
             start_date TEXT,
             due_day INTEGER DEFAULT 1,
+            days_before_due INTEGER DEFAULT 0,
             payment_method TEXT DEFAULT 'check',
             payable_to TEXT,
             location TEXT DEFAULT 'dennis',
             active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    # Add days_before_due column if upgrading from earlier version
+    try:
+        conn.execute("ALTER TABLE recurring_bills ADD COLUMN days_before_due INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS recurring_bill_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bill_id INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            account TEXT,
+            sort_order INTEGER DEFAULT 0,
+            FOREIGN KEY(bill_id) REFERENCES recurring_bills(id)
         )
     """)
     conn.execute("""
@@ -1839,6 +1857,28 @@ def init_recurring_tables():
     """)
     conn.commit()
     conn.close()
+
+
+def _get_lines(conn, bill_id):
+    rows = conn.execute(
+        "SELECT id, description, amount, account, sort_order FROM recurring_bill_lines WHERE bill_id=? ORDER BY sort_order, id",
+        (bill_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _save_lines(conn, bill_id, lines):
+    """Replace all lines for a bill and return the total."""
+    conn.execute("DELETE FROM recurring_bill_lines WHERE bill_id=?", (bill_id,))
+    total = 0.0
+    for i, line in enumerate(lines):
+        amt = float(line.get("amount") or 0)
+        total += amt
+        conn.execute(
+            "INSERT INTO recurring_bill_lines (bill_id, description, amount, account, sort_order) VALUES (?,?,?,?,?)",
+            (bill_id, line.get("description",""), amt, line.get("account",""), i)
+        )
+    return total
 
 
 def _next_due_date(frequency, start_date, due_day):
@@ -1979,12 +2019,15 @@ def get_recurring_bills():
     where = [] if include_inactive else ["active = 1"]
     sql = "SELECT * FROM recurring_bills" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY vendor_name"
     rows = conn.execute(sql).fetchall()
-    conn.close()
     result = []
     for r in rows:
         b = dict(r)
         b['next_due_date'] = _next_due_date(b['frequency'], b['start_date'], b['due_day'])
+        b['lines'] = _get_lines(conn, b['id'])
+        if b['lines']:
+            b['amount'] = sum(l['amount'] for l in b['lines'])
         result.append(b)
+    conn.close()
     return jsonify(result)
 
 
@@ -1993,11 +2036,15 @@ def get_recurring_bills():
 def get_recurring_bill(bill_id):
     conn = get_connection()
     row = conn.execute("SELECT * FROM recurring_bills WHERE id = ?", (bill_id,)).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         return jsonify({"error": "Not found"}), 404
     b = dict(row)
     b['next_due_date'] = _next_due_date(b['frequency'], b['start_date'], b['due_day'])
+    b['lines'] = _get_lines(conn, b['id'])
+    if b['lines']:
+        b['amount'] = sum(l['amount'] for l in b['lines'])
+    conn.close()
     return jsonify(b)
 
 
@@ -2006,20 +2053,23 @@ def get_recurring_bill(bill_id):
 def create_recurring_bill():
     data = request.get_json(silent=True) or {}
     vendor_name = data.get("vendor_name", "").strip()
-    amount = float(data.get("amount") or 0)
-    if not vendor_name or amount <= 0:
-        return jsonify({"error": "vendor_name and amount required"}), 400
+    lines = data.get("lines", [])
+    if not vendor_name:
+        return jsonify({"error": "vendor_name required"}), 400
     conn = get_connection()
     cur = conn.execute("""
         INSERT INTO recurring_bills (vendor_name, description, amount, frequency,
-            start_date, due_day, payment_method, payable_to, location, active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (vendor_name, data.get("description",""), amount,
+            start_date, due_day, days_before_due, payment_method, payable_to, location, active)
+        VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (vendor_name, data.get("description",""),
           data.get("frequency","monthly"), data.get("start_date"),
-          int(data.get("due_day") or 1), data.get("payment_method","check"),
-          data.get("payable_to",""), data.get("location","dennis"),
-          int(data.get("active", 1))))
+          int(data.get("due_day") or 1), int(data.get("days_before_due") or 0),
+          data.get("payment_method","check"), data.get("payable_to",""),
+          data.get("location","dennis"), int(data.get("active", 1))))
     new_id = cur.lastrowid
+    total = _save_lines(conn, new_id, lines)
+    if total > 0:
+        conn.execute("UPDATE recurring_bills SET amount=? WHERE id=?", (total, new_id))
     conn.commit()
     conn.close()
     return jsonify({"status": "ok", "id": new_id}), 201
@@ -2029,17 +2079,21 @@ def create_recurring_bill():
 @admin_or_accountant_required
 def update_recurring_bill(bill_id):
     data = request.get_json(silent=True) or {}
+    lines = data.get("lines", [])
     conn = get_connection()
     conn.execute("""
-        UPDATE recurring_bills SET vendor_name=?, description=?, amount=?, frequency=?,
-            start_date=?, due_day=?, payment_method=?, payable_to=?, location=?, active=?,
-            updated_at=datetime('now')
+        UPDATE recurring_bills SET vendor_name=?, description=?, frequency=?,
+            start_date=?, due_day=?, days_before_due=?, payment_method=?, payable_to=?,
+            location=?, active=?, updated_at=datetime('now')
         WHERE id=?
     """, (data.get("vendor_name",""), data.get("description",""),
-          float(data.get("amount") or 0), data.get("frequency","monthly"),
-          data.get("start_date"), int(data.get("due_day") or 1),
+          data.get("frequency","monthly"), data.get("start_date"),
+          int(data.get("due_day") or 1), int(data.get("days_before_due") or 0),
           data.get("payment_method","check"), data.get("payable_to",""),
           data.get("location","dennis"), int(data.get("active",1)), bill_id))
+    total = _save_lines(conn, bill_id, lines)
+    if total > 0:
+        conn.execute("UPDATE recurring_bills SET amount=? WHERE id=?", (total, bill_id))
     conn.commit()
     conn.close()
     return jsonify({"status": "ok"})
@@ -2050,6 +2104,7 @@ def update_recurring_bill(bill_id):
 def delete_recurring_bill(bill_id):
     conn = get_connection()
     conn.execute("DELETE FROM recurring_bill_payments WHERE bill_id = ?", (bill_id,))
+    conn.execute("DELETE FROM recurring_bill_lines WHERE bill_id = ?", (bill_id,))
     conn.execute("DELETE FROM recurring_bills WHERE id = ?", (bill_id,))
     conn.commit()
     conn.close()
@@ -2059,7 +2114,9 @@ def delete_recurring_bill(bill_id):
 @billpay_bp.route("/api/billpay/recurring/due", methods=["GET"])
 @admin_or_accountant_required
 def get_recurring_due():
-    """Return bills due on or before a given date that haven't been paid/skipped."""
+    """Return bills due on or before a given date that haven't been paid/skipped.
+    Respects days_before_due: a bill with days_before_due=3 appears 3 days early."""
+    from datetime import date as ddate, timedelta
     target_date = request.args.get("date") or date.today().isoformat()
     location = request.args.get("location")
     conn = get_connection()
@@ -2075,10 +2132,15 @@ def get_recurring_due():
     result = []
     for r in rows:
         b = dict(r)
-        due_date_str = _is_due_on(b, target_date)
+        days_early = int(b.get('days_before_due') or 0)
+        # Check against an effective date shifted forward by days_early
+        try:
+            effective_date = (ddate.fromisoformat(target_date) + timedelta(days=days_early)).isoformat()
+        except Exception:
+            effective_date = target_date
+        due_date_str = _is_due_on(b, effective_date)
         if not due_date_str:
             continue
-        # Check if already paid or skipped for this due date
         existing = conn.execute(
             "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=?",
             (b['id'], due_date_str)
@@ -2086,6 +2148,9 @@ def get_recurring_due():
         if existing:
             continue
         b['due_date'] = due_date_str
+        b['lines'] = _get_lines(conn, b['id'])
+        if b['lines']:
+            b['amount'] = sum(l['amount'] for l in b['lines'])
         result.append(b)
 
     conn.close()

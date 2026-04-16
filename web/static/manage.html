@@ -6631,21 +6631,60 @@ async function rcDeleteBill(billId) {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
+// ── Line item management ──
+var _rcLines = [];
+
+function rcAddLine(desc, amt, acct) {
+  _rcLines.push({description: desc||'', amount: amt||'', account: acct||''});
+  rcRenderLines();
+}
+
+function rcRemoveLine(i) {
+  _rcLines.splice(i, 1);
+  rcRenderLines();
+}
+
+function rcRenderLines() {
+  var c = document.getElementById('rc-lines-container');
+  if (!c) return;
+  if (!_rcLines.length) {
+    c.innerHTML = '<div style="text-align:center;padding:12px;color:var(--text3);font-size:12px">No lines yet — click "+ Add Line"</div>';
+    rcUpdateLineTotal();
+    return;
+  }
+  c.innerHTML = _rcLines.map(function(l, i) {
+    return '<div style="display:grid;grid-template-columns:1fr 90px 120px 28px;gap:4px;margin-bottom:4px">' +
+      '<input type="text" value="' + (l.description||'').replace(/"/g,'&quot;') + '" oninput="_rcLines['+i+'].description=this.value" placeholder="Description" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);font-size:12px;color:#111827">' +
+      '<input type="number" value="' + (l.amount||'') + '" step="0.01" oninput="_rcLines['+i+'].amount=parseFloat(this.value)||0;rcUpdateLineTotal()" placeholder="0.00" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);font-size:12px;color:#111827;text-align:right">' +
+      '<input type="text" value="' + (l.account||'').replace(/"/g,'&quot;') + '" oninput="_rcLines['+i+'].account=this.value" list="rc-acct-list" placeholder="Account" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);font-size:12px;color:#111827">' +
+      '<button onclick="rcRemoveLine('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:0;line-height:1">&times;</button>' +
+    '</div>';
+  }).join('');
+  rcUpdateLineTotal();
+}
+
+function rcUpdateLineTotal() {
+  var total = _rcLines.reduce(function(s, l){ return s + (parseFloat(l.amount)||0); }, 0);
+  var el = document.getElementById('rc-lines-total');
+  if (el) el.textContent = '$' + total.toFixed(2);
+}
+
 async function rcOpenModal(billId) {
   var modal = document.getElementById('rc-bill-modal');
   var titleEl = document.getElementById('rc-modal-title');
+  _rcLines = [];
   document.getElementById('rc-bill-id').value = '';
   document.getElementById('rc-bill-vendor').value = '';
   document.getElementById('rc-bill-desc').value = '';
-  document.getElementById('rc-bill-amount').value = '';
   document.getElementById('rc-bill-freq').value = 'monthly';
   document.getElementById('rc-bill-startdate').value = '';
   document.getElementById('rc-bill-dueday').value = '1';
+  document.getElementById('rc-bill-daysbefore').value = '0';
   document.getElementById('rc-bill-method').value = 'check';
-  document.getElementById('rc-bill-payto').value = '';
   document.getElementById('rc-bill-loc').value = 'dennis';
   document.getElementById('rc-bill-active').checked = true;
-  // Load vendor suggestions into datalist
+  rcRenderLines();
+  // Load vendor suggestions
   try {
     var vr = await fetch('/api/billpay/vendors');
     var vd = await vr.json();
@@ -6660,36 +6699,43 @@ async function rcOpenModal(billId) {
       document.getElementById('rc-bill-id').value = b.id;
       document.getElementById('rc-bill-vendor').value = b.vendor_name || '';
       document.getElementById('rc-bill-desc').value = b.description || '';
-      document.getElementById('rc-bill-amount').value = b.amount || '';
       document.getElementById('rc-bill-freq').value = b.frequency || 'monthly';
       document.getElementById('rc-bill-startdate').value = b.start_date || '';
       document.getElementById('rc-bill-dueday').value = b.due_day || '1';
+      document.getElementById('rc-bill-daysbefore').value = b.days_before_due || '0';
       document.getElementById('rc-bill-method').value = b.payment_method || 'check';
-      document.getElementById('rc-bill-payto').value = b.payable_to || '';
       document.getElementById('rc-bill-loc').value = b.location || 'dennis';
       document.getElementById('rc-bill-active').checked = !!b.active;
+      _rcLines = (b.lines || []).map(function(l){ return {description:l.description||'',amount:l.amount||0,account:l.account||''}; });
+      if (!_rcLines.length && b.description) _rcLines.push({description:b.description,amount:b.amount||0,account:''});
+      rcRenderLines();
     } catch(e) {}
   } else {
     if (titleEl) titleEl.textContent = 'Add Recurring Bill';
+    // Start with one empty line
+    rcAddLine();
   }
   modal.style.display = 'flex';
 }
 
 async function rcSaveBill() {
   var billId = document.getElementById('rc-bill-id').value;
+  var vendor = document.getElementById('rc-bill-vendor').value.trim();
+  if (!vendor) { alert('Vendor is required'); return; }
+  var validLines = _rcLines.filter(function(l){ return l.description && parseFloat(l.amount) > 0; });
+  if (!validLines.length) { alert('At least one account split line with description and amount is required'); return; }
   var data = {
-    vendor_name: document.getElementById('rc-bill-vendor').value,
+    vendor_name: vendor,
     description: document.getElementById('rc-bill-desc').value,
-    amount: parseFloat(document.getElementById('rc-bill-amount').value) || 0,
     frequency: document.getElementById('rc-bill-freq').value,
     start_date: document.getElementById('rc-bill-startdate').value,
     due_day: parseInt(document.getElementById('rc-bill-dueday').value) || 1,
+    days_before_due: parseInt(document.getElementById('rc-bill-daysbefore').value) || 0,
     payment_method: document.getElementById('rc-bill-method').value,
-    payable_to: document.getElementById('rc-bill-payto').value,
     location: document.getElementById('rc-bill-loc').value,
-    active: document.getElementById('rc-bill-active').checked ? 1 : 0
+    active: document.getElementById('rc-bill-active').checked ? 1 : 0,
+    lines: validLines
   };
-  if (!data.vendor_name || !data.amount) { alert('Vendor and amount are required'); return; }
   try {
     var url = billId ? '/api/billpay/recurring/' + billId : '/api/billpay/recurring';
     var method = billId ? 'PUT' : 'POST';
@@ -6714,7 +6760,7 @@ async function rcPrintChecks() {
     var checkNum = parseInt(rcGetNextCheckNum(loc)) || 1001;
     var checksHTML = bills.map(function(b) {
       var cn = checkNum++;
-      return rcCheckHTML(b.payable_to||b.vendor_name, b.amount, cn, date, b.description||'');
+      return rcCheckHTML(b.payable_to||b.vendor_name, b.amount, cn, date, b.description||'', b.lines||[]);
     }).join('<div style="page-break-after:always"></div>');
     rcSetNextCheckNum(loc, checkNum);
     var el = document.getElementById('rc-stat-checknum');
@@ -6728,13 +6774,13 @@ async function rcPrintChecks() {
 
 function rcPrintSingleCheck(b) {
   var win = window.open('', '_blank');
-  var html = rcCheckHTML(b.vendor_name, b.amount, b.check_number, b.date, b.memo||'');
+  var html = rcCheckHTML(b.vendor_name, b.amount, b.check_number, b.date, b.memo||'', b.lines||[]);
   win.document.write('<html><head><title>Check</title><style>body{font-family:Arial,sans-serif}@media print{body{margin:0}}</style></head><body>' + html + '</body></html>');
   win.document.close();
   win.print();
 }
 
-function rcCheckHTML(payTo, amount, checkNum, date, memo) {
+function rcCheckHTML(payTo, amount, checkNum, date, memo, lines) {
   var dollars = Math.floor(amount);
   var cents = Math.round((amount - dollars) * 100);
   var ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -6746,6 +6792,16 @@ function rcCheckHTML(payTo, amount, checkNum, date, memo) {
     return ones[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' ' + numToWords(n%100) : '');
   }
   var amountWords = numToWords(dollars) + ' and ' + String(cents).padStart(2,'0') + '/100 Dollars';
+  var linesHTML = '';
+  if (lines && lines.length > 1) {
+    linesHTML = '<div style="margin-top:16px;border-top:1px solid #ccc;padding-top:12px">' +
+      '<div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-transform:uppercase">Account Distribution</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+      '<tr style="border-bottom:1px solid #eee"><th style="text-align:left;padding:3px 4px;color:#888">Description</th><th style="text-align:left;padding:3px 4px;color:#888">Account</th><th style="text-align:right;padding:3px 4px;color:#888">Amount</th></tr>' +
+      lines.map(function(l){ return '<tr style="border-bottom:1px solid #f5f5f5"><td style="padding:3px 4px">' + (l.description||'') + '</td><td style="padding:3px 4px;color:#555">' + (l.account||'—') + '</td><td style="padding:3px 4px;text-align:right">$' + parseFloat(l.amount||0).toFixed(2) + '</td></tr>'; }).join('') +
+      '<tr style="border-top:2px solid #000"><td colspan="2" style="padding:4px;font-weight:600">Total</td><td style="padding:4px;text-align:right;font-weight:700">$' + amount.toFixed(2) + '</td></tr>' +
+      '</table></div>';
+  }
   return '<div style="border:2px solid #000;padding:24px;max-width:680px;margin:20px auto;font-size:14px">' +
     '<div style="display:flex;justify-content:space-between;margin-bottom:16px">' +
       '<div><strong style="font-size:16px">Red Nun Restaurant</strong><br><span style="font-size:12px;color:#555">Check #' + checkNum + '</span></div>' +
@@ -6760,7 +6816,8 @@ function rcCheckHTML(payTo, amount, checkNum, date, memo) {
       '<div><strong>Memo:</strong> <span style="border-bottom:1px solid #000;display:inline-block;min-width:200px">' + (memo||'') + '</span></div>' +
       '<div><strong>Authorized Signature:</strong> <span style="border-bottom:1px solid #000;display:inline-block;min-width:180px">&nbsp;</span></div>' +
     '</div>' +
-    '<div style="border-top:1px dashed #999;margin-top:8px;padding-top:8px;font-size:11px;color:#999;text-align:center">Red Nun Restaurant — ' + (date) + ' — Check #' + checkNum + '</div>' +
+    linesHTML +
+    '<div style="border-top:1px dashed #999;margin-top:8px;padding-top:8px;font-size:11px;color:#999;text-align:center">Red Nun Restaurant — ' + date + ' — Check #' + checkNum + '</div>' +
   '</div>';
 }
 
@@ -8071,6 +8128,9 @@ async function maRecalcCosts() {
   </div>
 </div>
 
+<!-- Account datalist for recurring bill lines -->
+<datalist id="rc-acct-list"></datalist>
+
 <!-- ── Recurring Bills: Pay Modal ── -->
 <div id="rc-pay-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1100;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 0">
   <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:440px;margin:auto">
@@ -8115,25 +8175,21 @@ async function maRecalcCosts() {
 
 <!-- ── Recurring Bills: Add/Edit Modal ── -->
 <div id="rc-bill-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1100;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 0">
-  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:500px;margin:auto">
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:560px;margin:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="color:#111827;margin:0;font-size:15px" id="rc-modal-title">Add Recurring Bill</h3>
       <button onclick="document.getElementById('rc-bill-modal').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">&times;</button>
     </div>
     <input type="hidden" id="rc-bill-id">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
       <div style="grid-column:1/-1">
-        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Vendor</label>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Vendor / Payee</label>
         <input type="text" id="rc-bill-vendor" list="rc-vendor-list" placeholder="Type vendor name…" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
         <datalist id="rc-vendor-list"></datalist>
       </div>
       <div style="grid-column:1/-1">
-        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Description / Bill Name</label>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Bill Name / Memo</label>
         <input type="text" id="rc-bill-desc" placeholder="e.g. Monthly Rent, Electric Bill" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Amount ($)</label>
-        <input type="number" id="rc-bill-amount" step="0.01" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
       </div>
       <div>
         <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Frequency</label>
@@ -8147,12 +8203,16 @@ async function maRecalcCosts() {
         </select>
       </div>
       <div>
-        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Start Date</label>
-        <input type="date" id="rc-bill-startdate" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
-      </div>
-      <div>
         <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Due Day of Month</label>
         <input type="number" id="rc-bill-dueday" min="1" max="31" value="1" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Show in Queue (days before due)</label>
+        <input type="number" id="rc-bill-daysbefore" min="0" max="30" value="0" placeholder="0 = on due date" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Start Date</label>
+        <input type="date" id="rc-bill-startdate" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
       </div>
       <div>
         <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Payment Method</label>
@@ -8171,17 +8231,33 @@ async function maRecalcCosts() {
           <option value="both">Both</option>
         </select>
       </div>
-      <div style="grid-column:1/-1">
-        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Payable To (if different from vendor)</label>
-        <input type="text" id="rc-bill-payto" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+    </div>
+
+    <!-- Account splits / line items -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:600;color:#111827">Account Splits</span>
+        <button onclick="rcAddLine()" style="padding:3px 10px;border-radius:6px;border:none;background:#38bdf8;color:#020617;font-size:11px;font-weight:600;cursor:pointer">+ Add Line</button>
       </div>
-      <div style="grid-column:1/-1">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#111827;cursor:pointer">
-          <input type="checkbox" id="rc-bill-active" checked> Active
-        </label>
+      <div style="display:grid;grid-template-columns:1fr 90px 120px 28px;gap:4px;margin-bottom:4px">
+        <span style="font-size:10px;color:var(--text3);font-weight:600;padding-left:2px">DESCRIPTION</span>
+        <span style="font-size:10px;color:var(--text3);font-weight:600">AMOUNT</span>
+        <span style="font-size:10px;color:var(--text3);font-weight:600">ACCOUNT</span>
+        <span></span>
+      </div>
+      <div id="rc-lines-container"></div>
+      <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--text3);margin-right:8px">Total:</span>
+        <span id="rc-lines-total" style="font-size:16px;font-weight:700;color:#111827">$0.00</span>
       </div>
     </div>
-    <div style="display:flex;gap:10px;margin-top:16px">
+
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#111827;cursor:pointer">
+        <input type="checkbox" id="rc-bill-active" checked> Active
+      </label>
+    </div>
+    <div style="display:flex;gap:10px">
       <button onclick="rcSaveBill()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Save Bill</button>
       <button onclick="document.getElementById('rc-bill-modal').style.display='none'" style="padding:10px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:13px;cursor:pointer">Cancel</button>
     </div>
