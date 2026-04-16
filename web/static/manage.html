@@ -1983,7 +1983,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
                 </tr></thead>
                 <tbody id="rc-queue-tbody"></tbody>
               </table>
-              <div id="rc-queue-empty" style="display:none;text-align:center;padding:40px;color:var(--text3);font-size:13px">✅ No bills due on this date</div>
+              <div id="rc-queue-empty" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No bills due on this date — add bills in the <strong>Recurring Bills</strong> tab</div>
             </div>
           </div>
 
@@ -6429,22 +6429,26 @@ async function rcLoadQueue() {
   }
   var date = dateEl.value;
   var loc = (document.getElementById('rc-queue-loc') || {}).value || '';
+  var tbody = document.getElementById('rc-queue-tbody');
+  var empty = document.getElementById('rc-queue-empty');
+  var stats = document.getElementById('rc-stats-row');
+  // Reset to empty state while loading
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Loading…</td></tr>';
+  if (empty) empty.style.display = 'none';
+  if (stats) stats.style.display = 'none';
   try {
     var params = 'date=' + date;
     if (loc) params += '&location=' + loc;
     var r = await fetch('/api/billpay/recurring/due?' + params);
+    if (!r.ok) throw new Error('Server error ' + r.status);
     var bills = await r.json();
-    var tbody = document.getElementById('rc-queue-tbody');
-    var empty = document.getElementById('rc-queue-empty');
-    var stats = document.getElementById('rc-stats-row');
     if (!bills.length) {
       if (tbody) tbody.innerHTML = '';
       if (empty) empty.style.display = '';
-      if (stats) stats.style.display = 'none';
       return;
     }
     if (empty) empty.style.display = 'none';
-    if (stats) { stats.style.display = 'grid'; }
+    if (stats) stats.style.display = 'grid';
     var total = bills.reduce(function(s,b){ return s + (b.amount||0); }, 0);
     var countEl = document.getElementById('rc-stat-count');
     var totalEl = document.getElementById('rc-stat-total');
@@ -6468,7 +6472,11 @@ async function rcLoadQueue() {
         '</td>' +
       '</tr>';
     }).join('');
-  } catch(e) { console.error('rcLoadQueue error:', e); }
+  } catch(e) {
+    console.error('rcLoadQueue error:', e);
+    if (tbody) tbody.innerHTML = '';
+    if (empty) { empty.textContent = 'Error loading queue — ' + e.message; empty.style.display = ''; }
+  }
 }
 
 async function rcLoadBills() {
