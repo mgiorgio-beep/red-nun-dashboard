@@ -1917,9 +1917,27 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             <button onclick="prOpenUpload()" style="padding:8px 20px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer">+ New Payroll Run</button>
           </div>
 
-          <!-- Runs list -->
-          <div id="pr-runs-list"></div>
-          <div id="pr-runs-empty" style="display:none;text-align:center;padding:60px;color:var(--text3);font-size:13px">No payroll runs yet. Click "+ New Payroll Run" to upload a 7shifts journal CSV.</div>
+          <!-- Runs table -->
+          <div class="card" style="padding:0;overflow:hidden">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border);background:#f8fafc">
+                  <th style="padding:10px 14px;text-align:left;color:var(--text3);font-weight:500">Pay Date</th>
+                  <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:500">Period</th>
+                  <th style="padding:10px 8px;text-align:center;color:var(--text3);font-weight:500">Emps</th>
+                  <th style="padding:10px 8px;text-align:center;color:var(--text3);font-weight:500">Checks</th>
+                  <th style="padding:10px 8px;text-align:right;color:var(--text3);font-weight:500">Gross</th>
+                  <th style="padding:10px 8px;text-align:right;color:var(--text3);font-weight:500">Net</th>
+                  <th style="padding:10px 14px;text-align:right;color:var(--text3);font-weight:500">Downloads</th>
+                </tr>
+              </thead>
+              <tbody id="pr-runs-tbody">
+                <tr id="pr-runs-empty-row">
+                  <td colspan="7" style="padding:50px;text-align:center;color:var(--text3)">No payroll runs yet. Click "+ New Payroll Run" to upload a 7shifts journal CSV.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <!-- Legacy individual checks (pre-run system) -->
           <div id="pr-legacy-wrap" style="display:none;margin-top:28px">
@@ -1977,6 +1995,14 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
               <input type="file" id="pr-up-pdf" accept=".pdf" onchange="prUploadPdfSelected(this)" style="display:none">
             </label>
             <div id="pr-up-pdf-name" style="font-size:11px;color:#22c55e;margin-top:4px;display:none"></div>
+          </div>
+
+          <div style="margin-bottom:16px;padding:10px 14px;border-radius:8px;background:#f8fafc;border:1px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#111827">
+              <input type="checkbox" id="pr-up-assign-checks" checked style="width:15px;height:15px;cursor:pointer">
+              Assign check numbers now
+            </label>
+            <div style="font-size:11px;color:#6b7280;margin-top:4px;padding-left:23px">Uncheck for past payrolls — preserves the current check number sequence. You can add check numbers later.</div>
           </div>
 
           <div id="pr-up-status" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:13px"></div>
@@ -6150,68 +6176,76 @@ function prSwitchLocation(loc) {
 
 async function prLoadRuns() {
   try {
-    var r = await fetch('/api/payroll/runs?location=' + _prLocation);
+    var r    = await fetch('/api/payroll/runs?location=' + _prLocation);
     var runs = await r.json();
-    var list  = document.getElementById('pr-runs-list');
-    var empty = document.getElementById('pr-runs-empty');
+    var tbody = document.getElementById('pr-runs-tbody');
+    var emptyRow = document.getElementById('pr-runs-empty-row');
+
+    // Remove all rows except the empty-row placeholder
+    Array.from(tbody.rows).forEach(function(row) {
+      if (row.id !== 'pr-runs-empty-row') tbody.removeChild(row);
+    });
+
     if (!runs.length) {
-      list.innerHTML = '';
-      empty.style.display = 'block';
+      emptyRow.style.display = '';
       return;
     }
-    empty.style.display = 'none';
-    var html = '';
+    emptyRow.style.display = 'none';
+
+    // Sort by pay_date descending (API already does this, but enforce client-side)
+    runs.sort(function(a, b) { return (b.pay_date || '').localeCompare(a.pay_date || ''); });
+
     runs.forEach(function(run) {
-      var loc   = run.location === 'chatham' ? 'Chatham' : 'Dennis Port';
-      var pdate = run.pay_date || '';
       var period = (run.pay_period_start || '') + ' — ' + (run.pay_period_end || '');
-      var gross = '$' + (run.total_gross || 0).toFixed(2);
-      var net   = '$' + (run.total_net   || 0).toFixed(2);
-      var empCt = run.employee_count || 0;
-      var chkCt = run.check_count   || 0;
-
-      html += '<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden">';
-      // Run header row
-      html += '<div style="display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--border)" onclick="prToggleRun(' + run.id + ',this)">';
-      html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-size:13px;font-weight:600;color:#111827">' + loc + ' — Pay Date: ' + pdate + '</div>';
-      html += '<div style="font-size:11px;color:var(--text3);margin-top:2px">Period: ' + period + ' &nbsp;|&nbsp; ' + empCt + ' employees &nbsp;|&nbsp; ' + chkCt + ' paper checks</div>';
-      html += '</div>';
-      html += '<div style="text-align:right;flex-shrink:0">';
-      html += '<div style="font-size:13px;font-weight:700;color:#111827">Gross ' + gross + '</div>';
-      html += '<div style="font-size:12px;color:#22c55e;font-weight:600">Net ' + net + '</div>';
-      html += '</div>';
-      html += '<span style="color:var(--text3);font-size:16px;flex-shrink:0" id="pr-arrow-' + run.id + '">&#9660;</span>';
-      html += '</div>';
-
-      // Action bar
-      html += '<div style="display:flex;gap:8px;padding:10px 16px;background:#f8fafc;flex-wrap:wrap">';
+      var gross  = '$' + (run.total_gross || 0).toFixed(2);
+      var net    = '$' + (run.total_net   || 0).toFixed(2);
+      var dls    = '';
       if (run.checks_pdf_path) {
-        html += '<a href="/api/payroll/runs/' + run.id + '/checks-pdf" target="_blank" style="padding:5px 12px;border-radius:6px;border:none;background:#38bdf8;color:#020617;font-size:11px;font-weight:600;cursor:pointer;text-decoration:none">Print Checks</a>';
+        dls += '<a href="/api/payroll/runs/' + run.id + '/checks-pdf" target="_blank" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:none;background:#38bdf8;color:#020617;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">Checks</a>';
       }
-      html += '<a href="/api/payroll/runs/' + run.id + '/qbo-csv" style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;cursor:pointer;text-decoration:none">QBO Journal</a>';
-      html += '<a href="/api/payroll/runs/' + run.id + '/summary-csv" style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;cursor:pointer;text-decoration:none">Summary CSV</a>';
-      html += '<a href="/api/payroll/runs/' + run.id + '/ytd-csv" style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;cursor:pointer;text-decoration:none">YTD CSV</a>';
-      html += '<a href="/api/payroll/runs/' + run.id + '/zip" style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;cursor:pointer;text-decoration:none">All Files (ZIP)</a>';
-      html += '</div>';
+      dls += '<a href="/api/payroll/runs/' + run.id + '/qbo-csv" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">QBO</a>';
+      dls += '<a href="/api/payroll/runs/' + run.id + '/zip" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">ZIP</a>';
 
-      // Employee detail (collapsed by default)
-      html += '<div id="pr-detail-' + run.id + '" style="display:none">';
-      html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
-      html += '<thead><tr style="border-bottom:1px solid var(--border);background:#f1f5f9">';
-      html += '<th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:500">Employee</th>';
-      html += '<th style="padding:8px 6px;text-align:left;color:var(--text3);font-weight:500">Method</th>';
-      html += '<th style="padding:8px 6px;text-align:right;color:var(--text3);font-weight:500">Gross</th>';
-      html += '<th style="padding:8px 6px;text-align:right;color:var(--text3);font-weight:500">EE Taxes</th>';
-      html += '<th style="padding:8px 6px;text-align:right;color:var(--text3);font-weight:500">Net</th>';
-      html += '<th style="padding:8px 6px;text-align:left;color:var(--text3);font-weight:500">Check #</th>';
-      html += '</tr></thead>';
-      html += '<tbody id="pr-emps-' + run.id + '"><tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text3)">Loading...</td></tr></tbody>';
-      html += '</table></div>';
+      // Main run row
+      var tr = tbody.insertRow();
+      tr.style.cssText = 'cursor:pointer;border-bottom:1px solid var(--border)';
+      tr.onmouseenter = function() { this.style.background = '#f8fafc'; };
+      tr.onmouseleave = function() { this.style.background = ''; };
+      tr.onclick = function() { prToggleRun(run.id); };
+      tr.innerHTML =
+        '<td style="padding:10px 14px;color:#111827;font-weight:600">' + (run.pay_date || '—') +
+          ' <span id="pr-arrow-' + run.id + '" style="color:var(--text3);font-size:11px">&#9660;</span></td>' +
+        '<td style="padding:10px 8px;color:var(--text3);font-size:12px">' + period + '</td>' +
+        '<td style="padding:10px 8px;text-align:center;color:#111827">' + (run.employee_count || 0) + '</td>' +
+        '<td style="padding:10px 8px;text-align:center;color:#111827">' + (run.check_count || 0) + '</td>' +
+        '<td style="padding:10px 8px;text-align:right;color:#111827">' + gross + '</td>' +
+        '<td style="padding:10px 8px;text-align:right;color:#22c55e;font-weight:600">' + net + '</td>' +
+        '<td style="padding:10px 14px;text-align:right">' + dls + '</td>';
 
-      html += '</div>';
+      // Detail row (hidden, spans full width)
+      var detailTr = tbody.insertRow();
+      detailTr.id = 'pr-detail-' + run.id;
+      detailTr.style.display = 'none';
+      var detailTd = detailTr.insertCell();
+      detailTd.colSpan = 7;
+      detailTd.style.cssText = 'padding:0;background:#fafafa;border-bottom:2px solid var(--border)';
+      detailTd.innerHTML =
+        '<div style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border)">' +
+        '<a href="/api/payroll/runs/' + run.id + '/summary-csv" style="padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none">Summary CSV</a>' +
+        '<a href="/api/payroll/runs/' + run.id + '/ytd-csv" style="padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none">YTD CSV</a>' +
+        '</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+        '<thead><tr style="background:#f1f5f9">' +
+        '<th style="padding:7px 14px;text-align:left;color:var(--text3);font-weight:500">Employee</th>' +
+        '<th style="padding:7px 8px;text-align:left;color:var(--text3);font-weight:500">Method</th>' +
+        '<th style="padding:7px 8px;text-align:right;color:var(--text3);font-weight:500">Gross</th>' +
+        '<th style="padding:7px 8px;text-align:right;color:var(--text3);font-weight:500">EE Taxes</th>' +
+        '<th style="padding:7px 8px;text-align:right;color:var(--text3);font-weight:500">Net</th>' +
+        '<th style="padding:7px 14px;text-align:left;color:var(--text3);font-weight:500">Check #</th>' +
+        '</tr></thead>' +
+        '<tbody id="pr-emps-' + run.id + '"><tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text3)">Click to expand</td></tr></tbody>' +
+        '</table>';
     });
-    list.innerHTML = html;
   } catch(e) { console.error('Payroll load error:', e); }
 }
 
@@ -6247,13 +6281,13 @@ async function prLoadLegacy() {
   } catch(e) { console.error('Legacy payroll load error:', e); }
 }
 
-async function prToggleRun(runId, headerEl) {
+async function prToggleRun(runId) {
   var detail = document.getElementById('pr-detail-' + runId);
   var arrow  = document.getElementById('pr-arrow-' + runId);
   if (!detail) return;
   var open = detail.style.display !== 'none';
-  detail.style.display = open ? 'none' : 'block';
-  arrow.innerHTML = open ? '&#9660;' : '&#9650;';
+  detail.style.display = open ? 'none' : 'table-row';
+  if (arrow) arrow.innerHTML = open ? '&#9660;' : '&#9650;';
   if (!open) {
     await prLoadRunEmployees(runId);
   }
@@ -6297,6 +6331,7 @@ function prOpenUpload() {
   document.getElementById('pr-up-csv-name').style.display = 'none';
   document.getElementById('pr-up-pdf-name').style.display = 'none';
   document.getElementById('pr-up-status').style.display = 'none';
+  document.getElementById('pr-up-assign-checks').checked = true;
   document.getElementById('pr-up-btn').disabled = false;
   document.getElementById('pr-up-btn').textContent = 'Process Payroll';
   document.getElementById('pr-upload-modal').style.display = 'flex';
@@ -6337,6 +6372,7 @@ async function prSubmitUpload() {
   var form = new FormData();
   form.append('journal_csv', csvFile);
   form.append('location', loc);
+  form.append('assign_checks', document.getElementById('pr-up-assign-checks').checked ? '1' : '0');
   var pdfFile = document.getElementById('pr-up-pdf').files[0];
   if (pdfFile) form.append('checks_pdf', pdfFile);
 

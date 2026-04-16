@@ -251,8 +251,9 @@ def create_payroll_run():
     """
     from check_printer import generate_batch_payroll_checks_pdf
 
-    location = (request.form.get("location") or "chatham").lower()
-    memo     = (request.form.get("memo") or "").strip()
+    location      = (request.form.get("location") or "chatham").lower()
+    memo          = (request.form.get("memo") or "").strip()
+    assign_checks = request.form.get("assign_checks", "1") == "1"
 
     journal_file = request.files.get("journal_csv")
     if not journal_file:
@@ -330,8 +331,9 @@ def create_payroll_run():
 
     for emp in employees:
         is_paper  = emp["payment_method"].lower() != "direct deposit" and emp["net"] > 0
-        check_num = str(next_check) if is_paper else None
-        if is_paper:
+        # Only assign a check number if assign_checks is True and employee gets a paper check
+        check_num = str(next_check) if (is_paper and assign_checks) else None
+        if is_paper and assign_checks:
             next_check += 1
 
         cur2 = conn.execute("""
@@ -374,8 +376,9 @@ def create_payroll_run():
                 "net":          emp["net"],
             })
 
-    conn.execute("UPDATE check_config SET check_number_next = ? WHERE location = ?",
-                 (next_check, location))
+    if assign_checks:
+        conn.execute("UPDATE check_config SET check_number_next = ? WHERE location = ?",
+                     (next_check, location))
 
     qbo_text, balanced, total_d, total_c = build_qbo_csv(employees, pay_date, period_str, location)
     qbo_path = os.path.join(PAYROLL_DIR, f"qbo_{location}_{ts}.csv")
@@ -383,7 +386,7 @@ def create_payroll_run():
         f.write(qbo_text)
 
     checks_pdf_path = None
-    if payroll_list:
+    if payroll_list and assign_checks:
         checks_pdf_path = os.path.join(PAYROLL_DIR, f"checks_{location}_{ts}.pdf")
         try:
             generate_batch_payroll_checks_pdf(payroll_list, config_dict, checks_pdf_path)
