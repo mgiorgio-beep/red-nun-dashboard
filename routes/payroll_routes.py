@@ -674,3 +674,98 @@ def report_payroll_ytd():
     """, (location, year)).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
+
+
+# ─────────────────────────────────────────────
+#  CONVERT LEGACY CHECKS → PAYROLL RUNS
+# ─────────────────────────────────────────────
+
+@payroll_bp.route("/api/payroll/import-legacy", methods=["POST"])
+@admin_required
+def import_legacy_checks():
+    """
+    Group existing payroll_checks (payroll_run_id IS NULL) by location +
+    pay_period_start + pay_period_end, create a payroll_run for each group,
+    and link the checks to it. Preserves all existing check numbers.
+    """
+    conn = get_connection()
+
+    orphans = conn.execute("""
+        SELECT * FROM payroll_checks
+        WHERE (payroll_run_id IS NULL OR payroll_run_id = '')
+          AND (voided IS NULL OR voided = 0)
+        ORDER BY location, pay_period_start, pay_period_end
+    """).fetchall()
+
+    if not orphans:
+        conn.close()
+        return jsonify({"status": "ok", "runs_created": 0, "message": "No legacy checks found"})
+
+    # Group by (location, pay_period_start, pay_period_end)
+    groups = {}
+    for c in orphans:
+        key = (
+            c["location"] or "chatham",
+            c["pay_period_start"] or "",
+            c["pay_period_end"] or "",
+        )
+        groups.setdefault(key, []).append(dict(c))
+
+    runs_created = 0
+    for (location, period_start, period_end), checks in groups.items():
+        # Derive pay_date: use printed_at of first check, or pay_period_end
+        pay_date = None
+        for c in checks:
+            raw = c.get("printed_at") or c.get("created_at") or ""
+            if raw:
+                pay_date = raw.split("T")[0].split(" ")[0]
+                break
+        if not pay_date:
+            pay_date = period_end or date.today().isoformat()
+
+        paper_checks = [c for c in checks
+                        if (c.get("payment_method") or "Manual").lower() != "direct deposit"
+                        and (c.get("net_pay") or 0) > 0
+                        and c.get("check_number")]
+
+        total_gross = sum(c.get("gross_pay") or 0 for c in checks)
+        total_net   = sum(c.get("net_pay")   or 0 for c in checks)
+        total_wages = sum(c.get("wages")      or 0 for c in checks)
+        total_pt    = sum(c.get("paycheck_tips") or 0 for c in checks)
+        total_ct    = sum(c.get("cash_tips")     or 0 for c in checks)
+        total_ee    = sum(c.get("ee_taxes")      or 0 for c in checks)
+        total_er    = sum(c.get("er_taxes")      or 0 for c in checks)
+
+        def fmt(d):
+            try:
+                return datetime.strptime(d, "%Y-%m-%d").strftime("%m/%d/%y")
+            except Exception:
+                return d or ""
+
+        period_str = f"{fmt(period_start)}-{fmt(period_end)}"
+        memo = f"Payroll {period_str}"
+
+        cur = conn.execute("""
+            INSERT INTO payroll_runs
+            (location, pay_period_start, pay_period_end, pay_date, memo,
+             employee_count, check_count, total_gross, total_net,
+             total_wages, total_paycheck_tips, total_cash_tips,
+             total_ee_taxes, total_er_taxes, status, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'complete',datetime('now'))
+        """, (location, period_start, period_end, pay_date, memo,
+              len(checks), len(paper_checks),
+              total_gross, total_net, total_wages, total_pt, total_ct,
+              total_ee, total_er))
+        run_id = cur.lastrowid
+
+        for c in checks:
+            conn.execute(
+                "UPDATE payroll_checks SET payroll_run_id = ? WHERE id = ?",
+                (run_id, c["id"])
+            )
+
+        runs_created += 1
+
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "runs_created": runs_created})

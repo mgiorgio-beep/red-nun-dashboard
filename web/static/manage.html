@@ -1941,7 +1941,10 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 
           <!-- Legacy individual checks (pre-run system) -->
           <div id="pr-legacy-wrap" style="display:none;margin-top:28px">
-            <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Previous Checks</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px">Previous Checks</div>
+              <button onclick="prImportLegacy()" style="padding:4px 12px;border-radius:6px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:11px;font-weight:600;cursor:pointer">Convert to Run</button>
+            </div>
             <div class="card" style="padding:0;overflow:hidden">
               <table style="width:100%;border-collapse:collapse;font-size:12px">
                 <thead>
@@ -6321,6 +6324,23 @@ async function prLoadRunEmployees(runId) {
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#ef4444">Error loading employees</td></tr>';
   }
+}
+
+// ── Convert legacy checks → run ──
+async function prImportLegacy() {
+  if (!confirm('Convert all previous checks into payroll runs? Check numbers will be preserved.')) return;
+  try {
+    var r = await fetch('/api/payroll/import-legacy', { method: 'POST' });
+    var j = await r.json();
+    if (!r.ok) { alert(j.error || 'Error converting'); return; }
+    if (j.runs_created === 0) {
+      alert('No legacy checks found to convert.');
+    } else {
+      alert(j.runs_created + ' payroll run(s) created from previous checks.');
+      prLoadRuns();
+      prLoadLegacy();
+    }
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 // ── Upload modal ──
