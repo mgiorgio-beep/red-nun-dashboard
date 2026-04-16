@@ -687,7 +687,27 @@ def generate_payroll_check_pdf(payroll, config, check_number=None, output_path=N
     else:
         ytd = ytd_raw or {}
 
-    total_hours = payroll.get("total_hours", 0) or 0
+    total_hours   = payroll.get("total_hours", 0) or 0
+    wages         = payroll.get("wages", 0) or 0
+    paycheck_tips = payroll.get("paycheck_tips", 0) or 0
+    cash_tips     = payroll.get("cash_tips", 0) or 0
+
+    # Map 7shifts column names → short labels for the stub
+    _DED_LABELS = {
+        "Federal Income Tax (EE)":                                    "Federal Income Tax",
+        "Social Security Tax (EE)":                                   "Social Security",
+        "Medicare (EE)":                                              "Medicare",
+        "Additional Medicare (EE)":                                   "Add'l Medicare",
+        "Massachusetts State Tax (EE)":                               "MA State Tax",
+        "Massachusetts Paid Family and Medical Leave - Employee (EE)":"MA PFML (EE)",
+        "Connecticut State Tax (EE)":                                 "CT State Tax",
+        "New Jersey State Tax (EE)":                                  "NJ State Tax",
+        # legacy keys
+        "federal_tax":   "Federal Tax",
+        "state_tax":     "State Tax",
+        "fica_ss":       "Social Security",
+        "fica_medicare": "Medicare",
+    }
 
     # ─── Helper: draw payroll stub ───
     def _draw_payroll_stub(stub_top):
@@ -698,86 +718,90 @@ def generate_payroll_check_pdf(payroll, config, check_number=None, output_path=N
         c.drawString(20 + ox, stub_top - 14 + oy, f"Employee: {employee_name}")
         c.drawString(250 + ox, stub_top - 14 + oy, f"Pay Period: {pay_start} — {pay_end}")
         if total_hours:
-            c.drawString(470 + ox, stub_top - 14 + oy, f"Hours: {total_hours:.1f}")
+            c.drawString(470 + ox, stub_top - 14 + oy, f"Hours: {total_hours:.2f}")
 
-        # Table header
-        has_ytd = bool(ytd)
-        col1_x = 20      # Description
-        col2_x = 200      # Current
-        col3_x = 300      # YTD
-        col4_x = 370      # Description (deductions)
-        col5_x = 500      # Current (ded)
-        col6_x = 560      # YTD (ded)
+        col1_x = 20   # Earnings label
+        col2_x = 180  # Earnings amount
+        col4_x = 310  # Deductions label
+        col5_x = 500  # Deductions amount
         row_y = stub_top - 32
 
-        # ── Left side: Earnings ──
+        # ── Left: Earnings ──
         c.setFont("Helvetica-Bold", 7)
         c.drawString(col1_x + ox, row_y + oy, "EARNINGS")
-        c.drawRightString(col2_x + 50 + ox, row_y + oy, "Current")
-        if has_ytd:
-            c.drawRightString(col3_x + 50 + ox, row_y + oy, "YTD")
+        c.drawRightString(col2_x + 30 + ox, row_y + oy, "Amount")
         c.setLineWidth(0.5)
-        c.line(col1_x + ox, row_y - 3 + oy, col3_x + 55 + ox, row_y - 3 + oy)
+        c.line(col1_x + ox, row_y - 3 + oy, col2_x + 35 + ox, row_y - 3 + oy)
 
         c.setFont("Helvetica", 7)
-        row_y -= 14
-        c.drawString(col1_x + ox, row_y + oy, "Gross Pay")
-        c.drawRightString(col2_x + 50 + ox, row_y + oy, f"${gross_pay:,.2f}")
-        if has_ytd and ytd.get("gross_pay"):
-            c.drawRightString(col3_x + 50 + ox, row_y + oy, f"${ytd['gross_pay']:,.2f}")
+        earn_y = row_y - 13
+        def earn_row(label, val):
+            nonlocal earn_y
+            if val:
+                c.drawString(col1_x + ox, earn_y + oy, label)
+                c.drawRightString(col2_x + 30 + ox, earn_y + oy, f"${val:,.2f}")
+                earn_y -= 11
 
-        # ── Right side: Deductions ──
-        ded_y = stub_top - 32
+        if wages:
+            earn_row("Wages", wages)
+        if paycheck_tips:
+            earn_row("Paycheck Tips", paycheck_tips)
+        if cash_tips:
+            earn_row("Cash Tips", cash_tips)
+        if not wages and not paycheck_tips and not cash_tips:
+            earn_row("Gross Pay", gross_pay)
+
+        # Gross total line
+        earn_y -= 2
+        c.setLineWidth(0.5)
+        c.line(col1_x + ox, earn_y + 8 + oy, col2_x + 35 + ox, earn_y + 8 + oy)
+        c.setFont("Helvetica-Bold", 7)
+        c.drawString(col1_x + ox, earn_y + oy, "Gross Pay")
+        c.drawRightString(col2_x + 30 + ox, earn_y + oy, f"${gross_pay:,.2f}")
+
+        # ── Right: Deductions ──
+        ded_y = row_y
         c.setFont("Helvetica-Bold", 7)
         c.drawString(col4_x + ox, ded_y + oy, "DEDUCTIONS")
-        c.drawRightString(col5_x + ox, ded_y + oy, "Current")
-        if has_ytd:
-            c.drawRightString(col6_x + ox, ded_y + oy, "YTD")
-        c.line(col4_x + ox, ded_y - 3 + oy, col6_x + 5 + ox, ded_y - 3 + oy)
+        c.drawRightString(col5_x + ox, ded_y + oy, "Amount")
+        c.setLineWidth(0.5)
+        c.line(col4_x + ox, ded_y - 3 + oy, col5_x + 5 + ox, ded_y - 3 + oy)
 
         c.setFont("Helvetica", 7)
-        ded_y -= 14
+        ded_y -= 13
         total_ded = 0
 
-        ded_labels = [
-            ("federal_tax", "Federal Tax"),
-            ("state_tax", "State Tax (MA)"),
-            ("fica_ss", "Social Security"),
-            ("fica_medicare", "Medicare"),
-        ]
-        for key, label in ded_labels:
-            val = deductions.get(key, 0) or 0
+        # Render each deduction line using mapped labels
+        for raw_key, label in _DED_LABELS.items():
+            val = deductions.get(raw_key, 0) or 0
             if val > 0:
                 c.drawString(col4_x + ox, ded_y + oy, label)
                 c.drawRightString(col5_x + ox, ded_y + oy, f"${val:,.2f}")
-                if has_ytd and ytd.get(key):
-                    c.drawRightString(col6_x + ox, ded_y + oy, f"${ytd[key]:,.2f}")
                 total_ded += val
                 ded_y -= 11
 
-        for item in deductions.get("other", []):
-            lbl = item.get("label", "Other")
-            amt = item.get("amount", 0) or 0
-            if amt > 0:
-                c.drawString(col4_x + ox, ded_y + oy, lbl)
-                c.drawRightString(col5_x + ox, ded_y + oy, f"${amt:,.2f}")
-                total_ded += amt
+        # Any extra keys not in the map
+        for raw_key, val in deductions.items():
+            if raw_key in _DED_LABELS:
+                continue
+            if isinstance(val, (int, float)) and val > 0:
+                c.drawString(col4_x + ox, ded_y + oy, raw_key[:28])
+                c.drawRightString(col5_x + ox, ded_y + oy, f"${val:,.2f}")
+                total_ded += val
                 ded_y -= 11
 
-        # Totals line
         ded_y -= 2
-        c.line(col4_x + ox, ded_y + 8 + oy, col6_x + 5 + ox, ded_y + 8 + oy)
+        c.setLineWidth(0.5)
+        c.line(col4_x + ox, ded_y + 8 + oy, col5_x + 5 + ox, ded_y + 8 + oy)
         c.setFont("Helvetica-Bold", 7)
         c.drawString(col4_x + ox, ded_y + oy, "Total Deductions")
         c.drawRightString(col5_x + ox, ded_y + oy, f"${total_ded:,.2f}")
 
-        # Net pay line
-        net_y = min(row_y, ded_y) - 14
+        # Net pay — below both columns
+        net_y = min(earn_y, ded_y) - 14
         c.setFont("Helvetica-Bold", 9)
         c.drawString(col1_x + ox, net_y + oy, "NET PAY")
-        c.drawRightString(col2_x + 50 + ox, net_y + oy, f"${net_pay:,.2f}")
-        if has_ytd and ytd.get("net_pay"):
-            c.drawRightString(col3_x + 50 + ox, net_y + oy, f"${ytd['net_pay']:,.2f}")
+        c.drawRightString(col5_x + ox, net_y + oy, f"${net_pay:,.2f}")
 
     # ─── MIDDLE STUB (y = 264–528) — Employer copy ───
     _draw_payroll_stub(520)
