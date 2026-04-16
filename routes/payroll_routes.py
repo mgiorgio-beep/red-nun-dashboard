@@ -85,9 +85,16 @@ def init_payroll_tables():
             checks_pdf_path TEXT,
             qbo_csv_path TEXT,
             status TEXT DEFAULT 'pending',
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
         )
     """)
+    # Add updated_at if upgrading from earlier version
+    try:
+        conn.execute("ALTER TABLE payroll_runs ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))")
+        conn.commit()
+    except Exception:
+        pass
     for col, defn in [
         ("payroll_run_id",  "INTEGER"),
         ("paycheck_tips",   "REAL DEFAULT 0"),
@@ -249,7 +256,18 @@ def create_payroll_run():
     sequential check numbers from check_config, generates QBO CSV and
     printable check PDF batch.
     """
-    from check_printer import generate_batch_payroll_checks_pdf
+    # check_printer lives in scripts/archive — add it to sys.path if needed
+    import sys as _sys, os as _os
+    _cp_dir = _os.path.join(_os.path.dirname(__file__), "..", "scripts", "archive")
+    if _cp_dir not in _sys.path:
+        _sys.path.insert(0, _os.path.abspath(_cp_dir))
+    try:
+        from check_printer import generate_batch_payroll_checks_pdf as _gen_pdf
+        _check_printer_available = True
+    except ImportError:
+        _gen_pdf = None
+        _check_printer_available = False
+        logger.warning("check_printer not available — checks PDF will be skipped")
 
     location      = (request.form.get("location") or "chatham").lower()
     memo          = (request.form.get("memo") or "").strip()
@@ -386,10 +404,10 @@ def create_payroll_run():
         f.write(qbo_text)
 
     checks_pdf_path = None
-    if payroll_list and assign_checks:
+    if payroll_list and assign_checks and _check_printer_available:
         checks_pdf_path = os.path.join(PAYROLL_DIR, f"checks_{location}_{ts}.pdf")
         try:
-            generate_batch_payroll_checks_pdf(payroll_list, config_dict, checks_pdf_path)
+            _gen_pdf(payroll_list, config_dict, checks_pdf_path)
             for ch in inserted_checks:
                 conn.execute(
                     "UPDATE payroll_checks SET status='printed', printed_at=datetime('now') WHERE id=?",
@@ -769,3 +787,125 @@ def import_legacy_checks():
     conn.commit()
     conn.close()
     return jsonify({"status": "ok", "runs_created": runs_created})
+
+
+# ─────────────────────────────────────────────
+#  BACKFILL RUN FROM CSV
+# ─────────────────────────────────────────────
+
+@payroll_bp.route("/api/payroll/runs/<int:run_id>/backfill", methods=["POST"])
+@admin_required
+def backfill_run_from_csv(run_id):
+    """
+    Upload a 7shifts payroll-journal CSV for an existing run.
+    Matches employees by name (case-insensitive), fills in wages / tips /
+    EE taxes / ER taxes / deductions on each payroll_check, updates run
+    totals, and regenerates the QBO journal entry CSV.
+    Check numbers and net/gross pay are NOT overwritten.
+    """
+    conn = get_connection()
+    run = conn.execute("SELECT * FROM payroll_runs WHERE id=?", (run_id,)).fetchone()
+    if not run:
+        conn.close()
+        return jsonify({"error": "Run not found"}), 404
+    run = dict(run)
+
+    journal_file = request.files.get("journal_csv")
+    if not journal_file:
+        conn.close()
+        return jsonify({"error": "journal_csv file required"}), 400
+
+    try:
+        csv_text  = journal_file.read().decode("utf-8-sig")
+        employees = parse_journal_csv(csv_text)
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": f"CSV parse error: {e}"}), 400
+
+    # Build lookup: normalised name → employee dict
+    def norm(name):
+        return " ".join(name.lower().split())
+
+    emp_map = {norm(e["name"]): e for e in employees}
+
+    checks = conn.execute(
+        "SELECT * FROM payroll_checks WHERE payroll_run_id=?", (run_id,)
+    ).fetchall()
+
+    matched = 0
+    unmatched = []
+    for c in checks:
+        key = norm(c["employee_name"] or "")
+        emp = emp_map.get(key)
+        if not emp:
+            # Try last-name-only match as fallback
+            last = key.split()[-1] if key else ""
+            emp = next((v for k, v in emp_map.items() if k.split()[-1] == last), None)
+        if not emp:
+            unmatched.append(c["employee_name"])
+            continue
+
+        conn.execute("""
+            UPDATE payroll_checks SET
+                wages           = ?,
+                paycheck_tips   = ?,
+                cash_tips       = ?,
+                ee_taxes        = ?,
+                er_taxes        = ?,
+                deductions      = ?,
+                total_hours     = ?,
+                payment_method  = ?,
+                updated_at      = datetime('now')
+            WHERE id = ?
+        """, (emp["wages"], emp["paycheck_tips"], emp["cash_tips"],
+              emp["ee_taxes"], emp["er_taxes"],
+              json.dumps(emp["deductions"]), emp["total_hours"],
+              emp["payment_method"], c["id"]))
+        matched += 1
+
+    # Recompute run totals from CSV
+    total_wages = sum(e["wages"]         for e in employees)
+    total_pt    = sum(e["paycheck_tips"] for e in employees)
+    total_ct    = sum(e["cash_tips"]     for e in employees)
+    total_ee    = sum(e["ee_taxes"]      for e in employees)
+    total_er    = sum(e["er_taxes"]      for e in employees)
+
+    conn.execute("""
+        UPDATE payroll_runs SET
+            total_wages=?, total_paycheck_tips=?, total_cash_tips=?,
+            total_ee_taxes=?, total_er_taxes=?, updated_at=datetime('now')
+        WHERE id=?
+    """, (total_wages, total_pt, total_ct, total_ee, total_er, run_id))
+
+    # Regen QBO CSV
+    pay_date   = run["pay_date"] or date.today().isoformat()
+    def fmt(d):
+        try:
+            return datetime.strptime(d, "%Y-%m-%d").strftime("%m/%d/%y")
+        except Exception:
+            return d or ""
+    period_str = f"{fmt(run['pay_period_start'])}-{fmt(run['pay_period_end'])}"
+
+    qbo_text, balanced, total_d, total_c = build_qbo_csv(
+        employees, pay_date, period_str, run["location"]
+    )
+
+    os.makedirs(PAYROLL_DIR, exist_ok=True)
+    ts       = datetime.now().strftime("%Y%m%d%H%M%S")
+    qbo_path = os.path.join(PAYROLL_DIR, f"qbo_{run['location']}_{ts}.csv")
+    with open(qbo_path, "w", encoding="utf-8") as f:
+        f.write(qbo_text)
+
+    conn.execute("UPDATE payroll_runs SET qbo_csv_path=? WHERE id=?", (qbo_path, run_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "status":    "ok",
+        "matched":   matched,
+        "unmatched": unmatched,
+        "balanced":  balanced,
+        "total_debits":  round(total_d, 2),
+        "total_credits": round(total_c, 2),
+        "qbo_csv":   f"/api/payroll/runs/{run_id}/qbo-csv",
+    })

@@ -6233,9 +6233,14 @@ async function prLoadRuns() {
       detailTd.colSpan = 7;
       detailTd.style.cssText = 'padding:0;background:#fafafa;border-bottom:2px solid var(--border)';
       detailTd.innerHTML =
-        '<div style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border)">' +
+        '<div style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border)">' +
         '<a href="/api/payroll/runs/' + run.id + '/summary-csv" style="padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none">Summary CSV</a>' +
         '<a href="/api/payroll/runs/' + run.id + '/ytd-csv" style="padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none">YTD CSV</a>' +
+        '<label style="padding:4px 10px;border-radius:4px;border:1px solid #f59e0b;background:#fffbeb;color:#92400e;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">' +
+          'Backfill CSV' +
+          '<input type="file" accept=".csv" style="display:none" onchange="prBackfillRun(' + run.id + ', this)">' +
+        '</label>' +
+        '<span id="pr-backfill-status-' + run.id + '" style="display:none;font-size:11px;padding:4px 8px;border-radius:4px"></span>' +
         '</div>' +
         '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
         '<thead><tr style="background:#f1f5f9">' +
@@ -6341,6 +6346,43 @@ async function prImportLegacy() {
       prLoadLegacy();
     }
   } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ── Backfill run from CSV ──
+async function prBackfillRun(runId, input) {
+  var file = input && input.files && input.files[0];
+  if (!file) return;
+  var statusEl = document.getElementById('pr-backfill-status-' + runId);
+  statusEl.style.display = 'inline-block';
+  statusEl.style.background = '#f0f9ff';
+  statusEl.style.color = '#0369a1';
+  statusEl.textContent = 'Processing...';
+  var form = new FormData();
+  form.append('journal_csv', file);
+  try {
+    var r = await fetch('/api/payroll/runs/' + runId + '/backfill', { method: 'POST', body: form });
+    var j = await r.json();
+    if (!r.ok) {
+      statusEl.style.background = '#fef2f2';
+      statusEl.style.color = '#dc2626';
+      statusEl.textContent = j.error || 'Error';
+      return;
+    }
+    var msg = 'Matched ' + j.matched + ' employees';
+    if (j.unmatched && j.unmatched.length) msg += ' (' + j.unmatched.length + ' unmatched: ' + j.unmatched.join(', ') + ')';
+    msg += j.balanced ? ' — QBO BALANCED' : ' — QBO UNBALANCED';
+    statusEl.style.background = j.balanced ? '#f0fdf4' : '#fef9c3';
+    statusEl.style.color = j.balanced ? '#15803d' : '#92400e';
+    statusEl.textContent = msg;
+    // Reload the employee detail
+    prLoadRunEmployees(runId);
+    // Reload the runs list to pick up updated totals
+    prLoadRuns();
+  } catch(e) {
+    statusEl.style.background = '#fef2f2';
+    statusEl.style.color = '#dc2626';
+    statusEl.textContent = 'Error: ' + e.message;
+  }
 }
 
 // ── Upload modal ──
