@@ -790,6 +790,121 @@ def import_legacy_checks():
 
 
 # ─────────────────────────────────────────────
+#  PRINT CHECKS FOR A RUN
+# ─────────────────────────────────────────────
+
+@payroll_bp.route("/api/payroll/runs/<int:run_id>/print-checks", methods=["POST"])
+@admin_required
+def print_run_checks(run_id):
+    """
+    Assign the next sequential check numbers to any paper-check employees in
+    this run that don't already have one, then generate (or regenerate) the
+    batch check PDF.  Returns JSON with a pdf_url the frontend can open.
+    """
+    import sys as _sys, os as _os
+    _cp_dir = _os.path.join(_os.path.dirname(__file__), "..", "scripts", "archive")
+    if _cp_dir not in _sys.path:
+        _sys.path.insert(0, _os.path.abspath(_cp_dir))
+    try:
+        from check_printer import generate_batch_payroll_checks_pdf as _gen_pdf
+    except ImportError:
+        return jsonify({"error": "check_printer module not available on this server"}), 500
+
+    conn = get_connection()
+    run = conn.execute("SELECT * FROM payroll_runs WHERE id=?", (run_id,)).fetchone()
+    if not run:
+        conn.close()
+        return jsonify({"error": "Run not found"}), 404
+    run = dict(run)
+    location = run["location"]
+
+    checks = conn.execute("""
+        SELECT * FROM payroll_checks
+        WHERE payroll_run_id=?
+          AND (payment_method IS NULL OR LOWER(payment_method) != 'direct deposit')
+          AND net_pay > 0
+        ORDER BY employee_name
+    """, (run_id,)).fetchall()
+
+    if not checks:
+        conn.close()
+        return jsonify({"error": "No paper checks found for this run"}), 400
+
+    config = conn.execute("SELECT * FROM check_config WHERE location = ?", (location,)).fetchone()
+    if not config:
+        config = conn.execute("SELECT * FROM check_config ORDER BY id LIMIT 1").fetchone()
+    if not config:
+        conn.close()
+        return jsonify({"error": "Check config not set up for this location"}), 400
+
+    config_dict = dict(config)
+    next_check   = config_dict.get("check_number_next") or 2001
+    assigned     = 0
+
+    payroll_list = []
+    for c in checks:
+        check_num = c["check_number"]
+        if not check_num:
+            check_num = str(next_check)
+            next_check += 1
+            assigned += 1
+            conn.execute("UPDATE payroll_checks SET check_number=? WHERE id=?",
+                         (check_num, c["id"]))
+
+        ded = c["deductions"] or "{}"
+        payroll_list.append({
+            "payroll": {
+                "id":               c["id"],
+                "employee_name":    c["employee_name"],
+                "gross_pay":        c["gross_pay"],
+                "net_pay":          c["net_pay"],
+                "deductions":       ded,
+                "total_hours":      float(c["total_hours"] or 0),
+                "pay_period_start": run["pay_period_start"],
+                "pay_period_end":   run["pay_period_end"],
+                "printed_at":       run["pay_date"],
+                "location":         location,
+            },
+            "check_number": check_num,
+        })
+
+    if assigned > 0:
+        conn.execute("UPDATE check_config SET check_number_next=? WHERE location=?",
+                     (next_check, location))
+
+    os.makedirs(PAYROLL_DIR, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    pdf_path = os.path.join(PAYROLL_DIR, f"checks_{location}_{ts}.pdf")
+
+    try:
+        _gen_pdf(payroll_list, config_dict, pdf_path)
+    except Exception as ex:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": f"PDF generation failed: {ex}"}), 500
+
+    conn.execute("""
+        UPDATE payroll_checks SET status='printed', printed_at=datetime('now')
+        WHERE payroll_run_id=?
+          AND (payment_method IS NULL OR LOWER(payment_method) != 'direct deposit')
+          AND net_pay > 0
+    """, (run_id,))
+    conn.execute("""
+        UPDATE payroll_runs SET checks_pdf_path=?, updated_at=datetime('now') WHERE id=?
+    """, (pdf_path, run_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "status":        "ok",
+        "assigned":      assigned,
+        "check_count":   len(payroll_list),
+        "next_check":    next_check,
+        "pdf_url":       f"/api/payroll/runs/{run_id}/checks-pdf",
+    })
+
+
+# ─────────────────────────────────────────────
 #  BACKFILL RUN FROM CSV
 # ─────────────────────────────────────────────
 

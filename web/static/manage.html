@@ -2000,18 +2000,10 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             <div id="pr-up-pdf-name" style="font-size:11px;color:#22c55e;margin-top:4px;display:none"></div>
           </div>
 
-          <div style="margin-bottom:16px;padding:10px 14px;border-radius:8px;background:#f8fafc;border:1px solid var(--border)">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#111827">
-              <input type="checkbox" id="pr-up-assign-checks" checked style="width:15px;height:15px;cursor:pointer">
-              Assign check numbers now
-            </label>
-            <div style="font-size:11px;color:#6b7280;margin-top:4px;padding-left:23px">Uncheck for past payrolls — preserves the current check number sequence. You can add check numbers later.</div>
-          </div>
-
           <div id="pr-up-status" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:13px"></div>
 
           <div style="display:flex;gap:10px">
-            <button onclick="prSubmitUpload()" id="pr-up-btn" style="padding:10px 24px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Process Payroll</button>
+            <button onclick="prSubmitUpload()" id="pr-up-btn" style="padding:10px 24px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Upload Payroll</button>
             <button onclick="prCloseUpload()" style="padding:10px 24px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:13px;cursor:pointer">Cancel</button>
           </div>
         </div>
@@ -6203,8 +6195,10 @@ async function prLoadRuns() {
       var gross  = '$' + (run.total_gross || 0).toFixed(2);
       var net    = '$' + (run.total_net   || 0).toFixed(2);
       var dls    = '';
+      // Print button — always shown; assigns numbers if not yet done
+      dls += '<button onclick="event.stopPropagation();prPrintChecks(' + run.id + ', this)" id="pr-print-btn-' + run.id + '" style="padding:3px 10px;border-radius:4px;border:none;background:#7c3aed;color:#fff;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px">&#128424; Print Checks</button>';
       if (run.checks_pdf_path) {
-        dls += '<a href="/api/payroll/runs/' + run.id + '/checks-pdf" target="_blank" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:none;background:#38bdf8;color:#020617;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">Checks</a>';
+        dls += '<a href="/api/payroll/runs/' + run.id + '/checks-pdf" target="_blank" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:none;background:#38bdf8;color:#020617;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">Checks PDF</a>';
       }
       dls += '<a href="/api/payroll/runs/' + run.id + '/qbo-csv" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">QBO</a>';
       dls += '<a href="/api/payroll/runs/' + run.id + '/zip" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">ZIP</a>';
@@ -6348,6 +6342,30 @@ async function prImportLegacy() {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
+// ── Print checks for a run ──
+async function prPrintChecks(runId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Printing...'; }
+  try {
+    var r = await fetch('/api/payroll/runs/' + runId + '/print-checks', { method: 'POST' });
+    var j = await r.json();
+    if (!r.ok) {
+      alert(j.error || 'Print failed');
+      if (btn) { btn.disabled = false; btn.textContent = '🖨 Print Checks'; }
+      return;
+    }
+    // Open the PDF
+    window.open(j.pdf_url, '_blank');
+    // Reload to show Checks PDF link and updated check numbers
+    prLoadRuns();
+    if (j.assigned > 0) {
+      alert(j.assigned + ' check number(s) assigned, starting at ' + (j.next_check - j.check_count) + '. PDF opened.');
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '🖨 Print Checks'; }
+  }
+}
+
 // ── Backfill run from CSV ──
 async function prBackfillRun(runId, input) {
   var file = input && input.files && input.files[0];
@@ -6393,9 +6411,8 @@ function prOpenUpload() {
   document.getElementById('pr-up-csv-name').style.display = 'none';
   document.getElementById('pr-up-pdf-name').style.display = 'none';
   document.getElementById('pr-up-status').style.display = 'none';
-  document.getElementById('pr-up-assign-checks').checked = true;
   document.getElementById('pr-up-btn').disabled = false;
-  document.getElementById('pr-up-btn').textContent = 'Process Payroll';
+  document.getElementById('pr-up-btn').textContent = 'Upload Payroll';
   document.getElementById('pr-upload-modal').style.display = 'flex';
 }
 function prCloseUpload() {
@@ -6434,7 +6451,7 @@ async function prSubmitUpload() {
   var form = new FormData();
   form.append('journal_csv', csvFile);
   form.append('location', loc);
-  form.append('assign_checks', document.getElementById('pr-up-assign-checks').checked ? '1' : '0');
+  form.append('assign_checks', '0');  // always skip — use Print button to assign numbers
   var pdfFile = document.getElementById('pr-up-pdf').files[0];
   if (pdfFile) form.append('checks_pdf', pdfFile);
 
@@ -6449,16 +6466,13 @@ async function prSubmitUpload() {
       btn.textContent = 'Process Payroll';
       return;
     }
-    var bal = j.balanced ? ' — QBO entry BALANCED' : ' — WARNING: QBO entry UNBALANCED (check totals)';
+    var bal = j.balanced ? ' — QBO BALANCED' : ' — WARNING: QBO UNBALANCED';
     statusEl.style.background = j.balanced ? '#f0fdf4' : '#fef9c3';
     statusEl.style.color = j.balanced ? '#15803d' : '#92400e';
-    statusEl.textContent = j.employee_count + ' employees, ' + j.check_count + ' paper checks. Gross $' + j.total_gross.toFixed(2) + bal;
+    statusEl.textContent = j.employee_count + ' employees, ' + j.check_count + ' paper checks. Gross $' + j.total_gross.toFixed(2) + bal + '. Click Print Checks on the run to print.';
     btn.textContent = 'Done';
-    if (j.checks_pdf) {
-      window.open(j.checks_pdf, '_blank');
-    }
     prLoadRuns();
-    setTimeout(prCloseUpload, 2500);
+    setTimeout(prCloseUpload, 3500);
   } catch(e) {
     statusEl.style.background = '#fef2f2';
     statusEl.style.color = '#dc2626';
