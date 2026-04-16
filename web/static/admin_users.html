@@ -204,7 +204,7 @@ function renderUsers(users) {
     if (u.active && !isMe) {
       actions = `<button class="au-btn au-btn-sm au-btn-danger" onclick="deactivate(${u.id},'${esc(u.full_name||u.username)}')">Deactivate</button>`;
     } else if (!u.active) {
-      actions = `<button class="au-btn au-btn-sm au-btn-ghost" onclick="reactivate(${u.id})">Reactivate</button>`;
+      actions = `<button class="au-btn au-btn-sm au-btn-ghost" onclick="reactivate(${u.id})">Reactivate</button> <button class="au-btn au-btn-sm au-btn-danger" onclick="deleteUser(${u.id},'${esc(u.full_name||u.username)}')">Delete</button>`;
     }
     return `<tr${cls}>
       <td><span class="au-avatar">${initials(u.full_name||u.username)}</span>${esc(u.full_name||u.username)}${isMe?' <span class="au-badge" style="font-size:10px;">you</span>':''}</td>
@@ -252,6 +252,11 @@ async function deactivate(id, name) {
 }
 async function reactivate(id) {
   try { await api(`/api/admin/users/${id}/reactivate`, 'POST'); toast('User reactivated'); load(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+async function deleteUser(id, name) {
+  if (!confirm(`Permanently delete ${name}? This cannot be undone.`)) return;
+  try { await api(`/api/admin/users/${id}`, 'DELETE'); toast(`${name} deleted`); load(); }
   catch (e) { toast(e.message, 'error'); }
 }
 

@@ -39,6 +39,7 @@ from routes.storage_routes import storage_bp
 from routes.order_guide_routes import order_guide_bp
 from routes.specials_routes import specials_bp, init_specials_tables
 from routes.food_cost_routes import food_cost_bp
+from routes.report_routes import report_bp
 from routes.vendor_routes import vendor_bp
 from routes.voice_recipe_routes import voice_recipe_bp
 from routes.pmix_routes import pmix_bp
@@ -103,6 +104,7 @@ app.register_blueprint(availability_bp)
 app.register_blueprint(application_bp)
 app.register_blueprint(daily_sales_bp)
 app.register_blueprint(morning_report_bp)
+app.register_blueprint(report_bp)
 
 # Initialize database
 init_db()

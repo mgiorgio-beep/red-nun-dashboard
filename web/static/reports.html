@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reports - Red Nun Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+.rp-wrap { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
+.rp-title { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+.rp-sub { font-size: 13px; color: #9ca3af; margin-bottom: 24px; }
+
+.rp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.rp-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 20px; cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s;
+}
+.rp-card:hover { border-color: #d1d5db; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.rp-card.selected { border-color: #dc2626; box-shadow: 0 0 0 2px rgba(220,38,38,0.15); }
+.rp-card-title { font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 4px; }
+.rp-card-desc { font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 8px; }
+.rp-card-freq { font-size: 11px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.3px; }
+
+/* Config panel */
+.rp-config {
+  display: none; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 24px; margin-bottom: 20px;
+}
+.rp-config.open { display: block; }
+.rp-config-title { font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 16px; }
+.rp-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+.rp-field { display: flex; flex-direction: column; }
+.rp-field label { font-size: 12px; font-weight: 500; color: #6b7280; margin-bottom: 5px; }
+.rp-field input, .rp-field select {
+  padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 8px;
+  font-size: 14px; color: #111827; background: #fff; font-family: inherit;
+}
+.rp-field input:focus, .rp-field select:focus { outline: none; border-color: #9ca3af; }
+.rp-btn {
+  padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: none; transition: opacity 0.12s; font-family: inherit;
+}
+.rp-btn:hover { opacity: 0.88; }
+.rp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rp-btn-primary { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; }
+.rp-btn-ghost { background: transparent; border: 1px solid #e5e7eb; color: #374151; }
+
+/* Presets */
+.rp-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.rp-preset {
+  padding: 5px 12px; border-radius: 16px; font-size: 12px; font-weight: 500;
+  border: 1px solid #e5e7eb; background: #fff; color: #374151; cursor: pointer;
+  transition: all 0.1s;
+}
+.rp-preset:hover { background: #f9fafb; border-color: #d1d5db; }
+.rp-preset.active { background: #111827; color: #fff; border-color: #111827; }
+
+.rp-toast {
+  position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px;
+  font-size: 14px; font-weight: 500; color: #fff; z-index: 1000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15); transition: opacity 0.3s; opacity: 0;
+  background: #dc2626;
+}
+.rp-toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="rp-wrap">
+  <div class="rp-title">Reports</div>
+  <div class="rp-sub">Select a report, choose your parameters, and export as CSV or PDF.</div>
+
+  <!-- Config panel (appears when a report is selected) -->
+  <div class="rp-config" id="configPanel">
+    <div class="rp-config-title" id="configTitle">Configure Report</div>
+    <div class="rp-presets" id="presets"></div>
+    <div class="rp-row">
+      <div class="rp-field" style="min-width:140px;">
+        <label>Location</label>
+        <select id="cfg-location">
+          <option value="dennis">Dennis Port</option>
+          <option value="chatham">Chatham</option>
+        </select>
+      </div>
+      <div class="rp-field" style="min-width:150px;">
+        <label>Start date</label>
+        <input type="date" id="cfg-start">
+      </div>
+      <div class="rp-field" style="min-width:150px;">
+        <label>End date</label>
+        <input type="date" id="cfg-end">
+      </div>
+      <div class="rp-field" style="min-width:120px;">
+        <label>Format</label>
+        <select id="cfg-format">
+          <option value="csv">CSV</option>
+          <option value="pdf">PDF</option>
+        </select>
+      </div>
+      <div>
+        <button class="rp-btn rp-btn-primary" id="genBtn" onclick="generate()">Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report cards -->
+  <div class="rp-grid" id="reportGrid"></div>
+</div>
+
+<div class="rp-toast" id="toast"></div>
+
+<script src="/static/sidebar.js"></script>
+<script>
+let selectedReport = null;
+let catalog = [];
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'rp-toast show';
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function toISO(d) { return d.toISOString().slice(0,10); }
+
+function setPreset(key) {
+  const now = new Date();
+  let start, end;
+  if (key === 'mtd') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = now;
+  } else if (key === 'last_month') {
+    start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    end = new Date(now.getFullYear(), now.getMonth(), 0);
+  } else if (key === 'wtd') {
+    const day = now.getDay();
+    start = new Date(now);
+    start.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    end = now;
+  } else if (key === 'last_week') {
+    const day = now.getDay();
+    end = new Date(now);
+    end.setDate(now.getDate() - (day === 0 ? 7 : day));
+    start = new Date(end);
+    start.setDate(end.getDate() - 6);
+  } else if (key === 'ytd') {
+    start = new Date(now.getFullYear(), 0, 1);
+    end = now;
+  } else if (key === 'yesterday') {
+    start = new Date(now); start.setDate(now.getDate() - 1);
+    end = start;
+  } else if (key === 'today') {
+    start = now; end = now;
+  }
+  document.getElementById('cfg-start').value = toISO(start);
+  document.getElementById('cfg-end').value = toISO(end);
+  document.querySelectorAll('.rp-preset').forEach(p => p.classList.toggle('active', p.dataset.key === key));
+}
+
+function selectReport(key) {
+  selectedReport = key;
+  const report = catalog.find(r => r.key === key);
+  if (!report) return;
+
+  // Highlight card
+  document.querySelectorAll('.rp-card').forEach(c => c.classList.toggle('selected', c.dataset.key === key));
+
+  // Show config
+  const panel = document.getElementById('configPanel');
+  panel.classList.add('open');
+  document.getElementById('configTitle').textContent = report.title;
+
+  // Build date presets based on frequency
+  const presets = document.getElementById('presets');
+  let presetHtml = '';
+  if (report.frequency === 'Daily') {
+    presetHtml = `
+      <button class="rp-preset" data-key="today" onclick="setPreset('today')">Today</button>
+      <button class="rp-preset" data-key="yesterday" onclick="setPreset('yesterday')">Yesterday</button>
+      <button class="rp-preset active" data-key="wtd" onclick="setPreset('wtd')">This Week</button>
+      <button class="rp-preset" data-key="mtd" onclick="setPreset('mtd')">Month to Date</button>
+    `;
+    setPreset('wtd');
+  } else {
+    presetHtml = `
+      <button class="rp-preset active" data-key="mtd" onclick="setPreset('mtd')">Month to Date</button>
+      <button class="rp-preset" data-key="last_month" onclick="setPreset('last_month')">Last Month</button>
+      <button class="rp-preset" data-key="ytd" onclick="setPreset('ytd')">Year to Date</button>
+    `;
+    setPreset('mtd');
+  }
+  presets.innerHTML = presetHtml;
+
+  // Scroll config into view
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function generate() {
+  if (!selectedReport) { toast('Select a report first'); return; }
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true; btn.textContent = 'Generating...';
+
+  const location = document.getElementById('cfg-location').value;
+  const start = document.getElementById('cfg-start').value;
+  const end = document.getElementById('cfg-end').value;
+  const format = document.getElementById('cfg-format').value;
+
+  if (!start || !end) { toast('Please select a date range'); btn.disabled = false; btn.textContent = 'Download'; return; }
+
+  const url = `/api/reports/${selectedReport}?location=${location}&start=${start}&end=${end}&format=${format}`;
+
+  try {
+    const r = await fetch(url);
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Report generation failed'); }
+
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    // Extract filename from Content-Disposition header
+    const cd = r.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename=(.+)/);
+    a.download = match ? match[1] : `report.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    toast(e.message);
+  }
+  btn.disabled = false; btn.textContent = 'Download';
+}
+
+// Load catalog and render cards
+async function init() {
+  try {
+    catalog = await fetch('/api/reports/catalog').then(r => r.json());
+  } catch (e) {
+    document.getElementById('reportGrid').innerHTML = '<div style="color:#9ca3af;padding:24px;">Failed to load reports</div>';
+    return;
+  }
+
+  const grid = document.getElementById('reportGrid');
+  grid.innerHTML = catalog.map(r => `
+    <div class="rp-card" data-key="${r.key}" onclick="selectReport('${r.key}')">
+      <div class="rp-card-title">${r.title}</div>
+      <div class="rp-card-desc">${r.description}</div>
+      <div class="rp-card-freq">${r.frequency}</div>
+    </div>
+  `).join('');
+}
+
+init();
+</script>
+</body>
+</html>

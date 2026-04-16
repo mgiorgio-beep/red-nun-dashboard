@@ -62,6 +62,7 @@ var sections=[
 ]}
 ,
 {id:'sec-accounting',label:'Accounting',icon:'accounting',children:[
+  {id:'nav-acct-reports',label:'Reports',page:'/reports'},
   {id:'nav-acct-entries',label:'Sales Entries',page:'/sales-journal'},
   {id:'nav-acct-export',label:'Export',page:'/sales-journal?tab=export'},
   {id:'nav-acct-mapping',label:'Sales Mapping',page:'/sales-mapping'},
@@ -299,6 +300,11 @@ fetch('/api/auth/check').then(function(r){return r.json()}).then(function(u){
     // Hide Vendor Scrapers nav item (admin only)
     var vs=document.getElementById('nav-vendorstatus');
     if(vs)vs.style.display='none';
+    // Hide Sales Mapping + Payment Accounts (admin only)
+    var sm=document.getElementById('nav-acct-mapping');
+    if(sm)sm.style.display='none';
+    var pa=document.getElementById('nav-acct-payaccts');
+    if(pa)pa.style.display='none';
     // Manager: hide Bill Pay entirely
     if(u.role==='manager'){
       var bp=document.getElementById('sec-billpay');

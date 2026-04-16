@@ -477,7 +477,7 @@ def api_stale_count():
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/sales-mapping")
-@login_required
+@admin_required
 def sales_mapping_page():
     from flask import send_from_directory, current_app, make_response
     resp = make_response(send_from_directory(current_app.static_folder, "sales_mapping.html"))

@@ -389,8 +389,8 @@ input[type="checkbox"] { width:16px; height:16px; cursor:pointer; accent-color:v
 
         <div class="filter-spacer"></div>
 
-        <!-- Push All Ready (queue only) -->
-        <button class="btn btn-blue btn-sm" id="pushAllReadyBtn" onclick="pushAllReady()" style="display:none">Push All Ready</button>
+        <!-- Push All Ready (queue only, admin) -->
+        <button class="btn btn-blue btn-sm rn-admin-only" id="pushAllReadyBtn" onclick="pushAllReady()" style="display:none">Push All Ready</button>
       </div>
 
       <!-- Stale banner -->
@@ -403,7 +403,7 @@ input[type="checkbox"] { width:16px; height:16px; cursor:pointer; accent-color:v
       <!-- Bulk toolbar -->
       <div class="bulk-toolbar" id="bulkToolbar">
         <span id="bulkCount">0 selected</span>
-        <button class="btn btn-blue btn-sm" onclick="pushSelected()">Push Selected to QBO</button>
+        <button class="btn btn-blue btn-sm rn-admin-only" onclick="pushSelected()">Push Selected to QBO</button>
         <button class="btn btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
       </div>
 
@@ -488,10 +488,10 @@ input[type="checkbox"] { width:16px; height:16px; cursor:pointer; accent-color:v
           <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
           Export CSV
         </button>
-        <button class="btn btn-blue" id="pushBtn" onclick="pushCurrentEntry()">
+        <button class="btn btn-blue rn-admin-only" id="pushBtn" onclick="pushCurrentEntry()">
           Push to QuickBooks
         </button>
-        <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+        <button class="btn btn-danger rn-admin-only" onclick="confirmDelete()">Delete</button>
       </div>
     </div>
 </main>
@@ -537,6 +537,13 @@ let state = {
 };
 
 const LOC_NAMES = {dennis: 'Dennis Port', chatham: 'Chatham'};
+function isAdmin() { return window._rnUser && window._rnUser.role === 'admin'; }
+// Hide admin-only buttons for non-admin roles once auth check resolves
+(function pollRole() {
+  if (window._rnUser) {
+    if (!isAdmin()) document.querySelectorAll('.rn-admin-only').forEach(function(el){ el.style.display='none'; });
+  } else { setTimeout(pollRole, 150); }
+})();
 const fmt = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtDate = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('en-US', {month:'2-digit',day:'2-digit',year:'numeric'}) : '—';
 const toISO = d => d.toISOString().slice(0,10);
@@ -688,7 +695,7 @@ function renderTable() {
       const checked = state.selectedIds.has(e.id) ? 'checked' : '';
       const canPush = e.status === 'ready';
       return `<tr>
-        <td><input type="checkbox" value="${e.id}" ${checked} onchange="toggleRow(${e.id}, this)"></td>
+        ${isAdmin() ? `<td><input type="checkbox" value="${e.id}" ${checked} onchange="toggleRow(${e.id}, this)"></td>` : ''}
         <td>${fmtDate(e.entry_date)}</td>
         <td><span class="mono">${e.je_name || '—'}</span></td>
         <td style="color:var(--text2)">Daily Sales Journal</td>
@@ -697,7 +704,7 @@ function renderTable() {
         <td style="color:var(--text3);font-size:12px">${e.last_sync_attempt ? new Date(e.last_sync_attempt+'Z').toLocaleString('en-US',{timeZone:'America/New_York'}) : '—'}</td>
         <td style="display:flex;gap:6px;flex-wrap:nowrap">
           <button class="btn btn-secondary btn-sm" onclick="openEntry(${e.id})">View</button>
-          ${canPush ? `<button class="btn btn-blue btn-sm" onclick="quickPush(${e.id}, this)">Push to QBO</button>` : ''}
+          ${canPush && isAdmin() ? `<button class="btn btn-blue btn-sm" onclick="quickPush(${e.id}, this)">Push to QBO</button>` : ''}
         </td>
       </tr>`;
     }).join('');
@@ -718,7 +725,7 @@ function renderTable() {
         <td class="right currency">${fmt(e.net_sales || 0)}</td>
         <td>${statusPill(e.status)}</td>
         <td onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-wrap:nowrap">
-          ${canPush ? `<button class="btn btn-blue btn-sm" onclick="quickPush(${e.id}, this)">Push to QBO</button>` : ''}
+          ${canPush && isAdmin() ? `<button class="btn btn-blue btn-sm" onclick="quickPush(${e.id}, this)">Push to QBO</button>` : ''}
         </td>
       </tr>`;
     }).join('');

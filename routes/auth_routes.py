@@ -417,6 +417,20 @@ def reactivate_user(user_id):
     return jsonify({'ok': True})
 
 
+@auth_bp.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(user_id):
+    """Permanently delete a user account."""
+    if user_id == session.get('user_id'):
+        return jsonify({'error': "You can't delete yourself"}), 400
+    conn = get_connection()
+    conn.execute("DELETE FROM login_log WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True})
+
+
 # ------------------------------------------------------------------
 # Registration (token-gated)
 # ------------------------------------------------------------------
@@ -482,10 +496,11 @@ def register_submit(token):
     salt = secrets.token_hex(16)
     pwd_hash = hash_password(password, salt)
 
-    conn.execute("""
+    cursor = conn.execute("""
         INSERT INTO users (username, email, full_name, password_hash, salt, role, location, active)
         VALUES (?, ?, ?, ?, ?, ?, ?, 1)
     """, (username, inv['email'], full_name, pwd_hash, salt, inv['role'], inv['location']))
+    new_user_id = cursor.lastrowid
 
     conn.execute(
         "UPDATE invites SET accepted_at = datetime('now') WHERE id = ?",
@@ -494,7 +509,16 @@ def register_submit(token):
     conn.commit()
     conn.close()
 
-    return jsonify({'ok': True, 'redirect': '/login'})
+    # Auto-login the new user
+    session.permanent = True
+    session['user_id'] = new_user_id
+    session['username'] = username
+    session['email'] = inv['email']
+    session['full_name'] = full_name
+    session['role'] = inv['role']
+    session['location'] = inv['location']
+
+    return jsonify({'ok': True, 'redirect': '/'})
 
 
 # ------------------------------------------------------------------
@@ -727,7 +751,7 @@ REGISTER_HTML = """
         });
         const data = await r.json();
         if (r.ok && data.ok) {
-          successDiv.textContent = 'Account created! Redirecting to sign in...';
+          successDiv.textContent = 'Account created! Redirecting to dashboard...';
           successDiv.classList.add('show');
           btn.textContent = 'Success!';
           setTimeout(() => { window.location.href = '/login'; }, 1500);
