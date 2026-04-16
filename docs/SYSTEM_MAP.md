@@ -66,6 +66,7 @@
 |---|---|---|
 | Every 5 min | `/opt/red-nun-dashboard/monitoring/ddns.py` | Update `dashboard.rednun.com` DNS in Cloudflare |
 | Every 5 min | `/opt/red-nun-dashboard/integrations/invoices/watchers/email_invoice_poller.py` | Poll Gmail for invoice emails |
+| Every 5 min | `/opt/red-nun-dashboard/monitoring/check_toast_ordering.py` | Alert if Toast online ordering is down |
 | Every 30 min | `/opt/red-nun-dashboard/monitoring/server_down_check.py` | Alert if server is unreachable |
 | Daily 6am, 12pm, 6pm | `/opt/wheelhouse/logger.py` | Wheelhouse data logger |
 | Daily 7am | `/home/rednun/vendor-scrapers/run_all.sh` | Scrape vendor invoices |
