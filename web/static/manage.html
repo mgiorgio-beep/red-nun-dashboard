@@ -6645,13 +6645,12 @@ async function rcOpenModal(billId) {
   document.getElementById('rc-bill-payto').value = '';
   document.getElementById('rc-bill-loc').value = 'dennis';
   document.getElementById('rc-bill-active').checked = true;
-  // Load vendor list
+  // Load vendor suggestions into datalist
   try {
     var vr = await fetch('/api/billpay/vendors');
     var vd = await vr.json();
-    var sel = document.getElementById('rc-bill-vendor');
-    sel.innerHTML = '<option value="">— Select Vendor —</option>' +
-      (vd.vendors||[]).map(function(v){ return '<option value="' + v.vendor_name + '">' + v.vendor_name + '</option>'; }).join('');
+    var dl = document.getElementById('rc-vendor-list');
+    if (dl) dl.innerHTML = (vd.vendors||[]).map(function(v){ return '<option value="' + v.vendor_name + '">'; }).join('');
   } catch(e) {}
   if (billId) {
     try {
@@ -8125,9 +8124,8 @@ async function maRecalcCosts() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div style="grid-column:1/-1">
         <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Vendor</label>
-        <select id="rc-bill-vendor" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
-          <option value="">— Select Vendor —</option>
-        </select>
+        <input type="text" id="rc-bill-vendor" list="rc-vendor-list" placeholder="Type vendor name…" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
+        <datalist id="rc-vendor-list"></datalist>
       </div>
       <div style="grid-column:1/-1">
         <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Description / Bill Name</label>
