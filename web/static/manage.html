@@ -1921,6 +1921,27 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
           <div id="pr-runs-list"></div>
           <div id="pr-runs-empty" style="display:none;text-align:center;padding:60px;color:var(--text3);font-size:13px">No payroll runs yet. Click "+ New Payroll Run" to upload a 7shifts journal CSV.</div>
 
+          <!-- Legacy individual checks (pre-run system) -->
+          <div id="pr-legacy-wrap" style="display:none;margin-top:28px">
+            <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Previous Checks</div>
+            <div class="card" style="padding:0;overflow:hidden">
+              <table style="width:100%;border-collapse:collapse;font-size:12px">
+                <thead>
+                  <tr style="border-bottom:1px solid var(--border);background:#f8fafc">
+                    <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:500">Date</th>
+                    <th style="padding:8px 8px;text-align:left;color:var(--text3);font-weight:500">Employee</th>
+                    <th style="padding:8px 8px;text-align:left;color:var(--text3);font-weight:500">Period</th>
+                    <th style="padding:8px 8px;text-align:right;color:var(--text3);font-weight:500">Gross</th>
+                    <th style="padding:8px 8px;text-align:right;color:var(--text3);font-weight:500">Net</th>
+                    <th style="padding:8px 8px;text-align:left;color:var(--text3);font-weight:500">Check #</th>
+                    <th style="padding:8px 8px;text-align:left;color:var(--text3);font-weight:500">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="pr-legacy-body"></tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -2421,7 +2442,7 @@ function showView(view) {
     case 'bp-payments': bpLoadPayments(); break;
     case 'bp-vendors': bpLoadVendors(); break;
     case 'bp-checksetup': bpLoadCheckConfig(); break;
-    case 'bp-payroll': prLoadRuns(); break;
+    case 'bp-payroll': prLoadRuns(); prLoadLegacy(); break;
     case 'bp-recurring': rcInit(); break;
   }
 }
@@ -6124,6 +6145,7 @@ function prSwitchLocation(loc) {
   document.getElementById('pr-loc-chatham').classList.toggle('active', loc === 'chatham');
   document.getElementById('pr-loc-dennisport').classList.toggle('active', loc === 'dennisport');
   prLoadRuns();
+  prLoadLegacy();
 }
 
 async function prLoadRuns() {
@@ -6191,6 +6213,38 @@ async function prLoadRuns() {
     });
     list.innerHTML = html;
   } catch(e) { console.error('Payroll load error:', e); }
+}
+
+async function prLoadLegacy() {
+  // Show payroll_checks records that predate the run system (no payroll_run_id)
+  try {
+    var r = await fetch('/api/billpay/payroll-checks?location=' + _prLocation);
+    var checks = await r.json();
+    // Filter to only legacy records (those without a run — old OCR-uploaded ones)
+    // The API returns all; we distinguish by checking if check looks like it came from old flow
+    // For safety show all of them; ones in new runs will still appear in run cards above
+    var wrap = document.getElementById('pr-legacy-wrap');
+    var tbody = document.getElementById('pr-legacy-body');
+    if (!checks || !checks.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    var html = '';
+    checks.forEach(function(c) {
+      var dt = ((c.printed_at || c.created_at || '').split('T')[0].split(' ')[0]);
+      var status = c.voided ? '<span style="color:#ef4444">Void</span>' :
+                   c.status === 'printed' || c.printed_at ? '<span style="color:#22c55e">Printed</span>' :
+                   '<span style="color:#f59e0b">Pending</span>';
+      html += '<tr style="border-bottom:1px solid var(--border)">';
+      html += '<td style="padding:7px 12px;color:var(--text2)">' + dt + '</td>';
+      html += '<td style="padding:7px 8px;color:#111827;font-weight:500">' + (c.employee_name||'') + '</td>';
+      html += '<td style="padding:7px 8px;color:var(--text3);font-size:11px">' + (c.pay_period_start||'') + (c.pay_period_end ? ' — '+c.pay_period_end : '') + '</td>';
+      html += '<td style="padding:7px 8px;text-align:right;color:#111827">$' + (c.gross_pay||0).toFixed(2) + '</td>';
+      html += '<td style="padding:7px 8px;text-align:right;color:#22c55e;font-weight:600">$' + (c.net_pay||0).toFixed(2) + '</td>';
+      html += '<td style="padding:7px 8px;color:#111827">' + (c.check_number||'—') + '</td>';
+      html += '<td style="padding:7px 8px">' + status + '</td>';
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+  } catch(e) { console.error('Legacy payroll load error:', e); }
 }
 
 async function prToggleRun(runId, headerEl) {
