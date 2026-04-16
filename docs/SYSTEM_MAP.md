@@ -41,8 +41,9 @@
 | `northfla.rednun.com` | A | 174.180.119.126 | YES | |
 | `skywatch.rednun.com` | A | 174.180.119.126 | YES | |
 | `ssh.rednun.com` | A | 174.180.119.126 | NO | SSH can't go through Cloudflare |
-| `rednun.com` | A | 162.120.94.90 | NO | ⛔ Register.com web host — DO NOT TOUCH |
-| `www.rednun.com` | CNAME | sites.toasttab.com | **NO** | ⛔ MUST STAY DNS-ONLY — proxying breaks Toast ordering |
+| `rednun.com` | A | 162.120.94.90 | **NO** | ⛔ Register.com web host — DO NOT TOUCH |
+| `www.rednun.com` | CNAME | sites.toasttab.com | **NO** | ⛔ NEVER PROXY — breaks Toast ordering immediately |
+| `_acme-challenge.rednun.com` | CNAME | rednun.com.cec5188867cef154.dcv.cloudflare.com | **NO** | ⛔ NEVER PROXY — breaks Toast SSL cert renewal (ordering fails within days) |
 | `mail.rednun.com` | CNAME | webmail01.register.com | NO | |
 | MX records | — | Google Workspace | NO | |
 
@@ -103,8 +104,10 @@
 
 ## Known Gotchas
 
-- **`www.rednun.com` must never be proxied through Cloudflare** — breaks Toast online ordering (cost $1k in lost orders Apr 12 2026)
+- **`www.rednun.com` must NEVER be proxied through Cloudflare** — breaks Toast online ordering immediately (cost $1k+ in lost orders Apr 12 2026)
+- **`_acme-challenge.rednun.com` must NEVER be proxied through Cloudflare** — breaks Toast SSL cert renewal; ordering fails on a delay (days), harder to catch (Apr 11-15 2026 outage)
 - **`rednun.com` A record must never be changed** — points to Register.com host, not this server
+- **Do not open Toast-related DNS records in Cloudflare's edit UI** — Cloudflare defaults proxy to ON when saving; even a no-op save can flip it
 - **Real DB is `/var/lib/rednun/toast_data.db`** — set via `DB_PATH` in `.env`. The file at `/opt/red-nun-dashboard/data/toast_data.db` is an empty stub.
 - **DDNS only updates `dashboard.rednun.com`** — all other A records point to the same IP but need manual update if the server IP ever changes
 - **`/opt/rednun.retired-20260412`** — old repo left from Phase 2H cutover, can be deleted once confident everything is working

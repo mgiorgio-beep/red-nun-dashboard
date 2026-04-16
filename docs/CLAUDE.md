@@ -353,19 +353,29 @@ Pages that are **mobile-primary** (desktop shows "mobile only" or simplified vie
 - **PDF naming:** Lastname_Firstname.pdf
 - **Auto-close:** 10-second countdown after submission
 
-## ⛔ DNS — NEVER TOUCH rednun.com
-**DO NOT modify the  DNS record or the  CNAME under any circumstances.**
+## ⛔⛔⛔ TOAST DNS — DO NOT TOUCH — REVENUE-CRITICAL ⛔⛔⛔
 
--  is a CNAME to  and MUST remain **DNS-only (proxied: False)** in Cloudflare. Proxying it through Cloudflare breaks Toast online ordering completely.
--  points to the restaurant's web host (162.120.94.90) — not this server. Do not touch it.
-- **Toast online ordering going down = direct revenue loss.** This mistake cost ,000 in lost orders.
-- The only DNS the DDNS script should ever update is .
+**The following THREE Cloudflare DNS records control Toast online ordering for rednun.com.
+DO NOT edit, delete, re-create, proxy, or modify them in ANY way. Ever.**
 
+| Record | Type | Target | Proxy Status | Why |
+|---|---|---|---|---|
+| `rednun.com` | A | `162.120.94.90` | **DNS ONLY (grey cloud)** | Register.com web host. NOT this server. |
+| `www.rednun.com` | CNAME | `sites.toasttab.com` | **DNS ONLY (grey cloud)** | Toast ordering frontend. Proxying = ordering down. |
+| `_acme-challenge.rednun.com` | CNAME | `rednun.com.cec5188867cef154.dcv.cloudflare.com` | **DNS ONLY (grey cloud)** | Toast SSL cert validation (DCV). Proxying = cert renewal fails = ordering breaks within days. |
 
-## NEVER TOUCH rednun.com DNS
-**DO NOT modify the `rednun.com` DNS record or `www.rednun.com` CNAME under any circumstances.**
+### Why this matters
+- **Proxying `www` breaks ordering immediately** — Cloudflare terminates TLS with its own SNI, Toast rejects the request with `403 host_not_allowed`, customers cannot order.
+- **Proxying `_acme-challenge` breaks ordering on a delay** — Toast's SSL-for-SaaS cert renewal silently fails because DCV lookup returns Cloudflare edge IPs instead of the CNAME target. Ordering continues on the old cert for days, then breaks when it expires. This is WORSE because it looks like everything is fine until it suddenly isn't.
+- **Modifying `rednun.com` A record breaks the restaurant website entirely.**
 
-- `www.rednun.com` is a CNAME to `sites.toasttab.com` and MUST stay **proxied: False** (DNS-only) in Cloudflare. Proxying it through Cloudflare breaks Toast online ordering completely.
-- `rednun.com` points to the restaurant web host (162.120.94.90) — not this server. Do not touch it.
-- Toast ordering going down = direct revenue loss. This mistake cost $1,000 in lost orders.
-- The DDNS script (`monitoring/ddns.py`) must only ever update `dashboard.rednun.com`. Nothing else.
+### What has gone wrong before
+- **Apr 11-15, 2026:** A Claude Code cleanup session opened these records in Cloudflare. Simply saving a record without explicitly toggling the proxy switch OFF causes Cloudflare to default it to Proxied (orange cloud). Both `www` and `_acme-challenge` got flipped. `www` was caught and fixed Apr 12 ($1,000+ in lost orders). `_acme-challenge` was not caught until Apr 15 (4 more days of broken ordering). Total revenue loss: multiple thousands of dollars.
+
+### Rules
+1. **NEVER open these records in Cloudflare's edit UI** — even viewing + saving without changes can flip proxy status to ON (Cloudflare's default).
+2. **NEVER delete and re-create these records** — same proxy-default problem, plus risks typos in the DCV token.
+3. **NEVER run any script or automation that touches these records.** The DDNS script (`monitoring/ddns.py`) must ONLY update `dashboard.rednun.com`. Nothing else.
+4. **NEVER proxy (orange cloud) any record containing `toasttab`, `_acme-challenge`, `dcv.cloudflare`, or pointing to `162.120.94.90`.**
+5. **If Toast support asks you to add or change DNS records**, do it carefully and TRIPLE-CHECK proxy status is DNS-only (grey cloud) before saving.
+6. **If in doubt, do not touch it. Ask first.**
