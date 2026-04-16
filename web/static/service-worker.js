@@ -1,7 +1,7 @@
 // Red Nun Dashboard Service Worker
 // Provides basic offline functionality and caching
 
-const CACHE_NAME = 'rednun-v3';
+const CACHE_NAME = 'rednun-v4';
 const OFFLINE_URL = '/';
 
 // Files to cache for offline use

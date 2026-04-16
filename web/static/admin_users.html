@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users & Invites - Red Nun Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+.au-wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px; }
+.au-title { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 24px; }
+.au-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 28px; }
+.au-card-title { font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 16px; }
+.au-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+.au-field { display: flex; flex-direction: column; }
+.au-field label { font-size: 12px; font-weight: 500; color: #6b7280; margin-bottom: 5px; }
+.au-field input, .au-field select {
+  padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 8px;
+  font-size: 14px; color: #111827; background: #fff; font-family: inherit;
+}
+.au-field input:focus, .au-field select:focus { outline: none; border-color: #9ca3af; }
+.au-btn {
+  padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: none; transition: opacity 0.12s; font-family: inherit;
+}
+.au-btn:hover { opacity: 0.88; }
+.au-btn-primary { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; }
+.au-btn-ghost { background: transparent; border: 1px solid #e5e7eb; color: #374151; }
+.au-btn-danger { background: #dc2626; color: #fff; }
+.au-btn-sm { padding: 5px 12px; font-size: 12px; }
+
+.au-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.au-table th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid #e5e7eb; }
+.au-table td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; color: #111827; vertical-align: middle; }
+.au-table tr:last-child td { border-bottom: none; }
+
+.au-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.au-badge-admin { background: rgba(16,185,129,0.12); color: #059669; }
+.au-badge-manager { background: rgba(217,119,6,0.12); color: #d97706; }
+.au-badge-accountant { background: rgba(37,99,235,0.10); color: #2563eb; }
+.au-badge-dennis { background: rgba(37,99,235,0.10); color: #2563eb; }
+.au-badge-chatham { background: rgba(124,58,237,0.12); color: #7c3aed; }
+.au-badge-both { background: #f3f4f6; color: #6b7280; }
+
+.au-status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.au-status-pending { background: #fef9ec; color: #92640a; }
+.au-status-accepted { background: #edf7ed; color: #2e6e30; }
+.au-status-expired { background: #f3f4f6; color: #777; }
+.au-status-revoked { background: #feecec; color: #922; }
+
+.au-avatar {
+  width: 28px; height: 28px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 11px;
+  font-weight: 700; color: #fff; flex-shrink: 0; vertical-align: middle;
+  background: linear-gradient(135deg, #dc2626, #ef4444); margin-right: 8px;
+}
+.au-inactive { opacity: 0.4; }
+.au-section-title { font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 12px; }
+.au-muted { font-size: 12px; color: #9ca3af; }
+.au-empty { text-align: center; color: #9ca3af; padding: 24px; font-size: 13px; }
+.au-toast {
+  position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px;
+  font-size: 14px; font-weight: 500; color: #fff; z-index: 1000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15); transition: opacity 0.3s; opacity: 0;
+}
+.au-toast.show { opacity: 1; }
+.au-toast-success { background: #059669; }
+.au-toast-error { background: #dc2626; }
+.au-toast-warning { background: #d97706; }
+</style>
+</head>
+<body>
+<div class="au-wrap" id="app">
+  <div class="au-title">Users & Invites</div>
+
+  <!-- Send invite -->
+  <div class="au-card">
+    <div class="au-card-title">Send invite</div>
+    <form id="inviteForm" class="au-row">
+      <div class="au-field" style="flex:2;min-width:200px;">
+        <label>Email address</label>
+        <input type="email" id="inv-email" placeholder="staff@example.com" required>
+      </div>
+      <div class="au-field" style="min-width:140px;">
+        <label>Location</label>
+        <select id="inv-location">
+          <option value="both">Both Locations</option>
+          <option value="dennis">Dennis Port</option>
+          <option value="chatham">Chatham</option>
+        </select>
+      </div>
+      <div class="au-field" style="min-width:100px;">
+        <label>Role</label>
+        <select id="inv-role">
+          <option value="manager">Manager</option>
+          <option value="accountant">Accountant</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div><button type="submit" class="au-btn au-btn-primary" id="inv-btn">Send invite</button></div>
+    </form>
+  </div>
+
+  <!-- Invites -->
+  <div class="au-section-title">Invites</div>
+  <div class="au-card" style="padding:0;overflow:hidden;margin-bottom:28px;">
+    <table class="au-table">
+      <thead><tr><th>Email</th><th>Location</th><th>Role</th><th>Status</th><th>Sent</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody id="invites-body"><tr><td colspan="6" class="au-empty">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Users -->
+  <div class="au-section-title">Accounts</div>
+  <div class="au-card" style="padding:0;overflow:hidden;">
+    <table class="au-table">
+      <thead><tr><th>Name</th><th>Email</th><th>Location</th><th>Role</th><th>Last Login</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody id="users-body"><tr><td colspan="6" class="au-empty">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="au-toast" id="toast"></div>
+
+<script src="/static/sidebar.js"></script>
+<script>
+const LOC = {dennis:'Dennis Port', chatham:'Chatham', both:'Both Locations'};
+
+function initials(name) {
+  if (!name) return '??';
+  const p = name.trim().split(/\s+/);
+  return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : name.slice(0,2).toUpperCase();
+}
+
+function fmtDate(d) {
+  if (!d) return '--';
+  try { return new Date(d).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}); }
+  catch { return d; }
+}
+
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'au-toast au-toast-' + (type||'success') + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function api(url, method, body) {
+  const opts = {method: method || 'GET', headers: {'Content-Type':'application/json'}};
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+let currentUserId = null;
+
+async function load() {
+  try {
+    const auth = await api('/api/auth/check');
+    currentUserId = auth.user_id;
+  } catch {}
+
+  try {
+    const data = await api('/api/admin/users');
+    renderInvites(data.invites || []);
+    renderUsers(data.users || []);
+  } catch (e) {
+    document.getElementById('invites-body').innerHTML = '<tr><td colspan="6" class="au-empty">Error loading data</td></tr>';
+    document.getElementById('users-body').innerHTML = '<tr><td colspan="6" class="au-empty">Error loading data</td></tr>';
+  }
+}
+
+function renderInvites(invites) {
+  const tbody = document.getElementById('invites-body');
+  if (!invites.length) { tbody.innerHTML = '<tr><td colspan="6" class="au-empty">No invites sent yet.</td></tr>'; return; }
+  tbody.innerHTML = invites.map(inv => {
+    let actions = '';
+    if (inv.status === 'pending' || inv.status === 'expired') {
+      actions += `<button class="au-btn au-btn-sm au-btn-ghost" onclick="resend(${inv.id})">Resend</button> `;
+    }
+    if (inv.status === 'pending') {
+      actions += `<button class="au-btn au-btn-sm au-btn-danger" onclick="revoke(${inv.id})">Revoke</button>`;
+    }
+    return `<tr>
+      <td>${esc(inv.email)}</td>
+      <td><span class="au-badge au-badge-${inv.location}">${LOC[inv.location]||inv.location}</span></td>
+      <td><span class="au-badge au-badge-${inv.role}">${inv.role}</span></td>
+      <td><span class="au-status au-status-${inv.status}">${inv.status}</span></td>
+      <td class="au-muted">${fmtDate(inv.created_at)}</td>
+      <td style="text-align:right;">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById('users-body');
+  if (!users.length) { tbody.innerHTML = '<tr><td colspan="6" class="au-empty">No users yet.</td></tr>'; return; }
+  tbody.innerHTML = users.map(u => {
+    const cls = u.active ? '' : ' class="au-inactive"';
+    const isMe = u.id === currentUserId;
+    let actions = '';
+    if (u.active && !isMe) {
+      actions = `<button class="au-btn au-btn-sm au-btn-danger" onclick="deactivate(${u.id},'${esc(u.full_name||u.username)}')">Deactivate</button>`;
+    } else if (!u.active) {
+      actions = `<button class="au-btn au-btn-sm au-btn-ghost" onclick="reactivate(${u.id})">Reactivate</button>`;
+    }
+    return `<tr${cls}>
+      <td><span class="au-avatar">${initials(u.full_name||u.username)}</span>${esc(u.full_name||u.username)}${isMe?' <span class="au-badge" style="font-size:10px;">you</span>':''}</td>
+      <td>${esc(u.email||'--')}</td>
+      <td><span class="au-badge au-badge-${u.location||'both'}">${LOC[u.location]||'Both'}</span></td>
+      <td><span class="au-badge au-badge-${u.role}">${u.role}</span></td>
+      <td class="au-muted">${fmtDate(u.last_login)}</td>
+      <td style="text-align:right;">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+document.getElementById('inviteForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('inv-btn');
+  btn.disabled = true; btn.textContent = 'Sending...';
+  try {
+    const data = await api('/api/admin/invite', 'POST', {
+      email: document.getElementById('inv-email').value.trim(),
+      location: document.getElementById('inv-location').value,
+      role: document.getElementById('inv-role').value,
+    });
+    toast(data.message, data.email_sent ? 'success' : 'warning');
+    document.getElementById('inv-email').value = '';
+    load();
+  } catch (e) { toast(e.message, 'error'); }
+  btn.disabled = false; btn.textContent = 'Send invite';
+});
+
+async function resend(id) {
+  try { const d = await api(`/api/admin/invite/${id}/resend`, 'POST'); toast(d.message); load(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+async function revoke(id) {
+  if (!confirm('Revoke this invite?')) return;
+  try { await api(`/api/admin/invite/${id}/revoke`, 'POST'); toast('Invite revoked'); load(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+async function deactivate(id, name) {
+  if (!confirm(`Deactivate ${name}?`)) return;
+  try { await api(`/api/admin/users/${id}/deactivate`, 'POST'); toast(`${name} deactivated`); load(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+async function reactivate(id) {
+  try { await api(`/api/admin/users/${id}/reactivate`, 'POST'); toast('User reactivated'); load(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+
+load();
+</script>
+</body>
+</html>

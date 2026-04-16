@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from flask import Blueprint, jsonify, request, send_from_directory, Response
 
 from integrations.toast.data_store import get_connection
+from routes.auth_routes import login_required, admin_required
 from reports.sales_journal import (
     build_journal_entry,
     persist_journal_entry,
@@ -33,6 +34,7 @@ PAGE_SIZE = 30
 
 @daily_sales_bp.route("/sales-journal")
 @daily_sales_bp.route("/sales-journal/<int:entry_id>")
+@login_required
 def sales_journal_page(entry_id=None):
     from flask import send_from_directory, current_app, make_response
     resp = make_response(send_from_directory(current_app.static_folder, "sales_journal.html"))
@@ -46,6 +48,7 @@ def sales_journal_page(entry_id=None):
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/last-run")
+@login_required
 def api_last_run():
     conn = get_connection()
     row = conn.execute("""
@@ -60,6 +63,7 @@ def api_last_run():
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/entries")
+@login_required
 def api_list_entries():
     location = request.args.get("location", "dennis")
     start = request.args.get("start")
@@ -152,6 +156,7 @@ def api_list_entries():
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/entries/<int:entry_id>")
+@login_required
 def api_get_entry(entry_id):
     conn = get_connection()
     row = conn.execute("""
@@ -180,6 +185,7 @@ def api_get_entry(entry_id):
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/entries/<int:entry_id>", methods=["PUT"])
+@admin_required
 def api_update_entry(entry_id):
     data = request.get_json()
     if not data:
@@ -257,6 +263,7 @@ def api_update_entry(entry_id):
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/entries/<int:entry_id>/fix-mapping", methods=["POST"])
+@admin_required
 def api_fix_mapping(entry_id):
     """Save a mapping for one unmapped journal_name and update this entry's line items."""
     data = request.get_json() or {}
@@ -307,6 +314,7 @@ def api_fix_mapping(entry_id):
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/entries/<int:entry_id>/push", methods=["POST"])
+@admin_required
 def api_push_entry(entry_id):
     result = push_to_qbo(entry_id)
 
@@ -339,6 +347,7 @@ def api_push_entry(entry_id):
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/entries/<int:entry_id>", methods=["DELETE"])
+@admin_required
 def api_delete_entry(entry_id):
     conn = get_connection()
     conn.execute("DELETE FROM qb_journal_entries WHERE id=?", (entry_id,))
@@ -352,6 +361,7 @@ def api_delete_entry(entry_id):
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/entries/bulk-push", methods=["POST"])
+@admin_required
 def api_bulk_push():
     data = request.get_json() or {}
     entry_ids = data.get("ids", [])
@@ -368,6 +378,7 @@ def api_bulk_push():
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/generate", methods=["POST"])
+@admin_required
 def api_generate_entry():
     data = request.get_json() or {}
     location = data.get("location", "dennis")
@@ -392,6 +403,7 @@ def api_generate_entry():
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/export")
+@login_required
 def api_export_csv():
     location = request.args.get("location", "dennis")
     now_et = datetime.now(ET)
@@ -414,6 +426,7 @@ def api_export_csv():
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/accounts")
+@login_required
 def api_accounts():
     conn = get_connection()
     rows = conn.execute("""
@@ -430,6 +443,7 @@ def api_accounts():
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/api/sales-journal/stale-count")
+@login_required
 def api_stale_count():
     location = request.args.get("location", "dennis")
     start = request.args.get("start")
@@ -463,6 +477,7 @@ def api_stale_count():
 # ---------------------------------------------------------------------------
 
 @daily_sales_bp.route("/sales-mapping")
+@login_required
 def sales_mapping_page():
     from flask import send_from_directory, current_app, make_response
     resp = make_response(send_from_directory(current_app.static_folder, "sales_mapping.html"))
@@ -495,6 +510,7 @@ CANONICAL_LINES = [
 
 
 @daily_sales_bp.route("/api/sales-journal/mapping")
+@login_required
 def api_get_mapping():
     location = request.args.get("location", "chatham")
     conn = get_connection()
@@ -527,6 +543,7 @@ def api_get_mapping():
 
 
 @daily_sales_bp.route("/api/sales-journal/mapping", methods=["POST"])
+@admin_required
 def api_save_mapping():
     data = request.get_json() or {}
     location = data.get("location", "chatham")

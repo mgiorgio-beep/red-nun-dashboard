@@ -174,6 +174,23 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_sync_log
             ON sync_log(location, data_type, business_date);
+
+        -- Invite tokens for user registration
+        CREATE TABLE IF NOT EXISTS invites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            email TEXT NOT NULL,
+            role TEXT DEFAULT 'staff',
+            location TEXT DEFAULT 'both',
+            invited_by INTEGER NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            accepted_at TEXT,
+            revoked_at TEXT,
+            FOREIGN KEY (invited_by) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);
+        CREATE INDEX IF NOT EXISTS idx_invites_email ON invites(email);
     """)
 
     conn.commit()

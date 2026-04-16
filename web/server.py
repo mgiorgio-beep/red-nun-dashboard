@@ -34,7 +34,7 @@ from routes.catalog_routes import catalog_bp
 from routes.inventory_routes import inventory_bp
 from routes.product_mapping_routes import mapping_bp
 from ai.inventory_ai_routes import ai_inventory_bp
-from routes.auth_routes import auth_bp, login_required
+from routes.auth_routes import auth_bp, login_required, admin_required
 from routes.storage_routes import storage_bp
 from routes.order_guide_routes import order_guide_bp
 from routes.specials_routes import specials_bp, init_specials_tables
@@ -201,9 +201,9 @@ def order_guide_page():
 
 
 @app.route("/vendor-status")
-@login_required
+@admin_required
 def vendor_status_page():
-    """Serve the vendor session status page."""
+    """Serve the vendor session status page (admin only)."""
     return send_from_directory("static", "vendor_status.html")
 
 
@@ -232,6 +232,20 @@ def specials_admin_page():
 def voice_recipe_page():
     """Serve the voice recipe builder page."""
     return send_from_directory("static", "voice_recipe.html")
+
+
+@app.route("/admin/users")
+@admin_required
+def admin_users_page():
+    """Serve the user management page (admin only)."""
+    return send_from_directory("static", "admin_users.html")
+
+
+@app.route("/change-password")
+@login_required
+def change_password_page():
+    """Serve the change password page."""
+    return send_from_directory("static", "change_password.html")
 
 
 # ------------------------------------------------------------------

@@ -166,7 +166,7 @@ var layout=document.createElement('div');layout.className='rn-layout';
 var sidebar=document.createElement('aside');sidebar.className='rn-sidebar';sidebar.innerHTML=buildSidebar();
 var main=document.createElement('div');main.className='rn-main';
 var topbar=document.createElement('div');topbar.className='rn-topbar';
-topbar.innerHTML='<div class="rn-topbar-left"></div><select class="rn-sb-location" id="rn-location"><option value="dennis">Dennis Port</option><option value="chatham">Chatham</option></select>';
+topbar.innerHTML='<div class="rn-topbar-left"></div><select class="rn-sb-location" id="rn-location"><option value="dennis">Dennis Port</option><option value="chatham">Chatham</option></select><div class="rn-user-menu" id="rn-user-menu"></div>';
 main.appendChild(topbar);
 for(var c=0;c<children.length;c++)main.appendChild(children[c]);
 var hamburger=document.createElement('button');hamburger.className='rn-hamburger';
@@ -260,6 +260,80 @@ setTimeout(function(){
     }
   }}
 },100);
+
+// User avatar in topbar + admin sidebar section
+fetch('/api/auth/check').then(function(r){return r.json()}).then(function(u){
+  if(!u.authenticated)return;
+  window._rnUser=u;
+  // Build initials
+  var parts=(u.full_name||u.username||'?').trim().split(/\s+/);
+  var ini=parts.length>=2?(parts[0][0]+parts[parts.length-1][0]).toUpperCase():((u.full_name||u.username||'?').slice(0,2).toUpperCase());
+  var locLabel={dennis:'Dennis Port',chatham:'Chatham',both:'Both Locations'}[u.location]||'Both';
+
+  // Avatar + dropdown
+  var menu=document.getElementById('rn-user-menu');
+  if(menu){
+    var adminLink=u.role==='admin'?'<a class="rn-ud-item" href="/admin/users"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a3 3 0 110 6 3 3 0 010-6zM2 13s-1 0-1-1 1-4 7-4 7 3 7 4-1 1-1 1H2z"/></svg>Manage users</a>':'';
+    menu.innerHTML='<button class="rn-avatar-btn" id="rn-avatar-btn">'+ini+'</button>'
+      +'<div class="rn-ud" id="rn-ud">'
+      +'<div class="rn-ud-hdr"><div class="rn-ud-name">'+((u.full_name||u.username)||'')+'</div>'
+      +'<div class="rn-ud-email">'+(u.email||'')+'</div>'
+      +'<div style="margin-top:6px;"><span class="rn-ud-badge">'+locLabel+'</span> <span class="rn-ud-badge" style="text-transform:capitalize;">'+u.role+'</span></div></div>'
+      +adminLink
+      +'<a class="rn-ud-item" href="/change-password"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="10" height="8" rx="2"/><path d="M5 7V5a3 3 0 016 0v2" stroke-linecap="round"/></svg>Change password</a>'
+      +'<div class="rn-ud-sep"></div>'
+      +'<a class="rn-ud-item rn-ud-danger" href="/logout"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6"/></svg>Sign out</a>'
+      +'</div>';
+    document.getElementById('rn-avatar-btn').addEventListener('click',function(e){
+      e.stopPropagation();
+      var dd=document.getElementById('rn-ud');
+      dd.classList.toggle('open');
+    });
+    document.addEventListener('click',function(e){
+      if(!menu.contains(e.target)){var dd=document.getElementById('rn-ud');if(dd)dd.classList.remove('open');}
+    });
+  }
+
+  // Hide restricted sections for non-admin roles
+  if(u.role!=='admin'){
+    // Hide Vendor Scrapers nav item (admin only)
+    var vs=document.getElementById('nav-vendorstatus');
+    if(vs)vs.style.display='none';
+    // Manager: hide Bill Pay entirely
+    if(u.role==='manager'){
+      var bp=document.getElementById('sec-billpay');
+      if(bp)bp.style.display='none';
+    }
+  }
+
+  // Admin sidebar section
+  if(u.role==='admin'){
+    var nav=document.querySelector('.rn-sb-nav');
+    if(nav){
+      var adminHtml='<div class="rn-sb-group" id="sec-admin">'
+        +'<div class="rn-sb-parent" data-section="sec-admin">'+icons.mgmt+'<span>Admin</span>'+chevron+'</div>'
+        +'<div class="rn-sb-children">'
+        +'<a class="rn-sb-child" id="nav-users" data-page="/admin/users" href="javascript:void(0)"><span>User Accounts</span></a>'
+        +'<a class="rn-sb-child" id="nav-logins" data-page="/admin/logins" href="javascript:void(0)"><span>Login History</span></a>'
+        +'</div></div>';
+      nav.insertAdjacentHTML('beforeend',adminHtml);
+      // Bind toggle
+      var adminParent=document.querySelector('#sec-admin .rn-sb-parent');
+      if(adminParent)adminParent.addEventListener('click',function(){document.getElementById('sec-admin').classList.toggle('open')});
+      // Bind nav clicks
+      ['nav-users','nav-logins'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(el)el.addEventListener('click',function(e){
+          e.preventDefault();
+          window.location.href=el.dataset.page;
+        });
+      });
+      // Highlight active if on admin page
+      if(window.location.pathname==='/admin/users'){setActiveItem('nav-users');document.getElementById('sec-admin').classList.add('open');}
+      if(window.location.pathname==='/admin/logins'){setActiveItem('nav-logins');document.getElementById('sec-admin').classList.add('open');}
+    }
+  }
+}).catch(function(e){console.error('sidebar avatar error:',e)});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
@@ -279,22 +353,6 @@ fetch('/api/invoices/pending-count').then(function(r){return r.json()}).then(fun
 }
 setInterval(pollBadges,30000);
 setTimeout(pollBadges,500);
-})();
-
-/* Red Nun — load universal sortable-tables script */
-(function(){
-  var s = document.createElement('script');
-  s.src = '/static/rn-sortable.js';
-  s.defer = true;
-  document.head.appendChild(s);
-})();
-
-/* Red Nun — load universal sortable-tables script */
-(function(){
-  var s = document.createElement('script');
-  s.src = '/static/rn-sortable.js';
-  s.defer = true;
-  document.head.appendChild(s);
 })();
 
 /* Red Nun — load universal sortable-tables script */

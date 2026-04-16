@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_from_directory
 from PIL import Image
+from routes.auth_routes import admin_required
 
 from integrations.invoices.processor import (
     init_invoice_tables,
@@ -1459,6 +1460,7 @@ def _run_all_scrapers_bg():
 
 
 @invoice_bp.route("/api/vendor-scrapers/run", methods=["POST"])
+@admin_required
 def api_run_vendor_scraper():
     """Trigger a vendor scraper in the background."""
     data = request.get_json(force=True)
@@ -1497,6 +1499,7 @@ def api_run_vendor_scraper():
 
 
 @invoice_bp.route("/api/vendor-scrapers/running", methods=["GET"])
+@admin_required
 def api_get_running_scrapers():
     """Return which scrapers are currently running, plus recent results."""
     state = _read_scraper_state()
@@ -1504,6 +1507,7 @@ def api_get_running_scrapers():
 
 
 @invoice_bp.route("/api/vendor-scrapers/log/<key>", methods=["GET"])
+@admin_required
 def api_get_scraper_log(key):
     """Return the full log output from the last run of a scraper."""
     log_path = os.path.join(_SCRAPER_LOG_DIR, f"{key}.log")

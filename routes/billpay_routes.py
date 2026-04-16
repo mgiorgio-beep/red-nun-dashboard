@@ -11,7 +11,7 @@ from datetime import datetime, date
 
 from flask import Blueprint, jsonify, request, send_file, send_from_directory
 from integrations.toast.data_store import get_connection
-from routes.auth_routes import login_required
+from routes.auth_routes import login_required, admin_required, admin_or_accountant_required
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ billpay_bp = Blueprint("billpay_bp", __name__)
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/invoices")
-@login_required
+@admin_or_accountant_required
 def get_billpay_invoices():
     """Return confirmed invoices with payment info, filterable."""
     vendor = request.args.get("vendor")
@@ -164,7 +164,7 @@ def get_billpay_invoices():
 
 
 @billpay_bp.route("/api/billpay/invoices/export-csv")
-@login_required
+@admin_or_accountant_required
 def export_invoices_csv():
     """Export outstanding invoices as CSV."""
     conn = get_connection()
@@ -205,7 +205,7 @@ def export_invoices_csv():
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/aging-summary")
-@login_required
+@admin_or_accountant_required
 def aging_summary():
     """Return AP aging buckets and per-vendor totals."""
     conn = get_connection()
@@ -292,7 +292,7 @@ def aging_summary():
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/vendors")
-@login_required
+@admin_or_accountant_required
 def get_billpay_vendors():
     """Return all vendors merged from vendors table + scanned_invoices, with bill pay settings."""
     conn = get_connection()
@@ -401,7 +401,7 @@ def get_billpay_vendors():
 
 
 @billpay_bp.route("/api/billpay/vendors/<path:vendor_name>", methods=["GET"])
-@login_required
+@admin_or_accountant_required
 def get_billpay_vendor(vendor_name):
     """Get full bill pay details for a vendor."""
     conn = get_connection()
@@ -419,7 +419,7 @@ def get_billpay_vendor(vendor_name):
 
 
 @billpay_bp.route("/api/billpay/vendors/<path:vendor_name>/sample-invoice")
-@login_required
+@admin_required
 def vendor_sample_invoice(vendor_name):
     """Serve the most recent invoice image/thumbnail for a vendor."""
     import os
@@ -443,7 +443,7 @@ def vendor_sample_invoice(vendor_name):
 
 
 @billpay_bp.route("/api/billpay/vendors/<path:vendor_name>", methods=["PUT"])
-@login_required
+@admin_required
 def update_billpay_vendor(vendor_name):
     """Create or update vendor bill pay settings."""
     data = request.get_json()
@@ -501,7 +501,7 @@ def update_billpay_vendor(vendor_name):
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/payments")
-@login_required
+@admin_or_accountant_required
 def get_payments():
     """Payment history with linked invoices."""
     vendor = request.args.get("vendor")
@@ -567,7 +567,7 @@ def get_payments():
 
 
 @billpay_bp.route("/api/billpay/payments", methods=["POST"])
-@login_required
+@admin_required
 def create_payment():
     """Create a payment and link to invoices."""
     data = request.get_json()
@@ -659,7 +659,7 @@ def create_payment():
 
 
 @billpay_bp.route("/api/billpay/payments/<int:payment_id>/void", methods=["PUT"])
-@login_required
+@admin_required
 def void_payment(payment_id):
     """Void a payment and reverse invoice balances."""
     conn = get_connection()
@@ -749,7 +749,7 @@ def void_payment(payment_id):
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/check-config")
-@login_required
+@admin_required
 def get_check_config():
     """Return check printing config for a location."""
     location = request.args.get("location", "chatham")
@@ -764,7 +764,7 @@ def get_check_config():
 
 
 @billpay_bp.route("/api/billpay/check-config", methods=["PUT"])
-@login_required
+@admin_required
 def update_check_config():
     """Save check config for a location."""
     data = request.get_json()
@@ -806,7 +806,7 @@ def update_check_config():
 
 
 @billpay_bp.route("/api/billpay/upload-signature", methods=["POST"])
-@login_required
+@admin_required
 def upload_signature():
     """Upload signature image for check printing."""
     if 'signature' not in request.files:
@@ -829,7 +829,7 @@ def upload_signature():
 
 
 @billpay_bp.route("/api/billpay/signature-preview")
-@login_required
+@admin_required
 def signature_preview():
     """Serve the uploaded signature image."""
     sig_path = "/opt/red-nun-dashboard/integrations/quickbooks/check_assets/signature.png"
@@ -839,7 +839,7 @@ def signature_preview():
 
 
 @billpay_bp.route("/api/billpay/print-sample-check", methods=["POST"])
-@login_required
+@admin_required
 def print_sample_check():
     """Generate a sample check PDF using current config."""
     from check_printer import generate_check_pdf
@@ -893,7 +893,7 @@ def print_sample_check():
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/payments/<int:payment_id>/print-check", methods=["GET", "POST"])
-@login_required
+@admin_required
 def print_check(payment_id):
     """Generate a PDF check for a payment."""
     from check_printer import generate_check_pdf
@@ -962,7 +962,7 @@ def print_check(payment_id):
 
 
 @billpay_bp.route("/api/billpay/payments/batch-print", methods=["POST"])
-@login_required
+@admin_required
 def batch_print_checks():
     """Generate multi-page PDF with one check per page."""
     from check_printer import generate_batch_checks_pdf
@@ -1032,7 +1032,7 @@ def batch_print_checks():
 
 
 @billpay_bp.route("/api/billpay/print-calibration", methods=["POST"])
-@login_required
+@admin_required
 def print_calibration():
     """Generate calibration page for check alignment."""
     from check_printer import generate_calibration_page
@@ -1053,7 +1053,7 @@ def print_calibration():
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/payroll-checks")
-@login_required
+@admin_or_accountant_required
 def list_payroll_checks():
     """List payroll checks with optional filters."""
     location = request.args.get("location", "")
@@ -1072,7 +1072,7 @@ def list_payroll_checks():
 
 
 @billpay_bp.route("/api/billpay/payroll-checks", methods=["POST"])
-@login_required
+@admin_required
 def create_payroll_check():
     """Upload payroll PDF → OCR extract → assign check numbers → generate printable checks."""
     import anthropic
@@ -1248,7 +1248,7 @@ Return ONLY the JSON array, no other text. Example:
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/<int:check_id>")
-@login_required
+@admin_or_accountant_required
 def get_payroll_check(check_id):
     """Get a single payroll check."""
     conn = get_connection()
@@ -1260,7 +1260,7 @@ def get_payroll_check(check_id):
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/<int:check_id>", methods=["PUT"])
-@login_required
+@admin_required
 def update_payroll_check(check_id):
     """Update a payroll check (only if not yet printed)."""
     import json
@@ -1311,7 +1311,7 @@ def update_payroll_check(check_id):
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/<int:check_id>/print", methods=["POST"])
-@login_required
+@admin_required
 def print_payroll_check(check_id):
     """Print a payroll check — assigns check number from shared sequence."""
     from check_printer import generate_payroll_check_pdf
@@ -1361,7 +1361,7 @@ def print_payroll_check(check_id):
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/<int:check_id>/pdf")
-@login_required
+@admin_required
 def view_payroll_pdf(check_id):
     """Serve the uploaded payroll source PDF."""
     conn = get_connection()
@@ -1375,7 +1375,7 @@ def view_payroll_pdf(check_id):
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/<int:check_id>/generated-pdf")
-@login_required
+@admin_required
 def view_generated_check_pdf(check_id):
     """Serve the generated printable check PDF."""
     conn = get_connection()
@@ -1389,7 +1389,7 @@ def view_generated_check_pdf(check_id):
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/download-batch")
-@login_required
+@admin_required
 def download_batch_payroll():
     """Download a generated batch payroll checks PDF."""
     path = request.args.get("path", "")
@@ -1400,7 +1400,7 @@ def download_batch_payroll():
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/print-all", methods=["GET", "POST"])
-@login_required
+@admin_required
 def print_all_payroll():
     """Generate printable checks PDF for all non-voided payroll checks in a location."""
     import json as json_mod
@@ -1484,7 +1484,7 @@ def print_all_payroll():
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/<int:check_id>/void", methods=["PUT"])
-@login_required
+@admin_required
 def void_payroll_check(check_id):
     """Void a payroll check."""
     conn = get_connection()
@@ -1505,7 +1505,7 @@ def void_payroll_check(check_id):
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/manual-checks")
-@login_required
+@admin_required
 def list_manual_checks():
     """List manual checks with optional filters."""
     conn = get_connection()
@@ -1517,7 +1517,7 @@ def list_manual_checks():
 
 
 @billpay_bp.route("/api/billpay/manual-checks", methods=["POST"])
-@login_required
+@admin_required
 def create_manual_check():
     """Create and optionally print a manual check."""
     data = request.get_json()
@@ -1545,7 +1545,7 @@ def create_manual_check():
 
 
 @billpay_bp.route("/api/billpay/manual-checks/<int:check_id>/print", methods=["GET", "POST"])
-@login_required
+@admin_required
 def print_manual_check(check_id):
     """Print a manual check — assigns check number from shared sequence."""
     from check_printer import generate_check_pdf
@@ -1617,7 +1617,7 @@ def print_manual_check(check_id):
 
 
 @billpay_bp.route("/api/billpay/manual-checks/<int:check_id>/void", methods=["PUT"])
-@login_required
+@admin_required
 def void_manual_check(check_id):
     """Void a manual check."""
     conn = get_connection()
@@ -1633,7 +1633,7 @@ def void_manual_check(check_id):
 # ─────────────────────────────────────────────
 
 @billpay_bp.route("/api/billpay/check-register/export")
-@login_required
+@admin_required
 def export_check_register():
     """Export unified check register as Excel — all check types in one sheet."""
     import openpyxl
