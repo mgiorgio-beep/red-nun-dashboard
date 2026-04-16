@@ -1956,7 +1956,6 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
           <!-- Queue sub-tab -->
           <div id="rc-sub-queue">
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-              <input type="date" id="rc-queue-date" onchange="rcLoadQueue()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
               <select id="rc-queue-loc" onchange="rcLoadQueue()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
                 <option value="">Both Locations</option>
                 <option value="dennis">Dennis Port</option>
@@ -6421,30 +6420,24 @@ function rcShowTab(tab) {
 }
 
 async function rcLoadQueue() {
-  var dateEl = document.getElementById('rc-queue-date');
-  if (!dateEl) return;
-  if (!dateEl.value) {
-    var today = new Date();
-    dateEl.value = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
-  }
-  var date = dateEl.value;
   var loc = (document.getElementById('rc-queue-loc') || {}).value || '';
   var tbody = document.getElementById('rc-queue-tbody');
   var empty = document.getElementById('rc-queue-empty');
   var stats = document.getElementById('rc-stats-row');
-  // Reset to empty state while loading
   if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Loading…</td></tr>';
   if (empty) empty.style.display = 'none';
   if (stats) stats.style.display = 'none';
   try {
-    var params = 'date=' + date;
+    var today = new Date();
+    var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    var params = 'date=' + todayStr + '&days=14';
     if (loc) params += '&location=' + loc;
     var r = await fetch('/api/billpay/recurring/due?' + params);
     if (!r.ok) throw new Error('Server error ' + r.status);
     var bills = await r.json();
     if (!bills.length) {
       if (tbody) tbody.innerHTML = '';
-      if (empty) empty.style.display = '';
+      if (empty) { empty.textContent = 'No bills due in the next 14 days'; empty.style.display = ''; }
       return;
     }
     if (empty) empty.style.display = 'none';
@@ -6456,21 +6449,37 @@ async function rcLoadQueue() {
     if (countEl) countEl.textContent = bills.length;
     if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
     if (cnEl) cnEl.textContent = rcGetNextCheckNum(loc || 'dennis');
+    // Group by due date for visual separation
+    var currentDue = null;
     if (tbody) tbody.innerHTML = bills.map(function(b) {
-      var locLabel = b.location === 'chatham' ? 'Chatham' : 'Dennis';
-      return '<tr style="border-bottom:1px solid var(--border)">' +
+      var locLabel = b.location === 'chatham' ? 'Chatham' : (b.location === 'both' ? 'Both' : 'Dennis');
+      var dueDate = b.due_date || '—';
+      var today2 = new Date(); today2.setHours(0,0,0,0);
+      var due2 = new Date(dueDate + 'T00:00:00');
+      var diffDays = Math.round((due2 - today2) / 86400000);
+      var dueBadge = diffDays === 0 ? '<span style="color:#ef4444;font-weight:700;font-size:11px"> DUE TODAY</span>'
+                   : diffDays === 1 ? '<span style="color:#f59e0b;font-size:11px"> tomorrow</span>'
+                   : diffDays > 1  ? '<span style="color:var(--text3);font-size:11px"> in ' + diffDays + 'd</span>'
+                   : '<span style="color:#ef4444;font-size:11px"> ' + Math.abs(diffDays) + 'd overdue</span>';
+      var rows = '';
+      if (dueDate !== currentDue) {
+        currentDue = dueDate;
+        rows += '<tr style="background:rgba(0,0,0,0.02)"><td colspan="8" style="padding:6px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">' + dueDate + dueBadge + '</td></tr>';
+      }
+      rows += '<tr style="border-bottom:1px solid var(--border)">' +
         '<td style="padding:8px 12px;font-weight:500;color:#111827">' + (b.vendor_name||'—') + '</td>' +
-        '<td style="padding:8px;color:var(--text3)">' + (b.description||'—') + '</td>' +
-        '<td style="padding:8px;color:var(--text3)">' + (b.due_date||'—') + '</td>' +
+        '<td style="padding:8px;color:var(--text3);font-size:12px">' + (b.description || (b.lines && b.lines.length ? b.lines.map(function(l){return l.description;}).join(', ') : '—')) + '</td>' +
+        '<td style="padding:8px;color:var(--text3)">' + dueDate + '</td>' +
         '<td style="padding:8px;text-align:right;font-weight:600;color:#111827">$' + (b.amount||0).toFixed(2) + '</td>' +
         '<td style="padding:8px;color:var(--text3)">' + (b.payable_to||b.vendor_name||'—') + '</td>' +
         '<td style="padding:8px;color:var(--text3)">' + (b.payment_method||'check') + '</td>' +
         '<td style="padding:8px;color:var(--text3)">' + locLabel + '</td>' +
         '<td style="padding:8px;white-space:nowrap">' +
-          '<button onclick="rcPayBill(' + b.id + ',\'' + date + '\')" style="padding:4px 10px;border-radius:6px;border:none;background:rgba(34,197,94,0.15);color:#22c55e;font-size:12px;font-weight:600;cursor:pointer;margin-right:4px">Pay</button>' +
-          '<button onclick="rcSkipBill(' + b.id + ',\'' + date + '\')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">Skip</button>' +
+          '<button onclick="rcPayBill(' + b.id + ',\'' + dueDate + '\')" style="padding:4px 10px;border-radius:6px;border:none;background:rgba(34,197,94,0.15);color:#22c55e;font-size:12px;font-weight:600;cursor:pointer;margin-right:4px">Pay</button>' +
+          '<button onclick="rcSkipBill(' + b.id + ',\'' + dueDate + '\')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">Skip</button>' +
         '</td>' +
       '</tr>';
+      return rows;
     }).join('');
   } catch(e) {
     console.error('rcLoadQueue error:', e);

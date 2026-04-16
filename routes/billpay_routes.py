@@ -2114,11 +2114,17 @@ def delete_recurring_bill(bill_id):
 @billpay_bp.route("/api/billpay/recurring/due", methods=["GET"])
 @admin_or_accountant_required
 def get_recurring_due():
-    """Return bills due on or before a given date that haven't been paid/skipped.
-    Respects days_before_due: a bill with days_before_due=3 appears 3 days early."""
+    """Return bills due within a date window that haven't been paid/skipped.
+    ?date=YYYY-MM-DD (default today) ?days=N (default 14) ?location=...
+    Respects days_before_due per bill."""
     from datetime import date as ddate, timedelta
-    target_date = request.args.get("date") or date.today().isoformat()
+    try:
+        start = ddate.fromisoformat(request.args.get("date") or date.today().isoformat())
+    except ValueError:
+        start = date.today()
+    window = int(request.args.get("days") or 14)
     location = request.args.get("location")
+
     conn = get_connection()
     where = ["active = 1"]
     params = []
@@ -2129,30 +2135,38 @@ def get_recurring_due():
         "SELECT * FROM recurring_bills WHERE " + " AND ".join(where), params
     ).fetchall()
 
+    # Collect unique (bill, due_date) pairs across the window
+    seen = set()
     result = []
     for r in rows:
         b = dict(r)
         days_early = int(b.get('days_before_due') or 0)
-        # Check against an effective date shifted forward by days_early
-        try:
-            effective_date = (ddate.fromisoformat(target_date) + timedelta(days=days_early)).isoformat()
-        except Exception:
-            effective_date = target_date
-        due_date_str = _is_due_on(b, effective_date)
-        if not due_date_str:
-            continue
-        existing = conn.execute(
-            "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=?",
-            (b['id'], due_date_str)
-        ).fetchone()
-        if existing:
-            continue
-        b['due_date'] = due_date_str
-        b['lines'] = _get_lines(conn, b['id'])
-        if b['lines']:
-            b['amount'] = sum(l['amount'] for l in b['lines'])
-        result.append(b)
+        # Walk each day in the window
+        for offset in range(window + 1):
+            check_day = start + timedelta(days=offset)
+            effective = (check_day + timedelta(days=days_early)).isoformat()
+            due_date_str = _is_due_on(b, effective)
+            if not due_date_str:
+                continue
+            key = (b['id'], due_date_str)
+            if key in seen:
+                continue
+            seen.add(key)
+            existing = conn.execute(
+                "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=?",
+                (b['id'], due_date_str)
+            ).fetchone()
+            if existing:
+                continue
+            entry = dict(b)
+            entry['due_date'] = due_date_str
+            entry['lines'] = _get_lines(conn, b['id'])
+            if entry['lines']:
+                entry['amount'] = sum(l['amount'] for l in entry['lines'])
+            result.append(entry)
 
+    # Sort by due date
+    result.sort(key=lambda x: x['due_date'])
     conn.close()
     return jsonify(result)
 
