@@ -92,7 +92,8 @@ def cost_ingredient(ri, conn):
         original_pack_unit = _normalize_unit(product.get('pack_unit'))
         inventory_unit = _normalize_unit(product.get('inventory_unit'))
         pack_unit = original_pack_unit or prod_unit
-        pack_size = product.get('pack_size') or 1
+        original_pack_size = product.get('pack_size') or 1
+        pack_size = original_pack_size
 
         # Use vendor item pack_contains if available (e.g. 20/8oz case = 160oz total)
         # This gives us the real cost per base unit
@@ -154,21 +155,34 @@ def cost_ingredient(ri, conn):
             return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
                     'source': 'standard_conversion'}
 
-        # PATH 3: check product_unit_conversions table
+        # PATH 3: check product_unit_conversions table.
+        # Two semantics are supported:
+        #   (A) from_unit == recipe_unit — "1 shot = 1.5 fl oz"  (legacy)
+        #   (B) from_unit == a purchase unit — "1 bottle = 25.36 fl oz" or
+        #       "1 each = 12 fl_oz" (new, saved by the fixer UI)
         conversions = conn.execute("""
             SELECT from_qty, from_unit, to_qty, to_unit
             FROM product_unit_conversions
             WHERE product_id = ?
         """, (product_id,)).fetchall()
 
+        # Purchase-unit candidates to match (B) against. Use original values
+        # before the vi.contains_unit override so "bottle"/"each"/"case" still
+        # matches even when pack_unit got rewritten to the base unit.
+        purchase_unit_candidates = {
+            u for u in (prod_unit, original_pack_unit, inventory_unit) if u
+        }
+
         for conv in conversions:
             conv = dict(conv)
-            from_unit = (conv['from_unit'] or '').strip().lower()
-            to_unit = (conv['to_unit'] or '').strip().lower()
+            from_unit = _normalize_unit(conv['from_unit'])
+            to_unit = _normalize_unit(conv['to_unit'])
             from_qty = conv['from_qty'] or 1
             to_qty = conv['to_qty'] or 0
+            if from_qty <= 0 or to_qty <= 0:
+                continue
 
-            # Match: recipe_unit -> conversion from_unit
+            # (A) Conversion expresses the recipe_unit directly
             if from_unit == recipe_unit:
                 # "1 each = 1.1 oz" with weight purchase
                 if to_unit in WEIGHT_UNITS and pu_wt and pack_size > 0:
@@ -187,15 +201,35 @@ def cost_ingredient(ri, conn):
                     return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
                             'source': 'vendor_item'}
 
-            # Match: pack_unit -> conversion from_unit (e.g. "1 gallon = 136 oz")
-            if from_unit == pack_unit:
-                if to_unit in WEIGHT_UNITS and recipe_unit in WEIGHT_UNITS and pack_size > 0:
-                    weight_per_pu = (to_qty / from_qty) * WEIGHT_TO_OZ[to_unit]
-                    cost_per_oz = price / (pack_size * weight_per_pu)
+            # (B) Conversion expresses how many base units are in one
+            # purchase unit. Price covers original_pack_size purchase units
+            # (usually 1); the vi_pack_contains override is irrelevant here
+            # because the conversion itself re-states what the pack contains.
+            if from_unit in purchase_unit_candidates or from_unit == pack_unit:
+                per_purchase_to = to_qty / from_qty   # e.g. 20 fl_oz per 1 each
+                total_to_units = original_pack_size * per_purchase_to
+                if total_to_units <= 0:
+                    continue
+                # Volume output, volume recipe unit
+                if to_unit in VOLUME_UNITS and recipe_unit in VOLUME_UNITS:
+                    cost_per_floz = price / (total_to_units * VOLUME_TO_FLOZ[to_unit])
+                    cost_per_ru = cost_per_floz * VOLUME_TO_FLOZ[recipe_unit]
+                    line_cost = quantity * cost_per_ru
+                    return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
+                            'source': 'standard_conversion'}
+                # Weight output, weight recipe unit
+                if to_unit in WEIGHT_UNITS and recipe_unit in WEIGHT_UNITS:
+                    cost_per_oz = price / (total_to_units * WEIGHT_TO_OZ[to_unit])
                     cost_per_ru = cost_per_oz * WEIGHT_TO_OZ[recipe_unit]
                     line_cost = quantity * cost_per_ru
                     return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
-                            'source': 'vendor_item'}
+                            'source': 'standard_conversion'}
+                # Direct count: "1 case = 24 each" and recipe uses each
+                if to_unit == recipe_unit:
+                    cost_per_ru = price / total_to_units
+                    line_cost = quantity * cost_per_ru
+                    return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
+                            'source': 'standard_conversion'}
 
         # PATH 4: no resolution — flag it, don't guess
         return {'cost': 0.0, 'unit_price': price, 'source': 'no_conversion'}

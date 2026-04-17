@@ -631,6 +631,21 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
 
   // --- Conversion dialog --------------------------------------------
 
+  // The conversion's from_unit is the product's purchase unit (what it's
+  // sold as — "bottle", "each", "case"), NOT the recipe unit. Preference
+  // order matches how the invoice / vendor sees the product first, then
+  // the product's own fields.
+  function resolvePurchaseUnit(ing){
+    const p = ing.product || {};
+    const avi = p.active_vendor_item || {};
+    const candidates = [avi.pack_unit, p.unit, p.pack_unit, p.inventory_unit];
+    for (const c of candidates){
+      const v = (c || '').trim();
+      if (v) return v.toLowerCase();
+    }
+    return '';
+  }
+
   async function toggleConversionDialog(ingId){
     if (state.openConversionFor === ingId){
       state.openConversionFor = null;
@@ -643,11 +658,12 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
       return;
     }
     state.openConversionFor = ingId;
-    // Prefetch existing conversion
+    // Prefetch any existing conversion keyed on the product's purchase unit.
+    // Fall back to the recipe unit if the product has no purchase unit at all.
+    const lookupFrom = resolvePurchaseUnit(ing) || (ing.unit || 'each').toLowerCase();
     try {
-      const from_unit = (ing.unit || 'each').toLowerCase();
       const data = await api('/api/recipe-fixer/conversion?product_id=' + ing.product_id +
-                             '&from_unit=' + encodeURIComponent(from_unit));
+                             '&from_unit=' + encodeURIComponent(lookupFrom));
       state.convContext = data;
     } catch(e){
       state.convContext = null;
@@ -660,18 +676,29 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     const existing = ctx.conversion;
     const avi = ctx.active_vendor_item;
     const prod = ctx.product;
-    const recipeUnit = (ing.unit || 'each');
+
+    const purchaseUnit = resolvePurchaseUnit(ing);
+    const hasPurchaseUnit = !!purchaseUnit;
+    // If no purchase unit at all, fall back to the recipe unit so the user
+    // can still save something — but warn them it'll only apply here.
+    const fromUnit = hasPurchaseUnit ? purchaseUnit : (ing.unit || 'each').toLowerCase();
+    const recipeUnit = (ing.unit || 'each').toLowerCase();
+
+    // Build the to_unit dropdown: canonical units + anything on the product
     const extraUnits = new Set(state.units || []);
     if (prod){
-      ['pack_unit','inventory_unit','recipe_unit'].forEach(k => {
-        if (prod[k]) extraUnits.add(prod[k]);
+      ['pack_unit','inventory_unit','recipe_unit','purchase_unit'].forEach(k => {
+        if (prod[k]) extraUnits.add(String(prod[k]).toLowerCase());
       });
     }
-    if (avi && avi.contains_unit) extraUnits.add(avi.contains_unit);
+    if (avi && avi.contains_unit) extraUnits.add(String(avi.contains_unit).toLowerCase());
     const allUnits = Array.from(extraUnits).filter(Boolean);
 
+    // Defaults: if an existing conversion is loaded, use its to_qty/to_unit.
+    // Otherwise default the to_unit to the current recipe unit so the first
+    // save is immediately useful for this recipe.
     const defQty = existing ? existing.to_qty : '';
-    const defUnit = existing ? existing.to_unit : (avi && avi.contains_unit) || 'fl_oz';
+    const defUnit = existing ? String(existing.to_unit).toLowerCase() : recipeUnit;
     const unitOpts = allUnits.map(u =>
       '<option value="'+esc(u)+'"' + (defUnit === u ? ' selected' : '') + '>' + esc(u) + '</option>'
     ).join('');
@@ -679,7 +706,8 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     const qtyVal = ing.quantity || 1;
     const ctxBlock =
       '<div class="conv-context">' +
-        'Recipe uses: <b>' + qtyVal + ' ' + esc(recipeUnit) + '</b> of <b>' + esc(ing.product_name_text || (prod && (prod.display_name || prod.name)) || '') + '</b><br>' +
+        'Recipe uses: <b>' + qtyVal + ' ' + esc(recipeUnit) + '</b> of <b>' +
+          esc(ing.product_name_text || (prod && (prod.display_name || prod.name)) || '') + '</b><br>' +
         (avi ?
           'Product is: <b>' + esc(avi.pack_size || '') + ' ' + esc(avi.pack_unit || '') + '</b>' +
           (avi.pack_contains ? ' · contains <b>' + avi.pack_contains + ' ' + esc(avi.contains_unit || '') + '</b>' : '') +
@@ -687,16 +715,24 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
         : 'No active vendor item linked.') +
       '</div>';
 
+    const warning = hasPurchaseUnit ? '' :
+      '<div class="conv-helper" style="color:var(--amber)">Product has no purchase unit set — this conversion will only apply to recipes using <b>' + esc(recipeUnit) + '</b>.</div>';
+
+    const helperHint = hasPurchaseUnit
+      ? 'e.g. "1 bottle = 25.36 fl_oz" for a 750ml liquor bottle'
+      : 'e.g. "1 ' + esc(recipeUnit) + ' = 12 fl_oz" for a 12 oz can';
+
     return (
       '<div class="conv-dialog" data-conv="'+ing.id+'">' +
         '<h4>' + (existing ? 'Edit' : 'Set') + ' unit conversion</h4>' +
         ctxBlock +
         '<div class="conv-form">' +
-          '<span class="label">1 ' + esc(recipeUnit) + ' of this product =</span>' +
-          '<input class="qty" type="number" step="0.0001" min="0" value="'+defQty+'" data-conv-qty="'+ing.id+'">' +
+          '<span class="label">1 <b style="color:var(--text); text-transform:none; font-weight:700">' + esc(fromUnit) + '</b> of this product =</span>' +
+          '<input class="qty" type="number" step="0.0001" min="0" value="'+defQty+'" data-conv-qty="'+ing.id+'" autofocus>' +
           '<select class="unit" data-conv-unit="'+ing.id+'">' + unitOpts + '</select>' +
         '</div>' +
-        '<div class="conv-helper">e.g. "1 each = 12 fl_oz" for a 12 oz can</div>' +
+        '<div class="conv-helper">' + helperHint + '</div>' +
+        warning +
         '<div class="conv-buttons">' +
           '<button class="btn btn-primary" data-action="save-conversion" data-ing="'+ing.id+'">Save conversion</button>' +
           '<button class="btn" data-action="cancel-conversion" data-ing="'+ing.id+'">Cancel</button>' +
@@ -716,7 +752,9 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
       toast('Enter a positive quantity and pick a unit', 'err');
       return;
     }
-    const from_unit = (ing.unit || 'each').toLowerCase();
+    // from_unit = product's purchase unit (bottle, each, case, etc.)
+    // Fall back to recipe unit only when the product has no purchase unit.
+    const from_unit = resolvePurchaseUnit(ing) || (ing.unit || 'each').toLowerCase();
     try {
       await api('/api/recipe-fixer/conversion', {
         method: 'POST',
