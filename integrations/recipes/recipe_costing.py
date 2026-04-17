@@ -58,7 +58,8 @@ def cost_ingredient(ri, conn):
 
     Returns:
         {'cost': float, 'unit_price': float, 'source': str}
-        source: 'vendor_item' | 'standard_conversion' | 'no_conversion' | 'no_price'
+        source: 'vendor_item' | 'standard_conversion' | 'no_conversion'
+                | 'no_unit' | 'no_price'
     """
     try:
         product_id = ri.get('product_id')
@@ -87,6 +88,13 @@ def cost_ingredient(ri, conn):
         price = product.get('purchase_price') or 0
         if not price or price <= 0:
             return {'cost': 0.0, 'unit_price': 0.0, 'source': 'no_price'}
+
+        # A blank recipe_unit is a data gap, not a match. Costing anything
+        # against it (e.g. "2 of a 288-ct case" without knowing that the
+        # user means 2 slices) produces confidently-wrong numbers. Surface
+        # it so the fixer UI can prompt for a unit.
+        if not recipe_unit:
+            return {'cost': 0.0, 'unit_price': price, 'source': 'no_unit'}
 
         prod_unit = _normalize_unit(product.get('purchase_unit'))
         original_pack_unit = _normalize_unit(product.get('pack_unit'))
@@ -126,11 +134,13 @@ def cost_ingredient(ri, conn):
                 cost = quantity * vi_price_per_unit
                 return {'cost': round(cost, 4), 'unit_price': round(vi_price_per_unit, 4), 'source': 'vendor_item'}
 
-        # PATH 1: same unit or no recipe unit -> divide price by pack_size to
-        # get per-pack_unit cost. When pack_size == 1 this is a no-op; when
-        # the vendor_item override inflated pack_size (e.g. 25.36 fl oz in a
-        # 1L liquor bottle) it correctly splits the bottle price across units.
-        if not recipe_unit or recipe_unit == prod_unit or recipe_unit == pack_unit:
+        # PATH 1: recipe_unit matches the product's own unit or the
+        # pack_unit (possibly rewritten by the vi contains override above).
+        # Divide price by pack_size to get per-pack_unit cost. When
+        # pack_size == 1 this is a no-op; when the vendor_item override
+        # inflated pack_size (e.g. 25.36 fl oz in a 1L liquor bottle) it
+        # correctly splits the bottle price across units.
+        if recipe_unit and (recipe_unit == prod_unit or recipe_unit == pack_unit):
             per_unit = price / pack_size if pack_size and pack_size > 0 else price
             cost = quantity * per_unit
             return {'cost': round(cost, 4), 'unit_price': round(per_unit, 4), 'source': 'vendor_item'}

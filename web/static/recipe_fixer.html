@@ -124,6 +124,14 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
 .pill-muted { background: rgba(148,163,184,0.08); color: var(--text3); }
 .pill-green { background: var(--green-soft); color: var(--green); }
 
+.ing-warn {
+  display: inline-block; margin-left: 6px; padding: 1px 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; border-radius: 4px;
+  background: var(--amber-soft); color: var(--amber);
+  border: 1px solid rgba(245,158,11,0.35);
+}
+
 .product-cell { display: flex; flex-direction: column; gap: 4px; }
 .product-name { color: var(--text); font-weight: 500; cursor: pointer; font-size: 13px; }
 .product-name:hover { color: var(--blue); }
@@ -478,9 +486,16 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     const costCell = renderCostCell(ing);
     const convDialog = (state.openConversionFor === ing.id) ? renderConversionDialog(ing) : '';
 
+    let warnBadge = '';
+    if (ing.cost_source === 'no_unit' || ing.needs_unit){
+      warnBadge = '<span class="ing-warn" title="Recipe unit is missing — cost cannot be computed">Missing unit</span>';
+    } else if (ing.cost_source === 'no_conversion' || ing.needs_conversion){
+      warnBadge = '<span class="ing-warn" title="Recipe unit does not match the product\'s purchase unit — set a conversion">Needs conversion</span>';
+    }
+
     return (
       '<tr data-ing="'+ing.id+'">' +
-        '<td class="ing-name">' + esc(ing.product_name_text || '—') + '</td>' +
+        '<td class="ing-name">' + esc(ing.product_name_text || '—') + warnBadge + '</td>' +
         '<td class="ing-product">' + productCell + '</td>' +
         '<td class="ing-qty">' +
           '<input class="q-input" type="number" step="0.01" min="0" ' +
@@ -499,7 +514,10 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
 
   function renderCostCell(ing){
     let html = '';
-    if (ing.cost_source === 'no_conversion' || ing.needs_conversion){
+    if (ing.cost_source === 'no_unit' || ing.needs_unit){
+      html = '<div><span class="cost-value cost-muted">—</span></div>' +
+             '<span class="pill pill-amber" data-action="set-unit" data-ing="'+ing.id+'">Set unit</span>';
+    } else if (ing.cost_source === 'no_conversion' || ing.needs_conversion){
       const label = ing.line_cost > 0 ? fmt$(ing.line_cost) : '—';
       html = '<div><span class="cost-value cost-muted">' + label + '</span></div>' +
              '<span class="pill pill-amber" data-action="set-conversion" data-ing="'+ing.id+'">Set conversion</span>';
@@ -579,6 +597,10 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     document.querySelectorAll('[data-action="set-conversion"]').forEach(el => {
       el.addEventListener('click', () => toggleConversionDialog(Number(el.dataset.ing)));
     });
+    // Set-unit pill — focus the unit dropdown for that row
+    document.querySelectorAll('[data-action="set-unit"]').forEach(el => {
+      el.addEventListener('click', () => focusUnitSelect(Number(el.dataset.ing)));
+    });
     // Edit-conversion link
     document.querySelectorAll('[data-action="edit-conversion"]').forEach(el => {
       el.addEventListener('click', () => toggleConversionDialog(Number(el.dataset.ing)));
@@ -652,6 +674,31 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
         el.addEventListener('click', () => toggleConversionDialog(Number(el.dataset.ing))));
       cell.querySelectorAll('[data-action="edit-conversion"]').forEach(el =>
         el.addEventListener('click', () => toggleConversionDialog(Number(el.dataset.ing))));
+      cell.querySelectorAll('[data-action="set-unit"]').forEach(el =>
+        el.addEventListener('click', () => focusUnitSelect(Number(el.dataset.ing))));
+    }
+    // Re-render the badge on the name cell since cost_source may have changed
+    const nameCell = document.querySelector('tr[data-ing="'+ingId+'"] td.ing-name');
+    if (nameCell && ing){
+      const base = esc(ing.product_name_text || '—');
+      let badge = '';
+      if (ing.cost_source === 'no_unit' || ing.needs_unit){
+        badge = '<span class="ing-warn" title="Recipe unit is missing — cost cannot be computed">Missing unit</span>';
+      } else if (ing.cost_source === 'no_conversion' || ing.needs_conversion){
+        badge = '<span class="ing-warn" title="Recipe unit does not match the product\'s purchase unit — set a conversion">Needs conversion</span>';
+      }
+      nameCell.innerHTML = base + badge;
+    }
+  }
+
+  function focusUnitSelect(ingId){
+    const sel = document.querySelector('select.u-input[data-ing="'+ingId+'"]');
+    if (!sel) return;
+    sel.scrollIntoView({block: 'center', behavior: 'smooth'});
+    sel.focus();
+    // Open the native picker where supported
+    if (typeof sel.showPicker === 'function'){
+      try { sel.showPicker(); } catch(e){ /* not supported */ }
     }
   }
 

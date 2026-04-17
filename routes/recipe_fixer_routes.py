@@ -296,6 +296,7 @@ def _ingredient_payload(conn, row):
         "unit_price": cost_info["unit_price"],
         "cost_source": cost_info["source"],
         "needs_conversion": cost_info["source"] == "no_conversion",
+        "needs_unit": cost_info["source"] == "no_unit",
     }
 
 
