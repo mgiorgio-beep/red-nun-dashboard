@@ -42,14 +42,87 @@ BACKUP_DIR = "/opt/backups"
 _PUNCT_RE = re.compile(r"[%s]" % re.escape(string.punctuation))
 _WS_RE = re.compile(r"\s+")
 
+# Applied to raw product names before fuzzy matching: peel off pack codes, size
+# suffixes, bare trailing numbers, and stray typographic symbols that tank the
+# difflib ratio for otherwise-obvious matches (e.g. "Fireball Cinnamon Whisky 750ML").
+_STRIP_PATTERNS = [
+    re.compile(r"\b\d+/\w+\b", re.IGNORECASE),                                                # 6/CS, 24/CS, 12/750
+    re.compile(r"\b\d+(?:\.\d+)?\s?(?:ml|l|oz|lt|ltr|pet|pk|ct|can|btl)\b", re.IGNORECASE),   # 750ml, 13.2oz, 16oz, 1L
+    re.compile(r"\s\d+(?:\.\d+)?\s*$"),                                                       # bare trailing numbers
+    re.compile(r"[\u00b0\u00ae\u2122]"),                                                      # °, ®, ™
+]
+
 
 def normalize(text):
+    """Lowercase, strip punctuation, collapse whitespace. Applied to BOTH sides
+    of every match attempt (exact / substring / word-boundary / fuzzy) so case
+    is always consistent."""
     if not text:
         return ""
     t = text.lower()
     t = _PUNCT_RE.sub(" ", t)
     t = _WS_RE.sub(" ", t).strip()
     return t
+
+
+def strip_size_suffixes(text):
+    if not text:
+        return text
+    t = text
+    for _ in range(3):  # iterate — stripping can expose new trailing numbers
+        prev = t
+        for pat in _STRIP_PATTERNS:
+            t = pat.sub(" ", t)
+        t = t.strip()
+        if t == prev:
+            break
+    return t
+
+
+def _contains_word(haystack_n, needle_n):
+    """Word-boundary contiguous substring check. Both inputs must already be
+    normalized (lowercase, punctuation-stripped). Prevents 'Apple' from
+    matching 'Pineapple Juice' or 'Ice' from matching 'Jasmine Rice'."""
+    if not haystack_n or not needle_n:
+        return False
+    pattern = r"\b" + re.escape(needle_n) + r"\b"
+    return re.search(pattern, haystack_n) is not None
+
+
+def _head_noun_ok(ing_n, product_n):
+    """Sanity check: reject when the product's first word is strictly longer
+    than the ingredient's first word AND the ingredient's first word is a
+    substring of it. Blocks the 'Apple' -> 'Pineapple' class of false positive."""
+    if not ing_n or not product_n:
+        return True
+    ing_parts = ing_n.split()
+    prod_parts = product_n.split()
+    if not ing_parts or not prod_parts:
+        return True
+    ing_first = ing_parts[0]
+    prod_first = prod_parts[0]
+    if ing_first == prod_first:
+        return True
+    if len(prod_first) > len(ing_first) and ing_first in prod_first:
+        return False
+    return True
+
+
+def _candidate_ok(ing_n, p):
+    """Apply head-noun check against the stripped forms of both name and
+    display_name. Keep candidate if at least one non-empty form passes."""
+    forms = [f for f in (p["_name_stripped_n"], p["_display_stripped_n"]) if f]
+    if not forms:
+        # Fall back to unstripped forms (shouldn't normally happen)
+        forms = [f for f in (p["_name_n"], p["_display_n"]) if f]
+    if not forms:
+        return True
+    return any(_head_noun_ok(ing_n, f) for f in forms)
+
+
+def _dedup_filter(ing_n, candidates):
+    uniq = {p["id"]: p for p in candidates}
+    return [p for p in uniq.values() if _candidate_ok(ing_n, p)]
 
 
 def has_column(conn, table, column):
@@ -77,8 +150,12 @@ def load_candidate_products(conn, recipe_location, products_has_location):
     out = []
     for r in rows:
         d = dict(r)
-        d["_name_n"] = normalize(d.get("name") or "")
-        d["_display_n"] = normalize(d.get("display_name") or "")
+        name = d.get("name") or ""
+        display = d.get("display_name") or ""
+        d["_name_n"] = normalize(name)
+        d["_display_n"] = normalize(display)
+        d["_name_stripped_n"] = normalize(strip_size_suffixes(name))
+        d["_display_stripped_n"] = normalize(strip_size_suffixes(display))
         out.append(d)
     return out
 
@@ -99,22 +176,21 @@ def find_match(ingredient_text, products, min_confidence):
     if not ing_n:
         return ("empty", 0.0, [])
 
-    # 1) Exact (on name or display_name)
+    # 1) Exact (on normalized name or display_name)
     exact = [p for p in products if p["_name_n"] == ing_n or p["_display_n"] == ing_n]
+    exact = _dedup_filter(ing_n, exact)
     if exact:
-        uniq = {p["id"]: p for p in exact}
-        cands = list(uniq.values())
-        return ("match" if len(cands) == 1 else "ambiguous", 1.0, cands)
+        return ("match" if len(exact) == 1 else "ambiguous", 1.0, exact)
 
-    # 2) Ingredient text is a contiguous substring of a product name
+    # 2) Ingredient text is a contiguous substring of a product name AT A WORD
+    #    BOUNDARY. Without the boundary check, "Apple" matched "Pineapple".
     substring = []
     for p in products:
-        if (p["_name_n"] and ing_n in p["_name_n"]) or (p["_display_n"] and ing_n in p["_display_n"]):
+        if _contains_word(p["_name_n"], ing_n) or _contains_word(p["_display_n"], ing_n):
             substring.append(p)
+    substring = _dedup_filter(ing_n, substring)
     if substring:
-        uniq = {p["id"]: p for p in substring}
-        cands = list(uniq.values())
-        return ("match" if len(cands) == 1 else "ambiguous", 0.95, cands)
+        return ("match" if len(substring) == 1 else "ambiguous", 0.95, substring)
 
     # 3) Product name starts with the ingredient text at a word boundary
     starts = []
@@ -125,20 +201,20 @@ def find_match(ingredient_text, products, min_confidence):
             if pn == ing_n or pn.startswith(ing_n + " "):
                 starts.append(p)
                 break
+    starts = _dedup_filter(ing_n, starts)
     if starts:
-        uniq = {p["id"]: p for p in starts}
-        cands = list(uniq.values())
-        return ("match" if len(cands) == 1 else "ambiguous", 0.90, cands)
+        return ("match" if len(starts) == 1 else "ambiguous", 0.90, starts)
 
-    # 4) Fuzzy ratio
+    # 4) Fuzzy ratio against the STRIPPED product names (pack/size suffixes
+    #    removed) so "Fireball" can match "Fireball Cinnamon Whisky 750ML".
     best_ratio = 0.0
     best = []
     for p in products:
         r = 0.0
-        if p["_name_n"]:
-            r = max(r, SequenceMatcher(None, ing_n, p["_name_n"]).ratio())
-        if p["_display_n"]:
-            r = max(r, SequenceMatcher(None, ing_n, p["_display_n"]).ratio())
+        if p["_name_stripped_n"]:
+            r = max(r, SequenceMatcher(None, ing_n, p["_name_stripped_n"]).ratio())
+        if p["_display_stripped_n"]:
+            r = max(r, SequenceMatcher(None, ing_n, p["_display_stripped_n"]).ratio())
         if r > best_ratio + 1e-9:
             best_ratio = r
             best = [p]
@@ -146,9 +222,9 @@ def find_match(ingredient_text, products, min_confidence):
             best.append(p)
 
     if best_ratio >= min_confidence and best:
-        uniq = {p["id"]: p for p in best}
-        cands = list(uniq.values())
-        return ("match" if len(cands) == 1 else "ambiguous", best_ratio, cands)
+        filtered = _dedup_filter(ing_n, best)
+        if filtered:
+            return ("match" if len(filtered) == 1 else "ambiguous", best_ratio, filtered)
 
     return ("no_match", best_ratio, best[:1])
 
