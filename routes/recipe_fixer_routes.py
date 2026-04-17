@@ -11,6 +11,9 @@ API:       /api/recipe-fixer/*
 """
 
 import logging
+import re
+import time
+from datetime import date, timedelta
 from flask import Blueprint, request, jsonify, send_from_directory
 from routes.auth_routes import login_required
 from integrations.toast.data_store import get_connection
@@ -55,15 +58,102 @@ CANONICAL_UNITS = [
 
 
 # ------------------------------------------------------------------
+# Revenue matcher (90-day sales, cached per process)
+# ------------------------------------------------------------------
+#
+# "Burger - Nun (Turkey)" -> "Turkey Nun Burger" : strip the dash-prefix,
+# pull any trailing parenthetical variant out, then stitch them together
+# so a LIKE on order_items.item_name will catch menu-side naming.
+# Recipes with no ' - ' fall back to their full name.
+
+_VARIANT_RE = re.compile(r"\s*\(([^)]+)\)\s*$")
+
+def _recipe_search_key(name):
+    if not name:
+        return ""
+    s = name.strip()
+    variant = ""
+    m = _VARIANT_RE.search(s)
+    if m:
+        variant = m.group(1).strip()
+        s = s[: m.start()].strip()
+    if " - " in s:
+        prefix, core = [p.strip() for p in s.split(" - ", 1)]
+        target = f"{variant} {core} {prefix}".strip() if variant else f"{core} {prefix}"
+    else:
+        target = f"{s} {variant}".strip() if variant else s
+    return target.lower()
+
+
+_REVENUE_CACHE = {"built_ts": 0, "data": None}
+_REVENUE_CACHE_TTL = 24 * 3600
+
+
+def _build_revenue_map(conn, force=False):
+    """Match every active recipe to order_items revenue over the last 90
+    days and cache the result. Each menu item is attributed to the most
+    specific recipe key that matches (longest key wins) so variants don't
+    double-count against their parents."""
+    now = time.time()
+    if (not force
+            and _REVENUE_CACHE["data"] is not None
+            and (now - _REVENUE_CACHE["built_ts"]) < _REVENUE_CACHE_TTL):
+        return _REVENUE_CACHE["data"]
+
+    cutoff = int((date.today() - timedelta(days=90)).strftime("%Y%m%d"))
+    item_rows = conn.execute(
+        """
+        SELECT LOWER(item_name) AS item_name,
+               SUM(COALESCE(quantity, 0)) AS qty,
+               SUM(COALESCE(price, 0))    AS rev
+        FROM order_items
+        WHERE COALESCE(voided, 0) = 0
+          AND business_date >= ?
+          AND item_name IS NOT NULL
+        GROUP BY LOWER(item_name)
+        """,
+        (cutoff,),
+    ).fetchall()
+
+    recipes = conn.execute(
+        "SELECT id, name FROM recipes WHERE active = 1"
+    ).fetchall()
+    keyed = [(r["id"], _recipe_search_key(r["name"])) for r in recipes]
+    keyed = [(rid, k) for rid, k in keyed if k]
+    # Longest first — "turkey nun burger" beats "nun burger" on a
+    # "Turkey Nun Burger" menu item.
+    keyed.sort(key=lambda x: len(x[1]), reverse=True)
+
+    out = {}
+    for row in item_rows:
+        name = row["item_name"]
+        qty = float(row["qty"] or 0)
+        rev = float(row["rev"] or 0)
+        for rid, key in keyed:
+            if key and key in name:
+                agg = out.setdefault(rid, {"revenue": 0.0, "qty": 0.0})
+                agg["revenue"] += rev
+                agg["qty"] += qty
+                break
+
+    _REVENUE_CACHE["built_ts"] = now
+    _REVENUE_CACHE["data"] = out
+    logger.info(
+        "recipe_fixer: revenue map built (%d recipes with sales, %d menu items scanned)",
+        len(out), len(item_rows),
+    )
+    return out
+
+
+# ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
 
 def _worklist_rows(conn, include_research=False):
-    """Zero-cost active recipes, ordered by the brief's rules:
-       1. needs_research = 0 first
-       2. then by linked/total ingredient ratio DESC
-       3. then alphabetical.
-    """
+    """Zero-cost active recipes. The default ordering (linked-first)
+    keeps the historical brief: needs_research last, then ratio of
+    linked/total ingredients, then alphabetical. Sorting is applied
+    in the endpoint layer when the user picks revenue or alphabetical."""
     research_filter = "" if include_research else "AND COALESCE(r.needs_research, 0) = 0"
     return conn.execute(f"""
         SELECT
@@ -87,6 +177,54 @@ def _worklist_rows(conn, include_research=False):
                   ELSE 0 END) DESC,
             r.name COLLATE NOCASE ASC
     """).fetchall()
+
+
+def _high_cost_rows(conn, threshold_pct=70.0):
+    """Active costed recipes with food_cost_pct above the threshold —
+    almost always a unit bug, surfaced separately so the fixer UI can
+    walk through them."""
+    return conn.execute("""
+        SELECT
+            r.id,
+            r.name,
+            COALESCE(r.needs_research, 0) AS needs_research,
+            COUNT(ri.id) AS total_ings,
+            SUM(CASE WHEN p.id IS NOT NULL THEN 1 ELSE 0 END) AS linked_ings
+        FROM recipes r
+        LEFT JOIN recipe_ingredients ri ON ri.recipe_id = r.id
+        LEFT JOIN products p ON p.id = ri.product_id
+        WHERE r.active = 1
+          AND COALESCE(r.food_cost_pct, 0) > ?
+        GROUP BY r.id, r.name, r.needs_research
+        ORDER BY r.food_cost_pct DESC, r.name COLLATE NOCASE ASC
+    """, (threshold_pct,)).fetchall()
+
+
+def _apply_sort(rows, sort, revenue_map):
+    """Sort a list of worklist row-dicts by the user's chosen mode."""
+    if sort == "revenue":
+        def key(r):
+            rev = revenue_map.get(r["id"], {}).get("revenue", 0.0)
+            # Descending revenue first (bigger dollars up top); no-sales
+            # recipes fall through to alphabetical at the bottom.
+            return (0 if rev > 0 else 1, -rev, (r["name"] or "").lower())
+        return sorted(rows, key=key)
+    if sort == "alpha":
+        return sorted(rows, key=lambda r: (r["name"] or "").lower())
+    return list(rows)  # default: honor SQL order (linked-first)
+
+
+def _queue_item(row, revenue_map):
+    info = revenue_map.get(row["id"]) or {}
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "linked_ings": row["linked_ings"],
+        "total_ings": row["total_ings"],
+        "needs_research": bool(row["needs_research"]),
+        "revenue_90d": round(info.get("revenue", 0.0), 2),
+        "qty_sold_90d": int(info.get("qty", 0) or 0),
+    }
 
 
 def _load_ingredient_row(conn, ingredient_id):
@@ -175,13 +313,21 @@ def recipe_fixer_page():
 # API — worklist
 # ------------------------------------------------------------------
 
+HIGH_COST_THRESHOLD = 70.0
+
+
 @recipe_fixer_bp.route("/api/recipe-fixer/worklist", methods=["GET"])
 @login_required
 def api_worklist():
     include_research = request.args.get("include_research") == "1"
+    sort = (request.args.get("sort") or "revenue").strip().lower()
+    if sort not in ("revenue", "alpha", "default"):
+        sort = "revenue"
     conn = get_connection()
     try:
         rows = _worklist_rows(conn, include_research=include_research)
+        revenue_map = _build_revenue_map(conn)
+        rows = _apply_sort(rows, sort, revenue_map)
         fixed_count = conn.execute("""
             SELECT COUNT(*) FROM recipes
             WHERE active = 1 AND COALESCE(total_cost, 0) > 0
@@ -195,20 +341,53 @@ def api_worklist():
             WHERE active = 1 AND COALESCE(total_cost, 0) = 0
               AND COALESCE(needs_research, 0) = 1
         """).fetchone()[0]
-        queue = [{
-            "id": r["id"],
-            "name": r["name"],
-            "linked_ings": r["linked_ings"],
-            "total_ings": r["total_ings"],
-            "needs_research": bool(r["needs_research"]),
-        } for r in rows]
+        high_cost_count = conn.execute(
+            "SELECT COUNT(*) FROM recipes WHERE active = 1 AND COALESCE(food_cost_pct, 0) > ?",
+            (HIGH_COST_THRESHOLD,),
+        ).fetchone()[0]
+        queue = [_queue_item(r, revenue_map) for r in rows]
         next_id = queue[0]["id"] if queue else None
         return jsonify({
+            "mode": "zero_cost",
+            "sort": sort,
             "fixed": fixed_count,
             "total_zero": total_zero,
             "remaining": len(queue),
             "needs_research": needs_research_count,
+            "high_cost_count": high_cost_count,
+            "high_cost_threshold": HIGH_COST_THRESHOLD,
             "next_recipe_id": next_id,
+            "queue": queue,
+        })
+    finally:
+        conn.close()
+
+
+@recipe_fixer_bp.route("/api/recipe-fixer/high-cost-review", methods=["GET"])
+@login_required
+def api_high_cost_review():
+    """Same shape as /worklist, filtered to recipes whose food_cost_pct
+    exceeds HIGH_COST_THRESHOLD — likely unit bugs worth reviewing."""
+    sort = (request.args.get("sort") or "revenue").strip().lower()
+    if sort not in ("revenue", "alpha", "default"):
+        sort = "revenue"
+    conn = get_connection()
+    try:
+        rows = _high_cost_rows(conn, threshold_pct=HIGH_COST_THRESHOLD)
+        revenue_map = _build_revenue_map(conn)
+        if sort != "default":
+            rows = _apply_sort(rows, sort, revenue_map)
+        queue = [_queue_item(r, revenue_map) for r in rows]
+        return jsonify({
+            "mode": "high_cost_review",
+            "sort": sort,
+            "fixed": 0,
+            "total_zero": 0,
+            "remaining": len(queue),
+            "needs_research": 0,
+            "high_cost_count": len(queue),
+            "high_cost_threshold": HIGH_COST_THRESHOLD,
+            "next_recipe_id": queue[0]["id"] if queue else None,
             "queue": queue,
         })
     finally:

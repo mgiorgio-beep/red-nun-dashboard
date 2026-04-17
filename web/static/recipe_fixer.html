@@ -40,6 +40,33 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .progress-bar .stat.amber b { color: var(--amber); }
 .progress-bar .stat.red b { color: var(--red); }
 .progress-bar .spacer { flex: 1; }
+.progress-bar a.review-link {
+  color: var(--amber); font-size: 13px; font-weight: 600; text-decoration: none;
+  padding: 4px 10px; border: 1px solid var(--amber); border-radius: 6px;
+  background: var(--amber-soft); transition: all 0.15s;
+}
+.progress-bar a.review-link:hover { background: rgba(245,158,11,0.22); }
+.progress-bar a.back-link {
+  color: var(--blue); font-size: 13px; font-weight: 600; text-decoration: none;
+  padding: 4px 10px; border: 1px solid var(--blue); border-radius: 6px;
+  background: var(--blue-soft); transition: all 0.15s;
+}
+.progress-bar a.back-link:hover { background: rgba(56,189,248,0.22); }
+
+.header-controls { display: flex; gap: 8px; align-items: center; }
+.sort-select {
+  padding: 7px 28px 7px 12px; font-family: var(--font); font-size: 13px;
+  background: var(--bg-card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>") no-repeat right 10px center;
+  border: 1px solid var(--border-focus); border-radius: 8px; color: var(--text);
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  cursor: pointer; font-weight: 600;
+}
+.sort-select:focus { outline: none; border-color: var(--blue); }
+
+.recipe-revenue { font-size: 13px; color: var(--text2); font-weight: 500; margin-top: 6px; }
+.recipe-revenue b { color: var(--green); font-weight: 700; font-family: 'JetBrains Mono', Menlo, monospace; }
+.recipe-revenue .sub { color: var(--text3); font-size: 11px; }
+.recipe-revenue .none { color: var(--text3); font-style: italic; }
 
 .btn {
   padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border-focus);
@@ -199,7 +226,12 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
         <div class="page-title">Recipe Cost Fixer</div>
         <div class="page-sub">Walk through zero-cost recipes and fill in quantities, product links, and unit conversions.</div>
       </div>
-      <div>
+      <div class="header-controls">
+        <select class="sort-select" id="sort-select" title="Sort worklist">
+          <option value="revenue">Sort: Revenue impact</option>
+          <option value="alpha">Sort: Alphabetical</option>
+          <option value="default">Sort: Default (linked-first)</option>
+        </select>
         <button class="btn" id="btn-reset">Reset worklist</button>
       </div>
     </div>
@@ -228,10 +260,24 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     total_zero: 0,
     remaining: 0,
     needs_research: 0,
+    high_cost_count: 0,
+    high_cost_threshold: 70,
+    sort: 'revenue',
+    mode: 'zero_cost',
     debouncers: {},
     dirty: new Set(),
     openConversionFor: null,
   };
+
+  const fmtInt = n => Number(n || 0).toLocaleString('en-US');
+  const fmtMoney0 = n => '$' + Math.round(Number(n || 0)).toLocaleString('en-US');
+
+  function worklistUrl(){
+    const base = state.mode === 'high_cost_review'
+      ? '/api/recipe-fixer/high-cost-review'
+      : '/api/recipe-fixer/worklist';
+    return base + '?sort=' + encodeURIComponent(state.sort);
+  }
 
   const $ = sel => document.querySelector(sel);
   const fmt$ = n => (n === null || n === undefined) ? '—' : '$' + Number(n).toFixed(2);
@@ -261,12 +307,14 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
   }
 
   async function loadWorklist(){
-    const w = await api('/api/recipe-fixer/worklist');
+    const w = await api(worklistUrl());
     state.queue = w.queue || [];
-    state.fixed = w.fixed;
-    state.total_zero = w.total_zero;
-    state.remaining = w.remaining;
-    state.needs_research = w.needs_research;
+    state.fixed = w.fixed || 0;
+    state.total_zero = w.total_zero || 0;
+    state.remaining = w.remaining || 0;
+    state.needs_research = w.needs_research || 0;
+    state.high_cost_count = w.high_cost_count || 0;
+    state.high_cost_threshold = w.high_cost_threshold || 70;
     // find idx of first non-needs_research if we don't have one selected
     if (!state.recipe){
       const firstId = w.next_recipe_id;
@@ -284,21 +332,57 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
 
   function renderProgress(){
     const p = $('#progress-bar');
+    const rightLink = state.mode === 'high_cost_review'
+      ? '<a href="javascript:void(0)" class="back-link" id="back-to-queue">← Back to fixer queue</a>'
+      : (state.high_cost_count > 0
+          ? '<a href="javascript:void(0)" class="review-link" id="review-high-cost">Review '
+            + state.high_cost_count + ' high-cost-ratio recipe'
+            + (state.high_cost_count === 1 ? '' : 's') + '</a>'
+          : '');
+    let leftStats;
+    if (state.mode === 'high_cost_review'){
+      leftStats =
+        '<div class="stat amber"><b>' + state.queue.length + '</b> recipes with food cost &gt; '
+          + state.high_cost_threshold + '%</div>';
+    } else {
+      leftStats =
+        '<div class="stat green"><b>' + state.fixed + '</b> fixed</div>' +
+        '<div class="stat"><b>' + state.remaining + '</b> remaining</div>' +
+        '<div class="stat amber"><b>' + state.needs_research + '</b> needs research</div>' +
+        '<div class="stat"><b>' + state.total_zero + '</b> still zero-cost</div>';
+    }
     p.innerHTML =
-      '<div class="stat green"><b>' + state.fixed + '</b> fixed</div>' +
-      '<div class="stat"><b>' + state.remaining + '</b> remaining</div>' +
-      '<div class="stat amber"><b>' + state.needs_research + '</b> needs research</div>' +
-      '<div class="stat"><b>' + state.total_zero + '</b> still zero-cost</div>' +
+      leftStats +
       '<div class="spacer"></div>' +
-      '<div class="stat">Recipe <b>' + (state.idx + 1) + '</b> of <b>' + state.queue.length + '</b></div>';
+      (state.queue.length
+        ? '<div class="stat">Recipe <b>' + (state.idx + 1) + '</b> of <b>' + state.queue.length + '</b></div>'
+        : '') +
+      rightLink;
+    const hc = $('#review-high-cost');
+    if (hc) hc.onclick = enterHighCostReview;
+    const bk = $('#back-to-queue');
+    if (bk) bk.onclick = exitHighCostReview;
   }
 
   function renderDone(){
-    $('#recipe-container').innerHTML =
-      '<div class="recipe-card empty-state">' +
-      '<h3>All clear</h3>' +
-      '<p>No zero-cost recipes left in the worklist.</p>' +
-      '</div>';
+    const msg = state.mode === 'high_cost_review'
+      ? '<h3>No high-cost-ratio recipes</h3><p>All costed recipes are under ' + state.high_cost_threshold + '% food cost.</p>'
+      : '<h3>All clear</h3><p>No zero-cost recipes left in the worklist.</p>';
+    $('#recipe-container').innerHTML = '<div class="recipe-card empty-state">' + msg + '</div>';
+  }
+
+  async function enterHighCostReview(){
+    state.mode = 'high_cost_review';
+    state.recipe = null;
+    state.idx = 0;
+    await loadWorklist();
+  }
+
+  async function exitHighCostReview(){
+    state.mode = 'zero_cost';
+    state.recipe = null;
+    state.idx = 0;
+    await loadWorklist();
   }
 
   async function loadRecipe(recipeId){
@@ -330,9 +414,22 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     const rows = state.ingredients.map(renderIngredientRow).join('');
     const totals = computeTotals();
 
+    const qItem = state.queue[state.idx] || {};
+    let revLine = '';
+    if (qItem.revenue_90d && qItem.revenue_90d > 0){
+      revLine =
+        '<div class="recipe-revenue">' +
+          esc(r.name) + ' &middot; <b>' + fmtMoney0(qItem.revenue_90d) + '</b> ' +
+          '<span class="sub">(' + fmtInt(qItem.qty_sold_90d) + ' sold, 90d)</span>' +
+        '</div>';
+    } else if (qItem.id){
+      revLine = '<div class="recipe-revenue"><span class="none">No matching sales in the last 90 days.</span></div>';
+    }
+
     const html =
       '<div class="recipe-card">' +
         '<div class="recipe-title">' + esc(r.name) + '</div>' +
+        revLine +
         '<div class="recipe-meta">' + meta.join('') + '</div>' +
         '<table class="ingredients">' +
           '<thead><tr>' +
@@ -502,6 +599,17 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     document.querySelectorAll('[data-action="skip"]').forEach(el => el.addEventListener('click', skipRecipe));
     document.querySelectorAll('[data-action="unskip"]').forEach(el => el.addEventListener('click', unskipRecipe));
     $('#btn-reset').onclick = () => { state.recipe = null; loadWorklist(); };
+    const sortEl = $('#sort-select');
+    if (sortEl && !sortEl._bound){
+      sortEl._bound = true;
+      sortEl.value = state.sort;
+      sortEl.addEventListener('change', () => {
+        state.sort = sortEl.value || 'revenue';
+        state.recipe = null;
+        state.idx = 0;
+        loadWorklist();
+      });
+    }
   }
 
   function scheduleIngredientUpdate(ingId, immediate){
@@ -795,13 +903,15 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
   }
 
   async function advanceQueue(){
-    // Re-fetch the worklist so fixed/remaining counts update
-    const w = await api('/api/recipe-fixer/worklist');
+    // Re-fetch (honors current mode + sort) so counts update
+    const w = await api(worklistUrl());
     state.queue = w.queue || [];
-    state.fixed = w.fixed;
-    state.total_zero = w.total_zero;
-    state.remaining = w.remaining;
-    state.needs_research = w.needs_research;
+    state.fixed = w.fixed || 0;
+    state.total_zero = w.total_zero || 0;
+    state.remaining = w.remaining || 0;
+    state.needs_research = w.needs_research || 0;
+    state.high_cost_count = w.high_cost_count || 0;
+    state.high_cost_threshold = w.high_cost_threshold || 70;
     state.idx = 0;
     renderProgress();
     if (state.queue.length === 0){
