@@ -39,6 +39,15 @@ WEIGHT_UNITS = set(WEIGHT_TO_OZ.keys())
 VOLUME_UNITS = set(VOLUME_TO_FLOZ.keys())
 
 
+def _normalize_unit(u):
+    """Lowercase, strip, and collapse 'fl_oz' → 'fl oz' so unit strings
+    match the keys in WEIGHT_TO_OZ / VOLUME_TO_FLOZ. Does NOT resolve
+    ambiguous 'oz' — that's handled contextually in cost_ingredient."""
+    if not u:
+        return ''
+    return u.strip().lower().replace('.', '').replace('_', ' ')
+
+
 def cost_ingredient(ri, conn):
     """
     Cost a single recipe ingredient using its active vendor item price.
@@ -54,7 +63,7 @@ def cost_ingredient(ri, conn):
     try:
         product_id = ri.get('product_id')
         quantity = ri.get('quantity') or 0
-        recipe_unit = (ri.get('unit') or '').strip().lower()
+        recipe_unit = _normalize_unit(ri.get('unit'))
 
         if not product_id:
             return {'cost': 0.0, 'unit_price': 0.0, 'source': 'no_price'}
@@ -62,6 +71,7 @@ def cost_ingredient(ri, conn):
         # Get product with active vendor item
         product = conn.execute("""
             SELECT p.id, p.name, p.unit as purchase_unit, p.pack_size, p.pack_unit,
+                   p.inventory_unit,
                    p.active_vendor_item_id, p.yield_pct as product_yield_pct,
                    vi.purchase_price, vi.price_per_unit, vi.pack_contains, vi.contains_unit,
                    vi.pack_size as vi_pack_size, vi.pack_unit as vi_pack_unit
@@ -78,42 +88,51 @@ def cost_ingredient(ri, conn):
         if not price or price <= 0:
             return {'cost': 0.0, 'unit_price': 0.0, 'source': 'no_price'}
 
-        prod_unit = (product.get('purchase_unit') or '').strip().lower()
-        pack_unit = (product.get('pack_unit') or prod_unit).strip().lower()
+        prod_unit = _normalize_unit(product.get('purchase_unit'))
+        original_pack_unit = _normalize_unit(product.get('pack_unit'))
+        inventory_unit = _normalize_unit(product.get('inventory_unit'))
+        pack_unit = original_pack_unit or prod_unit
         pack_size = product.get('pack_size') or 1
 
         # Use vendor item pack_contains if available (e.g. 20/8oz case = 160oz total)
         # This gives us the real cost per base unit
         vi_pack_contains = product.get('pack_contains')
-        vi_contains_unit = (product.get('contains_unit') or '').strip().lower()
+        vi_contains_unit = _normalize_unit(product.get('contains_unit'))
         if vi_pack_contains and vi_pack_contains > 0 and vi_contains_unit:
             pack_size = vi_pack_contains
             pack_unit = vi_contains_unit
 
+        # Liquor / bottled-drink correction: vendor_items.contains_unit is often
+        # 'OZ' for products actually sold by volume (a 750ml bottle with
+        # pack_contains=25.36 OZ really means 25.36 fl oz). If any of the
+        # product's own unit fields are a volume, treat that ambiguous 'oz' as
+        # fluid oz so PATH 2b / price_per_unit can resolve it.
+        product_is_volume = (
+            prod_unit in VOLUME_TO_FLOZ
+            or original_pack_unit in VOLUME_TO_FLOZ
+            or inventory_unit in VOLUME_TO_FLOZ
+        )
+        if pack_unit in ('oz', 'ounce', 'ounces') and product_is_volume:
+            pack_unit = 'fl oz'
+
         # Use price_per_unit from vendor item if available (pre-calculated)
         vi_price_per_unit = product.get('price_per_unit')
         if vi_price_per_unit and vi_price_per_unit > 0:
-            # price_per_unit is cost per contains_unit (e.g. per oz)
-            # Normalize units for comparison (fl oz, fl_oz, floz all the same)
-            def norm_unit(u):
-                u = (u or '').strip().lower().replace('_', ' ').replace('.', '')
-                if u in ('fl oz', 'floz', 'fluid oz', 'fluid ounce', 'fl_oz'): return 'fl oz'
-                if u in ('oz', 'ounce', 'ounces'): return 'oz'
-                if u in ('lb', 'lbs', 'pound', 'pounds'): return 'lb'
-                if u in ('ml', 'milliliter', 'millilitre'): return 'ml'
-                if u in ('l', 'liter', 'litre', 'lt'): return 'l'
-                if u in ('ea', 'each', 'cnt', 'ct', 'count'): return 'ea'
-                return u
-            ppu_unit = norm_unit(vi_contains_unit or pack_unit)
-            recipe_unit_norm = norm_unit(recipe_unit)
-            if ppu_unit == recipe_unit_norm:
+            # price_per_unit is cost per the corrected pack_unit (e.g. per fl oz
+            # for a liquor bottle, per oz for a weight item). Compare against
+            # the recipe_unit after the same normalization.
+            if pack_unit == recipe_unit:
                 cost = quantity * vi_price_per_unit
                 return {'cost': round(cost, 4), 'unit_price': round(vi_price_per_unit, 4), 'source': 'vendor_item'}
 
-        # PATH 1: same unit or no recipe unit -> direct multiply
+        # PATH 1: same unit or no recipe unit -> divide price by pack_size to
+        # get per-pack_unit cost. When pack_size == 1 this is a no-op; when
+        # the vendor_item override inflated pack_size (e.g. 25.36 fl oz in a
+        # 1L liquor bottle) it correctly splits the bottle price across units.
         if not recipe_unit or recipe_unit == prod_unit or recipe_unit == pack_unit:
-            cost = quantity * price
-            return {'cost': round(cost, 4), 'unit_price': round(price, 4), 'source': 'vendor_item'}
+            per_unit = price / pack_size if pack_size and pack_size > 0 else price
+            cost = quantity * per_unit
+            return {'cost': round(cost, 4), 'unit_price': round(per_unit, 4), 'source': 'vendor_item'}
 
         # PATH 2a: both weight units -> standard conversion
         ru_wt = WEIGHT_TO_OZ.get(recipe_unit)
