@@ -1,6 +1,6 @@
 [
   {
-    "channel": "218",
+    "channel": "206",
     "dtv_ip": "10.1.10.87",
     "id": "bar-left",
     "name": "Bar Left",
@@ -8,7 +8,7 @@
     "samsung_ip": ""
   },
   {
-    "channel": "207",
+    "channel": "213",
     "dtv_ip": "10.1.10.58",
     "id": "bar-middle",
     "name": "Bar Middle",
@@ -16,7 +16,7 @@
     "samsung_ip": ""
   },
   {
-    "channel": "628",
+    "channel": "206",
     "dtv_ip": "10.1.10.29",
     "id": "bar-right",
     "name": "Bar Right",
@@ -24,7 +24,7 @@
     "samsung_ip": ""
   },
   {
-    "channel": "208",
+    "channel": "206",
     "dtv_ip": "10.1.10.208",
     "id": "dr-left",
     "name": "DR Left",
@@ -32,7 +32,7 @@
     "samsung_ip": ""
   },
   {
-    "channel": "207",
+    "channel": "213",
     "dtv_ip": "10.1.10.93",
     "id": "dr-middle",
     "name": "DR Middle",

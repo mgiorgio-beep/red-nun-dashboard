@@ -1,26 +1,74 @@
 [
   {
-    "tv_id": "bar-middle",
-    "game_id": "New Jersey Devils_vs_Boston Bruins_1776207600",
-    "channel": "628",
-    "start_ts": 1776207600,
-    "game_label": "New Jersey Devils vs Boston Bruins",
-    "tv_name": "Bar Middle",
+    "tv_id": "bar-left",
+    "game_id": "New York Mets_vs_Los Angeles Dodgers_1776304800",
+    "channel": "206",
+    "start_ts": 1776304800,
+    "game_label": "New York Mets vs Los Angeles Dodgers",
+    "tv_name": "Bar Left",
     "is_stream": false,
     "stream_name": "",
-    "fired": false,
-    "created_at": 1776182982
+    "fired": true,
+    "created_at": 1776282907
+  },
+  {
+    "tv_id": "bar-left",
+    "game_id": "Kansas City Royals_vs_Detroit Tigers_1776292200",
+    "channel": "671",
+    "start_ts": 1776292200,
+    "game_label": "Kansas City Royals vs Detroit Tigers",
+    "tv_name": "Bar Left",
+    "is_stream": false,
+    "stream_name": "",
+    "fired": true,
+    "created_at": 1776282967
   },
   {
     "tv_id": "bar-right",
-    "game_id": "Chicago Cubs_vs_Philadelphia Phillies_1776205800",
-    "channel": "246",
-    "start_ts": 1776205800,
-    "game_label": "Chicago Cubs vs Philadelphia Phillies",
+    "game_id": "Kansas City Royals_vs_Detroit Tigers_1776292200",
+    "channel": "671",
+    "start_ts": 1776292200,
+    "game_label": "Kansas City Royals vs Detroit Tigers",
     "tv_name": "Bar Right",
     "is_stream": false,
     "stream_name": "",
-    "fired": false,
-    "created_at": 1776185033
+    "fired": true,
+    "created_at": 1776282970
+  },
+  {
+    "tv_id": "bar-right",
+    "game_id": "Texas Rangers_vs_Athletics_1776303600",
+    "channel": "",
+    "start_ts": 1776303600,
+    "game_label": "Texas Rangers vs Athletics",
+    "tv_name": "Bar Right",
+    "is_stream": true,
+    "stream_name": "VictoryTX",
+    "fired": true,
+    "created_at": 1776282995
+  },
+  {
+    "tv_id": "bar-middle",
+    "game_id": "Orlando Magic_vs_Philadelphia 76ers_1776295800",
+    "channel": "9549",
+    "start_ts": 1776295800,
+    "game_label": "Orlando Magic vs Philadelphia 76ers",
+    "tv_name": "Bar Middle",
+    "is_stream": false,
+    "stream_name": "",
+    "fired": true,
+    "created_at": 1776283018
+  },
+  {
+    "tv_id": "bar-middle",
+    "game_id": "Golden State Warriors_vs_LA Clippers_1776304800",
+    "channel": "9549",
+    "start_ts": 1776304800,
+    "game_label": "Golden State Warriors vs LA Clippers",
+    "tv_name": "Bar Middle",
+    "is_stream": false,
+    "stream_name": "",
+    "fired": true,
+    "created_at": 1776283024
   }
 ]

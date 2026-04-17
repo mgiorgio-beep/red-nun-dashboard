@@ -1,7 +1,7 @@
 {
   "title": "Today's Specials",
   "footer": "",
-  "font": "Rock Salt",
+  "font": "Blzee",
   "titleColor": "white",
   "soupColor": "white",
   "appColor": "blue",
@@ -12,29 +12,29 @@
     "eightySixed": false
   },
   "appetizer": {
-    "name": "Buffalo Cauliflower",
-    "desc": "With bleu cheese",
+    "name": "Buffalo Cauliflower with blue cheese",
+    "desc": "",
     "price": "$13",
-    "eightySixed": false
+    "eightySixed": true
   },
   "items": [
     {
-      "name": "Meatball Sub",
-      "desc": "Served with fries",
-      "price": "$18",
-      "color": "green"
-    },
-    {
-      "name": "Pasta Lunch Special",
-      "desc": "Beef and pork ragu over fettuccine with garlic bread",
-      "price": "$14",
-      "color": "yellow"
-    },
-    {
       "name": "Beer Battered Haddock",
-      "desc": "Served with fries, coleslaw, and tartar",
+      "desc": "Beer battered haddock served with fries, coleslaw, and tartar",
       "price": "$18",
-      "color": "pink"
+      "color": "white"
+    },
+    {
+      "name": "Meatball Sub",
+      "desc": "Meatballs, marinara, and cheese on a sub roll served with fries",
+      "price": "$18",
+      "color": "white"
+    },
+    {
+      "name": "Ravioli special",
+      "desc": "Braised short rib ravioli in a pesto cream sauce",
+      "price": "$23",
+      "color": "white"
     }
   ]
 }
