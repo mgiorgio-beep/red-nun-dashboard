@@ -60,6 +60,7 @@ from routes.availability_routes import availability_bp
 from routes.application_routes import application_bp
 from routes.daily_sales_routes import daily_sales_bp
 from routes.morning_report_routes import morning_report_bp
+from routes.recipe_fixer_routes import recipe_fixer_bp
 from reports.sales_journal import init_sales_journal_tables, run_daily_journal, send_weekly_unresolved_summary
 
 load_dotenv()
@@ -107,6 +108,7 @@ app.register_blueprint(application_bp)
 app.register_blueprint(daily_sales_bp)
 app.register_blueprint(morning_report_bp)
 app.register_blueprint(report_bp)
+app.register_blueprint(recipe_fixer_bp)
 
 # Initialize database
 init_db()

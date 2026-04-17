@@ -44,6 +44,7 @@ var sections=[
   {id:'nav-prepared',label:'Prepared Items',page:'/manage',tab:'prepared-items'},
   {id:'nav-menuanalysis',label:'Menu Analysis',page:'/manage',tab:'recipe-analysis'},
   {id:'nav-recipeviewer',label:'Recipe Viewer',page:'/manage',tab:'recipe-viewer'},
+  {id:'nav-recipefixer',label:'Recipe Fixer',page:'/recipes/fixer'},
   {id:'nav-voicerecipe',label:'Voice Recipe',page:'/voice-recipe'},
   {id:'nav-pmixmapping',label:'PMIX Mapping',page:'/manage',tab:'pmix-mapping'}
 ]},
@@ -104,6 +105,7 @@ if(path==='/manage'){
 }
 if(path==='/invoices'){var iv=localStorage.getItem('invoiceView')||'history';var ivm={history:'nav-invhistory',scan:'nav-scan',pending:'nav-pending'};return ivm[iv]||'nav-invhistory';}
 if(path==='/ai-inventory')return 'nav-aicount';
+if(path==='/recipes/fixer')return 'nav-recipefixer';
 if(path==='/order-guide')return 'nav-orderguide';
 if(path==='/specials-admin')return 'nav-specials';
 if(path==='/payments')return 'nav-payments';
@@ -362,6 +364,11 @@ fetch('/api/invoices/pending-count').then(function(r){return r.json()}).then(fun
     var ct=d.count||0;
     var psItem=document.getElementById('nav-prodsetup');
     if(psItem){if(ct>0){psItem.classList.add('has-alert')}else{psItem.classList.remove('has-alert')}}
+  }).catch(function(){});
+  fetch('/api/recipe-fixer/worklist').then(function(r){return r.json()}).then(function(d){
+    var rem=d.remaining||0;
+    var rfItem=document.getElementById('nav-recipefixer');
+    if(rfItem){if(rem>0){rfItem.classList.add('has-alert')}else{rfItem.classList.remove('has-alert')}}
   }).catch(function(){});
 }
 setInterval(pollBadges,30000);
