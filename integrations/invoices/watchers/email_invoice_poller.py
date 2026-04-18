@@ -17,7 +17,7 @@ Location detection (highest priority first):
   3. Default: dennis
 
 Run via cron every 5 minutes:
-  */5 * * * * cd /opt/rednun && source venv/bin/activate && python email_invoice_poller.py >> /var/log/rednun_email_poller.log 2>&1
+  */5 * * * * /opt/red-nun-dashboard/venv/bin/python3 /opt/red-nun-dashboard/integrations/invoices/watchers/email_invoice_poller.py >> /opt/red-nun-dashboard/monitoring/email_poller.log 2>&1
 """
 import os
 import sys
@@ -27,9 +27,6 @@ import logging
 import pickle
 from datetime import datetime
 from email.header import decode_header as email_decode_header
-
-sys.path.insert(0, '/opt/rednun')
-os.chdir('/opt/rednun')
 
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -89,8 +86,8 @@ def get_gmail_service():
     if not os.path.exists(GMAIL_TOKEN_PATH):
         logger.error(
             "Gmail token not found. Run gmail_auth.py once to authorize:\n"
-            "  cd /opt/rednun && source venv/bin/activate && python gmail_auth.py --url\n"
-            "  python gmail_auth.py --code <code>"
+            "  cd /opt/red-nun-dashboard && source venv/bin/activate && python integrations/google/gmail_auth.py --url\n"
+            "  python integrations/google/gmail_auth.py --code <code>"
         )
         return None
 
