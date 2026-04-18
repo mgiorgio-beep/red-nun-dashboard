@@ -6200,6 +6200,10 @@ async function prLoadRuns() {
       if (run.checks_pdf_path) {
         dls += '<a href="/api/payroll/runs/' + run.id + '/checks-pdf" target="_blank" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:none;background:#38bdf8;color:#020617;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">Checks PDF</a>';
       }
+      dls += '<label onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:1px solid #f59e0b;background:#fffbeb;color:#92400e;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;white-space:nowrap">' +
+        'Backfill CSV' +
+        '<input type="file" accept=".csv" style="display:none" onchange="prBackfillRun(' + run.id + ', this)">' +
+        '</label>';
       dls += '<a href="/api/payroll/runs/' + run.id + '/qbo-csv" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">QBO</a>';
       dls += '<a href="/api/payroll/runs/' + run.id + '/zip" onclick="event.stopPropagation()" style="padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none;margin-left:4px">ZIP</a>';
 
@@ -6230,11 +6234,6 @@ async function prLoadRuns() {
         '<div style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border)">' +
         '<a href="/api/payroll/runs/' + run.id + '/summary-csv" style="padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none">Summary CSV</a>' +
         '<a href="/api/payroll/runs/' + run.id + '/ytd-csv" style="padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none">YTD CSV</a>' +
-        '<label style="padding:4px 10px;border-radius:4px;border:1px solid #f59e0b;background:#fffbeb;color:#92400e;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">' +
-          'Backfill CSV' +
-          '<input type="file" accept=".csv" style="display:none" onchange="prBackfillRun(' + run.id + ', this)">' +
-        '</label>' +
-        '<span id="pr-backfill-status-' + run.id + '" style="display:none;font-size:11px;padding:4px 8px;border-radius:4px"></span>' +
         '</div>' +
         '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
         '<thead><tr style="background:#f1f5f9">' +
@@ -6252,13 +6251,10 @@ async function prLoadRuns() {
 }
 
 async function prLoadLegacy() {
-  // Show payroll_checks records that predate the run system (no payroll_run_id)
+  // Show only orphan payroll_checks (payroll_run_id IS NULL) — these predate the run system.
   try {
-    var r = await fetch('/api/billpay/payroll-checks?location=' + _prLocation);
+    var r = await fetch('/api/payroll/orphan-checks?location=' + _prLocation);
     var checks = await r.json();
-    // Filter to only legacy records (those without a run — old OCR-uploaded ones)
-    // The API returns all; we distinguish by checking if check looks like it came from old flow
-    // For safety show all of them; ones in new runs will still appear in run cards above
     var wrap = document.getElementById('pr-legacy-wrap');
     var tbody = document.getElementById('pr-legacy-body');
     if (!checks || !checks.length) { wrap.style.display = 'none'; return; }
@@ -6370,36 +6366,29 @@ async function prPrintChecks(runId, btn) {
 async function prBackfillRun(runId, input) {
   var file = input && input.files && input.files[0];
   if (!file) return;
-  var statusEl = document.getElementById('pr-backfill-status-' + runId);
-  statusEl.style.display = 'inline-block';
-  statusEl.style.background = '#f0f9ff';
-  statusEl.style.color = '#0369a1';
-  statusEl.textContent = 'Processing...';
   var form = new FormData();
   form.append('journal_csv', file);
   try {
     var r = await fetch('/api/payroll/runs/' + runId + '/backfill', { method: 'POST', body: form });
     var j = await r.json();
+    input.value = '';
     if (!r.ok) {
-      statusEl.style.background = '#fef2f2';
-      statusEl.style.color = '#dc2626';
-      statusEl.textContent = j.error || 'Error';
+      alert('Backfill failed: ' + (j.error || 'Unknown error'));
       return;
     }
-    var msg = 'Matched ' + j.matched + ' employees';
-    if (j.unmatched && j.unmatched.length) msg += ' (' + j.unmatched.length + ' unmatched: ' + j.unmatched.join(', ') + ')';
-    msg += j.balanced ? ' — QBO BALANCED' : ' — QBO UNBALANCED';
-    statusEl.style.background = j.balanced ? '#f0fdf4' : '#fef9c3';
-    statusEl.style.color = j.balanced ? '#15803d' : '#92400e';
-    statusEl.textContent = msg;
-    // Reload the employee detail
+    var msg = 'Matched ' + j.matched + ' employee(s).';
+    if (j.unmatched && j.unmatched.length) {
+      msg += '\nUnmatched (' + j.unmatched.length + '): ' + j.unmatched.join(', ');
+    }
+    msg += '\nQBO: ' + (j.balanced ? 'BALANCED' : 'UNBALANCED') +
+           ' (debits $' + (j.total_debits || 0).toFixed(2) +
+           ' / credits $' + (j.total_credits || 0).toFixed(2) + ')';
+    alert(msg);
     prLoadRunEmployees(runId);
-    // Reload the runs list to pick up updated totals
     prLoadRuns();
   } catch(e) {
-    statusEl.style.background = '#fef2f2';
-    statusEl.style.color = '#dc2626';
-    statusEl.textContent = 'Error: ' + e.message;
+    input.value = '';
+    alert('Error: ' + e.message);
   }
 }
 

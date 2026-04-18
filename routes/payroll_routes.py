@@ -695,6 +695,29 @@ def report_payroll_ytd():
 
 
 # ─────────────────────────────────────────────
+#  ORPHAN CHECKS (for Previous Checks table)
+# ─────────────────────────────────────────────
+
+@payroll_bp.route("/api/payroll/orphan-checks")
+@login_required
+def list_orphan_checks():
+    """Checks that don't belong to any payroll run — for the Previous Checks table."""
+    location = request.args.get("location")
+    conn = get_connection()
+    where = ["(payroll_run_id IS NULL OR payroll_run_id = '')",
+             "(voided IS NULL OR voided = 0)"]
+    params = []
+    if location:
+        where.append("location = ?")
+        params.append(location)
+    sql = "SELECT * FROM payroll_checks WHERE " + " AND ".join(where)
+    sql += " ORDER BY pay_period_end DESC, employee_name"
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+# ─────────────────────────────────────────────
 #  CONVERT LEGACY CHECKS → PAYROLL RUNS
 # ─────────────────────────────────────────────
 
