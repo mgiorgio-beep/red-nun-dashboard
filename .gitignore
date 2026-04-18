@@ -47,3 +47,7 @@ node_modules/
 
 .claude/
 payroll_runs/
+data/autotunes.json
+data/odds.json
+data/specials.json
+data/tvs.json

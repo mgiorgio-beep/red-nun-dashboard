@@ -6242,9 +6242,10 @@ async function prLoadRuns() {
         '<th style="padding:7px 8px;text-align:right;color:var(--text3);font-weight:500">Gross</th>' +
         '<th style="padding:7px 8px;text-align:right;color:var(--text3);font-weight:500">EE Taxes</th>' +
         '<th style="padding:7px 8px;text-align:right;color:var(--text3);font-weight:500">Net</th>' +
-        '<th style="padding:7px 14px;text-align:left;color:var(--text3);font-weight:500">Check #</th>' +
+        '<th style="padding:7px 8px;text-align:left;color:var(--text3);font-weight:500">Check #</th>' +
+        '<th style="padding:7px 14px;text-align:center;color:var(--text3);font-weight:500"></th>' +
         '</tr></thead>' +
-        '<tbody id="pr-emps-' + run.id + '"><tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text3)">Click to expand</td></tr></tbody>' +
+        '<tbody id="pr-emps-' + run.id + '"><tr><td colspan="7" style="padding:16px;text-align:center;color:var(--text3)">Click to expand</td></tr></tbody>' +
         '</table>';
     });
   } catch(e) { console.error('Payroll load error:', e); }
@@ -6299,26 +6300,65 @@ async function prLoadRunEmployees(runId) {
     var data = await r.json();
     var checks = data.checks || [];
     if (!checks.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text3)">No employees found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--text3)">No employees found</td></tr>';
       return;
     }
     var html = '';
     checks.forEach(function(c) {
       var method = (c.payment_method || 'Manual').toLowerCase() === 'direct deposit' ? 'DD' : 'Check';
       var chkNum = c.check_number || (method === 'DD' ? 'DD' : '—');
+      var voided = c.voided ? ' <span style="color:#ef4444;font-size:10px;font-weight:600">VOID</span>' : '';
       html += '<tr style="border-bottom:1px solid var(--border)">';
       html += '<td style="padding:7px 12px;color:#111827;font-weight:500">' + (c.employee_name || '') + '</td>';
       html += '<td style="padding:7px 6px;color:var(--text3)">' + method + '</td>';
       html += '<td style="padding:7px 6px;text-align:right;color:#111827">$' + (c.gross_pay || 0).toFixed(2) + '</td>';
       html += '<td style="padding:7px 6px;text-align:right;color:#ef4444">$' + (c.ee_taxes || 0).toFixed(2) + '</td>';
       html += '<td style="padding:7px 6px;text-align:right;color:#22c55e;font-weight:600">$' + (c.net_pay || 0).toFixed(2) + '</td>';
-      html += '<td style="padding:7px 6px;color:#111827">' + chkNum + '</td>';
+      html += '<td style="padding:7px 6px;color:#111827">' + chkNum + voided + '</td>';
+      if (method !== 'DD' && c.check_number && !c.voided) {
+        var safeName = (c.employee_name || '').replace(/'/g, "\\'");
+        html += '<td style="padding:7px 6px;text-align:center"><button onclick="reprintCheck(' + c.id + ',\'' + safeName + '\',\'' + c.check_number + '\')" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:#fff;color:#374151;cursor:pointer;font-weight:500">Reprint</button></td>';
+      } else {
+        html += '<td></td>';
+      }
       html += '</tr>';
     });
     tbody.innerHTML = html;
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#ef4444">Error loading employees</td></tr>';
   }
+}
+
+// ── Reprint a single check ──
+async function reprintCheck(checkId, employeeName, checkNumber) {
+  var choice = prompt(
+    'Reprint check #' + checkNumber + ' for ' + employeeName + '?\n\n' +
+    'Type "same" to reprint with the SAME check number.\n' +
+    'Type "new" to VOID #' + checkNumber + ' and reissue with a NEW number.\n' +
+    'Anything else cancels.'
+  );
+  if (!choice) return;
+  var cleaned = choice.trim().toLowerCase();
+  var reissue;
+  if (cleaned === 'same') reissue = false;
+  else if (cleaned === 'new') reissue = true;
+  else { alert('Cancelled.'); return; }
+
+  var resp = await fetch('/api/payroll/checks/' + checkId + '/reprint', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({reissue: reissue})
+  });
+  var data = await resp.json();
+  if (!resp.ok) { alert('Error: ' + (data.error || resp.status)); return; }
+
+  window.open(data.pdf_url, '_blank');
+
+  if (data.reissued) {
+    alert('Check #' + data.old_check_number + ' voided. New check #' + data.new_check_number + ' generated.');
+  }
+
+  prLoadRuns();
 }
 
 // ── Convert legacy checks → run ──
