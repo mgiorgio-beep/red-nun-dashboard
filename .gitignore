@@ -46,3 +46,4 @@ node_modules/
 !.gitkeep
 
 .claude/
+payroll_runs/
