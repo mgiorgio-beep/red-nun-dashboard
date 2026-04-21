@@ -36,11 +36,11 @@
 
 | Record | Type | Points To | Proxied | Notes |
 |---|---|---|---|---|
-| `dashboard.rednun.com` | A | 174.180.119.126 | YES | DDNS auto-updates this |
-| `wheelhouse.rednun.com` | A | 174.180.119.126 | YES | |
-| `northfla.rednun.com` | A | 174.180.119.126 | YES | |
-| `skywatch.rednun.com` | A | 174.180.119.126 | YES | |
-| `ssh.rednun.com` | A | 174.180.119.126 | NO | SSH can't go through Cloudflare |
+| `dashboard.rednun.com` | A | current WAN IP | YES | DDNS auto-updates |
+| `wheelhouse.rednun.com` | A | current WAN IP | YES | DDNS auto-updates |
+| `northfla.rednun.com` | A | current WAN IP | YES | DDNS auto-updates |
+| `skywatch.rednun.com` | A | current WAN IP | YES | DDNS auto-updates |
+| `ssh.rednun.com` | A | current WAN IP | NO | DDNS auto-updates, must stay DNS-only |
 | `rednun.com` | A | 162.120.94.90 | NO | ⛔ Register.com web host — DO NOT TOUCH |
 | `www.rednun.com` | CNAME | sites.toasttab.com | **NO** | ⛔ MUST STAY DNS-ONLY — proxying breaks Toast ordering |
 | `mail.rednun.com` | CNAME | webmail01.register.com | NO | |
@@ -63,7 +63,7 @@
 
 | Schedule | Script | Purpose |
 |---|---|---|
-| Every 5 min | `/opt/red-nun-dashboard/monitoring/ddns.py` | Update `dashboard.rednun.com` DNS in Cloudflare |
+| Every 5 min | `/opt/red-nun-dashboard/monitoring/ddns.py` | Update A records (`dashboard`, `wheelhouse`, `skywatch`, `northfla`, `ssh`) in Cloudflare |
 | Every 5 min | `/opt/red-nun-dashboard/integrations/invoices/watchers/email_invoice_poller.py` | Poll Gmail for invoice emails |
 | Every 30 min | `/opt/red-nun-dashboard/monitoring/server_down_check.py` | Alert if server is unreachable |
 | Daily 6am, 12pm, 6pm | `/opt/wheelhouse/logger.py` | Wheelhouse data logger |
@@ -106,5 +106,5 @@
 - **`www.rednun.com` must never be proxied through Cloudflare** — breaks Toast online ordering (cost $1k in lost orders Apr 12 2026)
 - **`rednun.com` A record must never be changed** — points to Register.com host, not this server
 - **Real DB is `/var/lib/rednun/toast_data.db`** — set via `DB_PATH` in `.env`. The file at `/opt/red-nun-dashboard/data/toast_data.db` is an empty stub.
-- **DDNS only updates `dashboard.rednun.com`** — all other A records point to the same IP but need manual update if the server IP ever changes
+- **DDNS updates 5 A records** (`dashboard`, `wheelhouse`, `skywatch`, `northfla`, `ssh`) to the current WAN IP every 5 min. It hard-blocks `rednun.com` apex and `www` via a `FORBIDDEN` set.
 - **`/opt/rednun.retired-20260412`** — old repo left from Phase 2H cutover, can be deleted once confident everything is working

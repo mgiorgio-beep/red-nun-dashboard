@@ -93,7 +93,7 @@ tests/              test_ai_inventory
 - `reports/analytics.py` — Revenue/labor/cost SQL queries
 - `reports/invoice_anomaly.py` — Post-confirm anomaly detection
 - `integrations/recipes/recipe_costing.py` — Recipe cost calculation
-- `monitoring/ddns.py` — Cloudflare DDNS updater (loads secrets from `.env`) — must ONLY update `dashboard.rednun.com`
+- `monitoring/ddns.py` — Cloudflare DDNS updater (loads secrets from `.env`) — updates A records for `dashboard`, `wheelhouse`, `skywatch`, `northfla`, and `ssh` subdomains. Hard-blocks `rednun.com` apex and `www`
 - `data/schema_v2.sql` — Canonical schema
 - `session_journal.json` — Session state tracker (READ FIRST every session, if present)
 
@@ -125,7 +125,7 @@ ALWAYS use `get_connection()` from `integrations/toast/data_store.py`. Do NOT us
 - `www.rednun.com` is a CNAME to `sites.toasttab.com` and MUST stay **DNS-only (proxied: False)** in Cloudflare. Proxying it through Cloudflare breaks Toast online ordering completely.
 - `rednun.com` points to the restaurant's web host (162.120.94.90) — not this server. Do not touch it.
 - **Toast online ordering going down = direct revenue loss.** This mistake previously cost $1,000 in lost orders.
-- The DDNS script (`monitoring/ddns.py`) must only ever update `dashboard.rednun.com`. Nothing else.
+- The DDNS script (`monitoring/ddns.py`) updates A records for `dashboard`, `wheelhouse`, `skywatch`, `northfla`, and `ssh` only. It must NEVER touch `rednun.com` or `www.rednun.com` — a hardcoded `FORBIDDEN` set enforces this.
 
 ---
 
