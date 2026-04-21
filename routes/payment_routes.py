@@ -548,6 +548,46 @@ def api_void_payment(payment_id):
     return jsonify({"status": "ok"})
 
 
+@payment_bp.route("/api/payments/<int:payment_id>/mark-paid", methods=["PUT", "POST"])
+def api_mark_payment_paid(payment_id):
+    """Flip a pending vendor_payment to 'cleared'. If linked to an ap_payment
+    (Bill Pay ACH/check flow), clear that too. Covers the systemic bug where
+    ACH/check payments never transition from pending — user confirms on the UI
+    once the payment is actually settled."""
+    conn = get_connection()
+    vp = conn.execute("SELECT * FROM vendor_payments WHERE id = ?", (payment_id,)).fetchone()
+    if not vp:
+        conn.close()
+        return jsonify({"error": "Payment not found"}), 404
+    if vp["status"] == "void":
+        conn.close()
+        return jsonify({"error": "Payment is voided"}), 400
+    if vp["status"] == "cleared":
+        conn.close()
+        return jsonify({"status": "ok", "already": True})
+
+    now = datetime.now().isoformat()
+    conn.execute(
+        "UPDATE vendor_payments SET status = 'cleared', updated_at = ? WHERE id = ?",
+        (now, payment_id),
+    )
+
+    ap_id = vp["ap_payment_id"]
+    if ap_id:
+        try:
+            conn.execute(
+                "UPDATE ap_payments SET status = 'cleared', updated_at = ? WHERE id = ? AND status != 'void'",
+                (now, ap_id),
+            )
+        except Exception as e:
+            logger.warning(f"mark-paid: failed to clear ap_payments #{ap_id}: {e}")
+
+    conn.commit()
+    conn.close()
+    logger.info(f"Vendor payment #{payment_id} marked as cleared (ap_payment_id={ap_id})")
+    return jsonify({"status": "ok"})
+
+
 @payment_bp.route("/api/payments/<int:payment_id>", methods=["DELETE"])
 def api_delete_payment(payment_id):
     """Delete a vendor_payment record entirely. No invoice balance reversal.

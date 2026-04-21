@@ -171,6 +171,13 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 .btn-void:hover { background: var(--red-soft); }
 
+.btn-markpaid {
+  padding: 4px 12px; border-radius: 6px; border: 1px solid var(--green);
+  background: transparent; color: var(--green); font-size: 11px; font-weight: 600;
+  cursor: pointer; margin-top: 8px;
+}
+.btn-markpaid:hover { background: var(--green-soft); }
+
 /* Mobile */
 @media (max-width: 767px) {
   .layout { display: block; height: auto; }
@@ -433,6 +440,9 @@ function renderTable(payments) {
     if (p.status === 'failed' || p.status === 'processing') {
       actions += '<button class="btn-void" onclick="event.stopPropagation();deletePayment(' + p.id + ')">Delete</button>';
     }
+    if (p.status === 'pending' || p.status === 'printed') {
+      actions += '<button class="btn-markpaid" onclick="event.stopPropagation();markPaid(' + p.id + ')">Mark Paid</button>';
+    }
     if ((p.source === 'check' || p.source === 'portal') && p.status !== 'void' && p.status !== 'failed') {
       actions += '<button class="btn-void" onclick="event.stopPropagation();voidPayment(' + p.id + ')" style="margin-left:6px">Void Payment</button>';
     }
@@ -546,6 +556,17 @@ window.voidPayment = function(id) {
     .then(function(d){
       if (d.status === 'ok') loadData();
       else alert(d.error || 'Failed to void');
+    })
+    .catch(function(){ alert('Network error'); });
+};
+
+window.markPaid = function(id) {
+  if (!confirm('Mark this payment as cleared? Use this once the ACH/check has actually gone through.')) return;
+  fetch('/api/payments/' + id + '/mark-paid', { method: 'PUT' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.status === 'ok') loadData();
+      else alert(d.error || 'Failed to mark paid');
     })
     .catch(function(){ alert('Network error'); });
 };
