@@ -2202,7 +2202,7 @@ def confirm_invoice(invoice_id, updated_data=None):
 
             cursor.execute("""
                 UPDATE scanned_invoices
-                SET due_date = COALESCE(due_date, ?),
+                SET due_date = COALESCE(?, due_date),
                     balance = COALESCE(balance, ?),
                     amount_paid = COALESCE(amount_paid, 0),
                     payment_status = COALESCE(
