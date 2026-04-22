@@ -56,6 +56,7 @@ var sections=[
 ]},
 {id:'sec-billpay',label:'Bill Pay',icon:'billpay',children:[
   {id:'nav-bp-outstanding',label:'Outstanding',page:'/manage',tab:'billpay'},
+  {id:'nav-bp-reconcile',label:'Portal Reconcile',page:'/reconcile'},
   {id:'nav-payments',label:'Payments',page:'/payments'},
   {id:'nav-bp-vendors',label:'Vendor Setup',page:'/manage',tab:'bp-vendors'},
   {id:'nav-bp-recurring',label:'Recurring Bills',page:'/manage',tab:'bp-recurring'},

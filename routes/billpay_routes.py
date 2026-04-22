@@ -841,6 +841,144 @@ def mark_invoice_paid_external(invoice_id):
 
 
 # ─────────────────────────────────────────────
+#  PORTAL RECONCILIATION
+# ─────────────────────────────────────────────
+
+PORTAL_SNAPSHOT_DIR = os.path.expanduser("~rednun/vendor-scrapers/open_invoices")
+
+# Map vendor_key (used in snapshot JSON filename prefix) to canonical vendor_name
+# as stored in scanned_invoices.vendor_name.
+PORTAL_VENDOR_MAP = {
+    "pfg": "Performance Foodservice",
+    "usfoods": "US Foods",
+    "lknife": "L. Knife & Son, Inc.",
+    "colonial": "Colonial Wholesale Beverage",
+    "martignetti": "Martignetti Companies",
+    "sg": "Southern Glazer's Beverage Company",
+    "craft": "Craft Collective Inc",
+}
+
+
+@billpay_bp.route("/api/billpay/reconcile-portal", methods=["GET"])
+@admin_or_accountant_required
+def reconcile_portal():
+    """Compare portal open-invoice snapshots to dashboard outstanding.
+
+    Query params:
+        vendor_key: e.g. 'pfg'. Required.
+
+    Reads ~rednun/vendor-scrapers/open_invoices/<vendor_key>_<location>.json
+    (one per location) and returns per-location diffs:
+        - matched: in both portal and dashboard
+        - portal_only: in portal, missing from dashboard (needs import)
+        - dashboard_only: in dashboard, gone from portal (likely paid IRL — ghost)
+        - amount_mismatch: in both but totals differ >$0.01
+    """
+    import glob
+    vendor_key = (request.args.get("vendor_key") or "").strip().lower()
+    if not vendor_key or vendor_key not in PORTAL_VENDOR_MAP:
+        return jsonify({
+            "error": "vendor_key required",
+            "supported": list(PORTAL_VENDOR_MAP.keys()),
+        }), 400
+
+    vendor_name = PORTAL_VENDOR_MAP[vendor_key]
+
+    snapshot_paths = sorted(glob.glob(os.path.join(
+        PORTAL_SNAPSHOT_DIR, f"{vendor_key}_*.json"
+    )))
+    if not snapshot_paths:
+        return jsonify({
+            "error": f"No portal snapshots found for {vendor_key}",
+            "expected_dir": PORTAL_SNAPSHOT_DIR,
+        }), 404
+
+    conn = get_connection()
+
+    import json as _json
+    results = []
+    for path in snapshot_paths:
+        try:
+            with open(path) as f:
+                snap = _json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to read portal snapshot {path}: {e}")
+            continue
+
+        location = snap.get("location")
+        scraped_at = snap.get("scraped_at")
+        portal_invs = snap.get("invoices", [])
+        portal_by_num = {str(i["invoice_number"]).strip(): i for i in portal_invs if i.get("invoice_number")}
+
+        db_rows = conn.execute(
+            """SELECT id, invoice_number, invoice_date, total, balance, payment_status, image_path
+               FROM scanned_invoices
+               WHERE vendor_name = ? AND location = ?
+                 AND status = 'confirmed'
+                 AND (payment_status IS NULL OR payment_status != 'paid')""",
+            (vendor_name, location),
+        ).fetchall()
+        db_by_num = {str(r["invoice_number"]).strip(): dict(r) for r in db_rows if r["invoice_number"]}
+
+        matched, mismatches, portal_only, dashboard_only = [], [], [], []
+
+        for num, portal_inv in portal_by_num.items():
+            if num in db_by_num:
+                db_inv = db_by_num[num]
+                portal_amt = float(portal_inv.get("amount") or 0)
+                db_amt = float(db_inv.get("total") or 0)
+                if abs(portal_amt - db_amt) > 0.01:
+                    mismatches.append({
+                        "invoice_number": num,
+                        "invoice_date": portal_inv.get("invoice_date"),
+                        "portal_amount": portal_amt,
+                        "dashboard_amount": db_amt,
+                        "dashboard_id": db_inv["id"],
+                    })
+                else:
+                    matched.append({
+                        "invoice_number": num,
+                        "invoice_date": portal_inv.get("invoice_date"),
+                        "amount": portal_amt,
+                        "dashboard_id": db_inv["id"],
+                    })
+            else:
+                portal_only.append({
+                    "invoice_number": num,
+                    "invoice_date": portal_inv.get("invoice_date"),
+                    "amount": float(portal_inv.get("amount") or 0),
+                    "type": portal_inv.get("type"),
+                })
+
+        for num, db_inv in db_by_num.items():
+            if num not in portal_by_num:
+                dashboard_only.append({
+                    "invoice_number": num,
+                    "invoice_date": db_inv.get("invoice_date"),
+                    "amount": float(db_inv.get("total") or 0),
+                    "dashboard_id": db_inv["id"],
+                })
+
+        results.append({
+            "location": location,
+            "scraped_at": scraped_at,
+            "portal_count": len(portal_invs),
+            "dashboard_count": len(db_rows),
+            "matched": matched,
+            "portal_only": portal_only,
+            "dashboard_only": dashboard_only,
+            "amount_mismatch": mismatches,
+        })
+
+    conn.close()
+    return jsonify({
+        "vendor_key": vendor_key,
+        "vendor_name": vendor_name,
+        "locations": results,
+    })
+
+
+# ─────────────────────────────────────────────
 #  CHECK CONFIG
 # ─────────────────────────────────────────────
 

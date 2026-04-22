@@ -232,6 +232,13 @@ def payments_page():
     return send_from_directory("static", "payments.html")
 
 
+@app.route("/reconcile")
+@login_required
+def reconcile_page():
+    """Serve the portal-reconciliation page (Bill Pay vs vendor portal)."""
+    return send_from_directory("static", "reconcile.html")
+
+
 @app.route("/specials")
 def specials_page():
     """Serve the chalkboard specials display (no login — for TV/public)."""

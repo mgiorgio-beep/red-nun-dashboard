@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal Reconciliation · Red Nun</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --card: #0f172a;
+      --border: #1e293b;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --green: #22c55e;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --blue: #38bdf8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--text2); font-size: 13px; margin-bottom: 20px; }
+    .controls {
+      display: flex; gap: 12px; align-items: center;
+      padding: 14px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    select, button {
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 8px 12px; font-size: 14px; cursor: pointer;
+    }
+    button:hover { background: var(--border); }
+    button.primary { background: var(--blue); color: #000; border-color: var(--blue); font-weight: 600; }
+    button.danger  { background: transparent; color: var(--red); border-color: var(--red); }
+    button.success { background: transparent; color: var(--green); border-color: var(--green); }
+    .loc-block { margin-bottom: 32px; }
+    .loc-head {
+      font-size: 16px; font-weight: 600; margin-bottom: 8px;
+      padding-bottom: 6px; border-bottom: 1px solid var(--border);
+    }
+    .bucket {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px; margin-bottom: 12px;
+    }
+    .bucket h3 {
+      margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
+      letter-spacing: 0.5px; display: flex; justify-content: space-between;
+    }
+    .bucket .count { color: var(--text3); font-weight: normal; }
+    .bucket.ghost    h3 { color: var(--amber); }
+    .bucket.portal   h3 { color: var(--red); }
+    .bucket.mismatch h3 { color: var(--amber); }
+    .bucket.matched  h3 { color: var(--green); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--text3); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    td.r { text-align: right; }
+    td.c { text-align: center; }
+    .empty { color: var(--text3); font-style: italic; font-size: 13px; }
+    .legend { font-size: 12px; color: var(--text2); margin-top: 8px; }
+    .status { padding: 12px; margin: 12px 0; border-radius: 6px; font-size: 13px; }
+    .status.err  { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .status.info { background: rgba(56,189,248,0.1); color: var(--blue); border: 1px solid rgba(56,189,248,0.3); }
+    .scraped { font-size: 11px; color: var(--text3); float: right; font-weight: normal; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Portal Reconciliation</h1>
+  <div class="sub">Compare what each vendor portal says is open vs what the dashboard shows as outstanding.</div>
+
+  <div class="controls">
+    <label style="color:var(--text2)">Vendor:</label>
+    <select id="vendorSel">
+      <option value="pfg">Performance Foodservice (PFG)</option>
+    </select>
+    <button class="primary" onclick="loadReconcile()">Compare</button>
+    <span id="status" style="color:var(--text3);font-size:12px;margin-left:auto"></span>
+  </div>
+
+  <div class="legend">
+    👻 <b>Ghosts</b> — in dashboard but no longer in portal (likely paid IRL) ·
+    🔴 <b>Missing</b> — in portal but not in dashboard (needs import) ·
+    ⚠️ <b>Mismatch</b> — different totals ·
+    ✓ <b>Matched</b> — agrees
+  </div>
+
+  <div id="results" style="margin-top:18px"></div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => '$' + (Number(n)||0).toFixed(2);
+  const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  async function loadReconcile() {
+    const vk = $('vendorSel').value;
+    const results = $('results');
+    results.innerHTML = '<div class="status info">Loading…</div>';
+    $('status').textContent = '';
+    try {
+      const resp = await fetch('/api/billpay/reconcile-portal?vendor_key=' + encodeURIComponent(vk));
+      const d = await resp.json();
+      if (!resp.ok) {
+        results.innerHTML = `<div class="status err">${esc(d.error || resp.statusText)}</div>`;
+        return;
+      }
+      render(d);
+    } catch (e) {
+      results.innerHTML = `<div class="status err">${esc(String(e))}</div>`;
+    }
+  }
+
+  function render(d) {
+    const results = $('results');
+    if (!d.locations || !d.locations.length) {
+      results.innerHTML = '<div class="status err">No portal snapshots found. Run the list scraper first.</div>';
+      return;
+    }
+    let html = `<h2 style="font-size:16px;margin:0 0 12px">${esc(d.vendor_name)}</h2>`;
+    for (const loc of d.locations) {
+      html += renderLocation(loc);
+    }
+    results.innerHTML = html;
+  }
+
+  function renderLocation(loc) {
+    const scraped = loc.scraped_at ? new Date(loc.scraped_at).toLocaleString() : '—';
+    let html = `<div class="loc-block">
+      <div class="loc-head">${esc(loc.location)} <span class="scraped">portal scraped ${esc(scraped)} · portal ${loc.portal_count} · dashboard ${loc.dashboard_count}</span></div>`;
+
+    // Dashboard_only (ghosts)
+    html += `<div class="bucket ghost"><h3>👻 Ghosts — in dashboard only <span class="count">${loc.dashboard_only.length}</span></h3>`;
+    if (!loc.dashboard_only.length) {
+      html += '<div class="empty">No ghosts — dashboard agrees with portal.</div>';
+    } else {
+      html += `<table><thead><tr><th>Invoice #</th><th>Date</th><th class="r">Amount</th><th class="c">Action</th></tr></thead><tbody>`;
+      for (const g of loc.dashboard_only) {
+        html += `<tr>
+          <td>${esc(g.invoice_number)}</td>
+          <td>${esc(g.invoice_date)}</td>
+          <td class="r">${fmt(g.amount)}</td>
+          <td class="c"><button class="success" onclick="markPaid(${g.dashboard_id}, '${esc(g.invoice_number)}', ${g.amount})">✓ Mark Paid</button></td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+    html += `</div>`;
+
+    // Portal_only (missing imports)
+    html += `<div class="bucket portal"><h3>🔴 Missing imports — in portal only <span class="count">${loc.portal_only.length}</span></h3>`;
+    if (!loc.portal_only.length) {
+      html += '<div class="empty">All portal invoices are imported.</div>';
+    } else {
+      html += `<table><thead><tr><th>Invoice #</th><th>Date</th><th>Type</th><th class="r">Amount</th></tr></thead><tbody>`;
+      for (const p of loc.portal_only) {
+        html += `<tr>
+          <td>${esc(p.invoice_number)}</td>
+          <td>${esc(p.invoice_date)}</td>
+          <td>${esc(p.type||'invoice')}</td>
+          <td class="r">${fmt(p.amount)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+      html += `<div class="legend" style="margin-top:8px">Re-run the download scraper or upload these invoices to import them.</div>`;
+    }
+    html += `</div>`;
+
+    // Amount mismatches
+    if (loc.amount_mismatch && loc.amount_mismatch.length) {
+      html += `<div class="bucket mismatch"><h3>⚠️ Amount mismatches <span class="count">${loc.amount_mismatch.length}</span></h3>`;
+      html += `<table><thead><tr><th>Invoice #</th><th>Date</th><th class="r">Portal</th><th class="r">Dashboard</th></tr></thead><tbody>`;
+      for (const m of loc.amount_mismatch) {
+        html += `<tr>
+          <td>${esc(m.invoice_number)}</td>
+          <td>${esc(m.invoice_date)}</td>
+          <td class="r">${fmt(m.portal_amount)}</td>
+          <td class="r">${fmt(m.dashboard_amount)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+
+    // Matched (collapsed, just count)
+    html += `<div class="bucket matched"><h3>✓ Matched <span class="count">${loc.matched.length}</span></h3>`;
+    if (!loc.matched.length) {
+      html += '<div class="empty">No matches.</div>';
+    } else {
+      html += `<details><summary style="cursor:pointer;color:var(--text2);font-size:12px">Show ${loc.matched.length} matched</summary>`;
+      html += `<table style="margin-top:8px"><thead><tr><th>Invoice #</th><th>Date</th><th class="r">Amount</th></tr></thead><tbody>`;
+      for (const m of loc.matched) {
+        html += `<tr><td>${esc(m.invoice_number)}</td><td>${esc(m.invoice_date)}</td><td class="r">${fmt(m.amount)}</td></tr>`;
+      }
+      html += `</tbody></table></details>`;
+    }
+    html += `</div>`;
+
+    html += `</div>`;
+    return html;
+  }
+
+  async function markPaid(invoiceId, invNum, amount) {
+    if (!confirm(`Mark paid externally?\n\n#${invNum} — ${fmt(amount)}\n\nThis records it as paid via QBO/external and zeroes the balance.`)) return;
+    const today = new Date();
+    const ymd = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    try {
+      const r = await fetch('/api/billpay/invoices/' + invoiceId + '/mark-paid-external', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({payment_date: ymd, memo: 'Marked paid via portal-reconcile — not in portal open list'})
+      });
+      const d = await r.json();
+      if (!r.ok) { alert('Error: ' + (d.error || r.statusText)); return; }
+      loadReconcile();
+    } catch (e) { alert('Error: ' + e); }
+  }
+
+  // Auto-load on page open
+  loadReconcile();
+</script>
+</body>
+</html>
