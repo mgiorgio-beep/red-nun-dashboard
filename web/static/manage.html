@@ -1715,9 +1715,11 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
               <select id="bp-vendor-filter" onchange="bpLoadInvoices()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
                 <option value="">All Vendors</option>
               </select>
-              <div id="bp-horizon-wrap" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)">
-                <label for="bp-horizon">Horizon:</label>
+              <div id="bp-horizon-wrap" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)" title="Default horizon. Override per vendor in Vendor Setup → Pay Lead Days.">
+                <label for="bp-horizon">Default lead:</label>
                 <select id="bp-horizon" onchange="bpRenderSorted()" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:12px">
+                  <option value="3">3 days</option>
+                  <option value="5">5 days</option>
                   <option value="7">7 days</option>
                   <option value="10" selected>10 days</option>
                   <option value="14">14 days</option>
@@ -2363,6 +2365,10 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
                 <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Day of Month</label>
                 <input type="number" id="bp-ve-dom" min="1" max="31" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
               </div>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Pay Lead Days <span style="color:#94a3b8;font-weight:normal">— start showing in Due Soon this many days before due date. Leave blank to use the global horizon.</span></label>
+              <input type="number" id="bp-ve-leaddays" min="0" max="90" placeholder="(use global horizon)" style="width:200px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
             </div>
             <div>
               <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Notes</label>
@@ -5740,12 +5746,36 @@ function bpRenderSorted() {
   if (_bpViewMode === 'due_soon') {
     var horizonSel = document.getElementById('bp-horizon');
     var horizon = horizonSel ? parseInt(horizonSel.value, 10) : 10;
+    // Build vendor → pay_lead_days lookup. Match on exact vendor name first,
+    // then a normalized fallback (lowercase, stripped of common suffixes)
+    // to catch OCR variants like "UniFirst" vs "UniFirst Corporation".
+    function _normVendor(n) {
+      if (!n) return '';
+      var s = String(n).toLowerCase().trim();
+      s = s.replace(/,?\s+(inc\.?|llc|corp\.?|corporation|company)$/i, '');
+      s = s.replace(/\s+/g, ' ').trim();
+      return s;
+    }
+    var vendorLead = {};
+    (_bpVendors || []).forEach(function(v) {
+      if (v.pay_lead_days != null) {
+        vendorLead[v.vendor_name] = v.pay_lead_days;
+        vendorLead['_n_' + _normVendor(v.vendor_name)] = v.pay_lead_days;
+      }
+    });
+    function leadFor(vendorName) {
+      if (vendorLead[vendorName] != null) return vendorLead[vendorName];
+      var key = '_n_' + _normVendor(vendorName);
+      if (vendorLead[key] != null) return vendorLead[key];
+      return horizon; // fallback to global picker
+    }
     var overdue = [], week = [], later = [], noDate = [];
     _bpInvoices.forEach(function(inv) {
       var m = _bpInvoiceMeta(inv);
       if (m.daysUntilDue === null) { noDate.push(inv); return; }
       if (m.daysUntilDue < 0) { overdue.push(inv); return; }
-      if (m.daysUntilDue <= horizon) { week.push(inv); return; }
+      var lead = leadFor(inv.vendor_name);
+      if (m.daysUntilDue <= lead) { week.push(inv); return; }
       later.push(inv);
     });
     // Sort each bucket by due date ascending (overdue by most-overdue first)
@@ -5758,14 +5788,19 @@ function bpRenderSorted() {
       html += overdue.map(_bpRowHtml).join('');
     }
     if (week.length) {
-      html += _bpGroupHeaderHtml('week', 'Due in Next ' + horizon + ' Days', week.length, sumBalance(week));
+      // Check if any invoice in the week bucket used a per-vendor lead instead of the default horizon
+      var usedVendorLead = week.some(function(inv){
+        return vendorLead[inv.vendor_name] != null || vendorLead['_n_' + _normVendor(inv.vendor_name)] != null;
+      });
+      var label = 'Ready to Pay (default: within ' + horizon + ' days of due' + (usedVendorLead ? ', plus vendor overrides' : '') + ')';
+      html += _bpGroupHeaderHtml('week', label, week.length, sumBalance(week));
       html += week.map(_bpRowHtml).join('');
     }
     if (!overdue.length && !week.length) {
       html += '<tr><td colspan="8" style="padding:32px;text-align:center;color:var(--text3)">' +
         '<div style="font-size:28px;margin-bottom:6px">✓</div>' +
         '<div style="font-weight:600;color:#22c55e;margin-bottom:4px">All caught up</div>' +
-        '<div style="font-size:12px">Nothing overdue and nothing due in the next ' + horizon + ' days.</div>' +
+        '<div style="font-size:12px">Nothing overdue and nothing ready to pay yet.</div>' +
         (later.length ? '<div style="font-size:12px;margin-top:8px">' + later.length + ' invoice' + (later.length===1?'':'s') + ' due later. <a href="#" onclick="bpSetViewMode(\'all\');return false;" style="color:#38bdf8">View all outstanding →</a></div>' : '') +
         '</td></tr>';
     } else if (later.length || noDate.length) {
@@ -6093,6 +6128,7 @@ async function bpEditVendor(name) {
     document.getElementById('bp-ve-terms').value = v.payment_term_type || 'not_specified';
     document.getElementById('bp-ve-netdays').value = v.payment_term_days || 30;
     document.getElementById('bp-ve-dom').value = v.payment_term_day_of_month || 15;
+    document.getElementById('bp-ve-leaddays').value = (v.pay_lead_days != null ? v.pay_lead_days : '');
     document.getElementById('bp-ve-notes').value = v.notes || '';
     bpTermsChanged();
   } catch(e) {}
@@ -6186,6 +6222,7 @@ async function bpSaveVendor() {
         payment_term_type: document.getElementById('bp-ve-terms').value,
         payment_term_days: parseInt(document.getElementById('bp-ve-netdays').value) || null,
         payment_term_day_of_month: parseInt(document.getElementById('bp-ve-dom').value) || null,
+        pay_lead_days: (function(){ var s = document.getElementById('bp-ve-leaddays').value; return s === '' ? null : (parseInt(s, 10)); })(),
         notes: document.getElementById('bp-ve-notes').value || null,
       })
     });

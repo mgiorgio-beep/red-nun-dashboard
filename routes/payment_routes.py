@@ -70,6 +70,9 @@ def init_payment_tables():
         "ALTER TABLE vendor_payments ADD COLUMN ap_payment_id INTEGER",
         # Portal pay setting on vendor_bill_pay
         "ALTER TABLE vendor_bill_pay ADD COLUMN portal_pay_enabled INTEGER DEFAULT 0",
+        # Per-vendor lead time — how many days before due date this vendor's bills
+        # surface in Due Soon. NULL = use the global Due Soon horizon.
+        "ALTER TABLE vendor_bill_pay ADD COLUMN pay_lead_days INTEGER",
     ]
     for sql in migrations:
         try:
