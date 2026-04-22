@@ -747,6 +747,99 @@ def void_payment(payment_id):
     return jsonify({"status": "ok"})
 
 
+@billpay_bp.route("/api/billpay/invoices/<int:invoice_id>/mark-paid-external", methods=["POST"])
+@admin_or_accountant_required
+def mark_invoice_paid_external(invoice_id):
+    """Mark an invoice as paid outside the dashboard (QBO, manual ACH, etc.).
+
+    Creates an ap_payments row with payment_method='external' and status='cleared',
+    zeroes the invoice balance, and mirrors into vendor_payments. Intended for
+    bills paid via the Pay ↗ link (QBO/Stripe/etc.) where the dashboard just
+    needs to reflect that the bill is settled.
+    """
+    data = request.get_json(silent=True) or {}
+    payment_date = data.get("payment_date") or date.today().isoformat()
+    reference = (data.get("reference") or "").strip() or None
+    memo = (data.get("memo") or "Paid externally").strip()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    inv = cursor.execute(
+        "SELECT id, vendor_name, total, COALESCE(balance, total) AS balance, "
+        "payment_status, location FROM scanned_invoices WHERE id = ?",
+        (invoice_id,),
+    ).fetchone()
+    if not inv:
+        conn.close()
+        return jsonify({"error": "Invoice not found"}), 404
+    if inv["payment_status"] == "paid":
+        conn.close()
+        return jsonify({"error": "Invoice already marked paid"}), 400
+
+    applied = float(inv["balance"] or 0)
+    if applied <= 0:
+        conn.close()
+        return jsonify({"error": "Invoice has no outstanding balance"}), 400
+
+    cursor.execute(
+        """INSERT INTO ap_payments
+           (vendor_name, payment_date, amount, payment_method,
+            reference_number, memo, status)
+           VALUES (?, ?, ?, 'external', ?, ?, 'cleared')""",
+        (inv["vendor_name"], payment_date, applied, reference, memo),
+    )
+    payment_id = cursor.lastrowid
+
+    cursor.execute(
+        """INSERT INTO ap_payment_invoices (payment_id, invoice_id, amount_applied)
+           VALUES (?, ?, ?)""",
+        (payment_id, invoice_id, applied),
+    )
+
+    cursor.execute(
+        """UPDATE scanned_invoices
+           SET amount_paid = COALESCE(total, 0),
+               balance = 0,
+               payment_status = 'paid',
+               paid_date = ?
+           WHERE id = ?""",
+        (payment_date, invoice_id),
+    )
+
+    ref = reference or f"EXT-AP{payment_id}"
+    try:
+        vp_cur = cursor.execute(
+            """INSERT INTO vendor_payments
+               (vendor, location, payment_date, payment_ref, payment_method,
+                payment_total, memo, status, source, ap_payment_id)
+               VALUES (?, ?, ?, ?, 'external', ?, ?, 'cleared', 'external', ?)""",
+            (inv["vendor_name"], inv["location"], payment_date, ref,
+             applied, memo, payment_id),
+        )
+        vp_id = vp_cur.lastrowid
+        inv_row = cursor.execute(
+            "SELECT invoice_number, invoice_date, due_date FROM scanned_invoices WHERE id = ?",
+            (invoice_id,),
+        ).fetchone()
+        if inv_row:
+            cursor.execute(
+                """INSERT INTO vendor_payment_invoices
+                   (payment_id, invoice_number, invoice_date, due_date, amount_paid)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (vp_id, inv_row["invoice_number"], inv_row["invoice_date"],
+                 inv_row["due_date"], applied),
+            )
+    except Exception as e:
+        logger.warning(f"Mirror to vendor_payments failed for external payment #{payment_id}: {e}")
+
+    conn.commit()
+    conn.close()
+
+    logger.info(f"Invoice #{invoice_id} ({inv['vendor_name']}) marked paid externally — ap_payment #{payment_id} ${applied:.2f}")
+    return jsonify({"status": "ok", "payment_id": payment_id, "amount": applied})
+
+
 # ─────────────────────────────────────────────
 #  CHECK CONFIG
 # ─────────────────────────────────────────────

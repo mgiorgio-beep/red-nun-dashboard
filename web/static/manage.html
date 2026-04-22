@@ -5719,18 +5719,23 @@ function _bpRowHtml(inv, effectiveDays) {
     else if (d <= 3) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(in '+d+'d)</span>'; }
   }
   var payCell;
+  var markPaidLink = ' <a href="#" onclick="bpMarkPaidExternal(' + inv.id + ');return false;" ' +
+    'title="Mark paid (external/QBO)" ' +
+    'style="color:#16a34a;font-size:11px;margin-left:4px;text-decoration:none;font-weight:600">✓ Paid</a>';
   if (inv.payment_url) {
-    payCell = '<td style="padding:8px;text-align:center">' +
+    payCell = '<td style="padding:8px;text-align:center;white-space:nowrap">' +
       '<a href="' + inv.payment_url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" ' +
         'title="Open payment link" ' +
         'style="display:inline-block;padding:3px 10px;border-radius:12px;background:#22c55e15;color:#16a34a;font-size:11px;font-weight:600;text-decoration:none">Pay ↗</a>' +
       ' <a href="#" onclick="bpSetPaymentUrl(' + inv.id + ',' + (inv.payment_url ? 1 : 0) + ');return false;" ' +
         'title="Edit link" style="color:var(--text3);font-size:11px;margin-left:4px;text-decoration:none">✎</a>' +
+      markPaidLink +
       '</td>';
   } else {
-    payCell = '<td style="padding:8px;text-align:center">' +
+    payCell = '<td style="padding:8px;text-align:center;white-space:nowrap">' +
       '<a href="#" onclick="bpSetPaymentUrl(' + inv.id + ',0);return false;" ' +
         'style="color:#38bdf8;font-size:11px;text-decoration:none">+ link</a>' +
+      markPaidLink +
       '</td>';
   }
   return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'rgba(0,0,0,0.03)\'" onmouseout="this.style.background=\'\'">' +
@@ -5763,6 +5768,24 @@ async function bpSetPaymentUrl(invoiceId, hasExisting) {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({payment_url: url})
+    });
+    var d = await r.json();
+    if (!r.ok) { alert('Error: ' + (d.error || r.statusText)); return; }
+    bpLoadInvoices();
+  } catch(e) { alert('Error: ' + e); }
+}
+
+async function bpMarkPaidExternal(invoiceId) {
+  var inv = (_bpInvoices || []).find(function(i){ return i.id === invoiceId; });
+  var label = inv ? (inv.vendor_name + ' — ' + (inv.invoice_number||'—') + ' — $' + (inv.balance||0).toFixed(2)) : '#' + invoiceId;
+  if (!window.confirm('Mark paid externally?\n\n' + label + '\n\nThis records the invoice as paid via QBO/external, zeroes the balance, and logs an ap_payments entry.')) return;
+  var today = new Date();
+  var ymd = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  try {
+    var r = await fetch('/api/billpay/invoices/' + invoiceId + '/mark-paid-external', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({payment_date: ymd, memo: 'Paid via QBO/external'})
     });
     var d = await r.json();
     if (!r.ok) { alert('Error: ' + (d.error || r.statusText)); return; }
