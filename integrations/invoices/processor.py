@@ -1887,6 +1887,53 @@ def _normalize_vendor_name(name):
     return name.strip()
 
 
+_PAYMENT_URL_ALLOW = (
+    "intuit.com", "quickbooks", "paysystems", "stripe.com",
+)
+_PAYMENT_URL_KEYWORDS = ("pay", "invoice", "bill")
+
+
+def extract_payment_url_from_pdf(pdf_path):
+    """Return first QBO/Intuit/Stripe/pay-ish hyperlink annotation URL from a PDF, or None."""
+    if not pdf_path or not pdf_path.lower().endswith(".pdf") or not os.path.exists(pdf_path):
+        return None
+    try:
+        import pypdf
+    except ImportError:
+        return None
+    try:
+        reader = pypdf.PdfReader(pdf_path)
+        for page in reader.pages:
+            annots = page.get("/Annots")
+            if not annots:
+                continue
+            try:
+                annots = annots.get_object() if hasattr(annots, "get_object") else annots
+            except Exception:
+                continue
+            for a in annots:
+                try:
+                    obj = a.get_object()
+                    if obj.get("/Subtype") != "/Link":
+                        continue
+                    action = obj.get("/A")
+                    if not action:
+                        continue
+                    action = action.get_object() if hasattr(action, "get_object") else action
+                    uri = action.get("/URI")
+                    if not uri:
+                        continue
+                    url = str(uri)
+                    url_l = url.lower()
+                    if any(d in url_l for d in _PAYMENT_URL_ALLOW) or any(k in url_l for k in _PAYMENT_URL_KEYWORDS):
+                        return url
+                except Exception:
+                    continue
+    except Exception as e:
+        logger.debug(f"PDF link extraction failed for {pdf_path}: {e}")
+    return None
+
+
 def save_invoice(location, data, image_path=None, raw_json=None, validation_data=None):
     """
     Save extracted invoice data to the database.
@@ -1978,6 +2025,14 @@ def save_invoice(location, data, image_path=None, raw_json=None, validation_data
     ))
 
     invoice_id = cursor.lastrowid
+
+    if image_path:
+        extracted_url = extract_payment_url_from_pdf(image_path)
+        if extracted_url:
+            cursor.execute(
+                "UPDATE scanned_invoices SET payment_url = ? WHERE id = ? AND payment_url IS NULL",
+                (extracted_url, invoice_id),
+            )
 
     # Save line items and check for price spikes
     for item in data.get("line_items", []):
