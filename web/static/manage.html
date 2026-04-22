@@ -5701,18 +5701,21 @@ function _bpInvoiceMeta(inv) {
   return { age: age, daysUntilDue: daysUntilDue };
 }
 
-// Render one <tr> row (shared by grouped and flat modes)
-function _bpRowHtml(inv) {
+// Render one <tr> row (shared by grouped and flat modes).
+// `effectiveDays` (optional): override days-until-due for the colored hint,
+// used when a vendor's Net Days setting overrides the OCR'd due_date.
+function _bpRowHtml(inv, effectiveDays) {
   var meta = _bpInvoiceMeta(inv);
   var age = meta.age;
   var ageColor = age > 45 ? '#ef4444' : age > 30 ? '#f59e0b' : 'var(--text3)';
   var ageLabel = age + 'd';
   var dueColor = 'var(--text3)';
   var dueSuffix = '';
-  if (meta.daysUntilDue !== null) {
-    if (meta.daysUntilDue < 0) { dueColor = '#ef4444'; dueSuffix = ' <span style="font-size:11px;color:#ef4444;font-weight:600">('+(-meta.daysUntilDue)+'d overdue)</span>'; }
-    else if (meta.daysUntilDue === 0) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(today)</span>'; }
-    else if (meta.daysUntilDue <= 3) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(in '+meta.daysUntilDue+'d)</span>'; }
+  var d = (effectiveDays != null) ? effectiveDays : meta.daysUntilDue;
+  if (d !== null) {
+    if (d < 0) { dueColor = '#ef4444'; dueSuffix = ' <span style="font-size:11px;color:#ef4444;font-weight:600">('+(-d)+'d overdue)</span>'; }
+    else if (d === 0) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(today)</span>'; }
+    else if (d <= 3) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(in '+d+'d)</span>'; }
   }
   return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'rgba(0,0,0,0.03)\'" onmouseout="this.style.background=\'\'">' +
     '<td style="padding:8px"><input type="checkbox" data-id="' + inv.id + '" onchange="bpToggleSelect(this,' + inv.id + ')"' + (_bpSelected.has(inv.id) ? ' checked' : '') + '></td>' +
@@ -5746,9 +5749,9 @@ function bpRenderSorted() {
   if (_bpViewMode === 'due_soon') {
     var horizonSel = document.getElementById('bp-horizon');
     var horizon = horizonSel ? parseInt(horizonSel.value, 10) : 10;
-    // Build vendor → pay_lead_days lookup. Match on exact vendor name first,
-    // then a normalized fallback (lowercase, stripped of common suffixes)
-    // to catch OCR variants like "UniFirst" vs "UniFirst Corporation".
+    // Build vendor-info lookup keyed by exact name AND a normalized form
+    // (lowercase, stripped of common suffixes) so OCR variants like
+    // "UniFirst" vs "UniFirst Corporation" resolve to the same vendor.
     function _normVendor(n) {
       if (!n) return '';
       var s = String(n).toLowerCase().trim();
@@ -5756,26 +5759,43 @@ function bpRenderSorted() {
       s = s.replace(/\s+/g, ' ').trim();
       return s;
     }
-    var vendorLead = {};
+    var vendorInfo = {};
     (_bpVendors || []).forEach(function(v) {
-      if (v.pay_lead_days != null) {
-        vendorLead[v.vendor_name] = v.pay_lead_days;
-        vendorLead['_n_' + _normVendor(v.vendor_name)] = v.pay_lead_days;
-      }
+      vendorInfo[v.vendor_name] = v;
+      vendorInfo['_n_' + _normVendor(v.vendor_name)] = v;
     });
-    function leadFor(vendorName) {
-      if (vendorLead[vendorName] != null) return vendorLead[vendorName];
-      var key = '_n_' + _normVendor(vendorName);
-      if (vendorLead[key] != null) return vendorLead[key];
-      return horizon; // fallback to global picker
+    function infoFor(name) {
+      return vendorInfo[name] || vendorInfo['_n_' + _normVendor(name)] || null;
+    }
+    function leadFor(name) {
+      var info = infoFor(name);
+      if (info && info.pay_lead_days != null) return info.pay_lead_days;
+      return horizon;
+    }
+    // Effective days-until-due: if vendor has Net Days configured,
+    // use invoice_date + net_days (overrides stored due_date which may
+    // be wrong due to OCR or inconsistent invoice formats).
+    var _now = new Date();
+    var _todayUtc = Date.UTC(_now.getFullYear(), _now.getMonth(), _now.getDate());
+    function effectiveDaysUntilDue(inv) {
+      var info = infoFor(inv.vendor_name);
+      if (info && info.payment_term_type === 'net_days'
+          && info.payment_term_days && inv.invoice_date) {
+        var invUtc = _bpParseDateUtc(inv.invoice_date);
+        if (invUtc != null) {
+          var effUtc = invUtc + info.payment_term_days * 86400000;
+          return Math.floor((effUtc - _todayUtc) / 86400000);
+        }
+      }
+      return _bpInvoiceMeta(inv).daysUntilDue;
     }
     var overdue = [], week = [], later = [], noDate = [];
     _bpInvoices.forEach(function(inv) {
-      var m = _bpInvoiceMeta(inv);
-      if (m.daysUntilDue === null) { noDate.push(inv); return; }
-      if (m.daysUntilDue < 0) { overdue.push(inv); return; }
+      var d = effectiveDaysUntilDue(inv);
+      if (d === null) { noDate.push(inv); return; }
+      if (d < 0) { overdue.push(inv); return; }
       var lead = leadFor(inv.vendor_name);
-      if (m.daysUntilDue <= lead) { week.push(inv); return; }
+      if (d <= lead) { week.push(inv); return; }
       later.push(inv);
     });
     // Sort each bucket by due date ascending (overdue by most-overdue first)
@@ -5785,16 +5805,20 @@ function bpRenderSorted() {
     function sumBalance(list) { var s = 0; list.forEach(function(i){ s += (i.balance||0); }); return s; }
     if (overdue.length) {
       html += _bpGroupHeaderHtml('overdue', '⚠ Overdue', overdue.length, sumBalance(overdue));
-      html += overdue.map(_bpRowHtml).join('');
+      html += overdue.map(function(inv){ return _bpRowHtml(inv, effectiveDaysUntilDue(inv)); }).join('');
     }
     if (week.length) {
-      // Check if any invoice in the week bucket used a per-vendor lead instead of the default horizon
-      var usedVendorLead = week.some(function(inv){
-        return vendorLead[inv.vendor_name] != null || vendorLead['_n_' + _normVendor(inv.vendor_name)] != null;
+      // Check whether any row used a vendor override (either lead days or net-days due override)
+      var usedVendorOverride = week.some(function(inv){
+        var info = infoFor(inv.vendor_name);
+        if (!info) return false;
+        if (info.pay_lead_days != null) return true;
+        if (info.payment_term_type === 'net_days' && info.payment_term_days) return true;
+        return false;
       });
-      var label = 'Ready to Pay (default: within ' + horizon + ' days of due' + (usedVendorLead ? ', plus vendor overrides' : '') + ')';
+      var label = 'Ready to Pay (default: within ' + horizon + ' days of due' + (usedVendorOverride ? ', plus vendor overrides' : '') + ')';
       html += _bpGroupHeaderHtml('week', label, week.length, sumBalance(week));
-      html += week.map(_bpRowHtml).join('');
+      html += week.map(function(inv){ return _bpRowHtml(inv, effectiveDaysUntilDue(inv)); }).join('');
     }
     if (!overdue.length && !week.length) {
       html += '<tr><td colspan="8" style="padding:32px;text-align:center;color:var(--text3)">' +
