@@ -5719,24 +5719,19 @@ function _bpRowHtml(inv, effectiveDays) {
     else if (d <= 3) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(in '+d+'d)</span>'; }
   }
   var payCell;
-  var markPaidLink = ' <a href="#" onclick="bpMarkPaidExternal(' + inv.id + ');return false;" ' +
-    'title="Mark paid (external/QBO)" ' +
-    'style="color:#16a34a;font-size:11px;margin-left:4px;text-decoration:none;font-weight:600">✓ Paid</a>';
   if (inv.payment_url) {
     payCell = '<td style="padding:8px;text-align:center;white-space:nowrap">' +
       '<a href="' + inv.payment_url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" ' +
         'title="Open payment link" ' +
         'style="display:inline-block;padding:3px 10px;border-radius:12px;background:#22c55e15;color:#16a34a;font-size:11px;font-weight:600;text-decoration:none">Pay ↗</a>' +
-      ' <a href="#" onclick="bpSetPaymentUrl(' + inv.id + ',' + (inv.payment_url ? 1 : 0) + ');return false;" ' +
+      ' <a href="#" onclick="bpSetPaymentUrl(' + inv.id + ',1);return false;" ' +
         'title="Edit link" style="color:var(--text3);font-size:11px;margin-left:4px;text-decoration:none">✎</a>' +
-      markPaidLink +
+      ' <a href="#" onclick="bpMarkPaidExternal(' + inv.id + ');return false;" ' +
+        'title="Mark paid (external/QBO)" ' +
+        'style="color:#16a34a;font-size:11px;margin-left:4px;text-decoration:none;font-weight:600">✓ Paid</a>' +
       '</td>';
   } else {
-    payCell = '<td style="padding:8px;text-align:center;white-space:nowrap">' +
-      '<a href="#" onclick="bpSetPaymentUrl(' + inv.id + ',0);return false;" ' +
-        'style="color:#38bdf8;font-size:11px;text-decoration:none">+ link</a>' +
-      markPaidLink +
-      '</td>';
+    payCell = '<td style="padding:8px;text-align:center;color:var(--text3)">—</td>';
   }
   return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'rgba(0,0,0,0.03)\'" onmouseout="this.style.background=\'\'">' +
     '<td style="padding:8px"><input type="checkbox" data-id="' + inv.id + '" onchange="bpToggleSelect(this,' + inv.id + ')"' + (_bpSelected.has(inv.id) ? ' checked' : '') + '></td>' +
