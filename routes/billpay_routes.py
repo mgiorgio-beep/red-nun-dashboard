@@ -116,7 +116,7 @@ def get_billpay_invoices():
                si.due_date, si.total, si.subtotal, si.tax,
                COALESCE(si.amount_paid, 0) as amount_paid,
                COALESCE(si.balance, si.total) as balance,
-               si.payment_status, si.location, si.category
+               si.payment_status, si.location, si.category, si.payment_url
         FROM scanned_invoices si
         WHERE {where_sql}
         ORDER BY si.due_date ASC NULLS LAST, si.invoice_date ASC
@@ -157,6 +157,7 @@ def get_billpay_invoices():
             "days_overdue": days_overdue,
             "location": r["location"],
             "category": r["category"],
+            "payment_url": r["payment_url"],
         })
 
     conn.close()

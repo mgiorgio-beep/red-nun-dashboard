@@ -138,6 +138,11 @@ def init_invoice_tables():
         conn.commit()
     except Exception:
         pass
+    try:
+        conn.execute("ALTER TABLE scanned_invoices ADD COLUMN payment_url TEXT")
+        conn.commit()
+    except Exception:
+        pass
     # Session 29: backfill discrepancy values for existing invoices
     try:
         conn.execute("""

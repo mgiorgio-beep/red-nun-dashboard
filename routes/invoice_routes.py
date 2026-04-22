@@ -991,6 +991,27 @@ def api_delete_invoice(invoice_id):
         return jsonify({"error": str(e)}), 500
 
 
+@invoice_bp.route("/api/invoices/<int:invoice_id>/payment-url", methods=["POST"])
+def api_set_payment_url(invoice_id):
+    """Set or clear the external payment URL (e.g. QBO 'Pay Now' link) for an invoice."""
+    data = request.get_json(silent=True) or {}
+    url = (data.get("payment_url") or "").strip() or None
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        return jsonify({"error": "payment_url must start with http:// or https://"}), 400
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "UPDATE scanned_invoices SET payment_url = ? WHERE id = ?",
+            (url, invoice_id),
+        )
+        if cur.rowcount == 0:
+            return jsonify({"error": "Invoice not found"}), 404
+        conn.commit()
+        return jsonify({"status": "ok", "payment_url": url})
+    finally:
+        conn.close()
+
+
 @invoice_bp.route("/api/invoices/create-manual", methods=["POST"])
 def api_create_manual_invoice():
     """Create a manual invoice (no OCR). Saved as confirmed immediately."""
