@@ -2025,7 +2025,7 @@ function resetScan() {
 
 // ── History ──
 async function loadHistory() {
-  let url = '/api/invoices?limit=100';
+  let url = '/api/invoices?limit=500';
   if (histFilter !== 'all') url += '&status=' + histFilter;
   const loc = window.currentLocation || localStorage.getItem('globalLocation');
   if (loc) url += '&location=' + encodeURIComponent(loc);
