@@ -1704,25 +1704,50 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
           <!-- Aging Summary Cards -->
           <div id="bp-aging-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
 
-          <!-- Filters -->
-          <div class="card" style="margin-bottom:16px;padding:12px 16px">
+          <!-- Primary view tabs -->
+          <div class="card" style="margin-bottom:16px;padding:10px 14px">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <div style="display:flex;gap:4px">
-                <button class="bp-filter-btn" data-status="" onclick="bpSetFilter(this)">All</button>
-                <button class="bp-filter-btn active" data-status="unpaid" onclick="bpSetFilter(this)">Unpaid</button>
-                <button class="bp-filter-btn" data-status="partial" onclick="bpSetFilter(this)">Partial</button>
-                <button class="bp-filter-btn" data-status="overdue" onclick="bpSetFilter(this)">Overdue</button>
-                <button class="bp-filter-btn" data-status="pending_review" onclick="bpSetFilter(this)">Pending Review</button>
-                <button class="bp-filter-btn" data-status="paid" onclick="bpSetFilter(this)">Paid</button>
+                <button class="bp-tab-btn active" data-view="due_soon" onclick="bpSetViewMode('due_soon',this)">Due Soon</button>
+                <button class="bp-tab-btn" data-view="all" onclick="bpSetViewMode('all',this)">All Outstanding</button>
+                <button class="bp-tab-btn" data-view="paid" onclick="bpSetViewMode('paid',this)">Paid</button>
               </div>
               <select id="bp-vendor-filter" onchange="bpLoadInvoices()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
                 <option value="">All Vendors</option>
               </select>
+              <div id="bp-horizon-wrap" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)">
+                <label for="bp-horizon">Horizon:</label>
+                <select id="bp-horizon" onchange="bpRenderSorted()" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:12px">
+                  <option value="7">7 days</option>
+                  <option value="10" selected>10 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                </select>
+              </div>
               <div style="margin-left:auto;display:flex;gap:8px">
                 <button onclick="bpExportCSV()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">Export CSV</button>
               </div>
             </div>
+            <!-- Secondary filters (only visible in All Outstanding) -->
+            <div id="bp-sub-filters" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);gap:4px;flex-wrap:wrap">
+              <button class="bp-filter-btn active" data-status="unpaid" onclick="bpSetFilter(this)">Unpaid</button>
+              <button class="bp-filter-btn" data-status="partial" onclick="bpSetFilter(this)">Partial</button>
+              <button class="bp-filter-btn" data-status="overdue" onclick="bpSetFilter(this)">Overdue</button>
+              <button class="bp-filter-btn" data-status="pending_review" onclick="bpSetFilter(this)">Pending Review</button>
+              <button class="bp-filter-btn" data-status="" onclick="bpSetFilter(this)">All</button>
+            </div>
           </div>
+
+          <style>
+            .bp-tab-btn{padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+            .bp-tab-btn:hover{color:#111827;border-color:#94a3b8}
+            .bp-tab-btn.active{background:#111827;color:#fff;border-color:#111827}
+            .bp-group-header{background:#f8fafc;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;font-weight:700;font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:#475569}
+            .bp-group-header.overdue{background:rgba(239,68,68,.08);color:#b91c1c}
+            .bp-group-header.today{background:rgba(245,158,11,.1);color:#b45309}
+            .bp-group-header.week{background:rgba(56,189,248,.08);color:#0369a1}
+            .bp-group-header.next-week{background:rgba(100,116,139,.08);color:#475569}
+          </style>
 
           <!-- Selected Actions Bar -->
           <div id="bp-action-bar" style="display:none;margin-bottom:12px;padding:10px 16px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);border-radius:10px;display:none;align-items:center;gap:12px">
@@ -1746,7 +1771,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
                   <th onclick="bpSortBy('due_date')" class="bp-sortable" style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px;cursor:pointer;user-select:none">Due</th>
                   <th onclick="bpSortBy('total')" class="bp-sortable" style="padding:10px 8px;text-align:right;color:var(--text3);font-weight:600;font-size:11px;cursor:pointer;user-select:none">Total</th>
                   <th onclick="bpSortBy('balance')" class="bp-sortable" style="padding:10px 8px;text-align:right;color:var(--text3);font-weight:600;font-size:11px;cursor:pointer;user-select:none">Balance</th>
-                  <th onclick="bpSortBy('payment_status')" class="bp-sortable" style="padding:10px 8px;text-align:center;color:var(--text3);font-weight:600;font-size:11px;cursor:pointer;user-select:none">Status</th>
+                  <th onclick="bpSortBy('age_days')" class="bp-sortable" title="Days since invoice date" style="padding:10px 8px;text-align:center;color:var(--text3);font-weight:600;font-size:11px;cursor:pointer;user-select:none">Age</th>
                 </tr>
               </thead>
               <tbody id="bp-invoices-table"></tbody>
@@ -5568,6 +5593,31 @@ var _bpSelected = new Set();
 var _bpStatusFilter = 'unpaid';
 var _bpVendors = [];
 var _bpSort = { col: 'due_date', dir: 'asc' };
+var _bpViewMode = 'due_soon'; // 'due_soon' | 'all' | 'paid'
+
+function bpSetViewMode(mode, btn) {
+  _bpViewMode = mode;
+  document.querySelectorAll('.bp-tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (!btn) btn = document.querySelector('.bp-tab-btn[data-view="' + mode + '"]');
+  if (btn) btn.classList.add('active');
+  // Show/hide horizon picker (only relevant for Due Soon)
+  var horizonWrap = document.getElementById('bp-horizon-wrap');
+  if (horizonWrap) horizonWrap.style.display = (mode === 'due_soon') ? 'flex' : 'none';
+  // Show/hide sub-filters (only for All Outstanding)
+  var subs = document.getElementById('bp-sub-filters');
+  if (subs) subs.style.display = (mode === 'all') ? 'flex' : 'none';
+  // Set the backend status filter appropriately
+  if (mode === 'paid') {
+    _bpStatusFilter = 'paid';
+  } else if (mode === 'due_soon') {
+    _bpStatusFilter = 'unpaid'; // narrow further by date in render
+  } else {
+    // 'all' — use whatever sub-filter is active, default unpaid
+    var activeSub = document.querySelector('#bp-sub-filters .bp-filter-btn.active');
+    _bpStatusFilter = activeSub ? (activeSub.dataset.status || '') : 'unpaid';
+  }
+  bpLoadInvoices();
+}
 
 // ── Aging Cards ──
 async function bpLoadAging() {
@@ -5622,6 +5672,61 @@ function bpSortBy(col) {
   bpRenderSorted();
 }
 
+// Compute age (days since invoice date) and days-until-due for one invoice.
+// Uses UTC for day diffs so DST transitions don't off-by-one.
+function _bpParseDateUtc(s) {
+  if (!s) return null;
+  var p = s.split('-');
+  return Date.UTC(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10));
+}
+function _bpInvoiceMeta(inv) {
+  var now = new Date();
+  var todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  var age = 0;
+  var invUtc = _bpParseDateUtc(inv.invoice_date);
+  if (invUtc !== null) {
+    age = Math.floor((todayUtc - invUtc) / 86400000);
+  }
+  var daysUntilDue = null;
+  var dueUtc = _bpParseDateUtc(inv.due_date);
+  if (dueUtc !== null) {
+    daysUntilDue = Math.floor((dueUtc - todayUtc) / 86400000);
+  }
+  return { age: age, daysUntilDue: daysUntilDue };
+}
+
+// Render one <tr> row (shared by grouped and flat modes)
+function _bpRowHtml(inv) {
+  var meta = _bpInvoiceMeta(inv);
+  var age = meta.age;
+  var ageColor = age > 45 ? '#ef4444' : age > 30 ? '#f59e0b' : 'var(--text3)';
+  var ageLabel = age + 'd';
+  var dueColor = 'var(--text3)';
+  var dueSuffix = '';
+  if (meta.daysUntilDue !== null) {
+    if (meta.daysUntilDue < 0) { dueColor = '#ef4444'; dueSuffix = ' <span style="font-size:11px;color:#ef4444;font-weight:600">('+(-meta.daysUntilDue)+'d overdue)</span>'; }
+    else if (meta.daysUntilDue === 0) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(today)</span>'; }
+    else if (meta.daysUntilDue <= 3) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(in '+meta.daysUntilDue+'d)</span>'; }
+  }
+  return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'rgba(0,0,0,0.03)\'" onmouseout="this.style.background=\'\'">' +
+    '<td style="padding:8px"><input type="checkbox" data-id="' + inv.id + '" onchange="bpToggleSelect(this,' + inv.id + ')"' + (_bpSelected.has(inv.id) ? ' checked' : '') + '></td>' +
+    '<td style="padding:8px;color:#111827;font-weight:500">' + (inv.vendor_name||'—') + '</td>' +
+    '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_number||'—') + '</td>' +
+    '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_date||'—') + '</td>' +
+    '<td style="padding:8px;color:' + dueColor + '">' + (inv.due_date||'—') + dueSuffix + '</td>' +
+    '<td style="padding:8px;text-align:right;color:#111827">$' + (inv.total||0).toFixed(2) + '</td>' +
+    '<td style="padding:8px;text-align:right;color:#111827;font-weight:600">$' + (inv.balance||0).toFixed(2) + '</td>' +
+    '<td style="padding:8px;text-align:center" title="Days since invoice date"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;color:' + ageColor + ';background:' + ageColor + '15">' + ageLabel + '</span></td>' +
+    '</tr>';
+}
+
+function _bpGroupHeaderHtml(cls, label, count, totalAmt) {
+  return '<tr><td colspan="8" class="bp-group-header ' + cls + '">' +
+    label + ' — ' + count + ' invoice' + (count===1?'':'s') +
+    ' <span style="float:right;font-weight:700">$' + totalAmt.toFixed(2) + '</span>' +
+    '</td></tr>';
+}
+
 function bpRenderSorted() {
   var tb = document.getElementById('bp-invoices-table');
   if (!tb) return;
@@ -5630,8 +5735,60 @@ function bpRenderSorted() {
     bpUpdateSortHeaders();
     return;
   }
+
+  // GROUPED (Due Soon) view
+  if (_bpViewMode === 'due_soon') {
+    var horizonSel = document.getElementById('bp-horizon');
+    var horizon = horizonSel ? parseInt(horizonSel.value, 10) : 10;
+    var overdue = [], week = [], later = [], noDate = [];
+    _bpInvoices.forEach(function(inv) {
+      var m = _bpInvoiceMeta(inv);
+      if (m.daysUntilDue === null) { noDate.push(inv); return; }
+      if (m.daysUntilDue < 0) { overdue.push(inv); return; }
+      if (m.daysUntilDue <= horizon) { week.push(inv); return; }
+      later.push(inv);
+    });
+    // Sort each bucket by due date ascending (overdue by most-overdue first)
+    overdue.sort(function(a,b){ return String(a.due_date).localeCompare(String(b.due_date)); });
+    week.sort(function(a,b){ return String(a.due_date).localeCompare(String(b.due_date)); });
+    var html = '';
+    function sumBalance(list) { var s = 0; list.forEach(function(i){ s += (i.balance||0); }); return s; }
+    if (overdue.length) {
+      html += _bpGroupHeaderHtml('overdue', '⚠ Overdue', overdue.length, sumBalance(overdue));
+      html += overdue.map(_bpRowHtml).join('');
+    }
+    if (week.length) {
+      html += _bpGroupHeaderHtml('week', 'Due in Next ' + horizon + ' Days', week.length, sumBalance(week));
+      html += week.map(_bpRowHtml).join('');
+    }
+    if (!overdue.length && !week.length) {
+      html += '<tr><td colspan="8" style="padding:32px;text-align:center;color:var(--text3)">' +
+        '<div style="font-size:28px;margin-bottom:6px">✓</div>' +
+        '<div style="font-weight:600;color:#22c55e;margin-bottom:4px">All caught up</div>' +
+        '<div style="font-size:12px">Nothing overdue and nothing due in the next ' + horizon + ' days.</div>' +
+        (later.length ? '<div style="font-size:12px;margin-top:8px">' + later.length + ' invoice' + (later.length===1?'':'s') + ' due later. <a href="#" onclick="bpSetViewMode(\'all\');return false;" style="color:#38bdf8">View all outstanding →</a></div>' : '') +
+        '</td></tr>';
+    } else if (later.length || noDate.length) {
+      var hint = [];
+      if (later.length) hint.push(later.length + ' due later');
+      if (noDate.length) hint.push(noDate.length + ' without a due date');
+      html += '<tr><td colspan="8" style="padding:14px;text-align:center;color:var(--text3);font-size:12px">' +
+        hint.join(' · ') + ' — <a href="#" onclick="bpSetViewMode(\'all\');return false;" style="color:#38bdf8">View all outstanding →</a>' +
+        '</td></tr>';
+    }
+    tb.innerHTML = html;
+    bpUpdateSortHeaders();
+    return;
+  }
+
+  // FLAT view (All Outstanding / Paid) — original behavior
   var sorted = _bpInvoices.slice().sort(function(a, b) {
     var col = _bpSort.col, dir = _bpSort.dir;
+    // Age is a derived field
+    if (col === 'age_days') {
+      var am = _bpInvoiceMeta(a).age, bm = _bpInvoiceMeta(b).age;
+      return dir === 'asc' ? am - bm : bm - am;
+    }
     var va = a[col], vb = b[col];
     if (col === 'total' || col === 'balance' || col === 'days_overdue') {
       va = va || 0; vb = vb || 0;
@@ -5641,26 +5798,12 @@ function bpRenderSorted() {
     if (!va && vb) return 1; if (va && !vb) return -1;
     return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
   });
-  tb.innerHTML = sorted.map(function(inv) {
-    var days = inv.invoice_date ? Math.floor((Date.now() - new Date(inv.invoice_date + 'T00:00:00').getTime()) / 86400000) : 0;
-    var statusColor = days > 45 ? '#ef4444' : days > 30 ? '#f59e0b' : 'var(--text3)';
-    var statusLabel = days + 'd';
-    return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'rgba(0,0,0,0.03)\'" onmouseout="this.style.background=\'\'">' +
-      '<td style="padding:8px"><input type="checkbox" data-id="' + inv.id + '" onchange="bpToggleSelect(this,' + inv.id + ')"' + (_bpSelected.has(inv.id) ? ' checked' : '') + '></td>' +
-      '<td style="padding:8px;color:#111827;font-weight:500">' + (inv.vendor_name||'—') + '</td>' +
-      '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_number||'—') + '</td>' +
-      '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_date||'—') + '</td>' +
-      '<td style="padding:8px;color:' + (inv.payment_status==='overdue'?'#ef4444':'var(--text3)') + '">' + (inv.due_date||'—') + '</td>' +
-      '<td style="padding:8px;text-align:right;color:#111827">$' + (inv.total||0).toFixed(2) + '</td>' +
-      '<td style="padding:8px;text-align:right;color:#111827;font-weight:600">$' + (inv.balance||0).toFixed(2) + '</td>' +
-      '<td style="padding:8px;text-align:center"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;color:' + statusColor + ';background:' + statusColor + '15">' + statusLabel + '</span></td>' +
-      '</tr>';
-  }).join('');
+  tb.innerHTML = sorted.map(_bpRowHtml).join('');
   bpUpdateSortHeaders();
 }
 
 function bpUpdateSortHeaders() {
-  var labels = {vendor_name:'Vendor',invoice_number:'Invoice #',invoice_date:'Date',due_date:'Due',total:'Total',balance:'Balance',payment_status:'Status'};
+  var labels = {vendor_name:'Vendor',invoice_number:'Invoice #',invoice_date:'Date',due_date:'Due',total:'Total',balance:'Balance',age_days:'Age'};
   var ths = document.querySelectorAll('#bp-thead-row th.bp-sortable');
   ths.forEach(function(th) {
     var col = th.getAttribute('onclick').match(/'([^']+)'/)[1];
