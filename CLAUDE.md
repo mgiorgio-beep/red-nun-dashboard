@@ -312,6 +312,13 @@ Also: back up before any schema change or large migration.
 ## Vendor Scrapers (`~/vendor-scrapers/`)
 Playwright-based scrapers that log into vendor portals, download invoices, and import them via the dashboard API. Persistent browser profiles, auto-login on session expiry.
 
+**Separate repo (not in this one):**
+```
+GitHub:  https://github.com/mgiorgio-beep/vendor-scrapers  (private)
+Server:  /home/rednun/vendor-scrapers                      (where cron runs from)
+```
+Dev flow is different from the dashboard: edit in-place on the server, `git commit`, `git push` — the server's `gh` is authed. No local working copy on Windows.
+
 - **Orchestrator:** `~/vendor-scrapers/run_all.sh` — runs all 7 scrapers sequentially, then `import_downloads.py`
 - **Cron:** `0 7 * * *` daily at 7 AM
 - **Import pipeline:** `~/vendor-scrapers/common/import_downloads.py`
