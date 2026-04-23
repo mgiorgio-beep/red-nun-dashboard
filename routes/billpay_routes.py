@@ -778,34 +778,45 @@ def mark_invoice_paid_external(invoice_id):
         return jsonify({"error": "Invoice already marked paid"}), 400
 
     applied = float(inv["balance"] or 0)
-    if applied <= 0:
-        conn.close()
-        return jsonify({"error": "Invoice has no outstanding balance"}), 400
+    # applied > 0  → real external payment: write ap_payments + vendor_payments
+    # applied <= 0 → credit memo or $0 adjustment: just close out the invoice,
+    #               no new money moved so skip the payment-record inserts
+    payment_id = None
+    if applied > 0:
+        cursor.execute(
+            """INSERT INTO ap_payments
+               (vendor_name, payment_date, amount, payment_method,
+                reference_number, memo, status)
+               VALUES (?, ?, ?, 'external', ?, ?, 'cleared')""",
+            (inv["vendor_name"], payment_date, applied, reference, memo),
+        )
+        payment_id = cursor.lastrowid
 
-    cursor.execute(
-        """INSERT INTO ap_payments
-           (vendor_name, payment_date, amount, payment_method,
-            reference_number, memo, status)
-           VALUES (?, ?, ?, 'external', ?, ?, 'cleared')""",
-        (inv["vendor_name"], payment_date, applied, reference, memo),
+        cursor.execute(
+            """INSERT INTO ap_payment_invoices (payment_id, invoice_id, amount_applied)
+               VALUES (?, ?, ?)""",
+            (payment_id, invoice_id, applied),
+        )
+
+    close_memo = memo if applied > 0 else (
+        memo if memo != "Paid externally" else "Credit/adjustment resolved"
     )
-    payment_id = cursor.lastrowid
-
-    cursor.execute(
-        """INSERT INTO ap_payment_invoices (payment_id, invoice_id, amount_applied)
-           VALUES (?, ?, ?)""",
-        (payment_id, invoice_id, applied),
-    )
-
     cursor.execute(
         """UPDATE scanned_invoices
            SET amount_paid = COALESCE(total, 0),
                balance = 0,
                payment_status = 'paid',
-               paid_date = ?
+               paid_date = ?,
+               notes = COALESCE(notes, '') || ' | ' || ?
            WHERE id = ?""",
-        (payment_date, invoice_id),
+        (payment_date, f"resolved {payment_date}: {close_memo}", invoice_id),
     )
+
+    if applied <= 0:
+        conn.commit()
+        conn.close()
+        logger.info(f"Invoice #{invoice_id} ({inv['vendor_name']}) resolved — credit/zero balance, no ap_payments row (amount={applied:.2f})")
+        return jsonify({"status": "ok", "payment_id": None, "amount": applied, "mode": "credit_resolved"})
 
     ref = reference or f"EXT-AP{payment_id}"
     try:
