@@ -787,23 +787,32 @@ def validate_invoice_extraction(data):
     )
     result["total_extracted"] = round(extracted_total, 2)
     
-    # Use invoice_total minus tax (line items don't include tax), fall back to subtotal
+    # Compare extracted line-item sum against both tax-exclusive and tax-inclusive
+    # stated totals. Some vendors (Martignetti, SG) extract lines pre-tax so the sum
+    # matches subtotal; others (UniFirst) embed tax per line so the sum matches the
+    # post-tax total. Accept whichever is closer.
     invoice_total_raw = float(data.get("invoice_total") or data.get("invoice_subtotal") or 0)
     invoice_tax = float(data.get("invoice_tax") or data.get("tax") or 0)
-    invoice_total = (invoice_total_raw - invoice_tax) if invoice_total_raw > 0 else None
-    
-    if invoice_total is not None:
-        invoice_total = float(invoice_total)
-        result["total_invoice"] = invoice_total
-        difference = abs(extracted_total - invoice_total)
-        result["total_difference"] = round(difference, 2)
-        
-        if difference <= 0.05:  # $0.05 tolerance for rounding
+    invoice_total_pretax = (invoice_total_raw - invoice_tax) if invoice_total_raw > 0 else None
+
+    if invoice_total_raw > 0:
+        diff_raw = abs(extracted_total - invoice_total_raw)
+        diff_pretax = abs(extracted_total - invoice_total_pretax) if invoice_total_pretax is not None else diff_raw
+        if diff_pretax <= diff_raw:
+            best_target = invoice_total_pretax
+            best_diff = diff_pretax
+        else:
+            best_target = invoice_total_raw
+            best_diff = diff_raw
+        result["total_invoice"] = round(best_target, 2)
+        result["total_difference"] = round(best_diff, 2)
+
+        if best_diff <= 0.05:  # $0.05 tolerance for rounding
             result["total_match"] = True
         else:
             result["total_match"] = False
             result["issues"].append(
-                f"Total mismatch: invoice shows ${invoice_total:.2f}, extracted ${extracted_total:.2f} (difference: ${difference:.2f})"
+                f"Total mismatch: invoice shows ${best_target:.2f}, extracted ${extracted_total:.2f} (difference: ${best_diff:.2f})"
             )
     else:
         # No total on invoice — can't validate, mark as null (pass)
