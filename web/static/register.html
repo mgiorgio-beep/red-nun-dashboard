@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Bank Register — Red Nun</title>
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, monospace;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+.main-content { padding: 24px; overflow-y: auto; }
+.content-wrap { max-width: 1100px; }
+
+/* Header */
+.page-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.page-title { font-size: 22px; font-weight: 700; }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+.header-buttons { display: flex; gap: 8px; align-items: center; }
+
+/* Account picker */
+.account-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+.account-pill {
+  padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 10px;
+}
+.account-pill:hover { border-color: var(--border-focus); color: var(--text); }
+.account-pill.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.account-pill .acct-last4 { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+.account-pill.active .acct-last4 { color: var(--blue); }
+
+/* Summary cards */
+.summary-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.summary-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 18px;
+}
+.summary-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.summary-value { font-size: 22px; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
+.summary-value.green { color: var(--green); }
+.summary-value.red { color: var(--red); }
+.summary-value.blue { color: var(--blue); }
+.summary-value.amber { color: var(--amber); }
+.summary-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+/* Filter bar */
+.filter-bar {
+  display: flex; gap: 10px; margin-bottom: 14px; align-items: center; flex-wrap: wrap;
+  padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+}
+.filter-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.filter-input, .filter-select {
+  padding: 7px 10px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 13px; font-family: var(--font);
+  min-width: 120px;
+}
+.filter-input:focus, .filter-select:focus { outline: none; border-color: var(--blue); }
+.btn-action {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text2); font-size: 13px; font-family: var(--font);
+  cursor: pointer; transition: all 0.15s; font-weight: 500;
+}
+.btn-action:hover { border-color: var(--blue); color: var(--blue); }
+.btn-primary { border-color: var(--green); color: var(--green); }
+.btn-primary:hover { background: var(--green-soft); }
+.btn-warn { border-color: var(--amber); color: var(--amber); }
+.btn-warn:hover { background: var(--amber-soft); }
+
+/* Register table */
+.reg-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.reg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.reg-table thead th {
+  text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 700;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 1;
+}
+.reg-table tbody td {
+  padding: 10px 12px; border-bottom: 1px solid rgba(30,41,59,0.6);
+  vertical-align: middle;
+}
+.reg-table tbody tr:hover td { background: rgba(56,189,248,0.04); }
+.reg-table tbody tr.reg-row { cursor: pointer; }
+.reg-table tbody tr.void-row td { opacity: 0.45; text-decoration: line-through; }
+.reg-table tbody tr.unassigned td { background: rgba(245,158,11,0.05); }
+.reg-table tbody tr.unassigned:hover td { background: rgba(245,158,11,0.08); }
+
+.col-date { font-family: var(--mono); font-size: 12px; color: var(--text2); width: 92px; white-space: nowrap; }
+.col-type { width: 100px; }
+.col-ref  { font-family: var(--mono); font-size: 12px; color: var(--text2); width: 110px; white-space: nowrap; }
+.col-amt  { text-align: right; font-family: var(--mono); width: 110px; white-space: nowrap; }
+.col-bal  { text-align: right; font-family: var(--mono); width: 120px; font-weight: 600; white-space: nowrap; }
+.col-chk  { width: 40px; text-align: center; }
+.col-memo { color: var(--text2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.type-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 5px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.type-bill_pay { background: var(--blue-soft); color: var(--blue); }
+.type-payroll  { background: rgba(168,85,247,0.15); color: #c084fc; }
+.type-deposit  { background: var(--green-soft); color: var(--green); }
+.type-manual   { background: rgba(148,163,184,0.15); color: var(--text2); }
+
+.status-pill {
+  display: inline-block; padding: 1px 7px; border-radius: 4px;
+  font-size: 10px; font-weight: 600; margin-left: 6px;
+}
+.status-pending { background: rgba(245,158,11,0.15); color: var(--amber); }
+.status-printed { background: rgba(56,189,248,0.15); color: var(--blue); }
+.status-cleared { background: rgba(34,197,94,0.15); color: var(--green); }
+.status-void    { background: rgba(239,68,68,0.15); color: var(--red); }
+.unassigned-pill {
+  display: inline-block; padding: 1px 7px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; background: var(--amber-soft); color: var(--amber);
+  margin-left: 6px;
+}
+
+.amt-out { color: var(--red); }
+.amt-in  { color: var(--green); }
+.bal-neg { color: var(--red); }
+
+.clear-chk {
+  width: 16px; height: 16px; cursor: pointer; accent-color: var(--green);
+}
+
+/* Detail row */
+.detail-row { display: none; }
+.detail-row.open { display: table-row; }
+.detail-row td { padding: 0; background: rgba(2,6,23,0.5); }
+.detail-content {
+  padding: 12px 16px 16px 16px; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;
+}
+.detail-item { font-size: 12px; }
+.detail-item .lbl { color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; font-size: 10px; font-weight: 600; }
+.detail-item .val { color: var(--text); margin-top: 2px; font-family: var(--mono); font-size: 12px; }
+.detail-actions { grid-column: 1 / -1; display: flex; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px; }
+
+/* Empty / loading */
+.loading, .empty { text-align: center; padding: 40px; color: var(--text3); font-size: 13px; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 9999;
+  display: none; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 22px; width: 100%; max-width: 480px;
+}
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.form-row { margin-bottom: 12px; }
+.form-row label { display: block; font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; font-weight: 600; }
+.form-row input, .form-row select, .form-row textarea {
+  width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 14px; font-family: var(--font);
+}
+.form-row input:focus, .form-row select:focus, .form-row textarea:focus { outline: none; border-color: var(--blue); }
+.form-row textarea { min-height: 60px; resize: vertical; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.modal-close {
+  background: transparent; border: 1px solid var(--border); color: var(--text2);
+}
+.amount-hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+/* Mobile */
+@media (max-width: 767px) {
+  .main-content { padding: 14px; }
+  .page-title { font-size: 18px; }
+  .summary-bar { grid-template-columns: 1fr 1fr; }
+  .summary-value { font-size: 18px; }
+  .reg-table .col-memo, .reg-table .col-type { display: none; }
+  .reg-table thead th { font-size: 9px; padding: 8px 6px; }
+  .reg-table tbody td { padding: 8px 6px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="main-content">
+  <div class="content-wrap">
+
+    <div class="page-header">
+      <div>
+        <div class="page-title">Bank Register</div>
+        <div class="page-sub">QBO-style per-account register — payments, payroll, deposits, and manual entries</div>
+      </div>
+      <div class="header-buttons">
+        <button class="btn-action" id="btn-sync">Sync Toast Deposits</button>
+        <button class="btn-action btn-primary" id="btn-add">+ Manual Entry</button>
+      </div>
+    </div>
+
+    <div class="account-bar" id="account-bar"></div>
+
+    <div class="summary-bar" id="summary-bar"></div>
+
+    <div class="filter-bar">
+      <span class="filter-label">From</span>
+      <input type="date" class="filter-input" id="flt-start">
+      <span class="filter-label">To</span>
+      <input type="date" class="filter-input" id="flt-end">
+      <span class="filter-label">Status</span>
+      <select class="filter-select" id="flt-cleared">
+        <option value="all">All</option>
+        <option value="uncleared">Uncleared</option>
+        <option value="cleared">Cleared</option>
+      </select>
+      <button class="btn-action" id="btn-refresh">Refresh</button>
+    </div>
+
+    <div class="reg-wrap">
+      <table class="reg-table" id="reg-table">
+        <thead>
+          <tr>
+            <th class="col-date">Date</th>
+            <th class="col-type">Type</th>
+            <th class="col-ref">Ref</th>
+            <th>Payee</th>
+            <th class="col-memo">Memo</th>
+            <th class="col-amt">Payment</th>
+            <th class="col-amt">Deposit</th>
+            <th class="col-bal">Balance</th>
+            <th class="col-chk">✓</th>
+          </tr>
+        </thead>
+        <tbody id="reg-body">
+          <tr><td colspan="9" class="loading">Loading accounts…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- Add Manual Entry Modal -->
+<div class="modal-overlay" id="modal-manual">
+  <div class="modal-box">
+    <div class="modal-title">Add Manual Entry</div>
+    <div class="form-row">
+      <label>Type</label>
+      <select id="m-type">
+        <option value="transfer">Transfer</option>
+        <option value="fee">Bank Fee</option>
+        <option value="interest">Interest</option>
+        <option value="adjustment">Adjustment</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label>Date</label>
+        <input type="date" id="m-date">
+      </div>
+      <div class="form-row">
+        <label>Amount (signed)</label>
+        <input type="number" step="0.01" id="m-amount" placeholder="-50.00 for outflow">
+        <div class="amount-hint">Negative = money out · Positive = money in</div>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label>Payee</label>
+        <input type="text" id="m-payee" placeholder="e.g. Cape Cod Five">
+      </div>
+      <div class="form-row">
+        <label>Ref Number</label>
+        <input type="text" id="m-ref" placeholder="optional">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Memo</label>
+      <textarea id="m-memo" placeholder="optional"></textarea>
+    </div>
+    <div class="form-row">
+      <label><input type="checkbox" id="m-cleared" style="width:auto;margin-right:6px"> Mark as cleared</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-action modal-close" onclick="closeModal('modal-manual')">Cancel</button>
+      <button class="btn-action btn-primary" id="m-submit">Save Entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reassign Modal -->
+<div class="modal-overlay" id="modal-reassign">
+  <div class="modal-box">
+    <div class="modal-title">Reassign to Bank Account</div>
+    <div class="page-sub" id="reassign-sub" style="margin-bottom:14px"></div>
+    <div class="form-row">
+      <label>Bank Account</label>
+      <select id="r-account"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-action modal-close" onclick="closeModal('modal-reassign')">Cancel</button>
+      <button class="btn-action btn-primary" id="r-submit">Reassign</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────────────────────
+// State
+// ────────────────────────────────────────────────────────────────────────────
+let STATE = {
+  accounts: [],
+  currentAcct: null,
+  rows: [],
+  reassignTarget: null,  // {source, id}
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => (n === 0 || n == null) ? '' : Number(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const fmtBal = (n) => Number(n || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const esc = (s) => (s == null ? '' : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
+function openModal(id) { $(id).classList.add('open'); }
+function closeModal(id) { $(id).classList.remove('open'); }
+
+// Default date range: last 90 days
+function defaultDates() {
+  const today = new Date();
+  const start = new Date(today.getTime() - 90 * 86400000);
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: today.toISOString().slice(0, 10),
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Load accounts
+// ────────────────────────────────────────────────────────────────────────────
+async function loadAccounts() {
+  const r = await fetch('/api/register/accounts');
+  if (!r.ok) { $('reg-body').innerHTML = '<tr><td colspan="9" class="empty">Failed to load accounts.</td></tr>'; return; }
+  const data = await r.json();
+  STATE.accounts = data.accounts || [];
+  if (!STATE.accounts.length) {
+    $('account-bar').innerHTML = '<div class="empty">No accounts configured.</div>';
+    $('reg-body').innerHTML = '<tr><td colspan="9" class="empty">Add bank accounts in admin settings to begin.</td></tr>';
+    return;
+  }
+  renderAccountBar();
+  // Auto-pick first account, or the one matching the global location selector
+  const loc = (window.currentLocation || localStorage.getItem('globalLocation') || 'chatham');
+  const match = STATE.accounts.find(a => a.location === loc) || STATE.accounts[0];
+  selectAccount(match.id);
+}
+
+function renderAccountBar() {
+  $('account-bar').innerHTML = STATE.accounts.map(a => `
+    <div class="account-pill" data-acct="${a.id}" onclick="selectAccount(${a.id})">
+      <div>
+        <div>${esc(a.short_name || a.name)}</div>
+        <div class="acct-last4">••• ${esc(a.account_last4 || '----')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectAccount(id) {
+  STATE.currentAcct = STATE.accounts.find(a => a.id === id);
+  document.querySelectorAll('.account-pill').forEach(el => {
+    el.classList.toggle('active', Number(el.dataset.acct) === id);
+  });
+  // Initialize date filters if empty
+  if (!$('flt-start').value) {
+    const d = defaultDates();
+    $('flt-start').value = d.start;
+    $('flt-end').value = d.end;
+  }
+  loadRegister();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Load the register
+// ────────────────────────────────────────────────────────────────────────────
+async function loadRegister() {
+  if (!STATE.currentAcct) return;
+  $('reg-body').innerHTML = '<tr><td colspan="9" class="loading">Loading register…</td></tr>';
+  const params = new URLSearchParams({
+    start: $('flt-start').value,
+    end: $('flt-end').value,
+    cleared: $('flt-cleared').value,
+  });
+  const r = await fetch(`/api/register/${STATE.currentAcct.id}?${params}`);
+  if (!r.ok) {
+    $('reg-body').innerHTML = '<tr><td colspan="9" class="empty">Failed to load register.</td></tr>';
+    return;
+  }
+  const data = await r.json();
+  STATE.rows = data.rows || [];
+  renderSummary(data.summary || {});
+  renderRows();
+}
+
+function renderSummary(s) {
+  $('summary-bar').innerHTML = `
+    <div class="summary-card">
+      <div class="summary-label">Opening Balance</div>
+      <div class="summary-value">${fmtBal(s.opening_balance)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Deposits In</div>
+      <div class="summary-value green">${fmtBal(s.total_inflow)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Payments Out</div>
+      <div class="summary-value red">${fmtBal(s.total_outflow)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Ending Balance</div>
+      <div class="summary-value ${s.ending_balance < 0 ? 'red' : 'blue'}">${fmtBal(s.ending_balance)}</div>
+      <div class="summary-sub">${s.row_count || 0} transactions · ${s.uncleared_count || 0} uncleared${s.unassigned_count ? ' · ' + s.unassigned_count + ' unassigned' : ''}</div>
+    </div>
+  `;
+}
+
+function renderRows() {
+  if (!STATE.rows.length) {
+    $('reg-body').innerHTML = '<tr><td colspan="9" class="empty">No transactions in this date range.</td></tr>';
+    return;
+  }
+  $('reg-body').innerHTML = STATE.rows.map((r, idx) => {
+    const isVoid = r.status === 'void';
+    const statusPill = r.status && r.status !== 'cleared'
+      ? `<span class="status-pill status-${esc(r.status)}">${esc(r.status)}</span>` : '';
+    const unassignedPill = r.unassigned ? '<span class="unassigned-pill">unassigned</span>' : '';
+    return `
+      <tr class="reg-row ${isVoid ? 'void-row' : ''} ${r.unassigned ? 'unassigned' : ''}" data-idx="${idx}" onclick="toggleDetail(${idx})">
+        <td class="col-date">${esc(r.date)}</td>
+        <td class="col-type"><span class="type-pill type-${esc(r.type)}">${esc(r.type_label)}</span></td>
+        <td class="col-ref">${esc(r.ref)}</td>
+        <td>${esc(r.payee)}${statusPill}${unassignedPill}</td>
+        <td class="col-memo" title="${esc(r.memo || '')}">${esc(r.memo || '')}</td>
+        <td class="col-amt amt-out">${fmt(r.outflow)}</td>
+        <td class="col-amt amt-in">${fmt(r.inflow)}</td>
+        <td class="col-bal ${r.balance < 0 ? 'bal-neg' : ''}">${fmtBal(r.balance)}</td>
+        <td class="col-chk" onclick="event.stopPropagation()">
+          <input type="checkbox" class="clear-chk" ${r.cleared ? 'checked' : ''}
+                 onchange="toggleCleared('${r.source}', ${r.source_id}, this.checked)">
+        </td>
+      </tr>
+      <tr class="detail-row" id="detail-${idx}">
+        <td colspan="9">
+          <div class="detail-content">
+            <div class="detail-item"><div class="lbl">Source</div><div class="val">${esc(r.source)}#${r.source_id}</div></div>
+            <div class="detail-item"><div class="lbl">Status</div><div class="val">${esc(r.status || '—')}</div></div>
+            ${r.ap_payment_id ? `<div class="detail-item"><div class="lbl">AP Payment</div><div class="val">ap_payments#${r.ap_payment_id}</div></div>` : ''}
+            ${r.payroll_run_id ? `<div class="detail-item"><div class="lbl">Payroll Run</div><div class="val">#${r.payroll_run_id}</div></div>` : ''}
+            <div class="detail-item"><div class="lbl">Cleared Date</div><div class="val">${esc(r.cleared_date || '—')}</div></div>
+            <div class="detail-actions">
+              ${(r.source === 'bill_pay' || r.source === 'payroll')
+                ? `<button class="btn-action btn-warn" onclick="event.stopPropagation();openReassign('${r.source}', ${r.source_id})">Reassign Account</button>` : ''}
+              ${r.source === 'manual' ? `<button class="btn-action" onclick="event.stopPropagation();deleteManual(${r.source_id})">Delete Entry</button>` : ''}
+              ${r.ap_payment_id ? `<a class="btn-action" href="/payments?payment=${r.ap_payment_id}" onclick="event.stopPropagation()">Open in Payments</a>` : ''}
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleDetail(idx) {
+  const row = $('detail-' + idx);
+  if (row) row.classList.toggle('open');
+}
+
+async function toggleCleared(source, id, cleared) {
+  const r = await fetch('/api/register/row/cleared', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({source, id, cleared}),
+  });
+  if (!r.ok) { alert('Failed to update cleared state'); return; }
+  // Refresh so the summary (uncleared count) updates
+  loadRegister();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Manual entry
+// ────────────────────────────────────────────────────────────────────────────
+$('btn-add').addEventListener('click', () => {
+  if (!STATE.currentAcct) { alert('Select an account first'); return; }
+  $('m-date').value = new Date().toISOString().slice(0, 10);
+  $('m-type').value = 'transfer';
+  $('m-amount').value = '';
+  $('m-payee').value = '';
+  $('m-ref').value = '';
+  $('m-memo').value = '';
+  $('m-cleared').checked = false;
+  openModal('modal-manual');
+});
+
+$('m-submit').addEventListener('click', async () => {
+  const amount = parseFloat($('m-amount').value);
+  if (!$('m-date').value || !$('m-type').value || isNaN(amount)) {
+    alert('Date, type, and a valid signed amount are required.');
+    return;
+  }
+  const body = {
+    entry_date: $('m-date').value,
+    entry_type: $('m-type').value,
+    amount: amount,
+    payee: $('m-payee').value || null,
+    ref_number: $('m-ref').value || null,
+    memo: $('m-memo').value || null,
+    cleared: $('m-cleared').checked,
+  };
+  const r = await fetch(`/api/register/${STATE.currentAcct.id}/manual`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    alert('Failed: ' + (err.error || r.status));
+    return;
+  }
+  closeModal('modal-manual');
+  loadRegister();
+});
+
+async function deleteManual(id) {
+  if (!confirm('Delete this manual entry?')) return;
+  const r = await fetch('/api/register/manual/' + id, {method: 'DELETE'});
+  if (!r.ok) { alert('Failed to delete'); return; }
+  loadRegister();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Reassign bank account
+// ────────────────────────────────────────────────────────────────────────────
+function openReassign(source, id) {
+  STATE.reassignTarget = {source, id};
+  const row = STATE.rows.find(r => r.source === source && r.source_id === id);
+  $('reassign-sub').textContent = row ? `${row.payee} · ${row.ref} · $${fmtBal(row.outflow || row.inflow)}` : '';
+  $('r-account').innerHTML = STATE.accounts.map(a =>
+    `<option value="${a.id}">${esc(a.short_name || a.name)}</option>`
+  ).join('');
+  openModal('modal-reassign');
+}
+
+$('r-submit').addEventListener('click', async () => {
+  if (!STATE.reassignTarget) return;
+  const target_id = parseInt($('r-account').value, 10);
+  const r = await fetch('/api/register/reassign', {
+    method: 'PUT', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      source: STATE.reassignTarget.source,
+      id: STATE.reassignTarget.id,
+      bank_account_id: target_id,
+    }),
+  });
+  if (!r.ok) { alert('Reassign failed'); return; }
+  closeModal('modal-reassign');
+  loadRegister();
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// QBO sync
+// ────────────────────────────────────────────────────────────────────────────
+$('btn-sync').addEventListener('click', async () => {
+  if (!STATE.currentAcct) { alert('Select an account first'); return; }
+  if (!STATE.currentAcct.qbo_account_id) {
+    alert('This account has no QBO account id configured. Edit the account settings first.');
+    return;
+  }
+  const btn = $('btn-sync');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Syncing…';
+  try {
+    const r = await fetch(`/api/register/${STATE.currentAcct.id}/sync-deposits`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({start: $('flt-start').value, end: $('flt-end').value}),
+    });
+    const data = await r.json();
+    if (!r.ok) { alert('Sync failed: ' + (data.error || r.status)); return; }
+    alert(`Synced: ${data.inserted} new, ${data.updated} updated deposits.`);
+    loadRegister();
+  } catch (e) {
+    alert('Sync error: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Filter wiring
+// ────────────────────────────────────────────────────────────────────────────
+$('btn-refresh').addEventListener('click', loadRegister);
+$('flt-cleared').addEventListener('change', loadRegister);
+$('flt-start').addEventListener('change', loadRegister);
+$('flt-end').addEventListener('change', loadRegister);
+
+// ────────────────────────────────────────────────────────────────────────────
+// Boot
+// ────────────────────────────────────────────────────────────────────────────
+loadAccounts();
+</script>
+
+<script src="/static/sidebar.js"></script>
+</body>
+</html>

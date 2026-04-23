@@ -53,6 +53,7 @@ from staff.tv_power import tv_power_bp
 from routes.billpay_routes import billpay_bp, init_recurring_tables
 from routes.payroll_routes import payroll_bp, init_payroll_tables
 from routes.payment_routes import payment_bp, init_payment_tables
+from routes.register_routes import register_bp, init_register_tables
 from integrations.invoices.processor import init_invoice_tables
 import secrets
 
@@ -103,6 +104,7 @@ app.register_blueprint(tv_power_bp)
 app.register_blueprint(billpay_bp)
 app.register_blueprint(payroll_bp)
 app.register_blueprint(payment_bp)
+app.register_blueprint(register_bp)
 app.register_blueprint(availability_bp)
 app.register_blueprint(application_bp)
 app.register_blueprint(daily_sales_bp)
@@ -145,6 +147,12 @@ try:
     logger.info("Payroll tables initialized")
 except Exception as e:
     logger.warning(f"Payroll table init failed: {e}")
+
+try:
+    init_register_tables()
+    logger.info("Bank register tables initialized")
+except Exception as e:
+    logger.warning(f"Register table init failed: {e}")
 
 
 # ------------------------------------------------------------------
@@ -230,6 +238,13 @@ def vendor_status_page():
 def payments_page():
     """Serve the vendor payments tracking page."""
     return send_from_directory("static", "payments.html")
+
+
+@app.route("/registers")
+@login_required
+def registers_page():
+    """Serve the QBO-style bank register page."""
+    return send_from_directory("static", "register.html")
 
 
 @app.route("/reconcile")
@@ -871,8 +886,3 @@ def api_today_snapshot():
 def serve_invoice_thumbnail(filename):
     """Serve invoice thumbnail images"""
     return send_from_directory('/opt/red-nun-dashboard/invoice_thumbnails', filename)
-
-@app.route('/invoice_images/<filename>')
-def serve_invoice_image(filename):
-    """Serve full-size invoice images"""
-    return send_from_directory('/opt/red-nun-dashboard/invoice_images', filename)

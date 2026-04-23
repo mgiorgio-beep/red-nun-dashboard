@@ -27,7 +27,7 @@ QB_PAYROLL_TIPS  = "Payroll Expenses:Payroll Tips"
 QB_PAYROLL_TAXES = "Payroll Expenses:Payroll Taxes"
 QB_TIP_BANK      = "Tip Bank"
 QB_BANK_CHATHAM  = "Cape Cod Five (5975)"
-QB_BANK_DENNIS   = "Cape Cod Five (5975)"   # update if different account
+QB_BANK_DENNIS   = "Cape Cod Five (2757)"
 
 # ── 7shifts payroll-journal CSV columns ───────────────────────────────────────
 EE_TAX_COLS = [

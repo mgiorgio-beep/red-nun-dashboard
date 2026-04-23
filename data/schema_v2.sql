@@ -233,3 +233,75 @@ CREATE TABLE IF NOT EXISTS waste_log (
 CREATE INDEX IF NOT EXISTS idx_waste_product ON waste_log(product_id);
 CREATE INDEX IF NOT EXISTS idx_waste_date ON waste_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_waste_location ON waste_log(location);
+
+-- ============================================
+-- BANK REGISTER (QBO-style per-account register)
+-- Tables created/migrated by routes/register_routes.py :: init_register_tables()
+-- ============================================
+
+-- Operating bank accounts (Chatham CCF, Dennis CCF, add more as needed)
+CREATE TABLE IF NOT EXISTS bank_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,                -- e.g. "Cape Cod Five (5975) — Chatham"
+    short_name TEXT,                   -- e.g. "Chatham Operating"
+    qbo_account_id TEXT,               -- QBO Account.Id for deposit sync
+    qbo_account_name TEXT,             -- QBO display name
+    location TEXT,                     -- chatham | dennis | null
+    account_last4 TEXT,
+    opening_balance REAL DEFAULT 0,
+    opening_date TEXT,                 -- YYYY-MM-DD
+    active INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_loc ON bank_accounts(location);
+
+-- Manual register entries (transfers, fees, interest, adjustments)
+CREATE TABLE IF NOT EXISTS manual_bank_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bank_account_id INTEGER NOT NULL,
+    entry_date TEXT NOT NULL,          -- YYYY-MM-DD
+    entry_type TEXT NOT NULL,          -- transfer | fee | interest | adjustment | other
+    payee TEXT,
+    memo TEXT,
+    ref_number TEXT,
+    amount REAL NOT NULL,              -- signed: positive = deposit, negative = payment
+    cleared INTEGER DEFAULT 0,
+    cleared_date TEXT,
+    created_by TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mbe_account ON manual_bank_entries(bank_account_id);
+CREATE INDEX IF NOT EXISTS idx_mbe_date ON manual_bank_entries(entry_date);
+
+-- Local cache of deposits pulled from QBO (Toast CC settlement + cash)
+CREATE TABLE IF NOT EXISTS bank_deposits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bank_account_id INTEGER NOT NULL,
+    deposit_date TEXT NOT NULL,        -- YYYY-MM-DD
+    amount REAL NOT NULL,              -- always positive
+    description TEXT,
+    memo TEXT,
+    source TEXT,                       -- 'toast' | 'cash' | 'qbo_other'
+    qbo_txn_id TEXT UNIQUE,            -- dedup key
+    qbo_txn_type TEXT,
+    cleared INTEGER DEFAULT 1,
+    cleared_date TEXT,
+    synced_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bd_account ON bank_deposits(bank_account_id);
+CREATE INDEX IF NOT EXISTS idx_bd_date ON bank_deposits(deposit_date);
+CREATE INDEX IF NOT EXISTS idx_bd_qbo ON bank_deposits(qbo_txn_id);
+
+-- Additive columns on existing tables (see init_register_tables for backfill logic):
+--   ALTER TABLE vendor_payments ADD COLUMN bank_account_id INTEGER
+--   ALTER TABLE vendor_payments ADD COLUMN cleared INTEGER DEFAULT 0
+--   ALTER TABLE vendor_payments ADD COLUMN cleared_date TEXT
+--   ALTER TABLE payroll_checks  ADD COLUMN bank_account_id INTEGER
+--   ALTER TABLE payroll_checks  ADD COLUMN cleared INTEGER DEFAULT 0
+--   ALTER TABLE payroll_checks  ADD COLUMN cleared_date TEXT
