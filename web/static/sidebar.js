@@ -381,4 +381,7 @@ setTimeout(pollBadges,500);
 /* Red Nun — load universal sortable-tables script */
 (function(){
   var s = document.createElement('script');
-  s.src = '/static/rn-sor
+  s.src = '/static/rn-sortable.js';
+  s.defer = true;
+  document.head.appendChild(s);
+})();
