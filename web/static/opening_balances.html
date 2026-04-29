@@ -107,6 +107,33 @@ input.ob-num.dirty, input.ob-date.dirty { border-color: var(--amber); background
   margin-bottom: 18px; line-height: 1.5;
 }
 
+/* Import modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 9999;
+  display: none; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 22px; width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto;
+}
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.modal-sub { font-size: 12px; color: var(--text3); margin-bottom: 14px; }
+.form-row { margin-bottom: 12px; }
+.form-row label { display: block; font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; font-weight: 600; }
+.form-row input[type=file], .form-row input[type=date] {
+  width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 13px; font-family: var(--font);
+}
+.form-row input:focus { outline: none; border-color: var(--blue); }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.imp-summary { font-size: 12px; color: var(--text2); margin: 12px 0 8px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 18px; }
+.imp-preview-wrap { max-height: 380px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+tr.imp-create td { background: rgba(34,197,94,0.05); }
+tr.imp-update td { background: rgba(56,189,248,0.05); }
+tr.imp-skip td   { color: var(--text3); }
+
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
   .page-title { font-size: 18px; }
@@ -119,9 +146,14 @@ input.ob-num.dirty, input.ob-date.dirty { border-color: var(--amber); background
 <div class="main-content">
   <div class="content-wrap">
 
-    <div class="page-header">
-      <div class="page-title">Opening Balances</div>
-      <div class="page-sub">Set starting balances as of a given date for the bank account and balance-sheet GL accounts (liabilities, equity, assets). Going-forward register activity layers on top of these.</div>
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap">
+      <div>
+        <div class="page-title">Opening Balances</div>
+        <div class="page-sub">Set starting balances as of a given date for the bank account and balance-sheet GL accounts (liabilities, equity, assets). Going-forward register activity layers on top of these.</div>
+      </div>
+      <div>
+        <button class="btn-save" id="btn-import-bs" style="border-color:var(--blue);color:var(--blue);font-size:13px;padding:9px 14px">Import Balance Sheet</button>
+      </div>
     </div>
 
     <div class="help-banner">
@@ -177,6 +209,43 @@ input.ob-num.dirty, input.ob-date.dirty { border-color: var(--amber); background
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Import Balance Sheet Modal -->
+<div class="modal-overlay" id="modal-import">
+  <div class="modal-box">
+    <div class="modal-title">Import Balance Sheet</div>
+    <div class="modal-sub">Upload a QBO Balance Sheet CSV export. Will upsert balance-sheet GL accounts for <strong id="imp-loc">chatham</strong> and set <em>opening_balance</em> + <em>opening_date</em>. Bank Accounts and A/P sections are skipped automatically (bank accounts go in the bank table; A/P is computed live from open invoices).</div>
+
+    <div class="form-row">
+      <label>CSV File</label>
+      <input type="file" accept=".csv,text/csv" id="imp-file">
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label>As-of Date</label>
+        <input type="date" id="imp-date" value="2026-01-01">
+      </div>
+      <div class="form-row" style="display:flex;align-items:flex-end">
+        <label style="font-size:12px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text2);margin-bottom:9px">
+          <input type="checkbox" id="imp-equity" checked style="margin-right:6px">
+          Include Equity accounts
+        </label>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:6px;justify-content:flex-start">
+      <button class="btn-save" onclick="previewImport()" style="border-color:var(--blue);color:var(--blue)">Preview</button>
+    </div>
+
+    <div class="imp-summary" id="imp-summary"></div>
+    <div class="imp-preview-wrap" id="imp-preview"></div>
+
+    <div class="modal-actions">
+      <button class="btn-save" onclick="closeImportModal()">Cancel</button>
+      <button class="btn-save" id="imp-commit" onclick="commitImport()" disabled style="border-color:var(--green);color:var(--green)">Apply Import</button>
+    </div>
   </div>
 </div>
 
@@ -463,6 +532,136 @@ async function saveGl(id, btn) {
 window.markDirty = markDirty;
 window.saveBank = saveBank;
 window.saveGl = saveGl;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Import Balance Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+function openImportModal() {
+  $('imp-file').value = '';
+  $('imp-date').value = '2026-01-01';
+  $('imp-equity').checked = true;
+  $('imp-preview').innerHTML = '';
+  $('imp-summary').textContent = '';
+  $('imp-commit').disabled = true;
+  $('imp-loc').textContent = STATE.location;
+  $('modal-import').classList.add('open');
+}
+
+async function previewImport() {
+  const file = $('imp-file').files[0];
+  if (!file) { alert('Pick a CSV first'); return; }
+  const date = $('imp-date').value;
+  if (!date) { alert('Pick an as-of date'); return; }
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('location', STATE.location);
+  fd.append('as_of_date', date);
+  fd.append('include_equity', $('imp-equity').checked ? '1' : '0');
+  fd.append('dry_run', '1');
+  $('imp-summary').textContent = 'Parsing…';
+  $('imp-preview').innerHTML = '';
+  $('imp-commit').disabled = true;
+  try {
+    const r = await fetch('/api/gl-accounts/import-balance-sheet', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (!r.ok) {
+      $('imp-summary').textContent = 'Error: ' + (d.error || r.status);
+      return;
+    }
+    renderPreview(d);
+    STATE.lastPreview = d;  // remember for commit
+    $('imp-commit').disabled = false;
+  } catch (e) {
+    $('imp-summary').textContent = 'Failed: ' + e;
+  }
+}
+
+function renderPreview(d) {
+  const c = d.counts || {create: 0, update: 0, skip: 0};
+  let summary = `Parsed ${d.accounts.length} rows for ${d.location} as of ${d.as_of_date}: `;
+  summary += `${c.create} create, ${c.update} update, ${c.skip} skip.`;
+  if (d.bank_account_match) {
+    const bm = d.bank_account_match;
+    summary += ` Bank ${esc(bm.last4)}: ${fmt(bm.previous_opening_balance)} → ${fmt(bm.new_opening_balance)}.`;
+  }
+  $('imp-summary').textContent = summary;
+
+  const rows = d.accounts.map(a => {
+    const cls = a.action === 'skip' ? 'imp-skip' : (a.action === 'update' ? 'imp-update' : 'imp-create');
+    let actionLabel = a.action.toUpperCase();
+    if (a.skip_reason) actionLabel += ' (' + esc(a.skip_reason) + ')';
+    let prev = '';
+    if (a.action === 'update' && a.previous_balance != null) {
+      prev = `<span style="color:var(--text3)">${fmt(a.previous_balance)} →</span> `;
+    }
+    return `
+      <tr class="${cls}">
+        <td>${esc(a.name)}</td>
+        <td style="color:var(--text3)">${esc(a.account_type || '—')}</td>
+        <td style="text-align:right;font-family:var(--mono)">${prev}${fmt(a.opening_balance)}</td>
+        <td style="font-size:10px;color:var(--text3)">${actionLabel}</td>
+      </tr>
+    `;
+  }).join('');
+  $('imp-preview').innerHTML = `
+    <table class="ob" style="min-width:600px">
+      <thead><tr><th>Account</th><th>Type</th><th style="text-align:right">Opening Balance</th><th>Action</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+async function commitImport() {
+  if (!STATE.lastPreview) { alert('Preview first'); return; }
+  if (!confirm(`Apply import to ${STATE.location}? This will create or update ${STATE.lastPreview.counts.create + STATE.lastPreview.counts.update} accounts.`)) return;
+  const file = $('imp-file').files[0];
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('location', STATE.location);
+  fd.append('as_of_date', $('imp-date').value);
+  fd.append('include_equity', $('imp-equity').checked ? '1' : '0');
+  fd.append('dry_run', '0');
+  $('imp-commit').disabled = true;
+  $('imp-commit').textContent = 'Applying…';
+  try {
+    const r = await fetch('/api/gl-accounts/import-balance-sheet', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (!r.ok) {
+      alert('Import failed: ' + (d.error || r.status));
+      $('imp-commit').disabled = false;
+      $('imp-commit').textContent = 'Apply Import';
+      return;
+    }
+    closeImportModal();
+    await loadAll();
+    alert(`Imported: ${d.counts.create} created, ${d.counts.update} updated, ${d.counts.skip} skipped.`);
+  } catch (e) {
+    alert('Failed: ' + e);
+  } finally {
+    $('imp-commit').disabled = false;
+    $('imp-commit').textContent = 'Apply Import';
+  }
+}
+
+function closeImportModal() {
+  $('modal-import').classList.remove('open');
+  STATE.lastPreview = null;
+}
+
+window.openImportModal = openImportModal;
+window.previewImport = previewImport;
+window.commitImport = commitImport;
+window.closeImportModal = closeImportModal;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btn-import-bs');
+  if (btn) btn.addEventListener('click', openImportModal);
+});
+// Also wire if DOM already parsed (script runs at end of body)
+{
+  const btn = document.getElementById('btn-import-bs');
+  if (btn) btn.addEventListener('click', openImportModal);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Boot

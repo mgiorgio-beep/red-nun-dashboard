@@ -1500,6 +1500,356 @@ def sync_deposits(account_id):
     })
 
 
+# ─── BALANCE SHEET IMPORT ────────────────────────────────────────────────────
+#
+# Import a QBO-style balance sheet CSV (the format produced by QBO's "Export
+# to CSV" on the Balance Sheet report) into gl_accounts.opening_balance for
+# a given location. Used to seed the books with carry-forward amounts when
+# transitioning off QBO.
+#
+# Skip rules:
+#   * Bank Accounts section — bank accounts are tracked separately in the
+#     bank_accounts table; Cape Cod Five 5975/2757 already exist there. The
+#     importer surfaces these for the user to copy over manually.
+#   * Accounts Payable — computed live from open invoices; storing a static
+#     opening would double-count.
+# Everything else (Accounts Receivable, Other Current Asset, Fixed Asset,
+# Other Asset, Credit Card, Other Current Liability, Long Term Liability,
+# Equity) gets upserted into gl_accounts at the named location with the
+# parsed amount as opening_balance and the user-supplied as_of_date.
+
+# Section header (in the BS) → gl_accounts.account_type value. Anything
+# outside this map is treated as a sub-grouping (e.g. "Daily Sales" inside
+# "Other Current Assets") — the leaf accounts inherit the most-recent
+# recognized section's type, with the sub-grouping name prefixed onto the
+# leaf name (QBO "Parent:Child" convention) for disambiguation.
+_BS_SECTION_TO_TYPE = {
+    "Bank Accounts": "Bank",
+    "Accounts Receivable": "Accounts Receivable",
+    "Other Current Assets": "Other Current Asset",
+    "Fixed Assets": "Fixed Asset",
+    "Other Assets": "Other Asset",
+    "Accounts Payable": "Accounts Payable",
+    "Credit Cards": "Credit Card",
+    "Other Current Liabilities": "Other Current Liability",
+    "Long-term Liabilities": "Long Term Liability",
+    "Equity": "Equity",
+}
+
+# Super-headers we always skip (they're aggregator labels, not GL accounts).
+_BS_SKIP_HEADERS = {
+    "Balance Sheet", "Total", "Assets", "Current Assets", "Liabilities",
+    "Liabilities and Equity", "Current Liabilities",
+}
+
+
+def _parse_bs_amount(s: str) -> float | None:
+    """Parse a QBO BS amount column. Strips $, commas, and quotes; returns
+    None when the cell is empty or non-numeric."""
+    if not s:
+        return None
+    s = s.replace('"', '').replace('$', '').replace(',', '').strip()
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def parse_balance_sheet_csv(text: str) -> list[dict]:
+    """Parse a QBO Balance Sheet CSV export into a list of dicts.
+
+    Output dicts:
+        {
+            "name":            "Sales Tax Payable",         # Account name (QBO Parent:Child if nested)
+            "account_type":    "Other Current Liability",   # Mapped from the parent section
+            "section":         "Other Current Liabilities", # The raw section header from the BS
+            "opening_balance": 8365.75,                     # Signed float
+            "is_bank":         False,                       # Bank Accounts section?
+            "is_ap":           False,                       # Accounts Payable section?
+        }
+    """
+    import csv as _csv
+    import io
+
+    reader = list(_csv.reader(io.StringIO(text)))
+
+    # Pass 1: find every name that appears as "Total for X" — those are
+    # subsection names (or parent-with-children rows). We use this to decide
+    # whether a value-less line should set the subsection context vs. just be
+    # a stray header to skip.
+    subsection_names: set[str] = set()
+    for row in reader:
+        if not row:
+            continue
+        first = row[0].strip()
+        if first.startswith("Total for "):
+            subsection_names.add(first[len("Total for "):].strip())
+
+    # Pass 2: walk the rows tracking the most-recent recognized section AND
+    # the most-recent (possibly nested) subsection.
+    accounts: list[dict] = []
+    current_section: str | None = None     # The recognized section header (drives account_type)
+    current_subsection: str | None = None  # The most recent nested subsection (drives name prefix)
+
+    for row in reader:
+        if not row:
+            continue
+        # Pad to at least 2 columns
+        while len(row) < 2:
+            row.append("")
+        name = row[0].strip()
+        amt_raw = row[1].strip()
+
+        # Skip blank lines, super-headers, and Total lines
+        if not name:
+            continue
+        if name in _BS_SKIP_HEADERS:
+            continue
+        if name.startswith("Total for "):
+            tot_name = name[len("Total for "):].strip()
+            # If the total closes our current subsection, reset it
+            if current_subsection and tot_name == current_subsection:
+                current_subsection = None
+            continue
+        # Footer ("Accrual Basis ...") and date lines
+        if name.lower().startswith("accrual basis") or name.lower().startswith("cash basis"):
+            continue
+
+        amt = _parse_bs_amount(amt_raw)
+
+        # Section header (recognized): switches context, no value
+        if name in _BS_SECTION_TO_TYPE and amt is None:
+            current_section = name
+            current_subsection = None
+            continue
+
+        # If no value and the name appears later as "Total for X", it's a
+        # subsection header (e.g. "Daily Sales", "George Fortuna").
+        if amt is None and name in subsection_names:
+            current_subsection = name
+            continue
+
+        # Skip any other no-value lines (defensive)
+        if amt is None:
+            continue
+
+        # We have a leaf account with a value.
+        # Special case: the line itself is a parent that has children
+        # (e.g. "Michael Giorgio,11000.00" followed by "Dividend,...").
+        # Emit the parent row AND set it as the current_subsection so its
+        # children get prefixed.
+        is_parent_with_value = (name in subsection_names)
+
+        # Build the qualified account name. Prefix only when the most-recent
+        # subsection is NOT itself a recognized section_to_type key, AND the
+        # current leaf isn't the parent itself.
+        if current_subsection and current_subsection not in _BS_SECTION_TO_TYPE \
+                and not is_parent_with_value:
+            qualified = f"{current_subsection}:{name}"
+        else:
+            qualified = name
+
+        # Account type comes from the most-recent recognized section.
+        account_type = _BS_SECTION_TO_TYPE.get(current_section or "", None)
+
+        accounts.append({
+            "name": qualified,
+            "account_type": account_type,
+            "section": current_section,
+            "opening_balance": amt,
+            "is_bank": current_section == "Bank Accounts",
+            "is_ap": current_section == "Accounts Payable",
+        })
+
+        # If this line was a parent-with-value, switch context to it for
+        # subsequent children.
+        if is_parent_with_value:
+            current_subsection = name
+
+    return accounts
+
+
+@register_bp.route("/api/gl-accounts/import-balance-sheet", methods=["POST"])
+@admin_required
+def import_balance_sheet():
+    """Import a QBO Balance Sheet CSV into gl_accounts.opening_balance.
+
+    Multipart form fields:
+        file:           the CSV (required)
+        location:       chatham | dennis (required)
+        as_of_date:     YYYY-MM-DD (required) — written to opening_date
+        include_equity: "1" | "0" (default "1")
+        dry_run:        "1" | "0" (default "1") — when 1, returns preview without writing
+
+    Response:
+        {
+            "as_of_date": "2026-01-01",
+            "location": "chatham",
+            "accounts": [
+                {"name": "Sales Tax Payable", "account_type": "Other Current Liability",
+                 "opening_balance": 8365.75, "action": "create"|"update"|"skip",
+                 "skip_reason": "ap"|"bank"|"equity_excluded"|None,
+                 "existing_id": 123 or null,
+                 "previous_balance": 0.0 or null}
+            ],
+            "bank_account_match": {
+                "bank_account_id": 1, "name": "...", "last4": "5975",
+                "previous_opening_balance": 0.0, "new_opening_balance": 51702.53
+            } or null,
+            "applied": false  // true if dry_run=0
+        }
+    """
+    location = (request.form.get("location") or "").strip().lower()
+    if location not in ("chatham", "dennis"):
+        return jsonify({"error": "location must be 'chatham' or 'dennis'"}), 400
+    as_of_date = (request.form.get("as_of_date") or "").strip()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of_date):
+        return jsonify({"error": "as_of_date must be YYYY-MM-DD"}), 400
+    include_equity = request.form.get("include_equity", "1") == "1"
+    dry_run = request.form.get("dry_run", "1") == "1"
+
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "file is required"}), 400
+    try:
+        text = f.read().decode("utf-8-sig", errors="replace")
+    except Exception as e:
+        return jsonify({"error": f"could not decode CSV: {e}"}), 400
+
+    parsed = parse_balance_sheet_csv(text)
+    if not parsed:
+        return jsonify({"error": "no accounts parsed from CSV — is this a QBO Balance Sheet export?"}), 400
+
+    conn = get_connection()
+
+    # Look up existing GL accounts for this location once.
+    existing = conn.execute(
+        "SELECT id, name, account_type, opening_balance FROM gl_accounts "
+        "WHERE location = ? OR location IS NULL",
+        (location,),
+    ).fetchall()
+    by_name = {(r["name"] or "").strip().lower(): dict(r) for r in existing}
+
+    out_accounts = []
+    bank_match = None
+
+    for a in parsed:
+        name = a["name"]
+        amt = a["opening_balance"]
+        action = "create"
+        skip_reason = None
+        existing_id = None
+        previous_balance = None
+
+        # Bank Accounts section: don't write to gl_accounts. If the name
+        # matches a known bank_accounts row by last4, surface it for the
+        # user to apply (separate write below). Cape Cod Five (5975) /
+        # (2757) get matched here.
+        if a["is_bank"]:
+            skip_reason = "bank"
+            action = "skip"
+            # Attempt to match by last4 in name
+            m = re.search(r"\((\d{4})\)", name)
+            if m:
+                last4 = m.group(1)
+                ba = conn.execute(
+                    "SELECT id, name, account_last4, opening_balance, opening_date "
+                    "FROM bank_accounts WHERE account_last4 = ? AND "
+                    "(location = ? OR location IS NULL)",
+                    (last4, location),
+                ).fetchone()
+                if ba:
+                    bank_match = {
+                        "bank_account_id": ba["id"],
+                        "name": ba["name"],
+                        "last4": ba["account_last4"],
+                        "previous_opening_balance": ba["opening_balance"] or 0.0,
+                        "previous_opening_date": ba["opening_date"],
+                        "new_opening_balance": amt,
+                        "new_opening_date": as_of_date,
+                    }
+        elif a["is_ap"]:
+            skip_reason = "ap"
+            action = "skip"
+        elif a["account_type"] == "Equity" and not include_equity:
+            skip_reason = "equity_excluded"
+            action = "skip"
+        elif a["account_type"] is None:
+            skip_reason = "unknown_section"
+            action = "skip"
+        else:
+            # Match by lowercased name within location (or unscoped).
+            existing_row = by_name.get(name.lower())
+            if existing_row:
+                action = "update"
+                existing_id = existing_row["id"]
+                previous_balance = existing_row["opening_balance"] or 0.0
+
+        out_accounts.append({
+            "name": name,
+            "account_type": a["account_type"],
+            "section": a["section"],
+            "opening_balance": amt,
+            "action": action,
+            "skip_reason": skip_reason,
+            "existing_id": existing_id,
+            "previous_balance": previous_balance,
+        })
+
+    applied = False
+    if not dry_run:
+        # Apply bank_accounts update
+        if bank_match:
+            conn.execute(
+                "UPDATE bank_accounts SET opening_balance = ?, opening_date = ? "
+                "WHERE id = ?",
+                (bank_match["new_opening_balance"], as_of_date,
+                 bank_match["bank_account_id"]),
+            )
+        # Apply gl_accounts upserts
+        for row in out_accounts:
+            if row["action"] == "skip":
+                continue
+            if row["action"] == "update":
+                conn.execute(
+                    "UPDATE gl_accounts SET opening_balance = ?, opening_date = ? "
+                    "WHERE id = ?",
+                    (row["opening_balance"], as_of_date, row["existing_id"]),
+                )
+            else:  # create
+                conn.execute(
+                    """INSERT INTO gl_accounts
+                       (name, account_type, location, active,
+                        opening_balance, opening_date)
+                       VALUES (?, ?, ?, 1, ?, ?)""",
+                    (row["name"], row["account_type"], location,
+                     row["opening_balance"], as_of_date),
+                )
+        conn.commit()
+        applied = True
+
+    conn.close()
+
+    # Summary counts for quick UI display
+    counts = {
+        "create": sum(1 for r in out_accounts if r["action"] == "create"),
+        "update": sum(1 for r in out_accounts if r["action"] == "update"),
+        "skip": sum(1 for r in out_accounts if r["action"] == "skip"),
+    }
+
+    return jsonify({
+        "as_of_date": as_of_date,
+        "location": location,
+        "include_equity": include_equity,
+        "applied": applied,
+        "counts": counts,
+        "accounts": out_accounts,
+        "bank_account_match": bank_match,
+    })
+
+
 # ─── PAGE ROUTE ──────────────────────────────────────────────────────────────
 
 # The HTML page is served by web/server.py (for consistency with other pages
