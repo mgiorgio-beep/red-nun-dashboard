@@ -507,16 +507,18 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
             "label": f"{r['vendor']} ({r['payment_method'] or 'check'})",
         })
 
-    # Payroll
+    # Payroll — pay_date is on payroll_runs (parent), joined via payroll_run_id.
     try:
         for r in conn.execute(
-            """SELECT id, employee_name, COALESCE(pay_date, pay_period_end) AS date,
-                      net_pay AS amount, check_number
-               FROM payroll_checks
-               WHERE COALESCE(pay_date, pay_period_end) >= ?
-                 AND COALESCE(pay_date, pay_period_end) <= ?
-                 AND (voided IS NULL OR voided = 0)
-                 AND bank_account_id = ?""",
+            """SELECT pc.id, pc.employee_name, pc.check_number,
+                      COALESCE(pr.pay_date, pc.pay_period_end) AS date,
+                      pc.net_pay AS amount
+               FROM payroll_checks pc
+               LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id
+               WHERE COALESCE(pr.pay_date, pc.pay_period_end) >= ?
+                 AND COALESCE(pr.pay_date, pc.pay_period_end) <= ?
+                 AND (pc.voided IS NULL OR pc.voided = 0)
+                 AND pc.bank_account_id = ?""",
             (start, end, account_id),
         ).fetchall():
             rows.append({
@@ -528,8 +530,8 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
                 "ref": str(r["check_number"]) if r["check_number"] else "",
                 "label": f"Payroll: {r['employee_name']}",
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"payroll match query failed: {e}")
 
     # Deposits
     for r in conn.execute(

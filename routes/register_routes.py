@@ -241,6 +241,13 @@ def init_register_tables():
     except Exception as e:
         logger.warning(f"GL account seed skipped: {e}")
 
+    # ── Seed sensible default GL rules so freshly imported statement rows
+    # auto-code without the user having to manually code one of each kind.
+    try:
+        seed_default_gl_rules()
+    except Exception as e:
+        logger.warning(f"Default GL rules seed skipped: {e}")
+
 
 # ─── GL ACCOUNT SEED ─────────────────────────────────────────────────────────
 
@@ -352,6 +359,204 @@ def _seed_one_csv(conn, path: Path, location: str) -> int:
         logger.info(f"Seeded {inserted} GL accounts for {location} from {path}")
     except Exception as e:
         logger.warning(f"Failed to seed GL accounts from {path}: {e}")
+    return inserted
+
+
+# ─── INVOICE CATEGORY → GL ACCOUNT MAPPING ───────────────────────────────────
+
+# Maps the category_type values produced by the OCR pipeline (see
+# integrations/invoices/processor.py) to the GL account NAME. Looked up by
+# name within the row's location at runtime.
+_CATEGORY_GL_MAP = {
+    "FOOD":             "Food Costs -F&B",
+    "LIQUOR":           "Liquor COGS",
+    "BEER":             "Beer COGS",
+    "WINE":             "Wine COGS",
+    "NA_BEVERAGES":     "NA Beverage COGS",
+    "NON_COGS":         "Other Business Expenses",
+    "TOGO_SUPPLIES":    "TakeOut Supplies",
+    "DR_SUPPLIES":      "Dining Room Supplies",
+    "KITCHEN_SUPPLIES": "Kitchen Supplies",
+}
+
+
+def _compute_bp_category_breakdown(conn, payment_ids: list) -> dict:
+    """For a batch of vendor_payments.id values, return the per-payment
+    breakdown of line-item totals by category_type.
+
+    Returns: { payment_id: { category_type: total_amount } }
+    """
+    if not payment_ids:
+        return {}
+    ph = ",".join("?" for _ in payment_ids)
+    rows = conn.execute(
+        f"""
+        SELECT vp.id AS payment_id,
+               COALESCE(NULLIF(TRIM(sii.category_type), ''), 'UNKNOWN') AS cat,
+               SUM(COALESCE(sii.total_price, 0)) AS amt
+        FROM vendor_payments vp
+        JOIN ap_payment_invoices api ON api.payment_id = vp.ap_payment_id
+        JOIN scanned_invoice_items sii ON sii.invoice_id = api.invoice_id
+        WHERE vp.id IN ({ph})
+        GROUP BY vp.id, cat
+        """,
+        list(payment_ids),
+    ).fetchall()
+    out: dict = {}
+    for r in rows:
+        out.setdefault(r["payment_id"], {})[r["cat"]] = float(r["amt"] or 0)
+    return out
+
+
+def _resolve_gl_for_category(conn, category: str, location: str | None) -> int | None:
+    """Look up a gl_accounts.id by category_type, scoped to location."""
+    name = _CATEGORY_GL_MAP.get((category or "").upper())
+    if not name:
+        return None
+    row = conn.execute(
+        "SELECT id FROM gl_accounts "
+        "WHERE name = ? AND active = 1 AND (location = ? OR location IS NULL) "
+        "ORDER BY (location = ?) DESC LIMIT 1",
+        (name, location, location),
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def _apply_invoice_category_coding(conn, bp_rows_with_loc: list) -> int:
+    """Lazy backfill: for each bill_pay row in the result set that has no
+    gl_account_id yet, look at its underlying invoice line items. If they're
+    all one category, persist the matching GL account id. If they're mixed
+    (Southern Glazers, Martignetti, etc.), leave NULL — the breakdown is
+    still attached to the row for the UI to show.
+
+    Args:
+        bp_rows_with_loc: list of (payment_id, location) tuples — only rows
+            currently visible in the register, so we don't pay for the whole
+            table on every page load.
+
+    Returns: number of rows whose gl_account_id was newly assigned.
+    """
+    if not bp_rows_with_loc:
+        return 0
+    payment_ids = [pid for (pid, _loc) in bp_rows_with_loc]
+    breakdowns = _compute_bp_category_breakdown(conn, payment_ids)
+    loc_by_pid = {pid: loc for (pid, loc) in bp_rows_with_loc}
+
+    assigned = 0
+    for pid, cats in breakdowns.items():
+        if not cats:
+            continue
+        # Skip if already assigned (caller should already filter, but be safe)
+        existing = conn.execute(
+            "SELECT gl_account_id FROM vendor_payments WHERE id = ?", (pid,)
+        ).fetchone()
+        if existing and existing["gl_account_id"]:
+            continue
+
+        # Single category? Auto-assign.
+        meaningful = {k: v for k, v in cats.items() if k != "UNKNOWN" and v > 0}
+        if len(meaningful) == 1:
+            cat = next(iter(meaningful))
+            gl_id = _resolve_gl_for_category(conn, cat, loc_by_pid.get(pid))
+            if gl_id:
+                conn.execute(
+                    "UPDATE vendor_payments SET gl_account_id = ? WHERE id = ?",
+                    (gl_id, pid),
+                )
+                assigned += 1
+    if assigned:
+        conn.commit()
+    return assigned
+
+
+# ─── DEFAULT GL RULES ────────────────────────────────────────────────────────
+
+# Map of (rule_pattern → preferred GL account name). The seeder looks up the
+# account by name within each location and creates a rule pointing to it. If
+# no account by that name exists in a location, that rule is skipped (no harm).
+# These cover the most common bank-statement patterns we see.
+_DEFAULT_RULES = [
+    # Sales / deposits
+    ("TOAST",       "Credit Card Sales"),     # CC settlement deposits
+    ("DEPOSIT",     "Cash Sales"),            # plain cash deposits
+    ("DOORDASH",    "Doordash"),              # Doordash deposits
+    # Sales tax
+    ("DAVO",        "Sales Tax Payable"),
+    # Payroll vendor
+    ("SHIFTS",      "Payroll Expenses"),      # 7shifts payroll
+    # Tip payouts
+    ("VENMO",       "Tip Wages"),
+    ("PAYPAL UBER", "Travel"),
+    # Software / subscriptions
+    ("MARGINEDGE",  "Office Supplies & Software"),
+    ("COMCAST",     "Cable/Phone/Internet"),
+    ("XFINITY",     "Cable/Phone/Internet"),
+    ("EVERSOURCE",  "Electric"),
+    ("NGRID",       "Gas"),
+    ("SPRAGUE",     "Gas"),
+    ("NUCO",        "Bar Consumables"),       # NuCO2 carbonation
+    # Insurance
+    ("NEXT INSUR",  "Liability Insurance"),
+    ("QUINCYMUTUAL", "Property Insurance"),
+    # Linens / uniforms / cleaning
+    ("CINTAS",      "Linens"),
+    ("UNIFIRST",    "Linens"),
+    ("COZZINI",     "Knife Sharpening"),      # Cozzini Bros
+    # Loans / fees
+    ("EIDL",        "EIDL Loan"),
+    ("INTUIT",      "Bookkeeping"),           # QuickBooks subscription
+    ("APPLECARD",   "Owner's Pay & Personal Expenses"),  # Mike's personal AmEx — adjust if needed
+    # Vendors that are typically food (so single-category invoices get coded)
+    ("US FOODSERVICE", "Food Costs -F&B"),
+    ("PERFORMANCEBOS", "Food Costs -F&B"),
+    ("KNIFE",       "Food Costs -F&B"),       # L. Knife & Son seafood
+    ("COLONIAL",    "Food Costs -F&B"),
+    # Beverage vendors
+    ("SOUTHERN GLAZERS", "Alcohol Costs"),    # MIXED — overrides via invoice line items later
+    ("MARTIGNETTI", "Liquor COGS"),
+    ("HORIZON",     "Alcohol Costs"),         # Southern Glazers DBA
+]
+
+
+def seed_default_gl_rules() -> int:
+    """For each location, create gl_account_rules entries for the patterns in
+    _DEFAULT_RULES that don't already exist. Idempotent — safe to run on
+    every startup; only inserts missing rules.
+    """
+    inserted = 0
+    conn = get_connection()
+    try:
+        for loc in ("chatham", "dennis"):
+            for pattern, gl_name in _DEFAULT_RULES:
+                exists = conn.execute(
+                    "SELECT 1 FROM gl_account_rules WHERE location = ? AND pattern = ?",
+                    (loc, pattern),
+                ).fetchone()
+                if exists:
+                    continue
+                # Find the GL account by name in this location.
+                gl = conn.execute(
+                    "SELECT id FROM gl_accounts "
+                    "WHERE (location = ? OR location IS NULL) AND name = ? AND active = 1 "
+                    "ORDER BY (location = ?) DESC LIMIT 1",
+                    (loc, gl_name, loc),
+                ).fetchone()
+                if not gl:
+                    continue
+                try:
+                    conn.execute(
+                        """INSERT INTO gl_account_rules (location, pattern, gl_account_id, created_by)
+                           VALUES (?, ?, ?, 'default-seed')""",
+                        (loc, pattern, gl["id"]),
+                    )
+                    inserted += 1
+                except Exception as e:
+                    logger.warning(f"Skip default rule {pattern!r} ({loc}): {e}")
+        conn.commit()
+        if inserted:
+            logger.info(f"Seeded {inserted} default GL coding rules")
+    finally:
+        conn.close()
     return inserted
 
 
@@ -903,16 +1108,22 @@ def get_register(account_id):
         rows.append(_normalize_row("bill_pay", r, r["bank_account_id"] or (account_id if is_default_account else None)))
 
     # ── payroll ──
+    # `payroll_checks` has no `pay_date` column itself — the actual pay date
+    # lives on the parent payroll_runs row, joined via payroll_run_id. Falls
+    # back to pay_period_end for legacy rows without a payroll_run_id.
     pr_query = (
-        "SELECT id, employee_name, check_number, net_pay, gross_pay, location, "
-        "payroll_run_id, pay_period_start, pay_period_end, payment_method, status, "
-        "voided, bank_account_id, cleared, cleared_date, gl_account_id, "
-        "COALESCE(pay_date, pay_period_end) AS pay_date "
-        "FROM payroll_checks WHERE "
-        "COALESCE(pay_date, pay_period_end) >= ? AND "
-        "COALESCE(pay_date, pay_period_end) <= ? AND "
-        "(voided IS NULL OR voided = 0) AND "
-        "bank_account_id = ?"
+        "SELECT pc.id, pc.employee_name, pc.check_number, pc.net_pay, pc.gross_pay, "
+        "       pc.location, pc.payroll_run_id, pc.pay_period_start, pc.pay_period_end, "
+        "       pc.payment_method, pc.status, pc.voided, pc.bank_account_id, "
+        "       pc.cleared, pc.cleared_date, pc.gl_account_id, "
+        "       COALESCE(pr.pay_date, pc.pay_period_end) AS pay_date "
+        "FROM payroll_checks pc "
+        "LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
+        "WHERE "
+        "COALESCE(pr.pay_date, pc.pay_period_end) >= ? AND "
+        "COALESCE(pr.pay_date, pc.pay_period_end) <= ? AND "
+        "(pc.voided IS NULL OR pc.voided = 0) AND "
+        "pc.bank_account_id = ?"
     )
     try:
         for r in conn.execute(pr_query, (start, end, account_id)).fetchall():
@@ -939,6 +1150,46 @@ def get_register(account_id):
     )
     for r in conn.execute(man_query, (account_id, start, end)).fetchall():
         rows.append(_normalize_row("manual", r, account_id))
+
+    # Lazy backfill: for any bill_pay rows in the visible window that don't
+    # have a gl_account_id yet, look at their underlying invoice line items
+    # and auto-assign the GL account if they're a single category. Persists
+    # to vendor_payments. Mixed-category rows are left NULL on purpose — we
+    # still want to show the breakdown to the user.
+    bp_rows_to_backfill = [
+        (r["source_id"], account["location"])
+        for r in rows
+        if r.get("source") == "bill_pay" and not r.get("gl_account_id")
+    ]
+    if bp_rows_to_backfill:
+        try:
+            _apply_invoice_category_coding(conn, bp_rows_to_backfill)
+            # Re-load gl_account_id on those rows after backfill.
+            assigned = {
+                row["id"]: row["gl_account_id"]
+                for row in conn.execute(
+                    f"SELECT id, gl_account_id FROM vendor_payments WHERE id IN ("
+                    + ",".join("?" for _ in bp_rows_to_backfill) + ")",
+                    [pid for (pid, _) in bp_rows_to_backfill],
+                ).fetchall()
+            }
+            for r in rows:
+                if r.get("source") == "bill_pay" and not r.get("gl_account_id"):
+                    r["gl_account_id"] = assigned.get(r.get("source_id"))
+        except Exception as e:
+            logger.warning(f"Invoice-category GL backfill failed: {e}")
+
+    # Compute breakdown for ALL bill_pay rows (so the UI can show "Mixed: …"
+    # tooltips even when gl_account_id is set).
+    bp_payment_ids = [r["source_id"] for r in rows if r.get("source") == "bill_pay"]
+    breakdown_by_pid = _compute_bp_category_breakdown(conn, bp_payment_ids) if bp_payment_ids else {}
+    for r in rows:
+        if r.get("source") == "bill_pay":
+            cats = breakdown_by_pid.get(r["source_id"]) or {}
+            # Drop UNKNOWN if there's other meaningful data
+            meaningful = {k: round(v, 2) for k, v in cats.items() if v > 0}
+            r["category_breakdown"] = meaningful if meaningful else None
+            r["category_mixed"] = sum(1 for v in meaningful.values() if v) > 1
 
     # Resolve GL account names in one shot (avoid N+1 lookups)
     needed = {r.get("gl_account_id") for r in rows if r.get("gl_account_id")}

@@ -120,6 +120,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .acct-select.unassigned { border-color: var(--amber); color: var(--amber); }
 .acct-select.assigned   { color: var(--text); }
 .acct-select.saving { opacity: 0.5; }
+.cat-breakdown {
+  font-size: 10px; color: var(--amber); margin-top: 3px;
+  font-family: var(--mono); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 100%;
+}
 
 .type-pill {
   display: inline-block; padding: 2px 8px; border-radius: 5px;
@@ -518,12 +523,30 @@ function renderAcctSelect(r) {
     optsHtml += `</optgroup>`;
   }
 
+  // Multi-category invoice? Show a small "Mixed" badge under the dropdown
+  // with the per-category breakdown so SG-style splits are visible at a
+  // glance. The data comes from the underlying invoice line items.
+  let breakdownHtml = '';
+  if (r.category_breakdown && r.category_mixed) {
+    const labels = {
+      FOOD: 'Food', LIQUOR: 'Liquor', BEER: 'Beer', WINE: 'Wine',
+      NA_BEVERAGES: 'NA Bev', NON_COGS: 'Non-COGS',
+      TOGO_SUPPLIES: 'TOGO', DR_SUPPLIES: 'DR Supplies', KITCHEN_SUPPLIES: 'Kitchen',
+      UNKNOWN: 'Unknown',
+    };
+    const parts = Object.entries(r.category_breakdown)
+      .sort((a,b) => b[1] - a[1])
+      .map(([k,v]) => `${esc(labels[k] || k)} $${v.toFixed(2)}`);
+    breakdownHtml = `<div class="cat-breakdown" title="Per-category invoice line item totals">⚠ Mixed: ${parts.join(' · ')}</div>`;
+  }
+
   return `
     <select class="${cls.join(' ')}"
             data-source="${esc(r.source)}" data-id="${r.source_id}"
             onchange="setGlAccount(this)" onclick="event.stopPropagation()">
       ${optsHtml}
     </select>
+    ${breakdownHtml}
   `;
 }
 
