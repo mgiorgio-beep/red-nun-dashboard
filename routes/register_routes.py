@@ -249,22 +249,28 @@ def init_register_tables():
 #   data/<loc>_coa.csv   →  /opt/red-nun-dashboard/data/<loc>_coa.csv
 #   /home/rednun/<loc>_coa.csv  (legacy location)
 def _coa_seed_paths_for(location: str) -> list[Path]:
-    return [
+    paths = [
         Path(f"data/{location}_coa.csv"),
         Path(f"/opt/red-nun-dashboard/data/{location}_coa.csv"),
         Path(f"/home/rednun/{location}_coa.csv"),
         Path.home() / f"{location}_coa.csv",
     ]
+    # Only include real files (skip blank/missing entries safely).
+    return [p for p in paths if p and str(p) and p.is_file()]
 
 
 def _coa_seed_paths_unscoped() -> list[Path]:
     """Legacy: a single coa.csv used before per-location was a thing. Loads
     as 'dennis' since that's where the existing dennis_coa.csv came from."""
-    return [
-        Path(os.environ.get("COA_CSV_PATH") or ""),
-        Path("data/coa.csv"),
-        Path("/opt/red-nun-dashboard/data/coa.csv"),
-    ]
+    paths = []
+    env_path = os.environ.get("COA_CSV_PATH")
+    if env_path:
+        paths.append(Path(env_path))
+    paths.append(Path("data/coa.csv"))
+    paths.append(Path("/opt/red-nun-dashboard/data/coa.csv"))
+    # Reject anything that's not a regular file (e.g. an empty string that
+    # resolves to the current directory).
+    return [p for p in paths if p and str(p) and p.is_file()]
 
 
 def seed_gl_accounts_if_empty() -> int:
@@ -290,21 +296,24 @@ def seed_gl_accounts_if_empty() -> int:
         if n > 0:
             conn.close()
             continue
-        path = next((p for p in _coa_seed_paths_for(loc) if p.exists()), None)
-        # Legacy: if a location-specific CSV is missing, fall back to:
-        #   1. The unscoped data/coa.csv  (committed seed)
-        #   2. /home/rednun/dennis_coa.csv (Beelink legacy file — same content
-        #      as the Dennis COA, used for both locations until a separate
-        #      chatham_coa.csv is provided).
+        # Find the first real file in this location's search path.
+        loc_paths = _coa_seed_paths_for(loc)
+        path = loc_paths[0] if loc_paths else None
+        # Fallback chain when location-specific CSV is missing:
+        #   1. unscoped data/coa.csv (committed)
+        #   2. dennis_coa.csv (Beelink legacy — same content used for both
+        #      locations until a separate chatham_coa.csv is provided).
         if not path:
-            path = next((p for p in _coa_seed_paths_unscoped() if p and p.exists()), None)
+            unscoped = _coa_seed_paths_unscoped()
+            path = unscoped[0] if unscoped else None
         if not path:
-            path = next((p for p in _coa_seed_paths_for("dennis") if p.exists()), None)
+            dennis_paths = _coa_seed_paths_for("dennis")
+            path = dennis_paths[0] if dennis_paths else None
         if not path:
             conn.close()
             logger.info(
-                "No COA CSV for %s; expected one of: %s",
-                loc, ", ".join(str(p) for p in _coa_seed_paths_for(loc)),
+                "No COA CSV found for %s. Drop a CSV at data/%s_coa.csv "
+                "or data/coa.csv to seed.", loc, loc,
             )
             continue
         inserted_total += _seed_one_csv(conn, path, loc)
