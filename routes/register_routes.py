@@ -1142,6 +1142,13 @@ def get_register(account_id):
         "COALESCE(pr.pay_date, pc.pay_period_end) >= ? AND "
         "COALESCE(pr.pay_date, pc.pay_period_end) <= ? AND "
         "(pc.voided IS NULL OR pc.voided = 0) AND "
+        # Exclude Direct Deposit rows from the bank register. They're rolled
+        # into the lump-sum 7shifts ACH (which is imported from the bank
+        # statement as a manual_bank_entry) — showing them individually would
+        # double-count. Manual paper checks DO appear here because each one
+        # hits the bank as the employee cashes it. DD rows still exist in
+        # payroll_checks for HR / payroll-reporting purposes.
+        "(pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit') AND "
         "pc.bank_account_id = ?"
     )
     try:

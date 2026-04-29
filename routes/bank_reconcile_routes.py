@@ -508,6 +508,10 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
         })
 
     # Payroll — pay_date is on payroll_runs (parent), joined via payroll_run_id.
+    # Direct Deposit checks excluded: they're rolled into the lump-sum 7shifts
+    # ACH (PCR 7shifts on the bank statement) and never appear individually,
+    # so the matcher would never find a match for them. Manual paper checks DO
+    # appear individually on the statement and are matched here.
     try:
         for r in conn.execute(
             """SELECT pc.id, pc.employee_name, pc.check_number,
@@ -518,6 +522,7 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
                WHERE COALESCE(pr.pay_date, pc.pay_period_end) >= ?
                  AND COALESCE(pr.pay_date, pc.pay_period_end) <= ?
                  AND (pc.voided IS NULL OR pc.voided = 0)
+                 AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit')
                  AND pc.bank_account_id = ?""",
             (start, end, account_id),
         ).fetchall():
