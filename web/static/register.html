@@ -89,6 +89,15 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   background: var(--bg-elevated); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 1;
 }
+.reg-table thead th.sortable { cursor: pointer; user-select: none; }
+.reg-table thead th.sortable:hover { color: var(--text2); }
+.reg-table thead th.sortable .sort-arrow {
+  display: inline-block; margin-left: 4px; font-size: 9px; opacity: 0.3;
+}
+.reg-table thead th.sort-active { color: var(--blue); }
+.reg-table thead th.sort-active .sort-arrow { opacity: 1; }
+.reg-table thead th.col-amt.sortable, .reg-table thead th.col-bal.sortable, .reg-table thead th.col-chk.sortable { text-align: right; }
+.reg-table thead th.col-chk.sortable { text-align: center; }
 .reg-table tbody td {
   padding: 10px 12px; border-bottom: 1px solid rgba(30,41,59,0.6);
   vertical-align: middle;
@@ -255,16 +264,16 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <table class="reg-table" id="reg-table">
         <thead>
           <tr>
-            <th class="col-date">Date</th>
-            <th class="col-type">Type</th>
-            <th class="col-ref">Ref</th>
-            <th>Payee</th>
+            <th class="col-date sortable" data-sort="date">Date<span class="sort-arrow"></span></th>
+            <th class="col-type sortable" data-sort="type">Type<span class="sort-arrow"></span></th>
+            <th class="col-ref sortable" data-sort="ref">Ref<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="payee">Payee<span class="sort-arrow"></span></th>
             <th class="col-acct">GL Account</th>
-            <th class="col-memo">Memo</th>
-            <th class="col-amt">Payment</th>
-            <th class="col-amt">Deposit</th>
-            <th class="col-bal">Balance</th>
-            <th class="col-chk">✓</th>
+            <th class="col-memo sortable" data-sort="memo">Memo<span class="sort-arrow"></span></th>
+            <th class="col-amt sortable" data-sort="outflow">Payment<span class="sort-arrow"></span></th>
+            <th class="col-amt sortable" data-sort="inflow">Deposit<span class="sort-arrow"></span></th>
+            <th class="col-bal sortable" data-sort="balance">Balance<span class="sort-arrow"></span></th>
+            <th class="col-chk sortable" data-sort="cleared">✓<span class="sort-arrow"></span></th>
           </tr>
         </thead>
         <tbody id="reg-body">
@@ -352,7 +361,71 @@ let STATE = {
   reassignTarget: null,  // {source, id}
   glAccounts: [],        // list of {id, name, account_type, ...}
   glByType: {},          // {type: [accounts]} for grouped dropdown
+  sort: (() => {
+    // Persisted across reloads + account switches via localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem('register.sort') || 'null');
+      if (saved && saved.col && (saved.dir === 'asc' || saved.dir === 'desc')) return saved;
+    } catch (e) {}
+    return {col: 'date', dir: 'desc'};
+  })(),
 };
+
+// Field accessors per sortable column. Numeric columns return numbers so
+// comparisons sort numerically; string columns are lowercased for case-
+// insensitive sort.
+const SORT_FIELDS = {
+  date:    r => r.date || '',
+  type:    r => (r.type_label || r.type || '').toLowerCase(),
+  ref:     r => r.ref || '',
+  payee:   r => (r.payee || '').toLowerCase(),
+  memo:    r => (r.memo || '').toLowerCase(),
+  outflow: r => Number(r.outflow) || 0,
+  inflow:  r => Number(r.inflow) || 0,
+  balance: r => Number(r.balance) || 0,
+  cleared: r => r.cleared ? 1 : 0,
+};
+
+function sortedRows() {
+  const {col, dir} = STATE.sort;
+  const fn = SORT_FIELDS[col] || SORT_FIELDS.date;
+  const mult = dir === 'asc' ? 1 : -1;
+  // Stable sort — preserve original order for ties (matches the date-asc
+  // running-balance order from the backend so balance column stays sensible).
+  const indexed = STATE.rows.map((r, i) => ({r, i}));
+  indexed.sort((a, b) => {
+    const av = fn(a.r), bv = fn(b.r);
+    if (av < bv) return -1 * mult;
+    if (av > bv) return  1 * mult;
+    return a.i - b.i;
+  });
+  return indexed.map(x => x.r);
+}
+
+function setSort(col) {
+  if (!SORT_FIELDS[col]) return;
+  if (STATE.sort.col === col) {
+    STATE.sort.dir = STATE.sort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    STATE.sort.col = col;
+    // Numeric / date columns default to desc (largest/newest first); text columns to asc
+    const numericOrDate = ['date', 'outflow', 'inflow', 'balance', 'cleared'];
+    STATE.sort.dir = numericOrDate.includes(col) ? 'desc' : 'asc';
+  }
+  try { localStorage.setItem('register.sort', JSON.stringify(STATE.sort)); } catch (e) {}
+  updateSortIndicators();
+  renderRows();
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll('.reg-table thead th.sortable').forEach(th => {
+    const col = th.dataset.sort;
+    const active = col === STATE.sort.col;
+    th.classList.toggle('sort-active', active);
+    const arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = active ? (STATE.sort.dir === 'asc' ? '▲' : '▼') : '';
+  });
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -483,7 +556,8 @@ function renderRows() {
     $('reg-body').innerHTML = '<tr><td colspan="10" class="empty">No transactions in this date range.</td></tr>';
     return;
   }
-  $('reg-body').innerHTML = STATE.rows.map((r, idx) => {
+  const rows = sortedRows();
+  $('reg-body').innerHTML = rows.map((r, idx) => {
     const isVoid = r.status === 'void';
     const statusPill = r.status && r.status !== 'cleared'
       ? `<span class="status-pill status-${esc(r.status)}">${esc(r.status)}</span>` : '';
@@ -783,9 +857,17 @@ $('flt-start').addEventListener('change', loadRegister);
 $('flt-end').addEventListener('change', loadRegister);
 
 // ────────────────────────────────────────────────────────────────────────────
+// Sort header click wiring
+// ────────────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.reg-table thead th.sortable').forEach(th => {
+  th.addEventListener('click', () => setSort(th.dataset.sort));
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Boot
 // ────────────────────────────────────────────────────────────────────────────
 (async () => {
+  updateSortIndicators();
   await loadGlAccounts();
   await loadAccounts();
 })();
