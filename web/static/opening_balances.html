@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Opening Balances — Red Nun</title>
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, monospace;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+.main-content { padding: 24px; overflow-y: auto; }
+.content-wrap { max-width: 1100px; }
+
+/* Header */
+.page-header { margin-bottom: 20px; }
+.page-title { font-size: 22px; font-weight: 700; }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+/* Location toggle */
+.loc-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+.loc-pill {
+  padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.loc-pill:hover { border-color: var(--border-focus); color: var(--text); }
+.loc-pill.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+
+/* Section */
+.section { margin-bottom: 28px; }
+.section-title {
+  font-size: 11px; font-weight: 700; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
+}
+.section-sub { font-size: 12px; color: var(--text3); margin-bottom: 12px; line-height: 1.5; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; }
+
+table.ob { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+table.ob thead th {
+  text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 700;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+}
+table.ob tbody td {
+  padding: 8px 12px; border-bottom: 1px solid rgba(30,41,59,0.6);
+  vertical-align: middle;
+}
+table.ob tbody tr:last-child td { border-bottom: none; }
+table.ob tbody tr.subhead td {
+  background: rgba(30,41,59,0.4); font-size: 10px; font-weight: 700;
+  color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 8px 12px;
+}
+table.ob tbody tr:hover td.editable-row { background: rgba(56,189,248,0.03); }
+
+.col-name  { min-width: 240px; }
+.col-type  { color: var(--text3); font-size: 11px; width: 200px; }
+.col-num   { width: 180px; text-align: right; }
+.col-date  { width: 140px; }
+.col-save  { width: 80px; text-align: right; }
+
+input.ob-num, input.ob-date {
+  padding: 7px 10px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 13px;
+  font-family: var(--mono); width: 100%;
+}
+input.ob-num { text-align: right; }
+input.ob-num:focus, input.ob-date:focus { outline: none; border-color: var(--blue); }
+input.ob-num.dirty, input.ob-date.dirty { border-color: var(--amber); background: rgba(245,158,11,0.04); }
+
+.btn-save {
+  padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text2); font-size: 12px;
+  font-family: var(--font); cursor: pointer; transition: all 0.15s; font-weight: 500;
+}
+.btn-save:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+.btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-save.dirty { border-color: var(--green); color: var(--green); background: var(--green-soft); }
+.btn-save.saving { opacity: 0.5; }
+
+.row-saved-flash td { background: rgba(34,197,94,0.08) !important; transition: background 1s; }
+
+.empty, .loading { text-align: center; padding: 30px; color: var(--text3); font-size: 13px; }
+
+.amt-pos { color: var(--text); }
+.amt-neg { color: var(--red); }
+.amt-zero { color: var(--text3); }
+
+.help-banner {
+  background: var(--blue-soft); border: 1px solid rgba(56,189,248,0.3);
+  border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--blue);
+  margin-bottom: 18px; line-height: 1.5;
+}
+
+@media (max-width: 767px) {
+  .main-content { padding: 14px; }
+  .page-title { font-size: 18px; }
+  .col-type { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="main-content">
+  <div class="content-wrap">
+
+    <div class="page-header">
+      <div class="page-title">Opening Balances</div>
+      <div class="page-sub">Set starting balances as of a given date for the bank account and balance-sheet GL accounts (liabilities, equity, assets). Going-forward register activity layers on top of these.</div>
+    </div>
+
+    <div class="help-banner">
+      Tip: enter signed amounts. For liability accounts (e.g. Sales Tax Payable, Loan to RNPH, Gift Certs), a positive number means you owe that amount. For asset accounts, positive means you hold that value.
+    </div>
+
+    <div class="loc-bar" id="loc-bar">
+      <div class="loc-pill" data-loc="chatham">Chatham</div>
+      <div class="loc-pill" data-loc="dennis">Dennis</div>
+    </div>
+
+    <!-- BANK ACCOUNTS -->
+    <div class="section">
+      <div class="section-title">Bank Account</div>
+      <div class="section-sub">Cash balance carried forward from the prior period. Used as the starting point for the running balance in the Bank Register.</div>
+      <div class="card">
+        <table class="ob">
+          <thead>
+            <tr>
+              <th class="col-name">Account</th>
+              <th class="col-type">Last 4</th>
+              <th class="col-num">Opening Balance</th>
+              <th class="col-date">As of Date</th>
+              <th class="col-save"></th>
+            </tr>
+          </thead>
+          <tbody id="bank-body">
+            <tr><td colspan="5" class="loading">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LIABILITY + EQUITY + ASSET ACCOUNTS -->
+    <div class="section">
+      <div class="section-title">Balance-Sheet GL Accounts</div>
+      <div class="section-sub">Liability, Equity, and Asset accounts for the selected location. Set the carry-forward balance and effective date.</div>
+      <div class="card">
+        <table class="ob">
+          <thead>
+            <tr>
+              <th class="col-name">Account</th>
+              <th class="col-type">Type</th>
+              <th class="col-num">Opening Balance</th>
+              <th class="col-date">As of Date</th>
+              <th class="col-save"></th>
+            </tr>
+          </thead>
+          <tbody id="gl-body">
+            <tr><td colspan="5" class="loading">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+const STATE = {
+  location: localStorage.getItem('openingBalances.loc') || (window.currentLocation || localStorage.getItem('globalLocation') || 'chatham'),
+  banks: [],
+  glAccounts: [],
+};
+
+// Account types we expose on this page (balance-sheet only — Income/Expense
+// don't carry an opening balance, they reset each period).
+const BS_TYPES = [
+  'Bank',                       // shown in the GL section only if it's not already in bank_accounts
+  'Other Current Asset',
+  'Fixed Asset',
+  'Other Asset',
+  'Accounts Payable',
+  'Credit Card',
+  'Other Current Liability',
+  'Long Term Liability',
+  'Equity',
+];
+
+const TYPE_ORDER = {
+  'Bank': 1,
+  'Other Current Asset': 2,
+  'Fixed Asset': 3,
+  'Other Asset': 4,
+  'Accounts Payable': 5,
+  'Credit Card': 6,
+  'Other Current Liability': 7,
+  'Long Term Liability': 8,
+  'Equity': 9,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const esc = (s) => (s == null ? '' : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+const fmt = (n) => Number(n || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+function defaultOpeningDate() {
+  // Default to Jan 1 of the current year — common starting point for an
+  // accounting period reset.
+  const y = new Date().getFullYear();
+  return `${y}-01-01`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Location toggle
+// ─────────────────────────────────────────────────────────────────────────────
+function renderLocationBar() {
+  document.querySelectorAll('.loc-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.loc === STATE.location);
+    el.onclick = () => {
+      STATE.location = el.dataset.loc;
+      localStorage.setItem('openingBalances.loc', STATE.location);
+      renderLocationBar();
+      loadAll();
+    };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Load
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadBanks(), loadGlAccounts()]);
+}
+
+async function loadBanks() {
+  $('bank-body').innerHTML = '<tr><td colspan="5" class="loading">Loading…</td></tr>';
+  try {
+    const r = await fetch('/api/register/accounts');
+    const d = await r.json();
+    STATE.banks = (d.accounts || []).filter(a => a.location === STATE.location);
+    renderBanks();
+  } catch (e) {
+    $('bank-body').innerHTML = '<tr><td colspan="5" class="empty">Failed to load bank accounts.</td></tr>';
+  }
+}
+
+async function loadGlAccounts() {
+  $('gl-body').innerHTML = '<tr><td colspan="5" class="loading">Loading…</td></tr>';
+  try {
+    const r = await fetch('/api/gl-accounts?location=' + encodeURIComponent(STATE.location));
+    const d = await r.json();
+    // Filter to balance-sheet types only, and skip "Bank" type since the
+    // Bank Accounts section above already covers operating cash.
+    STATE.glAccounts = (d.accounts || [])
+      .filter(a => BS_TYPES.includes(a.account_type) && a.account_type !== 'Bank' && a.active);
+    // Sort by type group, then alphabetical name within group.
+    STATE.glAccounts.sort((a, b) => {
+      const ta = TYPE_ORDER[a.account_type] || 99;
+      const tb = TYPE_ORDER[b.account_type] || 99;
+      if (ta !== tb) return ta - tb;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+    renderGl();
+  } catch (e) {
+    $('gl-body').innerHTML = '<tr><td colspan="5" class="empty">Failed to load GL accounts.</td></tr>';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────────────────────────────────────
+function renderBanks() {
+  if (!STATE.banks.length) {
+    $('bank-body').innerHTML = '<tr><td colspan="5" class="empty">No bank account configured for this location.</td></tr>';
+    return;
+  }
+  $('bank-body').innerHTML = STATE.banks.map(a => {
+    const ob = Number(a.opening_balance || 0);
+    const od = a.opening_date || defaultOpeningDate();
+    return `
+      <tr data-bank-id="${a.id}">
+        <td class="col-name editable-row">${esc(a.short_name || a.name)}</td>
+        <td class="col-type">••• ${esc(a.account_last4 || '----')}</td>
+        <td class="col-num">
+          <input type="number" step="0.01" class="ob-num" value="${ob.toFixed(2)}"
+                 data-orig="${ob.toFixed(2)}" oninput="markDirty(this)">
+        </td>
+        <td class="col-date">
+          <input type="date" class="ob-date" value="${esc(od)}"
+                 data-orig="${esc(od)}" oninput="markDirty(this)">
+        </td>
+        <td class="col-save">
+          <button class="btn-save" disabled onclick="saveBank(${a.id}, this)">Save</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderGl() {
+  if (!STATE.glAccounts.length) {
+    $('gl-body').innerHTML = '<tr><td colspan="5" class="empty">No balance-sheet GL accounts found for this location.</td></tr>';
+    return;
+  }
+  // Group by account_type with a subhead between groups
+  const html = [];
+  let lastType = null;
+  for (const a of STATE.glAccounts) {
+    if (a.account_type !== lastType) {
+      html.push(`<tr class="subhead"><td colspan="5">${esc(a.account_type || 'Other')}</td></tr>`);
+      lastType = a.account_type;
+    }
+    const ob = Number(a.opening_balance || 0);
+    const od = a.opening_date || defaultOpeningDate();
+    html.push(`
+      <tr data-gl-id="${a.id}">
+        <td class="col-name editable-row">${esc(a.name)}</td>
+        <td class="col-type">${esc(a.account_subtype || a.account_type || '')}</td>
+        <td class="col-num">
+          <input type="number" step="0.01" class="ob-num" value="${ob.toFixed(2)}"
+                 data-orig="${ob.toFixed(2)}" oninput="markDirty(this)">
+        </td>
+        <td class="col-date">
+          <input type="date" class="ob-date" value="${esc(od)}"
+                 data-orig="${esc(od)}" oninput="markDirty(this)">
+        </td>
+        <td class="col-save">
+          <button class="btn-save" disabled onclick="saveGl(${a.id}, this)">Save</button>
+        </td>
+      </tr>
+    `);
+  }
+  $('gl-body').innerHTML = html.join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Edit / save
+// ─────────────────────────────────────────────────────────────────────────────
+function markDirty(input) {
+  const tr = input.closest('tr');
+  if (!tr) return;
+  const inputs = tr.querySelectorAll('.ob-num, .ob-date');
+  let anyDirty = false;
+  inputs.forEach(el => {
+    const dirty = el.value !== el.dataset.orig;
+    el.classList.toggle('dirty', dirty);
+    if (dirty) anyDirty = true;
+  });
+  const btn = tr.querySelector('.btn-save');
+  if (btn) {
+    btn.disabled = !anyDirty;
+    btn.classList.toggle('dirty', anyDirty);
+  }
+}
+
+function rowPayload(tr) {
+  const numEl = tr.querySelector('.ob-num');
+  const dateEl = tr.querySelector('.ob-date');
+  const amount = parseFloat(numEl.value);
+  if (isNaN(amount)) {
+    alert('Enter a valid number for the opening balance.');
+    return null;
+  }
+  return {opening_balance: amount, opening_date: dateEl.value || null, _numEl: numEl, _dateEl: dateEl};
+}
+
+function flashSaved(tr) {
+  tr.classList.add('row-saved-flash');
+  setTimeout(() => tr.classList.remove('row-saved-flash'), 1200);
+}
+
+async function saveBank(id, btn) {
+  const tr = btn.closest('tr');
+  const payload = rowPayload(tr);
+  if (!payload) return;
+  btn.classList.add('saving');
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/register/accounts/${id}`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        opening_balance: payload.opening_balance,
+        opening_date: payload.opening_date,
+      }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert('Save failed: ' + (d.error || r.status));
+      btn.classList.remove('saving');
+      btn.disabled = false;
+      return;
+    }
+    payload._numEl.dataset.orig = payload._numEl.value;
+    payload._dateEl.dataset.orig = payload._dateEl.value;
+    payload._numEl.classList.remove('dirty');
+    payload._dateEl.classList.remove('dirty');
+    btn.classList.remove('saving', 'dirty');
+    btn.disabled = true;
+    flashSaved(tr);
+  } catch (e) {
+    alert('Save failed: ' + e);
+    btn.classList.remove('saving');
+    btn.disabled = false;
+  }
+}
+
+async function saveGl(id, btn) {
+  const tr = btn.closest('tr');
+  const payload = rowPayload(tr);
+  if (!payload) return;
+  btn.classList.add('saving');
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/gl-accounts/${id}`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        opening_balance: payload.opening_balance,
+        opening_date: payload.opening_date,
+      }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert('Save failed: ' + (d.error || r.status));
+      btn.classList.remove('saving');
+      btn.disabled = false;
+      return;
+    }
+    payload._numEl.dataset.orig = payload._numEl.value;
+    payload._dateEl.dataset.orig = payload._dateEl.value;
+    payload._numEl.classList.remove('dirty');
+    payload._dateEl.classList.remove('dirty');
+    btn.classList.remove('saving', 'dirty');
+    btn.disabled = true;
+    flashSaved(tr);
+  } catch (e) {
+    alert('Save failed: ' + e);
+    btn.classList.remove('saving');
+    btn.disabled = false;
+  }
+}
+
+// Expose for inline handlers
+window.markDirty = markDirty;
+window.saveBank = saveBank;
+window.saveGl = saveGl;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────────────────────
+renderLocationBar();
+loadAll();
+</script>
+
+<script src="/static/sidebar.js"></script>
+</body>
+</html>

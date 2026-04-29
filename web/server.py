@@ -255,6 +255,13 @@ def registers_page():
     return send_from_directory("static", "register.html")
 
 
+@app.route("/opening-balances")
+@login_required
+def opening_balances_page():
+    """Serve the opening balances admin page (bank + balance-sheet GL accounts)."""
+    return send_from_directory("static", "opening_balances.html")
+
+
 @app.route("/reconcile")
 @login_required
 def reconcile_page():

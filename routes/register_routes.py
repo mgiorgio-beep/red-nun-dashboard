@@ -170,6 +170,19 @@ def init_register_tables():
         conn.execute("ALTER TABLE gl_account_rules ADD COLUMN location TEXT")
     except Exception:
         pass
+    # Opening-balance carryover from prior accounting period. Set on liability
+    # / equity accounts (Sales Tax Payable, Loan to RNPH, Gift Cert Liability,
+    # Owner Equity, etc.) so the dashboard can show running GL balances going
+    # forward without needing the full historical journal entry stream.
+    # bank_accounts already has these two columns from the seed schema above.
+    for sql in (
+        "ALTER TABLE gl_accounts ADD COLUMN opening_balance REAL DEFAULT 0",
+        "ALTER TABLE gl_accounts ADD COLUMN opening_date TEXT",
+    ):
+        try:
+            conn.execute(sql)
+        except Exception:
+            pass  # column already exists
 
     # ── Seed the two Cape Cod Five operating accounts if missing ──
     # Mirrors the hardcoded values in payroll_routes.py:29-30.
@@ -658,7 +671,8 @@ def list_gl_accounts():
 
     conn = get_connection()
     rows = conn.execute(
-        f"""SELECT id, qbo_id, acct_num, name, account_type, account_subtype, location, active
+        f"""SELECT id, qbo_id, acct_num, name, account_type, account_subtype,
+                   location, active, opening_balance, opening_date
             FROM gl_accounts {where_sql}
             ORDER BY account_type, name"""
         , params
@@ -709,7 +723,8 @@ def create_gl_account():
 def update_gl_account(gl_id):
     """Edit a GL account (rename, change type, deactivate, etc.)."""
     data = request.get_json(silent=True) or {}
-    allowed = {"name", "account_type", "account_subtype", "location", "active", "qbo_id", "acct_num"}
+    allowed = {"name", "account_type", "account_subtype", "location", "active",
+               "qbo_id", "acct_num", "opening_balance", "opening_date"}
     sets = {k: data[k] for k in data if k in allowed}
     if not sets:
         return jsonify({"error": "No updatable fields"}), 400

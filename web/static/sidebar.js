@@ -69,6 +69,7 @@ var sections=[
   {id:'nav-acct-entries',label:'Sales Entries',page:'/sales-journal'},
   {id:'nav-acct-registers',label:'Registers',page:'/registers'},
   {id:'nav-acct-bankrec',label:'Bank Reconcile',page:'/bank-reconcile'},
+  {id:'nav-acct-openbal',label:'Opening Balances',page:'/opening-balances'},
   {id:'nav-acct-export',label:'Export',page:'/sales-journal?tab=export'},
   {id:'nav-acct-mapping',label:'Sales Mapping',page:'/sales-mapping'},
   {id:'nav-acct-payaccts',label:'Payment Accounts',page:'/payment-accounts'}
@@ -114,6 +115,7 @@ if(path==='/specials-admin')return 'nav-specials';
 if(path==='/payments')return 'nav-payments';
 if(path==='/registers')return 'nav-acct-registers';
 if(path==='/bank-reconcile')return 'nav-acct-bankrec';
+if(path==='/opening-balances')return 'nav-acct-openbal';
 if(path==='/sales-journal'){var sp=new URLSearchParams(window.location.search);return sp.get('tab')==='export'?'nav-acct-export':'nav-acct-entries';}
 if(path==='/reports')return 'nav-acct-reports';
 if(path==='/sales-mapping')return 'nav-acct-mapping';
