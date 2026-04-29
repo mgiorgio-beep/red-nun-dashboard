@@ -152,9 +152,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="main-content">
 <div class="content-wrap">
 
-  <div class="page-header">
-    <div class="page-title">Bank Reconcile</div>
-    <div class="page-sub">Upload a Cape Cod Five PDF statement, parse it, and import transactions that aren't in the register.</div>
+  <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap">
+    <div>
+      <div class="page-title">Bank Reconcile</div>
+      <div class="page-sub">Upload a Cape Cod Five PDF statement, parse it, and import transactions that aren't in the register.</div>
+    </div>
+    <div>
+      <button id="btn-dedupe" style="padding:9px 14px;border-radius:8px;border:1px solid var(--amber);background:var(--bg-card);color:var(--amber);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Dedupe Existing Register</button>
+    </div>
   </div>
 
   <!-- Account picker -->
@@ -234,6 +239,55 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   </div>
 
 </div>
+</div>
+
+<!-- ─── Dedupe Modal ──────────────────────────────────────────────────── -->
+<div id="dedupe-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:22px;width:100%;max-width:980px;max-height:90vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">Dedupe Existing Register</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.5">
+      Finds <code>manual_bank_entries</code> rows (statement-imported) that have a matching <code>vendor_payment</code> or Manual <code>payroll_check</code> in the dashboard. On apply, the dashboard row gets <em>cleared = 1</em> + <em>bank_account_id</em> set, and the duplicate manual entry is deleted. Use this when you imported a statement and ended up with both sides in the register.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;font-weight:600">Account</label>
+        <select id="dd-account" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px"></select>
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;font-weight:600">Start Date</label>
+        <input type="date" id="dd-start" value="2026-01-01" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;font-weight:600">End Date</label>
+        <input type="date" id="dd-end" value="2026-01-31" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px">
+      </div>
+    </div>
+    <div style="display:flex;gap:18px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <label style="font-size:12px;color:var(--text2)">
+        Date tolerance ±<input type="number" id="dd-tol" value="5" min="0" max="60" style="width:60px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);margin:0 4px"> days
+      </label>
+      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="dd-bp" checked> Match vendor payments
+      </label>
+      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="dd-pr" checked> Match Manual payroll checks
+      </label>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button id="dd-preview" style="padding:8px 14px;border-radius:8px;border:1px solid var(--blue);background:var(--bg-card);color:var(--blue);font-size:13px;font-weight:500;cursor:pointer">Preview</button>
+    </div>
+
+    <div id="dd-summary" style="font-size:12px;color:var(--text2);padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;min-height:18px;margin-bottom:12px"></div>
+
+    <div id="dd-results" style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:12px"></div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="dd-cancel" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text2);font-size:13px;font-weight:500;cursor:pointer">Close</button>
+      <button id="dd-apply" disabled style="padding:8px 14px;border-radius:8px;border:1px solid var(--green);background:rgba(34,197,94,0.12);color:var(--green);font-size:13px;font-weight:600;cursor:pointer;opacity:0.5">Apply Merge</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -618,6 +672,147 @@ async function reopenUpload(id) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Dedupe modal
+// ────────────────────────────────────────────────────────────────────────────
+const DEDUPE = {lastPreview: null};
+
+function openDedupeModal() {
+  // Populate the account dropdown from STATE.accounts
+  const sel = document.getElementById('dd-account');
+  sel.innerHTML = STATE.accounts.map(a =>
+    `<option value="${a.id}" ${STATE.currentAcct && STATE.currentAcct.id === a.id ? 'selected' : ''}>${esc(a.short_name || a.name)} ••• ${esc(a.account_last4 || '----')}</option>`
+  ).join('');
+  document.getElementById('dd-results').innerHTML = '';
+  document.getElementById('dd-summary').textContent = '';
+  document.getElementById('dd-apply').disabled = true;
+  document.getElementById('dd-apply').style.opacity = '0.5';
+  DEDUPE.lastPreview = null;
+  document.getElementById('dedupe-overlay').style.display = 'flex';
+}
+
+function closeDedupeModal() {
+  document.getElementById('dedupe-overlay').style.display = 'none';
+}
+
+function dedupeBody(commit) {
+  return JSON.stringify({
+    account_id: parseInt(document.getElementById('dd-account').value, 10),
+    start_date: document.getElementById('dd-start').value,
+    end_date: document.getElementById('dd-end').value,
+    date_tolerance_days: parseInt(document.getElementById('dd-tol').value || '5', 10),
+    match_vendor_payments: document.getElementById('dd-bp').checked,
+    match_payroll_manual: document.getElementById('dd-pr').checked,
+    commit: !!commit,
+  });
+}
+
+async function previewDedupe() {
+  const sumEl = document.getElementById('dd-summary');
+  const resEl = document.getElementById('dd-results');
+  sumEl.textContent = 'Scanning…';
+  resEl.innerHTML = '';
+  document.getElementById('dd-apply').disabled = true;
+  document.getElementById('dd-apply').style.opacity = '0.5';
+  try {
+    const r = await fetch('/api/bank-reconcile/dedupe', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: dedupeBody(false),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      sumEl.textContent = 'Error: ' + (d.error || r.status);
+      return;
+    }
+    DEDUPE.lastPreview = d;
+    renderDedupePreview(d);
+  } catch (e) {
+    sumEl.textContent = 'Failed: ' + e;
+  }
+}
+
+function renderDedupePreview(d) {
+  const s = d.summary;
+  document.getElementById('dd-summary').innerHTML =
+    `Scanned <b>${s.manual_entries_scanned}</b> manual_bank_entries (outflows) in ${esc(d.start)} → ${esc(d.end)} for account ${esc(d.account_last4)}. ` +
+    `<span style="color:var(--green)">Matched: ${s.matched}</span> · ` +
+    `<span style="color:var(--amber)">Ambiguous: ${s.ambiguous}</span> · ` +
+    `<span style="color:var(--text3)">Unmatched: ${s.unmatched}</span>. ` +
+    `Would merge total <b>$${(s.would_merge_amount || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</b>.`;
+
+  if (!d.candidates.length) {
+    document.getElementById('dd-results').innerHTML = '<div style="padding:20px;color:var(--text3);text-align:center;font-size:13px">No outflow manual_bank_entries in range.</div>';
+    return;
+  }
+
+  const rows = d.candidates.map(c => {
+    let rowColor = '';
+    if (c.match) rowColor = 'background: rgba(34,197,94,0.06);';
+    else if (c.skip_reason === 'ambiguous') rowColor = 'background: rgba(245,158,11,0.08);';
+    const matchCell = c.match
+      ? `<td style="font-size:11px"><div><b>${esc(c.match.source)}</b> #${c.match.id} · ${esc(c.match.date)} · $${c.match.amount.toFixed(2)}</div><div style="color:var(--text3)">${esc(c.match.label)} · ±${c.match.date_diff_days}d ${c.match.currently_cleared ? '· already cleared' : ''}</div></td>`
+      : `<td style="font-size:11px;color:var(--text3)">${esc(c.skip_reason)}${c.ambiguous_count > 1 ? ' (' + c.ambiguous_count + ' candidates)' : ''}</td>`;
+    return `
+      <tr style="${rowColor}">
+        <td style="padding:6px 8px;font-size:11px;font-family:var(--mono)">${esc(c.manual_entry_date)}</td>
+        <td style="padding:6px 8px;font-size:11px;color:var(--red);text-align:right;font-family:var(--mono)">${c.manual_entry_amount.toFixed(2)}</td>
+        <td style="padding:6px 8px;font-size:11px">${esc(c.manual_entry_payee || '—')}<div style="color:var(--text3);font-size:10px">${esc((c.manual_entry_memo||'').slice(0,60))}</div></td>
+        ${matchCell}
+      </tr>`;
+  }).join('');
+
+  document.getElementById('dd-results').innerHTML = `
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:var(--bg-elevated);position:sticky;top:0">
+        <tr>
+          <th style="padding:8px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left">Date</th>
+          <th style="padding:8px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:right">Amount</th>
+          <th style="padding:8px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left">Statement Payee</th>
+          <th style="padding:8px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left">Match / Reason</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+
+  if (s.matched > 0) {
+    document.getElementById('dd-apply').disabled = false;
+    document.getElementById('dd-apply').style.opacity = '1';
+  }
+}
+
+async function applyDedupe() {
+  if (!DEDUPE.lastPreview || !DEDUPE.lastPreview.summary.matched) {
+    alert('Run Preview first');
+    return;
+  }
+  if (!confirm(`Apply merge for ${DEDUPE.lastPreview.summary.matched} matches? This will UPDATE the dashboard rows (set bank_account_id + cleared) and DELETE the duplicate manual_bank_entries. Cannot be undone without a DB restore.`)) {
+    return;
+  }
+  const btn = document.getElementById('dd-apply');
+  btn.disabled = true;
+  btn.textContent = 'Applying…';
+  try {
+    const r = await fetch('/api/bank-reconcile/dedupe', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: dedupeBody(true),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      alert('Apply failed: ' + (d.error || r.status));
+      btn.disabled = false;
+      btn.textContent = 'Apply Merge';
+      return;
+    }
+    alert(`Merged ${d.merged_count} rows. Deleted ${d.deleted_manual_entries} duplicate manual entries.`);
+    closeDedupeModal();
+  } catch (e) {
+    alert('Apply failed: ' + e);
+    btn.disabled = false;
+    btn.textContent = 'Apply Merge';
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Wire up
 // ────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -640,6 +835,16 @@ document.addEventListener('DOMContentLoaded', () => {
   $('chk-all').addEventListener('change', (e) => {
     if (e.target.checked) selectByPredicate(() => true);
     else { STATE.selected = new Set(); renderTxTable(); }
+  });
+
+  // Dedupe modal wiring
+  document.getElementById('btn-dedupe').addEventListener('click', openDedupeModal);
+  document.getElementById('dd-cancel').addEventListener('click', closeDedupeModal);
+  document.getElementById('dd-preview').addEventListener('click', previewDedupe);
+  document.getElementById('dd-apply').addEventListener('click', applyDedupe);
+  // Click outside modal closes it
+  document.getElementById('dedupe-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'dedupe-overlay') closeDedupeModal();
   });
 });
 </script>

@@ -692,3 +692,322 @@ def _mark_cleared(conn, source: str, row_id: int, when: str | None) -> int:
         (when, row_id),
     )
     return cur.rowcount or 0
+
+
+# ─── DEDUPE TOOL ─────────────────────────────────────────────────────────────
+#
+# Retroactive cleanup for the case where a bank statement was imported and
+# created manual_bank_entries rows that duplicate existing dashboard-side
+# vendor_payments / payroll_checks rows (because the import-time matcher
+# missed them, or the user imported all parsed rows instead of unmatched-only).
+#
+# For each manual_bank_entries outflow in the date range, we look for a
+# matching vendor_payment or Manual payroll_check by amount + date proximity.
+# The "winner" is the dashboard row (it has vendor info, GL coding, link to
+# the invoice); the manual_bank_entry duplicate gets deleted on commit.
+#
+# Inflow duplicates (deposits) are not handled here because the typical
+# dashboard side (bank_deposits) is populated from QBO sync — if we later
+# add deposit dedup the same pattern applies.
+
+@bank_reconcile_bp.route("/api/bank-reconcile/dedupe", methods=["POST"])
+@admin_required
+def dedupe_register():
+    """Find and (optionally) merge duplicates between manual_bank_entries
+    (statement-imported) and dashboard-side vendor_payments / payroll_checks.
+
+    Body (JSON):
+        account_id:           int, required
+        start_date:           "YYYY-MM-DD", required
+        end_date:             "YYYY-MM-DD", required
+        date_tolerance_days:  int, default 5
+        match_vendor_payments: bool, default true
+        match_payroll_manual:  bool, default true
+        commit:               bool, default false (preview only)
+
+    Response:
+        {
+            "account_id": ..., "start": ..., "end": ...,
+            "candidates": [ {
+                "manual_entry_id": ..., "manual_entry_date": ...,
+                "manual_entry_amount": ...,        // signed (negative for outflow)
+                "manual_entry_payee": ...,
+                "manual_entry_memo": ...,
+                "match": {
+                    "source": "vendor_payment" | "payroll_check",
+                    "id": ..., "date": ..., "amount": ..., "label": ...,
+                    "date_diff_days": ...,
+                    "current_bank_account_id": ...,
+                    "currently_cleared": bool,
+                } or null,
+                "skip_reason": null | "no_match" | "ambiguous" | "no_amount_match",
+                "ambiguous_count": 0
+            } ],
+            "summary": {
+                "manual_entries_scanned": ...,
+                "matched": ..., "ambiguous": ..., "unmatched": ...,
+                "would_merge_amount": ...
+            },
+            "applied": bool,
+            "merged_count": int,
+            "deleted_manual_entries": int,
+        }
+    """
+    data = request.get_json(silent=True) or {}
+    account_id = data.get("account_id")
+    start = (data.get("start_date") or "").strip()
+    end = (data.get("end_date") or "").strip()
+    if not isinstance(account_id, int):
+        return jsonify({"error": "account_id (int) is required"}), 400
+    import re as _re
+    if not _re.match(r"^\d{4}-\d{2}-\d{2}$", start) or not _re.match(r"^\d{4}-\d{2}-\d{2}$", end):
+        return jsonify({"error": "start_date and end_date must be YYYY-MM-DD"}), 400
+    try:
+        tol = int(data.get("date_tolerance_days", 5))
+    except (TypeError, ValueError):
+        tol = 5
+    tol = max(0, min(60, tol))  # clamp
+    match_bp = bool(data.get("match_vendor_payments", True))
+    match_pr = bool(data.get("match_payroll_manual", True))
+    commit = bool(data.get("commit", False))
+
+    conn = get_connection()
+
+    # 0. Sanity check: account exists
+    bank = conn.execute(
+        "SELECT id, name, account_last4 FROM bank_accounts WHERE id = ?",
+        (account_id,),
+    ).fetchone()
+    if not bank:
+        conn.close()
+        return jsonify({"error": f"bank_account {account_id} not found"}), 404
+    is_default = bank["account_last4"] == "5975"
+
+    # 1. Pull all candidate manual_bank_entries (outflows) in range, sorted by
+    #    date then amount for stable iteration.
+    me_rows = conn.execute(
+        """SELECT id, entry_date, entry_type, payee, memo, amount, ref_number,
+                  cleared, statement_upload_id
+           FROM manual_bank_entries
+           WHERE bank_account_id = ?
+             AND entry_date >= ? AND entry_date <= ?
+             AND amount < 0
+           ORDER BY entry_date, amount""",
+        (account_id, start, end),
+    ).fetchall()
+
+    # 2. Preload candidate vendor_payments + payroll_checks in a wider window
+    #    (range ± tolerance) so we can match across small date drifts.
+    from datetime import datetime as _dt, timedelta as _td
+
+    def _shift(iso, days):
+        d = _dt.strptime(iso, "%Y-%m-%d") + _td(days=days)
+        return d.strftime("%Y-%m-%d")
+
+    wide_start = _shift(start, -tol)
+    wide_end = _shift(end, tol)
+
+    bp_rows = []
+    if match_bp:
+        # Include bank_account_id IS NULL when this is the catch-all account
+        bp_clause = "(bank_account_id = ?" + (" OR bank_account_id IS NULL" if is_default else "") + ")"
+        bp_rows = conn.execute(
+            f"""SELECT id, payment_date, vendor, payment_total, payment_method,
+                       payment_ref, check_number, status, bank_account_id,
+                       cleared, ap_payment_id
+               FROM vendor_payments
+               WHERE payment_date >= ? AND payment_date <= ?
+                 AND (status IS NULL OR status NOT IN ('void', 'failed'))
+                 AND {bp_clause}""",
+            (wide_start, wide_end, account_id),
+        ).fetchall()
+
+    pr_rows = []
+    if match_pr:
+        pr_rows = conn.execute(
+            """SELECT pc.id, pc.employee_name, pc.check_number, pc.net_pay,
+                      pc.payment_method, pc.bank_account_id, pc.cleared,
+                      COALESCE(pr.pay_date, pc.pay_period_end) AS pay_date
+               FROM payroll_checks pc
+               LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id
+               WHERE COALESCE(pr.pay_date, pc.pay_period_end) >= ?
+                 AND COALESCE(pr.pay_date, pc.pay_period_end) <= ?
+                 AND (pc.voided IS NULL OR pc.voided = 0)
+                 AND pc.payment_method = 'Manual'
+                 AND pc.bank_account_id = ?""",
+            (wide_start, wide_end, account_id),
+        ).fetchall()
+
+    # 3. Build lookup tables keyed on rounded amount → list of candidates
+    from collections import defaultdict
+    bp_by_amount = defaultdict(list)
+    for r in bp_rows:
+        amt = round(float(r["payment_total"] or 0), 2)
+        bp_by_amount[amt].append(dict(r))
+
+    pr_by_amount = defaultdict(list)
+    for r in pr_rows:
+        amt = round(float(r["net_pay"] or 0), 2)
+        pr_by_amount[amt].append(dict(r))
+
+    # Avoid claiming the same dashboard row twice across different manual_entries
+    used_bp_ids = set()
+    used_pr_ids = set()
+
+    def _date_diff(a_iso, b_iso):
+        a = _dt.strptime(a_iso, "%Y-%m-%d")
+        b = _dt.strptime(b_iso, "%Y-%m-%d")
+        return abs((a - b).days)
+
+    candidates = []
+    for me in me_rows:
+        me = dict(me)
+        target_amt = round(abs(float(me["amount"] or 0)), 2)
+        me_date = me["entry_date"]
+
+        cands = []
+        # Vendor payments candidates
+        for cand in bp_by_amount.get(target_amt, []):
+            if cand["id"] in used_bp_ids:
+                continue
+            dd = _date_diff(me_date, cand["payment_date"])
+            if dd > tol:
+                continue
+            cands.append({
+                "source": "vendor_payment",
+                "id": cand["id"],
+                "date": cand["payment_date"],
+                "amount": float(cand["payment_total"] or 0),
+                "label": cand["vendor"] or "(no vendor)",
+                "date_diff_days": dd,
+                "current_bank_account_id": cand["bank_account_id"],
+                "currently_cleared": bool(cand["cleared"]),
+                "_raw": cand,
+            })
+        # Payroll Manual candidates
+        for cand in pr_by_amount.get(target_amt, []):
+            if cand["id"] in used_pr_ids:
+                continue
+            dd = _date_diff(me_date, cand["pay_date"])
+            if dd > tol:
+                continue
+            cands.append({
+                "source": "payroll_check",
+                "id": cand["id"],
+                "date": cand["pay_date"],
+                "amount": float(cand["net_pay"] or 0),
+                "label": f"Payroll: {cand['employee_name']}",
+                "date_diff_days": dd,
+                "current_bank_account_id": cand["bank_account_id"],
+                "currently_cleared": bool(cand["cleared"]),
+                "_raw": cand,
+            })
+
+        # Pick best — closest date wins; tie-break favors payroll_check
+        # (more specific) then lower date_diff. If two best are tied AND from
+        # the same source, mark ambiguous so the user can review.
+        chosen = None
+        skip_reason = None
+        ambiguous_count = 0
+        if not cands:
+            skip_reason = "no_match"
+        else:
+            cands.sort(key=lambda c: (c["date_diff_days"],
+                                      0 if c["source"] == "payroll_check" else 1))
+            best = cands[0]
+            # If multiple cands at the same minimum date_diff with different
+            # ids and the same source, we're ambiguous.
+            same_diff = [c for c in cands if c["date_diff_days"] == best["date_diff_days"]
+                         and c["source"] == best["source"]]
+            if len(same_diff) > 1:
+                skip_reason = "ambiguous"
+                ambiguous_count = len(same_diff)
+            else:
+                chosen = best
+
+        match_obj = None
+        if chosen:
+            match_obj = {k: v for k, v in chosen.items() if k != "_raw"}
+            # Reserve the dashboard row so we don't double-merge
+            if chosen["source"] == "vendor_payment":
+                used_bp_ids.add(chosen["id"])
+            else:
+                used_pr_ids.add(chosen["id"])
+
+        candidates.append({
+            "manual_entry_id": me["id"],
+            "manual_entry_date": me["entry_date"],
+            "manual_entry_amount": float(me["amount"] or 0),
+            "manual_entry_payee": me["payee"],
+            "manual_entry_memo": me["memo"],
+            "manual_entry_ref": me["ref_number"],
+            "match": match_obj,
+            "skip_reason": skip_reason,
+            "ambiguous_count": ambiguous_count,
+        })
+
+    matched = sum(1 for c in candidates if c["match"])
+    ambiguous = sum(1 for c in candidates if c["skip_reason"] == "ambiguous")
+    unmatched = sum(1 for c in candidates if c["skip_reason"] == "no_match")
+    would_merge_amount = round(
+        sum(abs(c["manual_entry_amount"]) for c in candidates if c["match"]), 2
+    )
+
+    applied = False
+    merged_count = 0
+    deleted_count = 0
+
+    if commit:
+        for c in candidates:
+            if not c["match"]:
+                continue
+            m = c["match"]
+            entry_date = c["manual_entry_date"]
+            if m["source"] == "vendor_payment":
+                # Claim it for this bank account, mark cleared, update cleared_date
+                conn.execute(
+                    """UPDATE vendor_payments
+                       SET bank_account_id = COALESCE(bank_account_id, ?),
+                           cleared = 1,
+                           cleared_date = COALESCE(cleared_date, ?)
+                       WHERE id = ?""",
+                    (account_id, entry_date, m["id"]),
+                )
+            else:  # payroll_check
+                conn.execute(
+                    """UPDATE payroll_checks
+                       SET cleared = 1,
+                           cleared_date = COALESCE(cleared_date, ?)
+                       WHERE id = ?""",
+                    (entry_date, m["id"]),
+                )
+            # Delete the duplicate manual_bank_entry
+            conn.execute(
+                "DELETE FROM manual_bank_entries WHERE id = ?",
+                (c["manual_entry_id"],),
+            )
+            merged_count += 1
+            deleted_count += 1
+        conn.commit()
+        applied = True
+
+    conn.close()
+
+    return jsonify({
+        "account_id": account_id,
+        "account_last4": bank["account_last4"],
+        "start": start,
+        "end": end,
+        "date_tolerance_days": tol,
+        "candidates": candidates,
+        "summary": {
+            "manual_entries_scanned": len(me_rows),
+            "matched": matched,
+            "ambiguous": ambiguous,
+            "unmatched": unmatched,
+            "would_merge_amount": would_merge_amount,
+        },
+        "applied": applied,
+        "merged_count": merged_count,
+        "deleted_manual_entries": deleted_count,
+    })
