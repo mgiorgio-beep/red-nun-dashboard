@@ -1099,7 +1099,11 @@ def get_register(account_id):
         "payment_total, check_number, memo, status, ap_payment_id, "
         "bank_account_id, cleared, cleared_date, gl_account_id "
         "FROM vendor_payments WHERE payment_date >= ? AND payment_date <= ? AND "
-        "(status IS NULL OR status != 'void') AND ("
+        # Exclude void AND failed: void = manually canceled before send, failed =
+        # ACH/check rejected by the bank. In both cases no money left the account,
+        # so they don't belong in the register (they'd inflate Payments Out and
+        # break reconciliation against the bank statement).
+        "(status IS NULL OR status NOT IN ('void', 'failed')) AND ("
         "bank_account_id = ?"
         + (" OR bank_account_id IS NULL" if (is_default_account and include_unassigned) else "")
         + ")"

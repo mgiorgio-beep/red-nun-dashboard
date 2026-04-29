@@ -493,7 +493,7 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
                   check_number, payment_method, payment_ref, memo, status
             FROM vendor_payments
             WHERE payment_date >= ? AND payment_date <= ?
-              AND (status IS NULL OR status != 'void')
+              AND (status IS NULL OR status NOT IN ('void', 'failed'))
               AND {bp_clause}""",
         (start, end, account_id),
     ).fetchall():
