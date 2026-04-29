@@ -1151,45 +1151,17 @@ def get_register(account_id):
     for r in conn.execute(man_query, (account_id, start, end)).fetchall():
         rows.append(_normalize_row("manual", r, account_id))
 
-    # Lazy backfill: for any bill_pay rows in the visible window that don't
-    # have a gl_account_id yet, look at their underlying invoice line items
-    # and auto-assign the GL account if they're a single category. Persists
-    # to vendor_payments. Mixed-category rows are left NULL on purpose — we
-    # still want to show the breakdown to the user.
-    bp_rows_to_backfill = [
-        (r["source_id"], account["location"])
-        for r in rows
-        if r.get("source") == "bill_pay" and not r.get("gl_account_id")
-    ]
-    if bp_rows_to_backfill:
-        try:
-            _apply_invoice_category_coding(conn, bp_rows_to_backfill)
-            # Re-load gl_account_id on those rows after backfill.
-            assigned = {
-                row["id"]: row["gl_account_id"]
-                for row in conn.execute(
-                    f"SELECT id, gl_account_id FROM vendor_payments WHERE id IN ("
-                    + ",".join("?" for _ in bp_rows_to_backfill) + ")",
-                    [pid for (pid, _) in bp_rows_to_backfill],
-                ).fetchall()
-            }
-            for r in rows:
-                if r.get("source") == "bill_pay" and not r.get("gl_account_id"):
-                    r["gl_account_id"] = assigned.get(r.get("source_id"))
-        except Exception as e:
-            logger.warning(f"Invoice-category GL backfill failed: {e}")
-
-    # Compute breakdown for ALL bill_pay rows (so the UI can show "Mixed: …"
-    # tooltips even when gl_account_id is set).
-    bp_payment_ids = [r["source_id"] for r in rows if r.get("source") == "bill_pay"]
-    breakdown_by_pid = _compute_bp_category_breakdown(conn, bp_payment_ids) if bp_payment_ids else {}
-    for r in rows:
-        if r.get("source") == "bill_pay":
-            cats = breakdown_by_pid.get(r["source_id"]) or {}
-            # Drop UNKNOWN if there's other meaningful data
-            meaningful = {k: round(v, 2) for k, v in cats.items() if v > 0}
-            r["category_breakdown"] = meaningful if meaningful else None
-            r["category_mixed"] = sum(1 for v in meaningful.values() if v) > 1
+    # NOTE: bill_pay and payroll rows do NOT need a GL account on the bank
+    # register — the expense was already booked upstream when the invoice
+    # was OCR'd (with categorized line items) or when the payroll run was
+    # processed. The bank-register row is just the cash side. We deliberately
+    # leave gl_account_id NULL on those sources and the UI shows a read-only
+    # source link instead of an editable dropdown.
+    #
+    # GL coding only matters for `manual` and `deposit` rows — those are
+    # original entries that originate at the bank. Rules (DAVO, TOAST,
+    # DEPOSIT, etc.) handle the common ones automatically; the rest the
+    # user codes once.
 
     # Resolve GL account names in one shot (avoid N+1 lookups)
     needed = {r.get("gl_account_id") for r in rows if r.get("gl_account_id")}

@@ -120,10 +120,15 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .acct-select.unassigned { border-color: var(--amber); color: var(--amber); }
 .acct-select.assigned   { color: var(--text); }
 .acct-select.saving { opacity: 0.5; }
-.cat-breakdown {
-  font-size: 10px; color: var(--amber); margin-top: 3px;
-  font-family: var(--mono); white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; max-width: 100%;
+.src-link {
+  display: inline-block; font-size: 11px; color: var(--blue);
+  text-decoration: none; padding: 2px 6px; border-radius: 4px;
+  font-family: var(--mono); white-space: nowrap;
+}
+.src-link:hover { background: var(--blue-soft); }
+.src-muted {
+  font-size: 11px; color: var(--text3); font-family: var(--mono);
+  font-style: italic;
 }
 
 .type-pill {
@@ -507,13 +512,30 @@ function renderRows() {
 }
 
 function renderAcctSelect(r) {
-  // Inline GL account picker — editable on every row regardless of source.
-  // Pre-fills from r.gl_account_id if set; shows "— Choose account —" otherwise.
+  // bill_pay and payroll rows don't need a GL account on the bank register —
+  // the expense was already booked upstream (categorized invoice line items
+  // for bills; payroll run totals for checks). Show a small read-only source
+  // link instead of an editable dropdown.
+  if (r.source === 'bill_pay') {
+    const link = r.ap_payment_id
+      ? `<a class="src-link" href="/payments?payment=${r.ap_payment_id}" onclick="event.stopPropagation()" title="Open in Payments">→ Bill #${r.ap_payment_id}</a>`
+      : `<span class="src-muted">→ Bill payment</span>`;
+    return link;
+  }
+  if (r.source === 'payroll') {
+    const link = r.payroll_run_id
+      ? `<a class="src-link" href="/manage#bp-payroll" onclick="event.stopPropagation()" title="Open payroll run">→ Payroll Run #${r.payroll_run_id}</a>`
+      : `<span class="src-muted">→ Payroll</span>`;
+    return link;
+  }
+
+  // Editable GL dropdown for manual + deposit rows — these ARE the original
+  // entries (no upstream record), so the user codes them here. Rules learn
+  // patterns so future similar rows auto-fill.
   const currentId = r.gl_account_id != null ? r.gl_account_id : '';
   const cls = ['acct-select'];
   cls.push(currentId === '' ? 'unassigned' : 'assigned');
 
-  // Build option groups by account_type
   let optsHtml = `<option value="" ${currentId === '' ? 'selected' : ''}>— Choose account —</option>`;
   for (const type of Object.keys(STATE.glByType).sort()) {
     optsHtml += `<optgroup label="${esc(type)}">`;
@@ -523,30 +545,12 @@ function renderAcctSelect(r) {
     optsHtml += `</optgroup>`;
   }
 
-  // Multi-category invoice? Show a small "Mixed" badge under the dropdown
-  // with the per-category breakdown so SG-style splits are visible at a
-  // glance. The data comes from the underlying invoice line items.
-  let breakdownHtml = '';
-  if (r.category_breakdown && r.category_mixed) {
-    const labels = {
-      FOOD: 'Food', LIQUOR: 'Liquor', BEER: 'Beer', WINE: 'Wine',
-      NA_BEVERAGES: 'NA Bev', NON_COGS: 'Non-COGS',
-      TOGO_SUPPLIES: 'TOGO', DR_SUPPLIES: 'DR Supplies', KITCHEN_SUPPLIES: 'Kitchen',
-      UNKNOWN: 'Unknown',
-    };
-    const parts = Object.entries(r.category_breakdown)
-      .sort((a,b) => b[1] - a[1])
-      .map(([k,v]) => `${esc(labels[k] || k)} $${v.toFixed(2)}`);
-    breakdownHtml = `<div class="cat-breakdown" title="Per-category invoice line item totals">⚠ Mixed: ${parts.join(' · ')}</div>`;
-  }
-
   return `
     <select class="${cls.join(' ')}"
             data-source="${esc(r.source)}" data-id="${r.source_id}"
             onchange="setGlAccount(this)" onclick="event.stopPropagation()">
       ${optsHtml}
     </select>
-    ${breakdownHtml}
   `;
 }
 
