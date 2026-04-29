@@ -1872,6 +1872,209 @@ def import_balance_sheet():
     })
 
 
+# ─── GL ACCOUNT BALANCES (opening + register activity) ───────────────────────
+#
+# Computes a "current balance" per balance-sheet GL account by walking the
+# bank-register activity (vendor_payments, payroll_checks, bank_deposits,
+# manual_bank_entries) and applying it to the opening_balance set on
+# gl_accounts. Sign convention follows double-entry accounting:
+#   * Asset accounts        → balance += outflow - inflow
+#   * Liability / Equity    → balance += inflow  - outflow
+#
+# Limitations: this is the CASH SIDE of activity only. POS-side accruals
+# (sales tax collected at the register, gift certificates sold) and book-
+# only entries (depreciation) are not reflected. For loans, intercompany
+# transfers, and other primarily-cash accounts the number will reflect
+# reality; for sales tax / gift cert liabilities it will only capture the
+# decreases (DAVO sweeps, gift cert redemptions paid out).
+
+# Account types treated as debit-positive (assets / contra-equity).
+_DEBIT_POSITIVE_TYPES = {
+    "Bank",
+    "Accounts Receivable",
+    "Other Current Asset",
+    "Fixed Asset",
+    "Other Asset",
+}
+
+# Account types treated as credit-positive (liabilities, equity).
+_CREDIT_POSITIVE_TYPES = {
+    "Accounts Payable",
+    "Credit Card",
+    "Other Current Liability",
+    "Long Term Liability",
+    "Equity",
+}
+
+
+@register_bp.route("/api/gl-accounts/balances", methods=["GET"])
+@login_required
+def list_gl_account_balances():
+    """Return current balance per balance-sheet gl_account for a location.
+
+    Query params:
+        location: chatham | dennis (required)
+        as_of:    YYYY-MM-DD (optional, defaults to today). Activity is
+                  summed for entries dated >= opening_date AND <= as_of.
+
+    Response:
+        {
+            "location": "chatham",
+            "as_of": "2026-04-29",
+            "accounts": [
+                {
+                    "id": 123,
+                    "name": "Sales Tax Payable",
+                    "account_type": "Other Current Liability",
+                    "opening_balance": -3932.66,
+                    "opening_date": "2026-01-01",
+                    "register_inflow":  0.0,
+                    "register_outflow": 8000.0,
+                    "register_row_count": 4,
+                    "current_balance": -11932.66,
+                    "balance_side": "credit"   // or "debit"
+                }
+            ]
+        }
+    """
+    location = (request.args.get("location") or "").strip().lower()
+    if location not in ("chatham", "dennis"):
+        return jsonify({"error": "location must be 'chatham' or 'dennis'"}), 400
+    as_of = request.args.get("as_of") or date.today().strftime("%Y-%m-%d")
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
+        return jsonify({"error": "as_of must be YYYY-MM-DD"}), 400
+
+    conn = get_connection()
+
+    # Bank accounts at this location — scopes the activity query.
+    bank_ids = [
+        r["id"] for r in conn.execute(
+            "SELECT id FROM bank_accounts WHERE location = ? AND active = 1",
+            (location,),
+        ).fetchall()
+    ]
+    if not bank_ids:
+        conn.close()
+        return jsonify({"location": location, "as_of": as_of, "accounts": []})
+
+    placeholders = ",".join("?" for _ in bank_ids)
+
+    # Aggregate register activity per gl_account_id. We use the same source
+    # tables and exclusion rules as get_register so numbers reconcile.
+    activity_sql = f"""
+        WITH activity AS (
+            -- Bill pay (vendor_payments) — outflows
+            SELECT gl_account_id,
+                   payment_total AS outflow,
+                   0.0 AS inflow,
+                   1 AS row_count
+            FROM vendor_payments
+            WHERE bank_account_id IN ({placeholders})
+              AND payment_date <= ?
+              AND (status IS NULL OR status NOT IN ('void', 'failed'))
+              AND gl_account_id IS NOT NULL
+
+            UNION ALL
+
+            -- Payroll — outflows
+            SELECT pc.gl_account_id,
+                   pc.net_pay AS outflow,
+                   0.0 AS inflow,
+                   1 AS row_count
+            FROM payroll_checks pc
+            LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id
+            WHERE pc.bank_account_id IN ({placeholders})
+              AND COALESCE(pr.pay_date, pc.pay_period_end) <= ?
+              AND (pc.voided IS NULL OR pc.voided = 0)
+              AND pc.gl_account_id IS NOT NULL
+
+            UNION ALL
+
+            -- Bank deposits — inflows (amount stored positive)
+            SELECT gl_account_id,
+                   0.0 AS outflow,
+                   amount AS inflow,
+                   1 AS row_count
+            FROM bank_deposits
+            WHERE bank_account_id IN ({placeholders})
+              AND deposit_date <= ?
+              AND gl_account_id IS NOT NULL
+
+            UNION ALL
+
+            -- Manual entries — signed amount (positive = inflow)
+            SELECT gl_account_id,
+                   CASE WHEN amount < 0 THEN -amount ELSE 0 END AS outflow,
+                   CASE WHEN amount > 0 THEN  amount ELSE 0 END AS inflow,
+                   1 AS row_count
+            FROM manual_bank_entries
+            WHERE bank_account_id IN ({placeholders})
+              AND entry_date <= ?
+              AND gl_account_id IS NOT NULL
+        )
+        SELECT gl_account_id,
+               COALESCE(SUM(outflow), 0) AS total_outflow,
+               COALESCE(SUM(inflow),  0) AS total_inflow,
+               COALESCE(SUM(row_count), 0) AS row_count
+        FROM activity
+        GROUP BY gl_account_id
+    """
+    activity_params = bank_ids + [as_of] + bank_ids + [as_of] + bank_ids + [as_of] + bank_ids + [as_of]
+    activity_by_id = {}
+    for r in conn.execute(activity_sql, activity_params).fetchall():
+        activity_by_id[r["gl_account_id"]] = dict(r)
+
+    # All balance-sheet GL accounts at this location (or unscoped legacy)
+    bs_types = list(_DEBIT_POSITIVE_TYPES | _CREDIT_POSITIVE_TYPES)
+    type_placeholders = ",".join("?" for _ in bs_types)
+    accts = conn.execute(
+        f"""SELECT id, name, account_type, account_subtype, location,
+                   opening_balance, opening_date
+            FROM gl_accounts
+            WHERE active = 1
+              AND (location = ? OR location IS NULL)
+              AND account_type IN ({type_placeholders})
+            ORDER BY account_type, name""",
+        [location] + bs_types,
+    ).fetchall()
+    conn.close()
+
+    out = []
+    for a in accts:
+        gid = a["id"]
+        act = activity_by_id.get(gid, {"total_outflow": 0.0, "total_inflow": 0.0, "row_count": 0})
+        opening = a["opening_balance"] or 0.0
+        outflow = act["total_outflow"] or 0.0
+        inflow = act["total_inflow"] or 0.0
+        atype = a["account_type"]
+        if atype in _DEBIT_POSITIVE_TYPES:
+            current = opening + outflow - inflow
+            side = "debit"
+        else:
+            current = opening + inflow - outflow
+            side = "credit"
+        out.append({
+            "id": gid,
+            "name": a["name"],
+            "account_type": atype,
+            "account_subtype": a["account_subtype"],
+            "location": a["location"],
+            "opening_balance": opening,
+            "opening_date": a["opening_date"],
+            "register_outflow": outflow,
+            "register_inflow": inflow,
+            "register_row_count": act["row_count"],
+            "current_balance": current,
+            "balance_side": side,
+        })
+
+    return jsonify({
+        "location": location,
+        "as_of": as_of,
+        "accounts": out,
+    })
+
+
 # ─── PAGE ROUTE ──────────────────────────────────────────────────────────────
 
 # The HTML page is served by web/server.py (for consistency with other pages

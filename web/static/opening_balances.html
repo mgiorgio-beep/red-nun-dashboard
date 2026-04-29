@@ -151,7 +151,11 @@ tr.imp-skip td   { color: var(--text3); }
         <div class="page-title">Opening Balances</div>
         <div class="page-sub">Set starting balances as of a given date for the bank account and balance-sheet GL accounts (liabilities, equity, assets). Going-forward register activity layers on top of these.</div>
       </div>
-      <div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
+          As of <input type="date" id="cb-asof" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono)">
+        </label>
+        <button class="btn-save" id="btn-show-current" style="border-color:var(--amber);color:var(--amber);font-size:13px;padding:9px 14px">Show Current Balance</button>
         <button class="btn-save" id="btn-import-bs" style="border-color:var(--blue);color:var(--blue);font-size:13px;padding:9px 14px">Import Balance Sheet</button>
       </div>
     </div>
@@ -268,6 +272,11 @@ const STATE = {
   location: localStorage.getItem('openingBalances.loc') || (window.currentLocation || localStorage.getItem('globalLocation') || 'chatham'),
   banks: [],
   glAccounts: [],
+  // Current-balance overlay. When showCurrent is true, we fetch
+  // /api/gl-accounts/balances and render an extra column on the GL table.
+  showCurrent: localStorage.getItem('openingBalances.showCurrent') === '1',
+  asOf: localStorage.getItem('openingBalances.asOf') || new Date().toISOString().slice(0, 10),
+  currentBalances: {},  // {gl_account_id: {current_balance, register_inflow, register_outflow, register_row_count}}
 };
 
 // Account types we expose on this page (balance-sheet only — Income/Expense
@@ -329,7 +338,32 @@ function renderLocationBar() {
 // Load
 // ─────────────────────────────────────────────────────────────────────────────
 async function loadAll() {
-  await Promise.all([loadBanks(), loadGlAccounts()]);
+  const tasks = [loadBanks(), loadGlAccounts()];
+  if (STATE.showCurrent) tasks.push(loadCurrentBalances());
+  await Promise.all(tasks);
+  // Re-render GL after current balances fetch (if enabled) so the column
+  // shows up. loadGlAccounts() already calls renderGl, but currentBalances
+  // may have arrived after that — re-render to be safe.
+  if (STATE.showCurrent) renderGl();
+}
+
+async function loadCurrentBalances() {
+  try {
+    const url = `/api/gl-accounts/balances?location=${encodeURIComponent(STATE.location)}&as_of=${encodeURIComponent(STATE.asOf)}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!r.ok) {
+      console.error('balances load failed', d);
+      STATE.currentBalances = {};
+      return;
+    }
+    const map = {};
+    for (const a of (d.accounts || [])) map[a.id] = a;
+    STATE.currentBalances = map;
+  } catch (e) {
+    console.error('balances load error', e);
+    STATE.currentBalances = {};
+  }
 }
 
 async function loadBanks() {
@@ -400,18 +434,39 @@ function renderBanks() {
 function renderGl() {
   if (!STATE.glAccounts.length) {
     $('gl-body').innerHTML = '<tr><td colspan="5" class="empty">No balance-sheet GL accounts found for this location.</td></tr>';
+    updateGlHeader();
     return;
   }
+  updateGlHeader();
   // Group by account_type with a subhead between groups
   const html = [];
   let lastType = null;
+  const showCurrent = STATE.showCurrent;
+  const colspan = showCurrent ? 6 : 5;
   for (const a of STATE.glAccounts) {
     if (a.account_type !== lastType) {
-      html.push(`<tr class="subhead"><td colspan="5">${esc(a.account_type || 'Other')}</td></tr>`);
+      html.push(`<tr class="subhead"><td colspan="${colspan}">${esc(a.account_type || 'Other')}</td></tr>`);
       lastType = a.account_type;
     }
     const ob = Number(a.opening_balance || 0);
     const od = a.opening_date || defaultOpeningDate();
+    let currentCell = '';
+    if (showCurrent) {
+      const cb = STATE.currentBalances[a.id];
+      if (cb) {
+        const cv = Number(cb.current_balance || 0);
+        const delta = cv - ob;
+        const deltaSign = delta >= 0 ? '+' : '−';
+        const deltaAbs = Math.abs(delta);
+        const cls = cv < 0 ? 'amt-neg' : (cv === 0 ? 'amt-zero' : 'amt-pos');
+        const subtitle = cb.register_row_count > 0
+          ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--mono)">${deltaSign}${fmt(deltaAbs)} · ${cb.register_row_count} txn</div>`
+          : '<div style="font-size:10px;color:var(--text3);margin-top:2px">no activity</div>';
+        currentCell = `<td class="col-num ${cls}" style="font-family:var(--mono);text-align:right">${fmt(cv)}${subtitle}</td>`;
+      } else {
+        currentCell = '<td class="col-num" style="color:var(--text3)">—</td>';
+      }
+    }
     html.push(`
       <tr data-gl-id="${a.id}">
         <td class="col-name editable-row">${esc(a.name)}</td>
@@ -424,6 +479,7 @@ function renderGl() {
           <input type="date" class="ob-date" value="${esc(od)}"
                  data-orig="${esc(od)}" oninput="markDirty(this)">
         </td>
+        ${currentCell}
         <td class="col-save">
           <button class="btn-save" disabled onclick="saveGl(${a.id}, this)">Save</button>
         </td>
@@ -431,6 +487,25 @@ function renderGl() {
     `);
   }
   $('gl-body').innerHTML = html.join('');
+}
+
+function updateGlHeader() {
+  // Toggle the "Current Balance" header column based on STATE.showCurrent.
+  const thead = document.querySelector('#gl-body').closest('table').querySelector('thead tr');
+  if (!thead) return;
+  // Remove any existing dynamic columns first to avoid duplicates
+  const existing = thead.querySelector('th.col-current-dyn');
+  if (existing) existing.remove();
+  if (STATE.showCurrent) {
+    const th = document.createElement('th');
+    th.className = 'col-num col-current-dyn';
+    th.style.textAlign = 'right';
+    th.innerHTML = `Current<div style="font-size:9px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text3);margin-top:2px">as of ${esc(STATE.asOf)}</div>`;
+    // Insert before the last <th> (the empty Save column)
+    const lastTh = thead.querySelector('th.col-save');
+    if (lastTh) thead.insertBefore(th, lastTh);
+    else thead.appendChild(th);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -683,12 +758,68 @@ document.addEventListener('DOMContentLoaded', () => {
 {
   const btn = document.getElementById('btn-import-bs');
   if (btn) btn.addEventListener('click', openImportModal);
+  const cbBtn = document.getElementById('btn-show-current');
+  const cbDate = document.getElementById('cb-asof');
+  if (cbDate) cbDate.value = STATE.asOf;
+  function refreshCurrentToggleStyle() {
+    if (!cbBtn) return;
+    if (STATE.showCurrent) {
+      cbBtn.style.background = 'rgba(245,158,11,0.12)';
+      cbBtn.textContent = 'Hide Current Balance';
+    } else {
+      cbBtn.style.background = '';
+      cbBtn.textContent = 'Show Current Balance';
+    }
+  }
+  refreshCurrentToggleStyle();
+  if (cbBtn) {
+    cbBtn.addEventListener('click', async () => {
+      STATE.showCurrent = !STATE.showCurrent;
+      localStorage.setItem('openingBalances.showCurrent', STATE.showCurrent ? '1' : '0');
+      refreshCurrentToggleStyle();
+      if (STATE.showCurrent) {
+        await loadCurrentBalances();
+      }
+      renderGl();
+      toggleCurrentDisclaimer();
+    });
+  }
+  if (cbDate) {
+    cbDate.addEventListener('change', async () => {
+      STATE.asOf = cbDate.value || new Date().toISOString().slice(0, 10);
+      localStorage.setItem('openingBalances.asOf', STATE.asOf);
+      if (STATE.showCurrent) {
+        await loadCurrentBalances();
+        renderGl();
+      }
+    });
+  }
+}
+
+function toggleCurrentDisclaimer() {
+  let banner = document.getElementById('cb-disclaimer');
+  if (STATE.showCurrent) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'cb-disclaimer';
+      banner.className = 'help-banner';
+      banner.style.background = 'rgba(245,158,11,0.08)';
+      banner.style.borderColor = 'rgba(245,158,11,0.3)';
+      banner.style.color = 'var(--amber)';
+      banner.innerHTML = 'Current balances reflect <strong>cash-side activity only</strong> from the bank register. POS-side accruals (sales tax collected at the register, gift certificates sold) are NOT included — for those accounts the number captures only the decreases (DAVO sweeps, gift cert redemptions paid out).';
+      const sectionGl = document.querySelectorAll('.section')[1];
+      if (sectionGl) sectionGl.parentNode.insertBefore(banner, sectionGl);
+    }
+  } else if (banner) {
+    banner.remove();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Boot
 // ─────────────────────────────────────────────────────────────────────────────
 renderLocationBar();
+toggleCurrentDisclaimer();
 loadAll();
 </script>
 

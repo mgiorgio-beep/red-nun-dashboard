@@ -247,16 +247,30 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     <div class="summary-bar" id="summary-bar"></div>
 
     <div class="filter-bar">
-      <span class="filter-label">From</span>
-      <input type="date" class="filter-input" id="flt-start">
-      <span class="filter-label">To</span>
-      <input type="date" class="filter-input" id="flt-end">
+      <span class="filter-label">Period</span>
+      <select class="filter-select" id="flt-preset">
+        <option value="today">Today</option>
+        <option value="this_week">This Week</option>
+        <option value="mtd">Month to Date</option>
+        <option value="last_month">Last Month</option>
+        <option value="this_quarter">This Quarter</option>
+        <option value="last_quarter">Last Quarter</option>
+        <option value="ytd">Year to Date</option>
+        <option value="last_year">Last Year</option>
+        <option value="last_90">Last 90 Days</option>
+        <option value="custom">Custom…</option>
+      </select>
+      <span class="filter-label custom-only" style="display:none">From</span>
+      <input type="date" class="filter-input custom-only" id="flt-start" style="display:none">
+      <span class="filter-label custom-only" style="display:none">To</span>
+      <input type="date" class="filter-input custom-only" id="flt-end" style="display:none">
       <span class="filter-label">Status</span>
       <select class="filter-select" id="flt-cleared">
         <option value="all">All</option>
         <option value="uncleared">Uncleared</option>
         <option value="cleared">Cleared</option>
       </select>
+      <span class="date-display" id="date-display" style="font-size:11px;color:var(--text3);font-family:var(--mono)"></span>
       <button class="btn-action" id="btn-refresh">Refresh</button>
     </div>
 
@@ -438,14 +452,146 @@ const esc = (s) => (s == null ? '' : String(s).replace(/[&<>"']/g, c => ({'&':'&
 function openModal(id) { $(id).classList.add('open'); }
 function closeModal(id) { $(id).classList.remove('open'); }
 
-// Default date range: last 90 days
-function defaultDates() {
+// ────────────────────────────────────────────────────────────────────────────
+// Date presets
+// ────────────────────────────────────────────────────────────────────────────
+// Default preset for first-time visitors. Persisted choice (in localStorage)
+// overrides this on subsequent loads.
+const DEFAULT_PRESET = 'today';
+
+function isoDate(d) { return d.toISOString().slice(0, 10); }
+
+// Compute {start, end} for a named preset relative to today. End is always
+// today (so YTD/MTD show through current activity). Returns null for
+// 'custom' — caller reads from the date inputs in that case.
+function rangeForPreset(preset) {
   const today = new Date();
-  const start = new Date(today.getTime() - 90 * 86400000);
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: today.toISOString().slice(0, 10),
-  };
+  // Normalize "today" to midnight to avoid TZ rounding when subtracting days
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayIso = isoDate(t);
+
+  function startOfQuarter(year, qIdx) {
+    return new Date(year, qIdx * 3, 1);
+  }
+
+  switch (preset) {
+    case 'today':
+      return {start: todayIso, end: todayIso};
+    case 'this_week': {
+      // Monday start (ISO week)
+      const dow = (t.getDay() + 6) % 7;  // 0=Mon, 6=Sun
+      const start = new Date(t); start.setDate(t.getDate() - dow);
+      return {start: isoDate(start), end: todayIso};
+    }
+    case 'mtd': {
+      const start = new Date(t.getFullYear(), t.getMonth(), 1);
+      return {start: isoDate(start), end: todayIso};
+    }
+    case 'last_month': {
+      const start = new Date(t.getFullYear(), t.getMonth() - 1, 1);
+      const end = new Date(t.getFullYear(), t.getMonth(), 0);  // last day of prev month
+      return {start: isoDate(start), end: isoDate(end)};
+    }
+    case 'this_quarter': {
+      const qIdx = Math.floor(t.getMonth() / 3);
+      const start = startOfQuarter(t.getFullYear(), qIdx);
+      return {start: isoDate(start), end: todayIso};
+    }
+    case 'last_quarter': {
+      const qIdx = Math.floor(t.getMonth() / 3);
+      const lastQ = qIdx - 1;
+      const year = lastQ < 0 ? t.getFullYear() - 1 : t.getFullYear();
+      const adj = (lastQ + 4) % 4;
+      const start = startOfQuarter(year, adj);
+      // End = day before start of current quarter
+      const end = new Date(start.getFullYear(), start.getMonth() + 3, 0);
+      return {start: isoDate(start), end: isoDate(end)};
+    }
+    case 'ytd': {
+      const start = new Date(t.getFullYear(), 0, 1);
+      return {start: isoDate(start), end: todayIso};
+    }
+    case 'last_year': {
+      const start = new Date(t.getFullYear() - 1, 0, 1);
+      const end = new Date(t.getFullYear() - 1, 11, 31);
+      return {start: isoDate(start), end: isoDate(end)};
+    }
+    case 'last_90': {
+      const start = new Date(t.getTime() - 90 * 86400000);
+      return {start: isoDate(start), end: todayIso};
+    }
+    case 'custom':
+      return null;  // caller reads from inputs
+    default:
+      return rangeForPreset('today');
+  }
+}
+
+// Returns the active {start, end} for the current preset (reading from
+// the inputs when preset === 'custom').
+function activeDateRange() {
+  const preset = $('flt-preset').value || DEFAULT_PRESET;
+  if (preset === 'custom') {
+    return {start: $('flt-start').value, end: $('flt-end').value};
+  }
+  return rangeForPreset(preset);
+}
+
+// Apply the active preset: update the inputs (so Custom toggles use them
+// as a starting point) and the small range-display label, then reload.
+function applyPreset() {
+  const preset = $('flt-preset').value || DEFAULT_PRESET;
+  const isCustom = preset === 'custom';
+  document.querySelectorAll('.custom-only').forEach(el => {
+    el.style.display = isCustom ? '' : 'none';
+  });
+  if (!isCustom) {
+    const r = rangeForPreset(preset);
+    $('flt-start').value = r.start;
+    $('flt-end').value = r.end;
+  }
+  const r = activeDateRange();
+  $('date-display').textContent = (r.start && r.end) ? `${r.start} → ${r.end}` : '';
+  try { localStorage.setItem('register.preset', preset); } catch (e) {}
+  // Persist custom dates too (so reload returns to same window)
+  if (isCustom) {
+    try {
+      localStorage.setItem('register.customStart', $('flt-start').value);
+      localStorage.setItem('register.customEnd', $('flt-end').value);
+    } catch (e) {}
+  }
+  loadRegister();
+}
+
+// Boot the preset UI from localStorage (or default). Called once on init.
+function initPresets() {
+  const saved = localStorage.getItem('register.preset') || DEFAULT_PRESET;
+  $('flt-preset').value = saved;
+  // For custom, restore the saved dates if any
+  if (saved === 'custom') {
+    const cs = localStorage.getItem('register.customStart');
+    const ce = localStorage.getItem('register.customEnd');
+    if (cs) $('flt-start').value = cs;
+    if (ce) $('flt-end').value = ce;
+  }
+  const isCustom = saved === 'custom';
+  document.querySelectorAll('.custom-only').forEach(el => {
+    el.style.display = isCustom ? '' : 'none';
+  });
+  if (!isCustom) {
+    const r = rangeForPreset(saved);
+    $('flt-start').value = r.start;
+    $('flt-end').value = r.end;
+  }
+  const r = activeDateRange();
+  $('date-display').textContent = (r.start && r.end) ? `${r.start} → ${r.end}` : '';
+}
+
+// Back-compat alias used elsewhere in this file (selectAccount initialises
+// dates if empty). Returns the same shape but using the active preset.
+function defaultDates() {
+  const r = activeDateRange();
+  return r || {start: '', end: ''};
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -853,8 +999,24 @@ $('btn-sync').addEventListener('click', async () => {
 // ────────────────────────────────────────────────────────────────────────────
 $('btn-refresh').addEventListener('click', loadRegister);
 $('flt-cleared').addEventListener('change', loadRegister);
-$('flt-start').addEventListener('change', loadRegister);
-$('flt-end').addEventListener('change', loadRegister);
+$('flt-preset').addEventListener('change', applyPreset);
+// Custom-mode date inputs trigger an immediate reload (and persist their values)
+$('flt-start').addEventListener('change', () => {
+  if ($('flt-preset').value === 'custom') {
+    try { localStorage.setItem('register.customStart', $('flt-start').value); } catch (e) {}
+    const r = activeDateRange();
+    $('date-display').textContent = (r.start && r.end) ? `${r.start} → ${r.end}` : '';
+    loadRegister();
+  }
+});
+$('flt-end').addEventListener('change', () => {
+  if ($('flt-preset').value === 'custom') {
+    try { localStorage.setItem('register.customEnd', $('flt-end').value); } catch (e) {}
+    const r = activeDateRange();
+    $('date-display').textContent = (r.start && r.end) ? `${r.start} → ${r.end}` : '';
+    loadRegister();
+  }
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Sort header click wiring
@@ -867,6 +1029,7 @@ document.querySelectorAll('.reg-table thead th.sortable').forEach(th => {
 // Boot
 // ────────────────────────────────────────────────────────────────────────────
 (async () => {
+  initPresets();
   updateSortIndicators();
   await loadGlAccounts();
   await loadAccounts();
