@@ -355,6 +355,38 @@ def get_upload(upload_id):
     return jsonify(out)
 
 
+@bank_reconcile_bp.route("/api/bank-reconcile/uploads/<int:upload_id>/raw-text", methods=["GET"])
+@login_required
+def get_upload_raw_text(upload_id):
+    """Diagnostic: return the raw text pdfplumber extracted from this upload's
+    PDF, so we can tune the parser regex against the real statement format."""
+    from integrations.bank_statements.processor import _extract_text
+
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT file_path FROM bank_statement_uploads WHERE id = ?", (upload_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Upload not found"}), 404
+    if not row["file_path"] or not os.path.exists(row["file_path"]):
+        return jsonify({"error": f"PDF file missing on disk: {row['file_path']}"}), 404
+
+    try:
+        with open(row["file_path"], "rb") as f:
+            full, pages = _extract_text(f.read())
+    except Exception as e:
+        return jsonify({"error": f"Extract failed: {e}"}), 500
+
+    return jsonify({
+        "upload_id": upload_id,
+        "page_count": len(pages),
+        "char_count": len(full),
+        "full_text": full,
+        "page_lengths": [len(p) for p in pages],
+    })
+
+
 @bank_reconcile_bp.route("/api/bank-reconcile/uploads/<int:upload_id>", methods=["DELETE"])
 @admin_required
 def delete_upload(upload_id):
