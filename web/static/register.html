@@ -404,13 +404,25 @@ function sortedRows() {
   const {col, dir} = STATE.sort;
   const fn = SORT_FIELDS[col] || SORT_FIELDS.date;
   const mult = dir === 'asc' ? 1 : -1;
-  // Stable sort — preserve original order for ties (matches the date-asc
-  // running-balance order from the backend so balance column stays sensible).
   const indexed = STATE.rows.map((r, i) => ({r, i}));
   indexed.sort((a, b) => {
     const av = fn(a.r), bv = fn(b.r);
     if (av < bv) return -1 * mult;
     if (av > bv) return  1 * mult;
+    // For date sort, tie-break by (source, source_id) in the SAME direction
+    // as the primary sort so within-date order matches the chronological
+    // compute order. Without this, sorting date ASC keeps within-date in DESC
+    // (because that's how the backend reverses for default display), which
+    // makes the running balance flow backwards (deposit appears to lower the
+    // balance, payment appears to raise it).
+    if (col === 'date') {
+      const sa = a.r.source || '', sb = b.r.source || '';
+      if (sa < sb) return -1 * mult;
+      if (sa > sb) return  1 * mult;
+      const ia = Number(a.r.source_id || 0), ib = Number(b.r.source_id || 0);
+      if (ia < ib) return -1 * mult;
+      if (ia > ib) return  1 * mult;
+    }
     return a.i - b.i;
   });
   return indexed.map(x => x.r);
