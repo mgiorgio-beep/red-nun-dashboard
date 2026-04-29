@@ -162,13 +162,16 @@ _RE_ACCT_LAST4 = re.compile(
 # A Cape Cod Five transaction line looks like:
 #   "1/02 Deposit                                     105.00       34,118.57"
 #   "1/02 MEBillPay Cozzini Bros., I                   28.90-      54,768.99"
-# A debit ends the amount with a trailing '-'. A credit has no suffix.
-# The running balance is always present at end of line. Date may be 1- or 2-digit.
+#   "1/29 TAX 7shifts                                    .27-      30,620.57"  ← sub-dollar
+# A debit ends the amount with a trailing '-'. A credit has no suffix. The
+# amount may be sub-dollar (e.g. ".27") so we allow zero digits before the
+# decimal as long as there are two digits after. Running balance is always
+# present at end of line. Date may be 1- or 2-digit.
 _RE_TX_LINE = re.compile(
-    r"^\s*(?P<date>\d{1,2}/\d{1,2})"      # M/DD or MM/DD
-    r"\s+(?P<desc>.+?)"                    # non-greedy desc
-    r"\s+(?P<amt>[\d,]+\.\d{2})(?P<sign>-?)"  # amount + optional debit marker
-    r"\s+(?P<bal>[\d,]+\.\d{2})\s*$",     # running balance
+    r"^\s*(?P<date>\d{1,2}/\d{1,2})"          # M/DD or MM/DD
+    r"\s+(?P<desc>.+?)"                        # non-greedy desc
+    r"\s+(?P<amt>[\d,]*\.\d{2})(?P<sign>-?)"   # amount (incl. sub-dollar) + optional debit marker
+    r"\s+(?P<bal>[\d,]+\.\d{2})\s*$",          # running balance (always >= $1.00 in practice)
 )
 
 # Some statements split debit/credit into two columns. Handle that as a
