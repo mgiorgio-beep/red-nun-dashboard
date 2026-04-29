@@ -153,6 +153,38 @@ def upload_statement():
             "file_path": str(file_path),
         }), 500
 
+    # Verify the uploaded statement is actually for the selected account.
+    # The parser pulls account_last4 from the PDF header (looks for the
+    # known last4s 5975 / 2757). If it found one and it doesn't match the
+    # bank_account record's last4, reject the upload — this prevents a Dennis
+    # statement from being imported as Chatham (or vice-versa).
+    parsed_last4 = (parsed.get("account_last4") or "").strip()
+    expected_last4 = (acct["account_last4"] or "").strip()
+    if parsed_last4 and expected_last4 and parsed_last4 != expected_last4:
+        # Wrong account picked. Delete the saved file and bail.
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        conn.close()
+        return jsonify({
+            "error": (
+                f"Account mismatch: you selected {acct['name']} "
+                f"(•••{expected_last4}), but this statement is for an account "
+                f"ending in •••{parsed_last4}. Pick the matching account and try again."
+            ),
+            "expected_last4": expected_last4,
+            "found_last4": parsed_last4,
+        }), 400
+
+    # If the parser couldn't find a last4 at all, surface a soft warning so
+    # the user knows we couldn't auto-verify.
+    if expected_last4 and not parsed_last4:
+        parsed.setdefault("warnings", []).append(
+            f"Could not detect account number on the PDF — proceeding under "
+            f"the assumption it's {acct['name']} (•••{expected_last4})."
+        )
+
     # Dedupe against the register
     register_rows = _load_register_rows_for_period(conn, account_id, parsed)
     matches = _match_transactions(parsed.get("transactions", []), register_rows)

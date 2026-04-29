@@ -130,8 +130,8 @@ def _detect_bank(text: str) -> str:
 
 # Patterns
 _RE_PERIOD = re.compile(
-    r"(?:Statement\s*Period|Period|Statement\s*Date)[\s:]*"
-    r"(\d{1,2}/\d{1,2}/\d{2,4})\s*(?:to|through|-|—|–)\s*(\d{1,2}/\d{1,2}/\d{2,4})",
+    r"(?:Statement\s*Period|Statement\s*Dates|Period|Statement\s*Date)[\s:]*"
+    r"(\d{1,2}/\d{1,2}/\d{2,4})\s*(?:to|through|thru|-|—|–)\s*(\d{1,2}/\d{1,2}/\d{2,4})",
     re.IGNORECASE,
 )
 _RE_BEGIN_BAL = re.compile(
@@ -140,11 +140,17 @@ _RE_BEGIN_BAL = re.compile(
 _RE_END_BAL = re.compile(
     r"(?:Ending|New|Current|Closing)\s+Balance[\s:\.]*\$?\s*([\d,]+\.\d{2})", re.IGNORECASE
 )
+# CCF prints totals as e.g. "165 Checks/Debits 92,398.46" — count + label + amount.
+# Also handle the more conventional "Total Debits/Withdrawals" labels other banks use.
 _RE_TOT_DEBITS = re.compile(
-    r"(?:Total\s+(?:Debits|Withdrawals|Subtractions))[\s:\.]*\$?\s*([\d,]+\.\d{2})", re.IGNORECASE
+    r"(?:(?:\d+\s+)?(?:Checks/Debits|Debits/Checks)|Total\s+(?:Debits|Withdrawals|Subtractions))"
+    r"[\s:\.]*\$?\s*([\d,]+\.\d{2})",
+    re.IGNORECASE,
 )
 _RE_TOT_CREDITS = re.compile(
-    r"(?:Total\s+(?:Credits|Deposits|Additions))[\s:\.]*\$?\s*([\d,]+\.\d{2})", re.IGNORECASE
+    r"(?:(?:\d+\s+)?(?:Deposits/Credits|Credits/Deposits)|Total\s+(?:Credits|Deposits|Additions))"
+    r"[\s:\.]*\$?\s*([\d,]+\.\d{2})",
+    re.IGNORECASE,
 )
 _RE_ACCT_LAST4 = re.compile(
     r"Account[^\d]{0,30}(\d{4})\b|"
@@ -154,13 +160,13 @@ _RE_ACCT_LAST4 = re.compile(
 )
 
 # A Cape Cod Five transaction line looks like:
-#   "10/01 Check 9561                    1,553.88-      25,397.11"
-#   "10/03 DEP OCT 02 TOAST                            2,891.31     15,776.44"
+#   "1/02 Deposit                                     105.00       34,118.57"
+#   "1/02 MEBillPay Cozzini Bros., I                   28.90-      54,768.99"
 # A debit ends the amount with a trailing '-'. A credit has no suffix.
-# The running balance is always present at end of line.
+# The running balance is always present at end of line. Date may be 1- or 2-digit.
 _RE_TX_LINE = re.compile(
-    r"^\s*(?P<date>\d{2}/\d{2})"          # MM/DD
-    r"\s+(?P<desc>.+?)"                    # greedy desc
+    r"^\s*(?P<date>\d{1,2}/\d{1,2})"      # M/DD or MM/DD
+    r"\s+(?P<desc>.+?)"                    # non-greedy desc
     r"\s+(?P<amt>[\d,]+\.\d{2})(?P<sign>-?)"  # amount + optional debit marker
     r"\s+(?P<bal>[\d,]+\.\d{2})\s*$",     # running balance
 )
@@ -176,19 +182,38 @@ _SECTION_START_PATTERNS = (
     "TRANSACTION DETAIL",
     "ACTIVITY SUMMARY",
 )
+# Things that mark the END of the running daily-activity table. After these,
+# stop accepting transaction or memo lines. CCF in particular ends with
+# "--- CHECKS IN NUMBER ORDER ---" (a separate table that re-lists checks
+# in a totally different format we don't want to re-parse), then the polite
+# closing line.
 _SECTION_END_PATTERNS = (
+    "CHECKS IN NUMBER ORDER",
     "STATEMENT SUMMARY",
     "DAILY BALANCES",
+    "DAILY BALANCE SUMMARY",
     "SERVICE CHARGES",
     "INTEREST RATE SUMMARY",
     "OVERDRAFT NOTICE",
-    "MEMBER FDIC",
+    "THANK YOU FOR BANKING",
 )
 
-# Lines we should skip even if they look table-ish.
+# Lines we should skip even if they're inside the activity section (they're
+# page-break repeats, column headers, footers, or stray noise — never memo
+# content for a real transaction).
 _SKIP_PATTERNS = (
-    re.compile(r"^\s*(Date|Description|Debit|Credit|Balance|Withdrawals|Deposits)\s+", re.IGNORECASE),
-    re.compile(r"^\s*Page\s+\d+\s*(of\s+\d+)?\s*$", re.IGNORECASE),
+    # Column header row — repeats every page
+    re.compile(r"^\s*Date\s+Description\s+(Debit|Withdrawals)", re.IGNORECASE),
+    re.compile(r"^\s*(Description|Debit|Credit|Balance|Withdrawals|Deposits)\s+", re.IGNORECASE),
+    # CCF page header: "Date 1/30/26 Page 2"
+    re.compile(r"^\s*Date\s+\d{1,2}/\d{1,2}/\d{2,4}\s+Page\s+\d+", re.IGNORECASE),
+    # Generic page numbering
+    re.compile(r"^\s*Page[:]?\s+\d+(\s*of\s*\d+)?\s*$", re.IGNORECASE),
+    # CCF account banner on continuation pages
+    re.compile(r"^\s*Business\s+I\s+Checking\s+Acct\s+Ending", re.IGNORECASE),
+    # FDIC footer
+    re.compile(r"^\s*MEMBER\s+FDIC\s*$", re.IGNORECASE),
+    # Another DAILY ACTIVITY repeat already handled below, but match here too as safety
 )
 
 
@@ -223,8 +248,11 @@ def _parse_cape_cod_five(full_text: str, page_texts: list[str], hint_year: int |
 
         # Section toggling
         if any(p in upper for p in _SECTION_START_PATTERNS):
-            in_activity = True
-            pending = None
+            # CCF repeats "DAILY ACTIVITY" at the top of every continuation
+            # page. If we're already mid-section don't drop the in-flight tx.
+            if not in_activity:
+                in_activity = True
+                pending = None
             continue
         if any(p in upper for p in _SECTION_END_PATTERNS):
             if pending:
