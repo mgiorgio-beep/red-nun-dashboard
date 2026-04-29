@@ -1709,6 +1709,12 @@ def import_balance_sheet():
         return jsonify({"error": "as_of_date must be YYYY-MM-DD"}), 400
     include_equity = request.form.get("include_equity", "1") == "1"
     dry_run = request.form.get("dry_run", "1") == "1"
+    # Replace mode: deactivate every existing gl_account at this location
+    # before the upsert. Imported accounts (create or update) come back
+    # with active=1, so the net effect is "only BS accounts are visible".
+    # The other rows aren't deleted — they're just hidden — so any
+    # historical references (rules, register coding) keep working.
+    replace_mode = request.form.get("replace_mode", "0") == "1"
 
     f = request.files.get("file")
     if not f:
@@ -1799,7 +1805,19 @@ def import_balance_sheet():
         })
 
     applied = False
+    deactivated_count = 0
     if not dry_run:
+        # Replace-mode pass: hide every gl_account currently scoped to this
+        # location. Subsequent updates re-activate matched rows; new creates
+        # are active=1. Unscoped (location IS NULL) rows are left alone —
+        # those came from the legacy unified COA and may still be referenced.
+        if replace_mode:
+            cur = conn.execute(
+                "UPDATE gl_accounts SET active = 0 WHERE location = ?",
+                (location,),
+            )
+            deactivated_count = cur.rowcount or 0
+
         # Apply bank_accounts update
         if bank_match:
             conn.execute(
@@ -1813,9 +1831,11 @@ def import_balance_sheet():
             if row["action"] == "skip":
                 continue
             if row["action"] == "update":
+                # Re-activate AND set the new opening balance (replace mode
+                # may have just hidden it — bring it back).
                 conn.execute(
-                    "UPDATE gl_accounts SET opening_balance = ?, opening_date = ? "
-                    "WHERE id = ?",
+                    "UPDATE gl_accounts SET opening_balance = ?, opening_date = ?, "
+                    "active = 1 WHERE id = ?",
                     (row["opening_balance"], as_of_date, row["existing_id"]),
                 )
             else:  # create
@@ -1843,6 +1863,8 @@ def import_balance_sheet():
         "as_of_date": as_of_date,
         "location": location,
         "include_equity": include_equity,
+        "replace_mode": replace_mode,
+        "deactivated_count": deactivated_count,
         "applied": applied,
         "counts": counts,
         "accounts": out_accounts,
