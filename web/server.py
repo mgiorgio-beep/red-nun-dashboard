@@ -54,6 +54,7 @@ from routes.billpay_routes import billpay_bp, init_recurring_tables
 from routes.payroll_routes import payroll_bp, init_payroll_tables
 from routes.payment_routes import payment_bp, init_payment_tables
 from routes.register_routes import register_bp, init_register_tables
+from routes.bank_reconcile_routes import bank_reconcile_bp, init_bank_reconcile_tables
 from integrations.invoices.processor import init_invoice_tables
 import secrets
 
@@ -105,6 +106,7 @@ app.register_blueprint(billpay_bp)
 app.register_blueprint(payroll_bp)
 app.register_blueprint(payment_bp)
 app.register_blueprint(register_bp)
+app.register_blueprint(bank_reconcile_bp)
 app.register_blueprint(availability_bp)
 app.register_blueprint(application_bp)
 app.register_blueprint(daily_sales_bp)
@@ -153,6 +155,12 @@ try:
     logger.info("Bank register tables initialized")
 except Exception as e:
     logger.warning(f"Register table init failed: {e}")
+
+try:
+    init_bank_reconcile_tables()
+    logger.info("Bank reconcile tables initialized")
+except Exception as e:
+    logger.warning(f"Bank reconcile table init failed: {e}")
 
 
 # ------------------------------------------------------------------
@@ -252,6 +260,13 @@ def registers_page():
 def reconcile_page():
     """Serve the portal-reconciliation page (Bill Pay vs vendor portal)."""
     return send_from_directory("static", "reconcile.html")
+
+
+@app.route("/bank-reconcile")
+@login_required
+def bank_reconcile_page():
+    """Serve the bank statement reconcile page (PDF upload + dedupe + import)."""
+    return send_from_directory("static", "bank_reconcile.html")
 
 
 @app.route("/specials")

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bank Reconcile — Red Nun</title>
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, monospace;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+.main-content { padding: 24px; overflow-y: auto; }
+.content-wrap { max-width: 1280px; }
+
+.page-header { margin-bottom: 18px; }
+.page-title { font-size: 22px; font-weight: 700; }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+.section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); margin-bottom: 12px; font-weight: 700; }
+
+.account-bar { display: flex; gap: 10px; flex-wrap: wrap; }
+.account-pill {
+  padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 10px;
+}
+.account-pill:hover { border-color: var(--border-focus); color: var(--text); }
+.account-pill.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.account-pill .acct-last4 { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+.account-pill.active .acct-last4 { color: var(--blue); }
+
+.upload-zone {
+  border: 2px dashed var(--border-focus); border-radius: 12px; padding: 28px;
+  text-align: center; color: var(--text2); cursor: pointer; transition: all 0.15s;
+}
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--blue); background: rgba(56,189,248,0.05); color: var(--blue); }
+.upload-zone .lbl { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.upload-zone .hint { font-size: 12px; color: var(--text3); }
+.upload-zone input[type=file] { display: none; }
+
+.btn {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text2); font-size: 13px; font-family: var(--font);
+  cursor: pointer; transition: all 0.15s; font-weight: 500;
+}
+.btn:hover { border-color: var(--blue); color: var(--blue); }
+.btn-primary { border-color: var(--green); color: var(--green); }
+.btn-primary:hover { background: var(--green-soft); }
+.btn-warn { border-color: var(--amber); color: var(--amber); }
+.btn-warn:hover { background: var(--amber-soft); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.summary-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.summary-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
+.summary-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.summary-value { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
+.summary-value.green { color: var(--green); }
+.summary-value.red { color: var(--red); }
+.summary-value.blue { color: var(--blue); }
+.summary-value.amber { color: var(--amber); }
+
+.warnings { margin-bottom: 12px; }
+.warning {
+  background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3);
+  color: var(--amber); padding: 10px 14px; border-radius: 8px; font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.review-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.review-tools .label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.filter-input {
+  padding: 7px 10px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 13px; min-width: 140px;
+}
+
+.tx-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tx-table thead th {
+  text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 700;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 1;
+}
+.tx-table tbody td {
+  padding: 9px 12px; border-bottom: 1px solid rgba(30,41,59,0.6); vertical-align: top;
+}
+.tx-table tbody tr.row-exact { background: rgba(34,197,94,0.04); }
+.tx-table tbody tr.row-likely { background: rgba(56,189,248,0.04); }
+.tx-table tbody tr:hover td { background: rgba(56,189,248,0.06); }
+.col-chk { width: 36px; text-align: center; }
+.col-date { font-family: var(--mono); font-size: 12px; color: var(--text2); white-space: nowrap; width: 90px; }
+.col-amt { text-align: right; font-family: var(--mono); white-space: nowrap; width: 110px; }
+.col-bal { text-align: right; font-family: var(--mono); white-space: nowrap; width: 110px; color: var(--text3); }
+
+.amt-out { color: var(--red); }
+.amt-in { color: var(--green); }
+
+.match-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 5px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.match-exact { background: var(--green-soft); color: var(--green); }
+.match-likely { background: var(--blue-soft); color: var(--blue); }
+.match-none { background: rgba(148,163,184,0.15); color: var(--text2); }
+
+.match-detail {
+  font-size: 11px; color: var(--text3); margin-top: 2px;
+  font-family: var(--mono);
+}
+
+.history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.history-table th { text-align: left; padding: 8px 10px; font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+.history-table td { padding: 8px 10px; border-bottom: 1px solid rgba(30,41,59,0.6); }
+.history-table .right { text-align: right; font-family: var(--mono); }
+.history-table .clickable { cursor: pointer; color: var(--blue); }
+
+.empty { text-align: center; padding: 30px; color: var(--text3); font-size: 13px; }
+.loading { text-align: center; padding: 20px; color: var(--text3); font-size: 13px; }
+
+.action-bar {
+  position: sticky; bottom: 0;
+  background: var(--bg-card); border-top: 1px solid var(--border);
+  padding: 12px 16px; margin: 16px -16px -16px;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.action-bar .left { color: var(--text2); font-size: 12px; }
+.action-bar .right { margin-left: auto; display: flex; gap: 8px; }
+
+@media (max-width: 767px) {
+  .main-content { padding: 14px; }
+  .page-title { font-size: 18px; }
+  .summary-bar { grid-template-columns: 1fr 1fr; }
+  .summary-value { font-size: 16px; }
+  .tx-table thead th, .tx-table tbody td { padding: 7px 6px; font-size: 11px; }
+  .col-bal { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="main-content">
+<div class="content-wrap">
+
+  <div class="page-header">
+    <div class="page-title">Bank Reconcile</div>
+    <div class="page-sub">Upload a Cape Cod Five PDF statement, parse it, and import transactions that aren't in the register.</div>
+  </div>
+
+  <!-- Account picker -->
+  <div class="section">
+    <h2>1. Account</h2>
+    <div class="account-bar" id="account-bar"><div class="loading">Loading accounts…</div></div>
+  </div>
+
+  <!-- Upload zone -->
+  <div class="section">
+    <h2>2. Statement</h2>
+    <label class="upload-zone" id="upload-zone">
+      <div class="lbl">Drop PDF here or click to browse</div>
+      <div class="hint">Cape Cod Five statement (5975 Chatham or 2757 Dennis). Max 50 MB.</div>
+      <input type="file" id="file-input" accept="application/pdf">
+    </label>
+    <div id="upload-status" style="margin-top:10px; font-size:12px; color: var(--text3); min-height: 18px;"></div>
+  </div>
+
+  <!-- Review section (hidden until upload completes) -->
+  <div class="section" id="review-section" style="display:none">
+    <h2>3. Review &amp; import</h2>
+
+    <div class="summary-bar" id="summary-bar"></div>
+    <div class="warnings" id="warnings"></div>
+
+    <div class="review-tools">
+      <span class="label">Show</span>
+      <select class="filter-input" id="flt-show">
+        <option value="all">All rows</option>
+        <option value="unmatched">Unmatched only</option>
+        <option value="matched">Matched only</option>
+        <option value="checked">Checked only</option>
+      </select>
+      <span class="label">Search</span>
+      <input class="filter-input" id="flt-search" type="text" placeholder="payee, ref, memo…">
+      <button class="btn" id="btn-select-unmatched">Select unmatched</button>
+      <button class="btn" id="btn-select-all">Select all</button>
+      <button class="btn" id="btn-clear-selection">Clear</button>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table class="tx-table" id="tx-table">
+        <thead>
+          <tr>
+            <th class="col-chk"><input type="checkbox" id="chk-all"></th>
+            <th class="col-date">Date</th>
+            <th>Description</th>
+            <th>Match</th>
+            <th class="col-amt">Out</th>
+            <th class="col-amt">In</th>
+            <th class="col-bal">Balance</th>
+          </tr>
+        </thead>
+        <tbody id="tx-body"></tbody>
+      </table>
+    </div>
+
+    <div class="action-bar">
+      <div class="left">
+        <span id="sel-count">0</span> selected
+        · <span id="sel-net">$0.00</span> net
+      </div>
+      <div class="right">
+        <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="opt-clear-matches"> Mark matched register rows as cleared
+        </label>
+        <button class="btn btn-primary" id="btn-import" disabled>Import selected</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="section">
+    <h2>4. Past uploads</h2>
+    <div id="history-wrap"><div class="loading">Loading…</div></div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────────────────────
+// State
+// ────────────────────────────────────────────────────────────────────────────
+const STATE = {
+  accounts: [],
+  currentAcct: null,
+  upload: null,        // last response from /upload or /uploads/<id>
+  selected: new Set(), // parsed indexes selected for import
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Number(n||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtMoney = (n) => '$' + fmt(n);
+const esc = (s) => (s == null ? '' : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
+// ────────────────────────────────────────────────────────────────────────────
+// Accounts
+// ────────────────────────────────────────────────────────────────────────────
+async function loadAccounts() {
+  try {
+    const r = await fetch('/api/register/accounts');
+    const d = await r.json();
+    STATE.accounts = d.accounts || [];
+    if (!STATE.accounts.length) {
+      $('account-bar').innerHTML = '<div class="empty">No bank accounts configured.</div>';
+      return;
+    }
+    renderAccountBar();
+    // Auto-select based on global location
+    const loc = (window.currentLocation || localStorage.getItem('globalLocation') || 'chatham');
+    const match = STATE.accounts.find(a => a.location === loc) || STATE.accounts[0];
+    selectAccount(match.id);
+  } catch (e) {
+    $('account-bar').innerHTML = `<div class="empty">Failed to load accounts: ${esc(String(e))}</div>`;
+  }
+}
+
+function renderAccountBar() {
+  $('account-bar').innerHTML = STATE.accounts.map(a => `
+    <div class="account-pill" data-acct="${a.id}" onclick="selectAccount(${a.id})">
+      <div>
+        <div>${esc(a.short_name || a.name)}</div>
+        <div class="acct-last4">••• ${esc(a.account_last4 || '----')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectAccount(id) {
+  STATE.currentAcct = STATE.accounts.find(a => a.id === id);
+  document.querySelectorAll('.account-pill').forEach(el => {
+    el.classList.toggle('active', Number(el.dataset.acct) === id);
+  });
+  loadHistory();
+  // Don't auto-clear an in-progress review
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Upload
+// ────────────────────────────────────────────────────────────────────────────
+function setupUploadZone() {
+  const zone = $('upload-zone');
+  const input = $('file-input');
+
+  zone.addEventListener('click', (e) => {
+    // Avoid double-fire when clicking the inner <input>
+    if (e.target.tagName !== 'INPUT') input.click();
+  });
+
+  ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, (e) => {
+    e.preventDefault(); zone.classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, (e) => {
+    e.preventDefault(); zone.classList.remove('dragover');
+  }));
+  zone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) uploadStatement(file);
+  });
+  input.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) uploadStatement(file);
+  });
+}
+
+async function uploadStatement(file) {
+  if (!STATE.currentAcct) {
+    alert('Pick a bank account first.');
+    return;
+  }
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    if (!confirm('File does not end in .pdf — upload anyway?')) return;
+  }
+
+  $('upload-status').textContent = `Uploading ${file.name} (${(file.size/1024).toFixed(0)} KB)…`;
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('account_id', STATE.currentAcct.id);
+
+  try {
+    const r = await fetch('/api/bank-reconcile/upload', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) {
+      $('upload-status').innerHTML = `<span style="color:var(--red)">Error: ${esc(d.error || r.statusText)}</span>`;
+      return;
+    }
+    $('upload-status').innerHTML = `<span style="color:var(--green)">Parsed — ${d.parsed.transactions.length} transactions found.</span>`;
+    STATE.upload = d;
+    STATE.selected = new Set();
+    showReview();
+    loadHistory();
+  } catch (e) {
+    $('upload-status').innerHTML = `<span style="color:var(--red)">Upload failed: ${esc(String(e))}</span>`;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Review render
+// ────────────────────────────────────────────────────────────────────────────
+function showReview() {
+  if (!STATE.upload) return;
+  $('review-section').style.display = '';
+
+  const p = STATE.upload.parsed || {};
+  const matches = STATE.upload.matches || [];
+  const matchByIdx = {};
+  for (const m of matches) matchByIdx[m.parsed_index] = m;
+
+  // Summary cards
+  const period = (p.period_start && p.period_end) ? `${p.period_start} → ${p.period_end}` : '—';
+  $('summary-bar').innerHTML = `
+    <div class="summary-card">
+      <div class="summary-label">Statement Period</div>
+      <div class="summary-value blue" style="font-size:13px">${esc(period)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Beginning</div>
+      <div class="summary-value">${p.beginning_balance != null ? fmtMoney(p.beginning_balance) : '—'}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Ending</div>
+      <div class="summary-value">${p.ending_balance != null ? fmtMoney(p.ending_balance) : '—'}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Total Out</div>
+      <div class="summary-value red">${fmtMoney(p.total_debits)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Total In</div>
+      <div class="summary-value green">${fmtMoney(p.total_credits)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Transactions</div>
+      <div class="summary-value">${(p.transactions || []).length}</div>
+    </div>
+  `;
+
+  // Warnings
+  const warnings = p.warnings || [];
+  $('warnings').innerHTML = warnings.length
+    ? warnings.map(w => `<div class="warning">⚠ ${esc(w)}</div>`).join('')
+    : '';
+
+  renderTxTable();
+}
+
+function renderTxTable() {
+  if (!STATE.upload) return;
+  const txs = STATE.upload.parsed.transactions || [];
+  const matches = STATE.upload.matches || [];
+  const matchByIdx = {};
+  for (const m of matches) matchByIdx[m.parsed_index] = m;
+
+  const showFlt = $('flt-show').value;
+  const search = ($('flt-search').value || '').toLowerCase().trim();
+
+  const body = $('tx-body');
+  const rows = [];
+
+  for (let i = 0; i < txs.length; i++) {
+    const tx = txs[i];
+    const m = matchByIdx[i] || { match_kind: 'none', register_match: null };
+    const kind = m.match_kind;
+
+    // Filter
+    if (showFlt === 'unmatched' && kind !== 'none') continue;
+    if (showFlt === 'matched' && kind === 'none') continue;
+    if (showFlt === 'checked' && !STATE.selected.has(i)) continue;
+
+    if (search) {
+      const hay = (tx.description + ' ' + (tx.memo||'') + ' ' + (tx.ref||'')).toLowerCase();
+      if (!hay.includes(search)) continue;
+    }
+
+    const checked = STATE.selected.has(i) ? 'checked' : '';
+    const rowCls = kind === 'exact' ? 'row-exact' : (kind === 'likely' ? 'row-likely' : '');
+    const debit = Number(tx.debit || 0);
+    const credit = Number(tx.credit || 0);
+
+    let matchHtml;
+    if (kind === 'none') {
+      matchHtml = `<span class="match-pill match-none">new</span>`;
+    } else {
+      const reg = m.register_match || {};
+      const refStr = reg.ref ? ` #${esc(reg.ref)}` : '';
+      matchHtml = `
+        <span class="match-pill match-${kind}">${kind === 'exact' ? '✓ exact' : '~ likely'}</span>
+        <div class="match-detail">${esc(reg.source||'')} · ${esc(reg.label||'')}${refStr} · ${esc(reg.date||'')}</div>
+      `;
+    }
+
+    rows.push(`
+      <tr class="${rowCls}">
+        <td class="col-chk"><input type="checkbox" data-idx="${i}" ${checked} onchange="toggleSelected(${i}, this.checked)"></td>
+        <td class="col-date">${esc(tx.date || '')}</td>
+        <td>
+          <div>${esc(tx.description || '')}</div>
+          ${tx.memo ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(tx.memo)}</div>` : ''}
+        </td>
+        <td>${matchHtml}</td>
+        <td class="col-amt amt-out">${debit ? fmtMoney(debit) : ''}</td>
+        <td class="col-amt amt-in">${credit ? fmtMoney(credit) : ''}</td>
+        <td class="col-bal">${tx.balance != null ? fmt(tx.balance) : ''}</td>
+      </tr>
+    `);
+  }
+
+  body.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="7" class="empty">No rows match the current filter.</td></tr>';
+  updateActionBar();
+}
+
+function toggleSelected(idx, checked) {
+  if (checked) STATE.selected.add(idx);
+  else STATE.selected.delete(idx);
+  updateActionBar();
+}
+
+function updateActionBar() {
+  if (!STATE.upload) return;
+  const txs = STATE.upload.parsed.transactions || [];
+  let net = 0;
+  for (const i of STATE.selected) {
+    const tx = txs[i];
+    if (!tx) continue;
+    net += Number(tx.credit || 0) - Number(tx.debit || 0);
+  }
+  $('sel-count').textContent = STATE.selected.size;
+  $('sel-net').textContent = (net >= 0 ? '+' : '−') + fmtMoney(Math.abs(net));
+  $('btn-import').disabled = STATE.selected.size === 0;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Selection helpers
+// ────────────────────────────────────────────────────────────────────────────
+function selectByPredicate(pred) {
+  if (!STATE.upload) return;
+  const txs = STATE.upload.parsed.transactions || [];
+  const matches = STATE.upload.matches || [];
+  const matchByIdx = {};
+  for (const m of matches) matchByIdx[m.parsed_index] = m;
+  for (let i = 0; i < txs.length; i++) {
+    const m = matchByIdx[i] || { match_kind: 'none' };
+    if (pred(txs[i], m)) STATE.selected.add(i);
+  }
+  renderTxTable();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Import
+// ────────────────────────────────────────────────────────────────────────────
+async function doImport() {
+  if (!STATE.upload || STATE.selected.size === 0) return;
+  const indexes = Array.from(STATE.selected).sort((a,b) => a - b);
+  const alsoClear = $('opt-clear-matches').checked;
+
+  const confirmMsg = `Import ${indexes.length} transactions into the register?` +
+    (alsoClear ? `\n\nAlso mark matched register rows as cleared.` : '');
+  if (!confirm(confirmMsg)) return;
+
+  $('btn-import').disabled = true;
+  $('btn-import').textContent = 'Importing…';
+
+  try {
+    const r = await fetch('/api/bank-reconcile/import', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        upload_id: STATE.upload.upload_id || STATE.upload.id,
+        indexes: indexes,
+        also_clear_matches: alsoClear,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      alert('Import failed: ' + (d.error || r.statusText));
+      $('btn-import').disabled = false;
+      $('btn-import').textContent = 'Import selected';
+      return;
+    }
+    alert(`Imported ${d.inserted} entries${alsoClear ? `, cleared ${d.cleared} register rows` : ''}.`);
+    // Reload the upload to refresh match status
+    if (STATE.upload.upload_id) {
+      const r2 = await fetch('/api/bank-reconcile/uploads/' + STATE.upload.upload_id);
+      const d2 = await r2.json();
+      if (r2.ok) {
+        STATE.upload = d2;
+        STATE.upload.upload_id = d2.id;
+        STATE.selected = new Set();
+        showReview();
+      }
+    }
+    loadHistory();
+  } catch (e) {
+    alert('Import failed: ' + e);
+  } finally {
+    $('btn-import').disabled = false;
+    $('btn-import').textContent = 'Import selected';
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// History
+// ────────────────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  if (!STATE.currentAcct) return;
+  $('history-wrap').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const r = await fetch('/api/bank-reconcile/uploads?account_id=' + STATE.currentAcct.id);
+    const d = await r.json();
+    if (!r.ok) {
+      $('history-wrap').innerHTML = `<div class="empty">${esc(d.error || r.statusText)}</div>`;
+      return;
+    }
+    if (!d.uploads || !d.uploads.length) {
+      $('history-wrap').innerHTML = '<div class="empty">No statements uploaded yet for this account.</div>';
+      return;
+    }
+    const rows = d.uploads.map(u => `
+      <tr>
+        <td><span class="clickable" onclick="reopenUpload(${u.id})">#${u.id}</span></td>
+        <td>${esc(u.uploaded_at || '')}</td>
+        <td>${esc(u.filename || '')}</td>
+        <td>${esc(u.period_start || '?')} → ${esc(u.period_end || '?')}</td>
+        <td class="right">${u.beginning_balance != null ? fmtMoney(u.beginning_balance) : '—'}</td>
+        <td class="right">${u.ending_balance != null ? fmtMoney(u.ending_balance) : '—'}</td>
+        <td class="right">${u.transaction_count || 0}</td>
+        <td class="right">${u.imported_count || 0}</td>
+      </tr>
+    `).join('');
+    $('history-wrap').innerHTML = `
+      <table class="history-table">
+        <thead><tr>
+          <th>ID</th><th>Uploaded</th><th>File</th><th>Period</th>
+          <th class="right">Begin</th><th class="right">End</th>
+          <th class="right">Txns</th><th class="right">Imported</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch (e) {
+    $('history-wrap').innerHTML = `<div class="empty">Failed: ${esc(String(e))}</div>`;
+  }
+}
+
+async function reopenUpload(id) {
+  try {
+    const r = await fetch('/api/bank-reconcile/uploads/' + id);
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || r.statusText); return; }
+    STATE.upload = d;
+    STATE.upload.upload_id = d.id;
+    STATE.selected = new Set();
+    showReview();
+    window.scrollTo({top: $('review-section').offsetTop, behavior: 'smooth'});
+  } catch (e) { alert(String(e)); }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Wire up
+// ────────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setupUploadZone();
+  loadAccounts();
+
+  $('flt-show').addEventListener('change', renderTxTable);
+  $('flt-search').addEventListener('input', renderTxTable);
+  $('btn-import').addEventListener('click', doImport);
+  $('btn-select-unmatched').addEventListener('click', () => {
+    selectByPredicate((tx, m) => m.match_kind === 'none');
+  });
+  $('btn-select-all').addEventListener('click', () => {
+    selectByPredicate(() => true);
+  });
+  $('btn-clear-selection').addEventListener('click', () => {
+    STATE.selected = new Set();
+    renderTxTable();
+  });
+  $('chk-all').addEventListener('change', (e) => {
+    if (e.target.checked) selectByPredicate(() => true);
+    else { STATE.selected = new Set(); renderTxTable(); }
+  });
+});
+</script>
+<script src="/static/sidebar.js"></script>
+</body>
+</html>

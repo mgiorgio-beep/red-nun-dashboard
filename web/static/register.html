@@ -23,7 +23,7 @@
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
 
 .main-content { padding: 24px; overflow-y: auto; }
-.content-wrap { max-width: 1100px; }
+.content-wrap { max-width: 1280px; }
 
 /* Header */
 .page-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
@@ -81,8 +81,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .btn-warn:hover { background: var(--amber-soft); }
 
 /* Register table */
-.reg-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.reg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.reg-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; }
+.reg-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 960px; }
 .reg-table thead th {
   text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 700;
   color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
@@ -99,13 +99,26 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .reg-table tbody tr.unassigned td { background: rgba(245,158,11,0.05); }
 .reg-table tbody tr.unassigned:hover td { background: rgba(245,158,11,0.08); }
 
-.col-date { font-family: var(--mono); font-size: 12px; color: var(--text2); width: 92px; white-space: nowrap; }
-.col-type { width: 100px; }
-.col-ref  { font-family: var(--mono); font-size: 12px; color: var(--text2); width: 110px; white-space: nowrap; }
-.col-amt  { text-align: right; font-family: var(--mono); width: 110px; white-space: nowrap; }
-.col-bal  { text-align: right; font-family: var(--mono); width: 120px; font-weight: 600; white-space: nowrap; }
-.col-chk  { width: 40px; text-align: center; }
-.col-memo { color: var(--text2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-date { font-family: var(--mono); font-size: 12px; color: var(--text2); width: 92px; min-width: 92px; white-space: nowrap; }
+.col-type { width: 100px; min-width: 100px; }
+.col-ref  { font-family: var(--mono); font-size: 12px; color: var(--text2); width: 110px; min-width: 110px; white-space: nowrap; }
+.col-amt  { text-align: right; font-family: var(--mono); width: 100px; min-width: 100px; white-space: nowrap; }
+.col-bal  { text-align: right; font-family: var(--mono); width: 130px; min-width: 130px; font-weight: 600; white-space: nowrap; }
+.col-chk  { width: 44px; min-width: 44px; text-align: center; }
+.col-memo { color: var(--text2); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-acct { width: 150px; min-width: 150px; }
+
+.acct-select {
+  width: 100%; padding: 4px 6px; border-radius: 5px;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text2); font-size: 11px; font-family: var(--font);
+  cursor: pointer; transition: all 0.15s;
+}
+.acct-select:hover:not(:disabled) { border-color: var(--blue); color: var(--text); }
+.acct-select:focus { outline: none; border-color: var(--blue); }
+.acct-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.acct-select.unassigned { border-color: var(--amber); color: var(--amber); }
+.acct-select.saving { opacity: 0.5; }
 
 .type-pill {
   display: inline-block; padding: 2px 8px; border-radius: 5px;
@@ -186,7 +199,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   .page-title { font-size: 18px; }
   .summary-bar { grid-template-columns: 1fr 1fr; }
   .summary-value { font-size: 18px; }
-  .reg-table .col-memo, .reg-table .col-type { display: none; }
+  .reg-table .col-memo, .reg-table .col-type, .reg-table .col-acct { display: none; }
   .reg-table thead th { font-size: 9px; padding: 8px 6px; }
   .reg-table tbody td { padding: 8px 6px; font-size: 12px; }
 }
@@ -234,6 +247,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
             <th class="col-type">Type</th>
             <th class="col-ref">Ref</th>
             <th>Payee</th>
+            <th class="col-acct">Account</th>
             <th class="col-memo">Memo</th>
             <th class="col-amt">Payment</th>
             <th class="col-amt">Deposit</th>
@@ -242,7 +256,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
           </tr>
         </thead>
         <tbody id="reg-body">
-          <tr><td colspan="9" class="loading">Loading accounts…</td></tr>
+          <tr><td colspan="10" class="loading">Loading accounts…</td></tr>
         </tbody>
       </table>
     </div>
@@ -352,12 +366,12 @@ function defaultDates() {
 // ────────────────────────────────────────────────────────────────────────────
 async function loadAccounts() {
   const r = await fetch('/api/register/accounts');
-  if (!r.ok) { $('reg-body').innerHTML = '<tr><td colspan="9" class="empty">Failed to load accounts.</td></tr>'; return; }
+  if (!r.ok) { $('reg-body').innerHTML = '<tr><td colspan="10" class="empty">Failed to load accounts.</td></tr>'; return; }
   const data = await r.json();
   STATE.accounts = data.accounts || [];
   if (!STATE.accounts.length) {
     $('account-bar').innerHTML = '<div class="empty">No accounts configured.</div>';
-    $('reg-body').innerHTML = '<tr><td colspan="9" class="empty">Add bank accounts in admin settings to begin.</td></tr>';
+    $('reg-body').innerHTML = '<tr><td colspan="10" class="empty">Add bank accounts in admin settings to begin.</td></tr>';
     return;
   }
   renderAccountBar();
@@ -397,7 +411,7 @@ function selectAccount(id) {
 // ────────────────────────────────────────────────────────────────────────────
 async function loadRegister() {
   if (!STATE.currentAcct) return;
-  $('reg-body').innerHTML = '<tr><td colspan="9" class="loading">Loading register…</td></tr>';
+  $('reg-body').innerHTML = '<tr><td colspan="10" class="loading">Loading register…</td></tr>';
   const params = new URLSearchParams({
     start: $('flt-start').value,
     end: $('flt-end').value,
@@ -405,7 +419,7 @@ async function loadRegister() {
   });
   const r = await fetch(`/api/register/${STATE.currentAcct.id}?${params}`);
   if (!r.ok) {
-    $('reg-body').innerHTML = '<tr><td colspan="9" class="empty">Failed to load register.</td></tr>';
+    $('reg-body').innerHTML = '<tr><td colspan="10" class="empty">Failed to load register.</td></tr>';
     return;
   }
   const data = await r.json();
@@ -438,7 +452,7 @@ function renderSummary(s) {
 
 function renderRows() {
   if (!STATE.rows.length) {
-    $('reg-body').innerHTML = '<tr><td colspan="9" class="empty">No transactions in this date range.</td></tr>';
+    $('reg-body').innerHTML = '<tr><td colspan="10" class="empty">No transactions in this date range.</td></tr>';
     return;
   }
   $('reg-body').innerHTML = STATE.rows.map((r, idx) => {
@@ -452,6 +466,7 @@ function renderRows() {
         <td class="col-type"><span class="type-pill type-${esc(r.type)}">${esc(r.type_label)}</span></td>
         <td class="col-ref">${esc(r.ref)}</td>
         <td>${esc(r.payee)}${statusPill}${unassignedPill}</td>
+        <td class="col-acct" onclick="event.stopPropagation()">${renderAcctSelect(r)}</td>
         <td class="col-memo" title="${esc(r.memo || '')}">${esc(r.memo || '')}</td>
         <td class="col-amt amt-out">${fmt(r.outflow)}</td>
         <td class="col-amt amt-in">${fmt(r.inflow)}</td>
@@ -462,7 +477,7 @@ function renderRows() {
         </td>
       </tr>
       <tr class="detail-row" id="detail-${idx}">
-        <td colspan="9">
+        <td colspan="10">
           <div class="detail-content">
             <div class="detail-item"><div class="lbl">Source</div><div class="val">${esc(r.source)}#${r.source_id}</div></div>
             <div class="detail-item"><div class="lbl">Status</div><div class="val">${esc(r.status || '—')}</div></div>
@@ -470,8 +485,6 @@ function renderRows() {
             ${r.payroll_run_id ? `<div class="detail-item"><div class="lbl">Payroll Run</div><div class="val">#${r.payroll_run_id}</div></div>` : ''}
             <div class="detail-item"><div class="lbl">Cleared Date</div><div class="val">${esc(r.cleared_date || '—')}</div></div>
             <div class="detail-actions">
-              ${(r.source === 'bill_pay' || r.source === 'payroll')
-                ? `<button class="btn-action btn-warn" onclick="event.stopPropagation();openReassign('${r.source}', ${r.source_id})">Reassign Account</button>` : ''}
               ${r.source === 'manual' ? `<button class="btn-action" onclick="event.stopPropagation();deleteManual(${r.source_id})">Delete Entry</button>` : ''}
               ${r.ap_payment_id ? `<a class="btn-action" href="/payments?payment=${r.ap_payment_id}" onclick="event.stopPropagation()">Open in Payments</a>` : ''}
             </div>
@@ -480,6 +493,62 @@ function renderRows() {
       </tr>
     `;
   }).join('');
+}
+
+function renderAcctSelect(r) {
+  // Inline account picker. Editable for bill_pay & payroll (the reassign API
+  // accepts those). Disabled for deposits & manual entries since their
+  // bank_account_id is fixed by table design.
+  const editable = (r.source === 'bill_pay' || r.source === 'payroll');
+  const currentId = r.bank_account_id != null ? r.bank_account_id : '';
+  const isUnassigned = r.unassigned;
+
+  const opts = STATE.accounts.map(a =>
+    `<option value="${a.id}" ${Number(a.id) === Number(currentId) ? 'selected' : ''}>${esc(a.short_name || a.name)}</option>`
+  ).join('');
+  const unassignedOpt = isUnassigned
+    ? `<option value="" selected>— Unassigned —</option>`
+    : `<option value="" ${currentId === '' ? 'selected' : ''} style="color:var(--amber)">— Unassigned —</option>`;
+
+  const cls = ['acct-select'];
+  if (isUnassigned) cls.push('unassigned');
+
+  return `
+    <select class="${cls.join(' ')}" ${editable ? '' : 'disabled'}
+            data-source="${esc(r.source)}" data-id="${r.source_id}"
+            onchange="reassignRowInline(this)" onclick="event.stopPropagation()">
+      ${unassignedOpt}
+      ${opts}
+    </select>
+  `;
+}
+
+async function reassignRowInline(sel) {
+  const source = sel.dataset.source;
+  const id = parseInt(sel.dataset.id, 10);
+  const newId = sel.value === '' ? null : parseInt(sel.value, 10);
+  sel.classList.add('saving');
+  sel.disabled = true;
+  try {
+    const r = await fetch('/api/register/reassign', {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({source, id, bank_account_id: newId}),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      alert('Reassign failed: ' + (err.error || r.status));
+      // Revert by reloading
+      loadRegister();
+      return;
+    }
+    // If the row was reassigned to a different account than the one we're
+    // viewing, it will disappear on next load. If it was assigned to this
+    // account from unassigned, the unassigned styling needs to drop.
+    loadRegister();
+  } catch (e) {
+    alert('Reassign error: ' + e);
+    loadRegister();
+  }
 }
 
 function toggleDetail(idx) {
