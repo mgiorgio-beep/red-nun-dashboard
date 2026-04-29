@@ -128,13 +128,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .loading { text-align: center; padding: 20px; color: var(--text3); font-size: 13px; }
 
 .action-bar {
-  position: sticky; bottom: 0;
-  background: var(--bg-card); border-top: 1px solid var(--border);
-  padding: 12px 16px; margin: 16px -16px -16px;
+  background: rgba(56,189,248,0.04);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 16px; margin-bottom: 12px;
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
 }
-.action-bar .left { color: var(--text2); font-size: 12px; }
-.action-bar .right { margin-left: auto; display: flex; gap: 8px; }
+.action-bar .left { color: var(--text2); font-size: 13px; font-weight: 600; }
+.action-bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.action-bar .btn-primary { padding: 9px 18px; font-size: 14px; }
 
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
@@ -195,6 +196,19 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <button class="btn" id="btn-clear-selection">Clear</button>
     </div>
 
+    <div class="action-bar">
+      <div class="left">
+        <span id="sel-count">0</span> selected
+        · <span id="sel-net">$0.00</span> net
+      </div>
+      <div class="right">
+        <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="opt-clear-matches"> Mark matched register rows as cleared
+        </label>
+        <button class="btn btn-primary" id="btn-import" disabled>Import selected</button>
+      </div>
+    </div>
+
     <div style="overflow-x:auto">
       <table class="tx-table" id="tx-table">
         <thead>
@@ -210,19 +224,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
         </thead>
         <tbody id="tx-body"></tbody>
       </table>
-    </div>
-
-    <div class="action-bar">
-      <div class="left">
-        <span id="sel-count">0</span> selected
-        · <span id="sel-net">$0.00</span> net
-      </div>
-      <div class="right">
-        <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px;">
-          <input type="checkbox" id="opt-clear-matches"> Mark matched register rows as cleared
-        </label>
-        <button class="btn btn-primary" id="btn-import" disabled>Import selected</button>
-      </div>
     </div>
   </div>
 
