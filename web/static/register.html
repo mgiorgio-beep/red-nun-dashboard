@@ -82,7 +82,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 /* Register table */
 .reg-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; }
-.reg-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1180px; }
+.reg-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1260px; }
 .reg-table thead th {
   text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 700;
   color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
@@ -106,7 +106,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .col-bal  { text-align: right; font-family: var(--mono); width: 130px; min-width: 130px; font-weight: 600; white-space: nowrap; }
 .col-chk  { width: 44px; min-width: 44px; text-align: center; }
 .col-memo { color: var(--text2); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-acct { width: 130px; min-width: 130px; }
+.col-acct { width: 200px; min-width: 200px; }
 
 .acct-select {
   width: 100%; padding: 4px 6px; border-radius: 5px;
@@ -118,6 +118,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .acct-select:focus { outline: none; border-color: var(--blue); }
 .acct-select:disabled { opacity: 0.6; cursor: not-allowed; }
 .acct-select.unassigned { border-color: var(--amber); color: var(--amber); }
+.acct-select.assigned   { color: var(--text); }
 .acct-select.saving { opacity: 0.5; }
 
 .type-pill {
@@ -217,6 +218,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       </div>
       <div class="header-buttons">
         <button class="btn-action" id="btn-sync">Sync Toast Deposits</button>
+        <button class="btn-action" onclick="addGlAccountPrompt()">+ GL Account</button>
         <button class="btn-action btn-primary" id="btn-add">+ Manual Entry</button>
       </div>
     </div>
@@ -247,7 +249,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
             <th class="col-type">Type</th>
             <th class="col-ref">Ref</th>
             <th>Payee</th>
-            <th class="col-acct">Account</th>
+            <th class="col-acct">GL Account</th>
             <th class="col-memo">Memo</th>
             <th class="col-amt">Payment</th>
             <th class="col-amt">Deposit</th>
@@ -338,6 +340,8 @@ let STATE = {
   currentAcct: null,
   rows: [],
   reassignTarget: null,  // {source, id}
+  glAccounts: [],        // list of {id, name, account_type, ...}
+  glByType: {},          // {type: [accounts]} for grouped dropdown
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -392,7 +396,7 @@ function renderAccountBar() {
   `).join('');
 }
 
-function selectAccount(id) {
+async function selectAccount(id) {
   STATE.currentAcct = STATE.accounts.find(a => a.id === id);
   document.querySelectorAll('.account-pill').forEach(el => {
     el.classList.toggle('active', Number(el.dataset.acct) === id);
@@ -403,6 +407,8 @@ function selectAccount(id) {
     $('flt-start').value = d.start;
     $('flt-end').value = d.end;
   }
+  // GL accounts are scoped per location — re-load when the bank account changes
+  await loadGlAccounts();
   loadRegister();
 }
 
@@ -496,60 +502,113 @@ function renderRows() {
 }
 
 function renderAcctSelect(r) {
-  // Inline account picker. Editable for bill_pay & payroll (the reassign API
-  // accepts those). Disabled for deposits & manual entries since their
-  // bank_account_id is fixed by table design.
-  const editable = (r.source === 'bill_pay' || r.source === 'payroll');
-  const currentId = r.bank_account_id != null ? r.bank_account_id : '';
-  const isUnassigned = r.unassigned;
-
-  const opts = STATE.accounts.map(a =>
-    `<option value="${a.id}" ${Number(a.id) === Number(currentId) ? 'selected' : ''}>${esc(a.short_name || a.name)}</option>`
-  ).join('');
-  const unassignedOpt = isUnassigned
-    ? `<option value="" selected>— Unassigned —</option>`
-    : `<option value="" ${currentId === '' ? 'selected' : ''} style="color:var(--amber)">— Unassigned —</option>`;
-
+  // Inline GL account picker — editable on every row regardless of source.
+  // Pre-fills from r.gl_account_id if set; shows "— Choose account —" otherwise.
+  const currentId = r.gl_account_id != null ? r.gl_account_id : '';
   const cls = ['acct-select'];
-  if (isUnassigned) cls.push('unassigned');
+  cls.push(currentId === '' ? 'unassigned' : 'assigned');
+
+  // Build option groups by account_type
+  let optsHtml = `<option value="" ${currentId === '' ? 'selected' : ''}>— Choose account —</option>`;
+  for (const type of Object.keys(STATE.glByType).sort()) {
+    optsHtml += `<optgroup label="${esc(type)}">`;
+    for (const a of STATE.glByType[type]) {
+      optsHtml += `<option value="${a.id}" ${Number(a.id) === Number(currentId) ? 'selected' : ''}>${esc(a.name)}</option>`;
+    }
+    optsHtml += `</optgroup>`;
+  }
 
   return `
-    <select class="${cls.join(' ')}" ${editable ? '' : 'disabled'}
+    <select class="${cls.join(' ')}"
             data-source="${esc(r.source)}" data-id="${r.source_id}"
-            onchange="reassignRowInline(this)" onclick="event.stopPropagation()">
-      ${unassignedOpt}
-      ${opts}
+            onchange="setGlAccount(this)" onclick="event.stopPropagation()">
+      ${optsHtml}
     </select>
   `;
 }
 
-async function reassignRowInline(sel) {
+async function setGlAccount(sel) {
   const source = sel.dataset.source;
   const id = parseInt(sel.dataset.id, 10);
   const newId = sel.value === '' ? null : parseInt(sel.value, 10);
   sel.classList.add('saving');
   sel.disabled = true;
   try {
-    const r = await fetch('/api/register/reassign', {
+    const r = await fetch('/api/register/row/gl-account', {
       method: 'PUT', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({source, id, bank_account_id: newId}),
+      body: JSON.stringify({source, id, gl_account_id: newId, create_rule: true}),
     });
+    const d = await r.json();
     if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      alert('Reassign failed: ' + (err.error || r.status));
-      // Revert by reloading
+      alert('Failed to set GL account: ' + (d.error || r.status));
       loadRegister();
       return;
     }
-    // If the row was reassigned to a different account than the one we're
-    // viewing, it will disappear on next load. If it was assigned to this
-    // account from unassigned, the unassigned styling needs to drop.
+    // If a rule was created and matched other rows, surface the count
+    if (d.backfilled && d.backfilled > 0) {
+      const note = document.createElement('div');
+      note.style.cssText = 'position:fixed;bottom:20px;right:20px;background:var(--green-soft);color:var(--green);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:12px;z-index:9999';
+      note.textContent = `Rule "${d.rule_pattern}" applied — ${d.backfilled} other row${d.backfilled !== 1 ? 's' : ''} auto-coded.`;
+      document.body.appendChild(note);
+      setTimeout(() => note.remove(), 4000);
+    }
     loadRegister();
   } catch (e) {
-    alert('Reassign error: ' + e);
+    alert('Failed: ' + e);
     loadRegister();
   }
 }
+
+async function loadGlAccounts() {
+  // Scope to the current bank account's location, falling back to "all" if
+  // we don't have a current account yet (initial boot).
+  let url = '/api/gl-accounts';
+  const loc = STATE.currentAcct && STATE.currentAcct.location;
+  if (loc) url += '?location=' + encodeURIComponent(loc);
+
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    STATE.glAccounts = d.accounts || [];
+    STATE.glByType = {};
+    for (const a of STATE.glAccounts) {
+      const t = a.account_type || 'Other';
+      (STATE.glByType[t] = STATE.glByType[t] || []).push(a);
+    }
+  } catch (e) {
+    console.error('GL accounts load failed:', e);
+  }
+}
+
+async function addGlAccountPrompt() {
+  // Quick-add a GL account when the one you need isn't in the dropdown.
+  const name = prompt('New GL account name (e.g. "Roof Repairs"):');
+  if (!name || !name.trim()) return;
+  const types = ['Expense', 'Cost of Goods Sold', 'Income', 'Other Expense',
+                 'Other Income', 'Bank', 'Other Current Asset',
+                 'Other Current Liability', 'Fixed Asset', 'Long Term Liability', 'Equity'];
+  const typePrompt = 'Account type? Pick one of:\n' + types.map((t,i) => `  ${i+1}. ${t}`).join('\n');
+  const choice = prompt(typePrompt + '\n\nEnter the number, or leave blank for Expense:');
+  let account_type = 'Expense';
+  if (choice && choice.trim()) {
+    const n = parseInt(choice.trim(), 10);
+    if (!isNaN(n) && n >= 1 && n <= types.length) account_type = types[n - 1];
+  }
+  const loc = STATE.currentAcct && STATE.currentAcct.location;
+  try {
+    const r = await fetch('/api/gl-accounts', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: name.trim(), account_type, location: loc}),
+    });
+    const d = await r.json();
+    if (!r.ok) { alert('Add failed: ' + (d.error || r.status)); return; }
+    await loadGlAccounts();
+    alert(`Added "${name.trim()}" to ${loc || 'shared'} chart of accounts. Reopen the dropdown to pick it.`);
+    loadRegister();
+  } catch (e) { alert('Add failed: ' + e); }
+}
+
+window.addGlAccountPrompt = addGlAccountPrompt;
 
 function toggleDetail(idx) {
   const row = $('detail-' + idx);
@@ -687,7 +746,10 @@ $('flt-end').addEventListener('change', loadRegister);
 // ────────────────────────────────────────────────────────────────────────────
 // Boot
 // ────────────────────────────────────────────────────────────────────────────
-loadAccounts();
+(async () => {
+  await loadGlAccounts();
+  await loadAccounts();
+})();
 </script>
 
 <script src="/static/sidebar.js"></script>

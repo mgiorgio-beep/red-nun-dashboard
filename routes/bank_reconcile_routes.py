@@ -289,12 +289,19 @@ def import_selected():
         memo_parts.append(f"[stmt #{upload_id}]")
         memo = " ".join(memo_parts).strip()
 
+        # Apply GL rule (if any) so freshly imported rows pre-fill the
+        # right account. Falls back to NULL if no rule matches yet.
+        from routes.register_routes import _find_gl_account_for_description
+        gl_id = _find_gl_account_for_description(
+            conn, (tx.get("description") or "") + " " + (tx.get("memo") or "")
+        )
+
         cur = conn.execute(
             """INSERT INTO manual_bank_entries
                (bank_account_id, entry_date, entry_type, payee, memo,
                 ref_number, amount, cleared, cleared_date, created_by,
-                statement_upload_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+                statement_upload_id, gl_account_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
             (
                 account_id,
                 tx.get("date"),
@@ -306,6 +313,7 @@ def import_selected():
                 tx.get("date"),
                 created_by,
                 upload_id,
+                gl_id,
             ),
         )
         if cur.rowcount:

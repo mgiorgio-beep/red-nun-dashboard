@@ -18,10 +18,13 @@ ALTER TABLE ADD COLUMN (nullable) only, matching the pattern in
 init_payment_tables() — no destructive changes.
 """
 
+import csv
 import json
 import logging
 import os
+import re
 from datetime import datetime, date, timedelta
+from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
@@ -110,12 +113,63 @@ def init_register_tables():
         "ALTER TABLE payroll_checks ADD COLUMN bank_account_id INTEGER",
         "ALTER TABLE payroll_checks ADD COLUMN cleared INTEGER DEFAULT 0",
         "ALTER TABLE payroll_checks ADD COLUMN cleared_date TEXT",
+        # GL coding columns (added later — guard with try/pass for idempotency)
+        "ALTER TABLE vendor_payments ADD COLUMN gl_account_id INTEGER",
+        "ALTER TABLE payroll_checks ADD COLUMN gl_account_id INTEGER",
+        "ALTER TABLE bank_deposits ADD COLUMN gl_account_id INTEGER",
+        "ALTER TABLE manual_bank_entries ADD COLUMN gl_account_id INTEGER",
     ]
     for sql in migrations:
         try:
             conn.execute(sql)
         except Exception:
             pass  # column already exists
+
+    # ── GL chart of accounts ──
+    # Each location (Chatham, Dennis) has its own QBO company file and its
+    # own chart of accounts. We carry a location column so the dropdown on
+    # the register can show the right list.
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS gl_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            qbo_id TEXT,
+            acct_num TEXT,
+            name TEXT NOT NULL,
+            account_type TEXT,
+            account_subtype TEXT,
+            location TEXT,                  -- chatham | dennis (NULL = legacy/unscoped)
+            active INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_gl_active ON gl_accounts(active, location, account_type, name);
+        CREATE INDEX IF NOT EXISTS idx_gl_qbo_id ON gl_accounts(qbo_id, location);
+
+        -- Auto-populate rules: when a description matches the pattern (case-insensitive
+        -- substring), pre-assign the named GL account. Scoped per location so a
+        -- DAVO rule for Chatham doesn't auto-code Dennis rows to a Chatham account.
+        CREATE TABLE IF NOT EXISTS gl_account_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location TEXT,                  -- chatham | dennis | NULL (any)
+            pattern TEXT NOT NULL,
+            gl_account_id INTEGER NOT NULL,
+            created_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(location, pattern),
+            FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_gl_rules_pattern ON gl_account_rules(location, pattern);
+    """)
+    # Idempotent ALTER for older installs that already had the table without
+    # location (the unique constraint above is only enforced on new tables).
+    try:
+        conn.execute("ALTER TABLE gl_accounts ADD COLUMN location TEXT")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE gl_account_rules ADD COLUMN location TEXT")
+    except Exception:
+        pass
 
     # ── Seed the two Cape Cod Five operating accounts if missing ──
     # Mirrors the hardcoded values in payroll_routes.py:29-30.
@@ -180,6 +234,469 @@ def init_register_tables():
 
     conn.commit()
     conn.close()
+
+    # ── Seed gl_accounts from the COA CSV if empty ──
+    try:
+        seed_gl_accounts_if_empty()
+    except Exception as e:
+        logger.warning(f"GL account seed skipped: {e}")
+
+
+# ─── GL ACCOUNT SEED ─────────────────────────────────────────────────────────
+
+# Where the seed CSVs live. We look for one CSV per location, plus an
+# unscoped fallback. Search order per location:
+#   data/<loc>_coa.csv   →  /opt/red-nun-dashboard/data/<loc>_coa.csv
+#   /home/rednun/<loc>_coa.csv  (legacy location)
+def _coa_seed_paths_for(location: str) -> list[Path]:
+    return [
+        Path(f"data/{location}_coa.csv"),
+        Path(f"/opt/red-nun-dashboard/data/{location}_coa.csv"),
+        Path(f"/home/rednun/{location}_coa.csv"),
+        Path.home() / f"{location}_coa.csv",
+    ]
+
+
+def _coa_seed_paths_unscoped() -> list[Path]:
+    """Legacy: a single coa.csv used before per-location was a thing. Loads
+    as 'dennis' since that's where the existing dennis_coa.csv came from."""
+    return [
+        Path(os.environ.get("COA_CSV_PATH") or ""),
+        Path("data/coa.csv"),
+        Path("/opt/red-nun-dashboard/data/coa.csv"),
+    ]
+
+
+def seed_gl_accounts_if_empty() -> int:
+    """If gl_accounts has no rows for a given location, populate it from the
+    matching CSV. Returns total accounts inserted across both locations.
+
+    CSV format (matches integrations/quickbooks/qb_list_accounts.py output
+    and the existing dennis_coa.csv):
+        AcctNum,ID,Name,AccountType,AccountSubType,Active
+
+    Files looked for, per location:
+      - data/chatham_coa.csv   → location=chatham
+      - data/dennis_coa.csv    → location=dennis
+      - /home/rednun/<loc>_coa.csv (legacy fallback)
+    """
+    inserted_total = 0
+
+    for loc in ("dennis", "chatham"):  # seed dennis first so chatham can fall back to it
+        conn = get_connection()
+        n = conn.execute(
+            "SELECT COUNT(*) AS c FROM gl_accounts WHERE location = ?", (loc,)
+        ).fetchone()["c"]
+        if n > 0:
+            conn.close()
+            continue
+        path = next((p for p in _coa_seed_paths_for(loc) if p.exists()), None)
+        # Legacy: if a location-specific CSV is missing, fall back to:
+        #   1. The unscoped data/coa.csv  (committed seed)
+        #   2. /home/rednun/dennis_coa.csv (Beelink legacy file — same content
+        #      as the Dennis COA, used for both locations until a separate
+        #      chatham_coa.csv is provided).
+        if not path:
+            path = next((p for p in _coa_seed_paths_unscoped() if p and p.exists()), None)
+        if not path:
+            path = next((p for p in _coa_seed_paths_for("dennis") if p.exists()), None)
+        if not path:
+            conn.close()
+            logger.info(
+                "No COA CSV for %s; expected one of: %s",
+                loc, ", ".join(str(p) for p in _coa_seed_paths_for(loc)),
+            )
+            continue
+        inserted_total += _seed_one_csv(conn, path, loc)
+        conn.close()
+
+    return inserted_total
+
+
+def _seed_one_csv(conn, path: Path, location: str) -> int:
+    """Read a CSV and insert its rows scoped to `location`."""
+    inserted = 0
+    try:
+        with open(path, "r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                name = (row.get("Name") or "").strip()
+                if not name:
+                    continue
+                qbo_id = (row.get("ID") or "").strip() or None
+                acct_num = (row.get("AcctNum") or "").strip() or None
+                acct_type = (row.get("AccountType") or "").strip() or None
+                acct_sub = (row.get("AccountSubType") or "").strip() or None
+                active_yes = (row.get("Active") or "Yes").strip().lower()
+                active = 1 if active_yes in ("yes", "true", "1", "y") else 0
+                try:
+                    conn.execute(
+                        """INSERT INTO gl_accounts
+                           (qbo_id, acct_num, name, account_type, account_subtype, active, location)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (qbo_id, acct_num, name, acct_type, acct_sub, active, location),
+                    )
+                    inserted += 1
+                except Exception as e:
+                    logger.warning(f"Skip GL row {name!r} ({location}): {e}")
+        conn.commit()
+        logger.info(f"Seeded {inserted} GL accounts for {location} from {path}")
+    except Exception as e:
+        logger.warning(f"Failed to seed GL accounts from {path}: {e}")
+    return inserted
+
+
+# ─── GL ACCOUNT API ──────────────────────────────────────────────────────────
+
+# Generic banking-noise words that should NOT become rule patterns. The
+# remainder of a description tokens defines the rule (so "DEP JAN 04 TOAST"
+# → rule "TOAST"; "Deposit" → rule "DEPOSIT"; "DAVO TECHNOLOGIE 412.54" →
+# rule "DAVO TECHNOLOGIE").
+_RULE_SKIP_WORDS = {
+    "DEP", "ACH", "CCD", "PPD", "DBT", "CRD", "POS", "WEB", "INST", "XFER",
+    "SALE", "PAYMENT", "BILLPAY", "MEBILLPAY", "EFT", "TRANSFER", "TXN",
+    "CHECK", "CHK", "REC", "DDA", "PMT", "AGNT", "AR", "VENDOR", "PAY",
+    "INVOICES", "SVCS", "HORIZON", "BE", "AP", "INV", "PCR", "TAX",
+    # Date words
+    "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+}
+
+
+def _extract_rule_pattern(description: str) -> str:
+    """Pick a stable, distinctive substring from a transaction description to
+    use as an auto-populate rule key.
+
+    Strategy: take alphabetic tokens of length >= 3, drop generic banking
+    prefix words and dates, keep the first 2 remaining significant tokens.
+    Falls back to the original (uppercased, trimmed) description if no
+    significant tokens remain.
+    """
+    if not description:
+        return ""
+    words = re.findall(r"[A-Za-z]{3,}", description.upper())
+    significant = [w for w in words if w not in _RULE_SKIP_WORDS]
+    if significant:
+        return " ".join(significant[:2])
+    if words:
+        return " ".join(words[:2])
+    return description.strip()[:40].upper()
+
+
+def _find_gl_account_for_description(conn, description: str, location: str | None = None) -> int | None:
+    """Find a gl_account_id whose rule pattern appears (case-insensitive
+    substring) in `description`. Longest pattern wins on ties.
+
+    If `location` is supplied, only rules scoped to that location (or with
+    NULL location, meaning "any") are considered.
+    """
+    if not description:
+        return None
+    upper = description.upper()
+    if location:
+        rows = conn.execute(
+            "SELECT pattern, gl_account_id FROM gl_account_rules "
+            "WHERE location = ? OR location IS NULL "
+            "ORDER BY LENGTH(pattern) DESC",
+            (location,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT pattern, gl_account_id FROM gl_account_rules "
+            "ORDER BY LENGTH(pattern) DESC"
+        ).fetchall()
+    for r in rows:
+        if r["pattern"] and r["pattern"].upper() in upper:
+            return r["gl_account_id"]
+    return None
+
+
+@register_bp.route("/api/gl-accounts", methods=["GET"])
+@login_required
+def list_gl_accounts():
+    """List GL accounts for the dropdown.
+
+    Query params:
+        active: 1|0|all  (default 1)
+        type:   filter by account_type (e.g. "Expense"). Multiple via ?type=X&type=Y.
+
+    Response shape:
+      {"accounts": [{ id, qbo_id, name, account_type, account_subtype, active }, ...]}
+    """
+    active = request.args.get("active", "1")
+    types = request.args.getlist("type")
+    location = request.args.get("location")  # chatham | dennis | None (all)
+
+    where = []
+    params: list = []
+    if active != "all":
+        where.append("active = ?")
+        params.append(1 if active == "1" else 0)
+    if types:
+        placeholders = ",".join("?" for _ in types)
+        where.append(f"account_type IN ({placeholders})")
+        params.extend(types)
+    if location:
+        # Show this location's accounts AND any unscoped (legacy NULL) ones.
+        where.append("(location = ? OR location IS NULL)")
+        params.append(location)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    conn = get_connection()
+    rows = conn.execute(
+        f"""SELECT id, qbo_id, acct_num, name, account_type, account_subtype, location, active
+            FROM gl_accounts {where_sql}
+            ORDER BY account_type, name"""
+        , params
+    ).fetchall()
+    conn.close()
+    return jsonify({"accounts": [dict(r) for r in rows]})
+
+
+@register_bp.route("/api/gl-accounts", methods=["POST"])
+@login_required
+def create_gl_account():
+    """Add a new GL account manually (when one isn't already in the seeded COA).
+
+    Body: {
+        "name":           "Roof Repairs",        // required
+        "account_type":   "Expense",             // optional but recommended
+        "account_subtype": "RepairMaintenance",  // optional
+        "location":       "chatham" | "dennis" | null,  // null = visible to both
+        "qbo_id":         "300"                  // optional
+    }
+    """
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    account_type = (data.get("account_type") or "").strip() or None
+    account_subtype = (data.get("account_subtype") or "").strip() or None
+    location = (data.get("location") or "").strip().lower() or None
+    if location and location not in ("chatham", "dennis"):
+        return jsonify({"error": "location must be 'chatham', 'dennis', or null"}), 400
+    qbo_id = (data.get("qbo_id") or "").strip() or None
+
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO gl_accounts
+           (qbo_id, name, account_type, account_subtype, location, active)
+           VALUES (?, ?, ?, ?, ?, 1)""",
+        (qbo_id, name, account_type, account_subtype, location),
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return jsonify({"status": "ok", "id": new_id}), 201
+
+
+@register_bp.route("/api/gl-accounts/<int:gl_id>", methods=["PUT"])
+@login_required
+def update_gl_account(gl_id):
+    """Edit a GL account (rename, change type, deactivate, etc.)."""
+    data = request.get_json(silent=True) or {}
+    allowed = {"name", "account_type", "account_subtype", "location", "active", "qbo_id", "acct_num"}
+    sets = {k: data[k] for k in data if k in allowed}
+    if not sets:
+        return jsonify({"error": "No updatable fields"}), 400
+    conn = get_connection()
+    cur = conn.execute(
+        f"UPDATE gl_accounts SET {', '.join(k + ' = ?' for k in sets)} WHERE id = ?",
+        list(sets.values()) + [gl_id],
+    )
+    conn.commit()
+    conn.close()
+    if cur.rowcount == 0:
+        return jsonify({"error": "GL account not found"}), 404
+    return jsonify({"status": "ok"})
+
+
+@register_bp.route("/api/gl-accounts/refresh-from-csv", methods=["POST"])
+@admin_required
+def refresh_gl_from_csv():
+    """Force a re-seed from the COA CSV (useful after editing the file or
+    after the table is wiped). Skipped when the table already has rows
+    unless ?force=1 is passed (which TRUNCATEs first)."""
+    force = request.args.get("force", "0") == "1"
+    conn = get_connection()
+    if force:
+        conn.execute("DELETE FROM gl_accounts")
+        conn.commit()
+    conn.close()
+    inserted = seed_gl_accounts_if_empty()
+    return jsonify({"status": "ok", "inserted": inserted})
+
+
+@register_bp.route("/api/register/row/gl-account", methods=["PUT"])
+@login_required
+def set_row_gl_account():
+    """Assign a GL account to a single register row. Auto-creates a rule
+    keyed on the row's description and back-fills any other unassigned rows
+    matching the same rule.
+
+    Body: {
+        "source": "bill_pay" | "payroll" | "deposit" | "manual",
+        "id":     int,
+        "gl_account_id": int | null,        // null clears the assignment
+        "create_rule": true                 // default true; pass false to skip rule + back-fill
+    }
+    """
+    data = request.get_json(silent=True) or {}
+    source = data.get("source")
+    row_id = data.get("id")
+    gl_id = data.get("gl_account_id")
+    create_rule = data.get("create_rule", True)
+
+    table = _TABLE_BY_SOURCE.get(source)
+    if not table or not isinstance(row_id, int):
+        return jsonify({"error": "Bad source or id"}), 400
+    if gl_id is not None and not isinstance(gl_id, int):
+        return jsonify({"error": "gl_account_id must be an integer or null"}), 400
+
+    conn = get_connection()
+
+    # Validate the GL account
+    if gl_id is not None:
+        gl = conn.execute("SELECT id, name FROM gl_accounts WHERE id = ?", (gl_id,)).fetchone()
+        if not gl:
+            conn.close()
+            return jsonify({"error": "GL account not found"}), 404
+
+    # Update the row
+    cur = conn.execute(f"UPDATE {table} SET gl_account_id = ? WHERE id = ?", (gl_id, row_id))
+    if cur.rowcount == 0:
+        conn.close()
+        return jsonify({"error": "Row not found"}), 404
+
+    backfilled = 0
+    rule_pattern: str | None = None
+
+    if gl_id is not None and create_rule:
+        # Pull the description from the row to extract a rule key, and figure
+        # out which location this row belongs to so the rule is scoped right.
+        desc_col, loc_col = {
+            "bill_pay": ("vendor", "location"),
+            "payroll":  ("employee_name", "location"),
+            "deposit":  ("description", None),
+            "manual":   ("payee", None),
+        }[source]
+
+        row = conn.execute(
+            f"SELECT {desc_col} AS desc, bank_account_id FROM {table} WHERE id = ?",
+            (row_id,),
+        ).fetchone()
+        desc = (row["desc"] if row else None) or ""
+
+        # For manual entries (statement-imported), the memo often contains the
+        # original transaction description with stronger signal than payee.
+        if source == "manual":
+            row2 = conn.execute(
+                "SELECT payee, memo, bank_account_id FROM manual_bank_entries WHERE id = ?",
+                (row_id,),
+            ).fetchone()
+            desc = (row2["payee"] or "") + " " + (row2["memo"] or "")
+
+        # Resolve the location via bank_account_id (every register-source row
+        # carries one). Falls back to None if unset (NULL = unassigned bill_pay).
+        loc = None
+        if row and row["bank_account_id"]:
+            ba = conn.execute(
+                "SELECT location FROM bank_accounts WHERE id = ?", (row["bank_account_id"],)
+            ).fetchone()
+            if ba:
+                loc = ba["location"]
+
+        rule_pattern = _extract_rule_pattern(desc)
+        if rule_pattern:
+            from flask import session
+            who = session.get("username") or session.get("email") or "unknown"
+            try:
+                conn.execute(
+                    """INSERT INTO gl_account_rules (location, pattern, gl_account_id, created_by)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT(location, pattern) DO UPDATE SET
+                         gl_account_id = excluded.gl_account_id,
+                         created_by = excluded.created_by,
+                         created_at = CURRENT_TIMESTAMP""",
+                    (loc, rule_pattern, gl_id, who),
+                )
+            except Exception as e:
+                logger.warning(f"Could not write GL rule {rule_pattern!r} for {loc}: {e}")
+
+            # Back-fill all unassigned rows whose description matches this pattern,
+            # scoped to the same location (so a Chatham rule doesn't auto-code Dennis).
+            backfilled = _backfill_unassigned_for_pattern(conn, rule_pattern, gl_id, loc)
+
+    conn.commit()
+    conn.close()
+    return jsonify({
+        "status": "ok",
+        "rule_pattern": rule_pattern,
+        "backfilled": backfilled,
+    })
+
+
+def _backfill_unassigned_for_pattern(conn, pattern: str, gl_id: int, location: str | None) -> int:
+    """For every register-source table, set gl_account_id=<gl_id> on rows
+    that (a) match `pattern` case-insensitively, (b) currently have NULL
+    gl_account_id, and (c) belong to a bank_account in `location` (if given).
+
+    Scoping by location keeps a Chatham rule from accidentally coding Dennis
+    rows to a Chatham GL account.
+    """
+    if not pattern:
+        return 0
+    upper_like = f"%{pattern.upper()}%"
+
+    # Resolve the set of bank_account_ids that belong to this location.
+    if location:
+        loc_acct_ids = [
+            r["id"] for r in conn.execute(
+                "SELECT id FROM bank_accounts WHERE location = ?", (location,)
+            ).fetchall()
+        ]
+    else:
+        loc_acct_ids = []
+
+    if location and not loc_acct_ids:
+        # No bank accounts for this location — nothing to back-fill.
+        return 0
+
+    loc_clause = ""
+    loc_params: tuple = ()
+    if location and loc_acct_ids:
+        ph = ",".join("?" for _ in loc_acct_ids)
+        loc_clause = f" AND bank_account_id IN ({ph})"
+        loc_params = tuple(loc_acct_ids)
+
+    queries = [
+        ("vendor_payments",
+         f"UPDATE vendor_payments SET gl_account_id = ? WHERE gl_account_id IS NULL "
+         f"AND UPPER(vendor) LIKE ?{loc_clause}",
+         (gl_id, upper_like) + loc_params),
+        ("payroll_checks",
+         f"UPDATE payroll_checks SET gl_account_id = ? WHERE gl_account_id IS NULL "
+         f"AND UPPER(employee_name) LIKE ?{loc_clause}",
+         (gl_id, upper_like) + loc_params),
+        ("bank_deposits",
+         f"UPDATE bank_deposits SET gl_account_id = ? WHERE gl_account_id IS NULL "
+         f"AND (UPPER(COALESCE(description,'')) LIKE ? OR UPPER(COALESCE(memo,'')) LIKE ?)"
+         f"{loc_clause}",
+         (gl_id, upper_like, upper_like) + loc_params),
+        ("manual_bank_entries",
+         f"UPDATE manual_bank_entries SET gl_account_id = ? WHERE gl_account_id IS NULL "
+         f"AND (UPPER(COALESCE(payee,'')) LIKE ? OR UPPER(COALESCE(memo,'')) LIKE ?)"
+         f"{loc_clause}",
+         (gl_id, upper_like, upper_like) + loc_params),
+    ]
+    total = 0
+    for table, q, params in queries:
+        try:
+            cur = conn.execute(q, params)
+            total += cur.rowcount or 0
+        except Exception as e:
+            logger.warning(f"Backfill on {table} failed: {e}")
+    return total
 
 
 # ─── ACCOUNT CRUD ────────────────────────────────────────────────────────────
@@ -247,6 +764,12 @@ def _normalize_row(source, r, bank_account_id):
         "bank_account_id": bank_account_id,
         "unassigned": False,
     }
+    # GL account fields (present on all four sources after the migration)
+    try:
+        gl_id = r["gl_account_id"]
+    except (IndexError, KeyError):
+        gl_id = None
+    out["gl_account_id"] = gl_id
     if source == "bill_pay":
         # vendor_payments
         ref = r["payment_ref"] or (f"CHK-{r['check_number']}" if r["check_number"] else "")
@@ -360,7 +883,7 @@ def get_register(account_id):
     bp_query = (
         "SELECT id, vendor, location, payment_date, payment_ref, payment_method, "
         "payment_total, check_number, memo, status, ap_payment_id, "
-        "bank_account_id, cleared, cleared_date "
+        "bank_account_id, cleared, cleared_date, gl_account_id "
         "FROM vendor_payments WHERE payment_date >= ? AND payment_date <= ? AND "
         "(status IS NULL OR status != 'void') AND ("
         "bank_account_id = ?"
@@ -374,7 +897,7 @@ def get_register(account_id):
     pr_query = (
         "SELECT id, employee_name, check_number, net_pay, gross_pay, location, "
         "payroll_run_id, pay_period_start, pay_period_end, payment_method, status, "
-        "voided, bank_account_id, cleared, cleared_date, "
+        "voided, bank_account_id, cleared, cleared_date, gl_account_id, "
         "COALESCE(pay_date, pay_period_end) AS pay_date "
         "FROM payroll_checks WHERE "
         "COALESCE(pay_date, pay_period_end) >= ? AND "
@@ -391,7 +914,7 @@ def get_register(account_id):
     # ── deposits ──
     dep_query = (
         "SELECT id, bank_account_id, deposit_date, amount, description, memo, "
-        "source, qbo_txn_id, qbo_txn_type, cleared, cleared_date "
+        "source, qbo_txn_id, qbo_txn_type, cleared, cleared_date, gl_account_id "
         "FROM bank_deposits WHERE bank_account_id = ? AND "
         "deposit_date >= ? AND deposit_date <= ?"
     )
@@ -401,12 +924,25 @@ def get_register(account_id):
     # ── manual ──
     man_query = (
         "SELECT id, bank_account_id, entry_date, entry_type, payee, memo, "
-        "ref_number, amount, cleared, cleared_date "
+        "ref_number, amount, cleared, cleared_date, gl_account_id "
         "FROM manual_bank_entries WHERE bank_account_id = ? AND "
         "entry_date >= ? AND entry_date <= ?"
     )
     for r in conn.execute(man_query, (account_id, start, end)).fetchall():
         rows.append(_normalize_row("manual", r, account_id))
+
+    # Resolve GL account names in one shot (avoid N+1 lookups)
+    needed = {r.get("gl_account_id") for r in rows if r.get("gl_account_id")}
+    gl_name_by_id: dict[int, str] = {}
+    if needed:
+        ph = ",".join("?" for _ in needed)
+        for g in conn.execute(
+            f"SELECT id, name FROM gl_accounts WHERE id IN ({ph})", list(needed)
+        ).fetchall():
+            gl_name_by_id[g["id"]] = g["name"]
+    for r in rows:
+        gid = r.get("gl_account_id")
+        r["gl_account_name"] = gl_name_by_id.get(gid) if gid else None
 
     conn.close()
 
