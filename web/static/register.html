@@ -427,7 +427,16 @@ async function selectAccount(id) {
 // ────────────────────────────────────────────────────────────────────────────
 async function loadRegister() {
   if (!STATE.currentAcct) return;
-  $('reg-body').innerHTML = '<tr><td colspan="10" class="loading">Loading register…</td></tr>';
+  // Preserve scroll position across account switches / refreshes so the user
+  // doesn't get bounced back to the top. Only blank the table on the very
+  // first load (when there are no rows yet); otherwise keep the previous
+  // rows visible while the new ones fetch — this also keeps the page height
+  // stable so the browser has a scroll position to restore to.
+  const savedScroll = window.scrollY || document.documentElement.scrollTop || 0;
+  const hadRows = !!$('reg-body').querySelector('tr.reg-row');
+  if (!hadRows) {
+    $('reg-body').innerHTML = '<tr><td colspan="10" class="loading">Loading register…</td></tr>';
+  }
   const params = new URLSearchParams({
     start: $('flt-start').value,
     end: $('flt-end').value,
@@ -442,6 +451,9 @@ async function loadRegister() {
   STATE.rows = data.rows || [];
   renderSummary(data.summary || {});
   renderRows();
+  // Restore scroll. Use rAF so the layout has settled after innerHTML swap;
+  // browser will clamp to max scroll if the new account has fewer rows.
+  requestAnimationFrame(() => window.scrollTo(0, savedScroll));
 }
 
 function renderSummary(s) {
