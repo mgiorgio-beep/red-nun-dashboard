@@ -58,6 +58,7 @@ var sections=[
   {id:'nav-bp-outstanding',label:'Outstanding',page:'/manage',tab:'billpay'},
   {id:'nav-bp-reconcile',label:'Portal Reconcile',page:'/reconcile'},
   {id:'nav-payments',label:'Payments',page:'/payments'},
+  {id:'nav-bp-printchecks',label:'Print Checks',page:'/print-checks'},
   {id:'nav-bp-vendors',label:'Vendor Setup',page:'/manage',tab:'bp-vendors'},
   {id:'nav-bp-recurring',label:'Recurring Bills',page:'/manage',tab:'bp-recurring'},
   {id:'nav-bp-checksetup',label:'Check Setup',page:'/manage',tab:'bp-checksetup'},
@@ -113,6 +114,7 @@ if(path==='/recipes/fixer')return 'nav-recipefixer';
 if(path==='/order-guide')return 'nav-orderguide';
 if(path==='/specials-admin')return 'nav-specials';
 if(path==='/payments')return 'nav-payments';
+if(path==='/print-checks')return 'nav-bp-printchecks';
 if(path==='/registers')return 'nav-acct-registers';
 if(path==='/bank-reconcile')return 'nav-acct-bankrec';
 if(path==='/opening-balances')return 'nav-acct-openbal';

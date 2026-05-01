@@ -55,6 +55,7 @@ from routes.payroll_routes import payroll_bp, init_payroll_tables
 from routes.payment_routes import payment_bp, init_payment_tables
 from routes.register_routes import register_bp, init_register_tables
 from routes.bank_reconcile_routes import bank_reconcile_bp, init_bank_reconcile_tables
+from routes.print_queue_routes import print_queue_bp
 from integrations.invoices.processor import init_invoice_tables
 import secrets
 
@@ -107,6 +108,7 @@ app.register_blueprint(payroll_bp)
 app.register_blueprint(payment_bp)
 app.register_blueprint(register_bp)
 app.register_blueprint(bank_reconcile_bp)
+app.register_blueprint(print_queue_bp)
 app.register_blueprint(availability_bp)
 app.register_blueprint(application_bp)
 app.register_blueprint(daily_sales_bp)
@@ -246,6 +248,13 @@ def vendor_status_page():
 def payments_page():
     """Serve the vendor payments tracking page."""
     return send_from_directory("static", "payments.html")
+
+
+@app.route("/print-checks")
+@login_required
+def print_checks_page():
+    """Serve the unified check print queue (AP + payroll + manual)."""
+    return send_from_directory("static", "print-checks.html")
 
 
 @app.route("/registers")
