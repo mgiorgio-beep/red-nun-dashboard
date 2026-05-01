@@ -466,6 +466,62 @@ def api_list_payments():
             ],
         })
 
+    # ── Also include recurring bill payments (paid by check, not voided) ────
+    rec_conditions = ["rbp.check_number IS NOT NULL", "rbp.check_number != ''",
+                      "COALESCE(rbp.status, 'paid') != 'voided'"]
+    rec_params = []
+    if location:
+        rec_conditions.append("(rb.location = ? OR rb.location = 'both')")
+        rec_params.append(location)
+    if vendor:
+        rec_conditions.append("(rb.vendor_name = ? OR rb.payable_to = ?)")
+        rec_params.extend([vendor, vendor])
+    if status:
+        # Map vendor_payments status semantics onto recurring (paid≈cleared, voided=void)
+        wanted = "voided" if status == "void" else "paid"
+        rec_conditions.append("COALESCE(rbp.status, 'paid') = ?")
+        rec_params.append(wanted)
+    if source and source != 'recurring':
+        # User filtered by another source — exclude recurring entirely
+        rec_conditions.append("0 = 1")
+
+    rec_rows = conn.execute(f"""
+        SELECT rbp.id AS id, rbp.bill_id, rbp.due_date, rbp.paid_date,
+               rbp.amount_paid, rbp.check_number, rbp.payment_method, rbp.memo,
+               rbp.status, rbp.created_at,
+               rb.vendor_name, rb.payable_to, rb.location, rb.description
+        FROM recurring_bill_payments rbp
+        JOIN recurring_bills rb ON rb.id = rbp.bill_id
+        WHERE {' AND '.join(rec_conditions)}
+        ORDER BY rbp.paid_date DESC, rbp.id DESC
+    """, rec_params).fetchall()
+
+    for r in rec_rows:
+        payee = r["payable_to"] or r["vendor_name"]
+        rbp_status = r["status"] or "paid"
+        ui_status = "void" if rbp_status == "voided" else "cleared"
+        payments.append({
+            "id": r["id"],
+            "vendor": payee,
+            "location": r["location"],
+            "payment_date": r["paid_date"],
+            "payment_ref": f"RBP-{r['check_number']}" if r["check_number"] else f"RBP-{r['id']}",
+            "payment_method": "check",
+            "payment_total": r["amount_paid"],
+            "check_number": r["check_number"],
+            "memo": r["memo"] or r["description"] or "",
+            "status": ui_status,
+            "source": "recurring",
+            "ap_payment_id": None,
+            "recurring_bill_id": r["bill_id"],
+            "due_date": r["due_date"],
+            "created_at": r["created_at"],
+            "invoices": [],
+        })
+
+    # Re-sort the merged list by payment_date DESC
+    payments.sort(key=lambda p: (p.get("payment_date") or "", p.get("id") or 0), reverse=True)
+
     summary = _get_summary(conn, where, tuple(params))
     conn.close()
 
@@ -548,6 +604,34 @@ def api_void_payment(payment_id):
     conn.commit()
     conn.close()
     logger.info(f"Vendor payment #{payment_id} voided")
+    return jsonify({"status": "ok"})
+
+
+@payment_bp.route("/api/payments/recurring/<int:rbp_id>/void", methods=["PUT"])
+def api_void_recurring_payment(rbp_id):
+    """Void a recurring_bill_payments row. Sets status='voided' so:
+       - the bill re-appears in the print queue (its due_date period is no
+         longer considered paid),
+       - the check_number stays on the row but is not treated as a conflict
+         on future prints (so user can choose to reuse it or pick a new one).
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id, status FROM recurring_bill_payments WHERE id = ?", (rbp_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Recurring payment not found"}), 404
+    if (row["status"] or "paid") == "voided":
+        conn.close()
+        return jsonify({"error": "Already voided"}), 400
+
+    conn.execute(
+        "UPDATE recurring_bill_payments SET status = 'voided' WHERE id = ?",
+        (rbp_id,),
+    )
+    conn.commit()
+    conn.close()
     return jsonify({"status": "ok"})
 
 

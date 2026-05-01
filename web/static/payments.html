@@ -446,6 +446,9 @@ function renderTable(payments) {
     if ((p.source === 'check' || p.source === 'portal') && p.status !== 'void' && p.status !== 'failed') {
       actions += '<button class="btn-void" onclick="event.stopPropagation();voidPayment(' + p.id + ')" style="margin-left:6px">Void Payment</button>';
     }
+    if (p.source === 'recurring' && p.status !== 'void') {
+      actions += '<button class="btn-void" onclick="event.stopPropagation();voidRecurringPayment(' + p.id + ')" style="margin-left:6px">Void &amp; Reopen</button>';
+    }
     if (actions) html += '<div style="margin-top:8px">' + actions + '</div>';
     html += '</div></td></tr>';
   }
@@ -552,6 +555,17 @@ function uploadFile(file) {
 window.voidPayment = function(id) {
   if (!confirm('Void this payment? This will reverse invoice balances if applicable.')) return;
   fetch('/api/payments/' + id + '/void', { method: 'PUT' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.status === 'ok') loadData();
+      else alert(d.error || 'Failed to void');
+    })
+    .catch(function(){ alert('Network error'); });
+};
+
+window.voidRecurringPayment = function(id) {
+  if (!confirm('Void this recurring bill payment? The bill will return to the print queue so you can reissue it.')) return;
+  fetch('/api/payments/recurring/' + id + '/void', { method: 'PUT' })
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d.status === 'ok') loadData();

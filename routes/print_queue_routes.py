@@ -158,6 +158,7 @@ def _find_conflicts(conn, location, numbers, exclude_keys=None):
         FROM recurring_bill_payments rbp
         JOIN recurring_bills rb ON rb.id = rbp.bill_id
         WHERE rbp.check_number IN ({placeholders})
+          AND COALESCE(rbp.status, 'paid') != 'voided'
         """,
         nums,
     ).fetchall()
@@ -232,7 +233,8 @@ def _due_recurring_for_queue(conn, location):
                 continue
             seen.add(key)
             existing = conn.execute(
-                "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=?",
+                "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=? "
+                "AND COALESCE(status, 'paid') != 'voided'",
                 (b["id"], due_str),
             ).fetchone()
             if existing:
@@ -617,7 +619,8 @@ def print_queue_batch():
                 continue
             # Race check: don't double-record
             already = conn.execute(
-                "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=?",
+                "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=? "
+                "AND COALESCE(status, 'paid') != 'voided'",
                 (bill_id, due_date),
             ).fetchone()
             if already:
