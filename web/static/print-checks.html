@@ -21,26 +21,19 @@
 }
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
 
-/* Layout */
 .layout { display: flex; height: 100vh; }
 .sidebar-container { width: 240px; flex-shrink: 0; }
 .main-content { flex: 1; overflow-y: auto; padding: 24px; }
 .content-wrap { max-width: 1100px; }
 
-/* Page header */
 .page-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 .page-title { font-size: 22px; font-weight: 700; }
 .page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
 
-/* Location toggle */
 .loc-toggle { display: inline-flex; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.loc-toggle button {
-  padding: 8px 16px; border: none; background: transparent; color: var(--text2);
-  font-size: 13px; font-weight: 500; cursor: pointer; font-family: var(--font);
-}
+.loc-toggle button { padding: 8px 16px; border: none; background: transparent; color: var(--text2); font-size: 13px; font-weight: 500; cursor: pointer; font-family: var(--font); }
 .loc-toggle button.active { background: var(--blue); color: #000; font-weight: 600; }
 
-/* Summary cards */
 .summary-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 .summary-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; flex: 1; min-width: 130px; }
 .summary-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
@@ -48,7 +41,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .summary-value.blue { color: var(--blue); }
 .summary-value.green { color: var(--green); }
 
-/* Action bar */
 .action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
 .action-left { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text2); }
 .btn-print { padding: 9px 18px; border-radius: 8px; border: 1px solid var(--blue); background: var(--blue); color: #000; font-weight: 600; font-size: 14px; cursor: pointer; }
@@ -56,7 +48,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .btn-secondary { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 13px; cursor: pointer; }
 .btn-secondary:hover { background: var(--bg-elevated); }
 
-/* Queue table */
 .queue-table { width: 100%; border-collapse: collapse; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px; }
 .queue-table th { padding: 10px 12px; text-align: left; color: var(--text3); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); }
 .queue-table td { padding: 12px; border-bottom: 1px solid var(--border); }
@@ -66,12 +57,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .queue-table .col-amt { text-align: right; font-variant-numeric: tabular-nums; }
 .queue-table input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--blue); }
 
-/* Source badges */
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
-.badge.ap      { background: var(--blue-soft);   color: var(--blue);   border: 1px solid rgba(56,189,248,0.3); }
-.badge.payroll { background: var(--green-soft);  color: var(--green);  border: 1px solid rgba(34,197,94,0.3); }
-.badge.manual  { background: var(--purple-soft); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
-.badge.loc     { background: var(--bg-elevated); color: var(--text2); border: 1px solid var(--border); margin-left: 6px; font-size: 10px; }
+.badge.ap        { background: var(--blue-soft);   color: var(--blue);   border: 1px solid rgba(56,189,248,0.3); }
+.badge.payroll   { background: var(--green-soft);  color: var(--green);  border: 1px solid rgba(34,197,94,0.3); }
+.badge.manual    { background: var(--purple-soft); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+.badge.recurring { background: var(--amber-soft);  color: var(--amber);  border: 1px solid rgba(245,158,11,0.3); }
+.badge.loc       { background: var(--bg-elevated); color: var(--text2);  border: 1px solid var(--border); margin-left: 6px; font-size: 10px; }
 
 .payee { font-weight: 600; color: var(--text); }
 .subtitle { color: var(--text3); font-size: 11px; margin-top: 2px; }
@@ -81,22 +72,37 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 /* Modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.85); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
 .modal-overlay.show { display: flex; }
-.modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; max-width: 480px; width: 100%; padding: 24px; }
-.modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-.modal .modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 18px; }
-.modal label { display: block; font-size: 12px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
-.modal input[type="number"] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 16px; font-family: var(--font); font-variant-numeric: tabular-nums; margin-bottom: 16px; }
-.modal input[type="number"]:focus { outline: none; border-color: var(--blue); }
-.preview-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 18px; font-size: 13px; color: var(--text2); }
-.preview-box .range { font-size: 16px; font-weight: 700; color: var(--blue); margin: 6px 0; font-variant-numeric: tabular-nums; }
-.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; max-width: 720px; width: 100%; padding: 24px; max-height: 90vh; display: flex; flex-direction: column; }
+.modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.modal .modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
+.starter-row { display: flex; align-items: end; gap: 10px; margin-bottom: 14px; }
+.starter-row .field { flex: 1; }
+.starter-row label { display: block; font-size: 12px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+.starter-row input { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 15px; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.starter-row input:focus { outline: none; border-color: var(--blue); }
+.starter-row .btn-secondary { white-space: nowrap; padding: 9px 14px; }
 
-/* Status messages */
+.checks-list { flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; min-height: 100px; }
+.checks-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.checks-list th { padding: 8px 10px; text-align: left; color: var(--text3); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+.checks-list td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.checks-list tbody tr:last-child td { border-bottom: none; }
+.checks-list .col-num { width: 110px; }
+.checks-list .col-num input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.checks-list .col-num input:focus { outline: none; border-color: var(--blue); }
+.checks-list .col-num input.conflict { border-color: var(--red); background: var(--red-soft); }
+.checks-list .col-amt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.checks-list .conflict-msg { color: var(--red); font-size: 11px; margin-top: 3px; }
+
+.modal-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.modal-footer .summary { font-size: 13px; color: var(--text2); }
+.modal-footer .summary.warn { color: var(--red); }
+.modal-actions { display: flex; gap: 10px; }
+
 .status-msg { margin: 12px 0; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
 .status-msg.err { background: var(--red-soft); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
 .status-msg.ok  { background: var(--green-soft); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
 
-/* Mobile */
 @media (max-width: 767px) {
   .layout { display: block; height: auto; }
   .sidebar-container { display: none; }
@@ -118,7 +124,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <div class="page-header">
         <div>
           <div class="page-title">Print Checks</div>
-          <div class="page-sub">All checks pending print — vendor, payroll, and manual.</div>
+          <div class="page-sub">All checks pending print — vendor, payroll, manual, and recurring bills due now.</div>
         </div>
         <div class="loc-toggle">
           <button id="locChatham" class="active" onclick="setLocation('chatham')">Chatham</button>
@@ -164,22 +170,26 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="modal-overlay" id="printModal" onclick="if(event.target===this)closePrintModal()">
   <div class="modal">
     <h2>Print checks</h2>
-    <div class="modal-sub">Confirm the starting check number. Sequential numbers will be assigned in the order shown in the queue.</div>
+    <div class="modal-sub">Edit any check number before printing. Numbers must be unique across the system.</div>
 
-    <label for="startNum">Starting check number</label>
-    <input type="number" id="startNum" min="1" step="1">
-
-    <div class="preview-box">
-      <div id="previewSummary">—</div>
-      <div class="range" id="previewRange">—</div>
-      <div id="previewLocation" style="font-size:12px;color:var(--text3);"></div>
+    <div class="starter-row">
+      <div class="field">
+        <label for="startNum">Starting check #</label>
+        <input type="number" id="startNum" min="1" step="1">
+      </div>
+      <button class="btn-secondary" onclick="applySequential()">Apply sequentially</button>
     </div>
+
+    <div class="checks-list" id="checksList"></div>
 
     <div id="modalStatus"></div>
 
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closePrintModal()">Cancel</button>
-      <button class="btn-print" id="btnConfirmPrint" onclick="confirmPrint()">Print &amp; download PDF</button>
+    <div class="modal-footer">
+      <div class="summary" id="modalSummary">—</div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closePrintModal()">Cancel</button>
+        <button class="btn-print" id="btnConfirmPrint" onclick="confirmPrint()">Print &amp; download PDF</button>
+      </div>
     </div>
   </div>
 </div>
@@ -189,9 +199,13 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   /* global buildSidebar */
   let state = {
     location: 'chatham',
-    items: [],
+    items: [],            // queue items from /api/print-queue
     nextCheckNumber: 1001,
-    selected: new Set(),  // keys: `${source}:${id}`
+    selected: new Set(),  // keys: `${source}:${id}` (id may be string for recurring)
+    // Modal state
+    modalNumbers: {},     // { key: 'check_number_string' }
+    externalConflicts: {},// { number_string: conflict_object } — external dupes
+    conflictTimer: null,
   };
 
   function fmtMoney(n) {
@@ -199,6 +213,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   function key(it) { return `${it.source}:${it.id}`; }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
   function setLocation(loc) {
     state.location = loc;
@@ -216,7 +235,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       const data = await r.json();
       state.items = data.items || [];
       state.nextCheckNumber = data.next_check_number || 1001;
-      // Drop selections whose item is no longer in the queue
       state.selected = new Set([...state.selected].filter(k => state.items.some(it => key(it) === k)));
       render();
     } catch (e) {
@@ -225,19 +243,17 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   }
 
   function render() {
-    // Summary
     document.getElementById('sumCount').textContent = state.items.length;
     const total = state.items.reduce((s, it) => s + (it.amount || 0), 0);
     document.getElementById('sumTotal').textContent = fmtMoney(total);
     document.getElementById('sumNext').textContent = '#' + state.nextCheckNumber;
 
-    // Queue table
     const wrap = document.getElementById('queueWrap');
     if (state.items.length === 0) {
       wrap.innerHTML = `
         <div class="empty-state">
           <div class="big">No checks waiting to print</div>
-          <div>Approved AP payments, payroll checks, and manual checks will appear here.</div>
+          <div>Pending vendor payments, payroll checks, manual checks, and due recurring bills will appear here.</div>
         </div>`;
       updateSelectionSummary();
       return;
@@ -259,16 +275,16 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     for (const it of state.items) {
       const k = key(it);
       const checked = state.selected.has(k) ? 'checked' : '';
-      const locBadge = it.location ? `<span class="badge loc">${it.location}</span>` : '';
+      const locBadge = it.location ? `<span class="badge loc">${escapeHtml(it.location)}</span>` : '';
       html += `
         <tr>
-          <td class="col-cb"><input type="checkbox" data-key="${k}" ${checked} onchange="toggleOne('${k}')"></td>
+          <td class="col-cb"><input type="checkbox" data-key="${escapeHtml(k)}" ${checked} onchange="toggleOne('${escapeHtml(k)}')"></td>
           <td><span class="badge ${it.source}">${it.source}</span>${locBadge}</td>
           <td>
             <div class="payee">${escapeHtml(it.payee || '—')}</div>
             ${it.extra ? `<div class="subtitle">${escapeHtml(it.extra)}</div>` : ''}
           </td>
-          <td class="hide-mobile" style="color:var(--text2)">${it.date || ''}</td>
+          <td class="hide-mobile" style="color:var(--text2)">${escapeHtml(it.date || '')}</td>
           <td class="hide-mobile" style="color:var(--text2)">${escapeHtml(it.memo || '')}</td>
           <td class="col-amt">${fmtMoney(it.amount)}</td>
         </tr>`;
@@ -279,12 +295,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     document.getElementById('selectAll').checked =
       state.items.length > 0 && state.selected.size === state.items.length;
     updateSelectionSummary();
-  }
-
-  function escapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function toggleOne(k) {
@@ -299,7 +309,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     const all = document.getElementById('selectAll').checked;
     state.selected.clear();
     if (all) state.items.forEach(it => state.selected.add(key(it)));
-    // Update each row checkbox without re-rendering (to keep scroll position)
     document.querySelectorAll('.queue-table input[type="checkbox"][data-key]').forEach(cb => {
       cb.checked = state.selected.has(cb.dataset.key);
     });
@@ -318,58 +327,199 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     document.getElementById('btnPrint').disabled = (n === 0);
   }
 
+  // ── Modal ───────────────────────────────────────────────────────────────────
+
+  function selectedItemsInOrder() {
+    return state.items.filter(it => state.selected.has(key(it)));
+  }
+
   function openPrintModal() {
-    if (state.selected.size === 0) return;
-    const n = state.selected.size;
-    const start = state.nextCheckNumber;
-    const end = start + n - 1;
-    document.getElementById('startNum').value = start;
-    document.getElementById('previewSummary').textContent =
-      `${n} ${n === 1 ? 'check' : 'checks'} will be printed.`;
-    document.getElementById('previewRange').textContent =
-      n === 1 ? `#${start}` : `#${start} – #${end}`;
-    document.getElementById('previewLocation').textContent =
-      `Location: ${state.location === 'chatham' ? 'Chatham' : 'Dennis Port'}`;
+    const sel = selectedItemsInOrder();
+    if (sel.length === 0) return;
+
+    // Pre-assign sequential numbers from the suggested next #
+    state.modalNumbers = {};
+    let n = state.nextCheckNumber;
+    for (const it of sel) {
+      state.modalNumbers[key(it)] = String(n);
+      n++;
+    }
+    state.externalConflicts = {};
+
+    document.getElementById('startNum').value = state.nextCheckNumber;
+    renderChecksList();
+    refreshModalSummary();
     document.getElementById('modalStatus').innerHTML = '';
-    document.getElementById('btnConfirmPrint').disabled = false;
     document.getElementById('printModal').classList.add('show');
     setTimeout(() => document.getElementById('startNum').focus(), 50);
+    queueConflictCheck();
   }
 
   function closePrintModal() {
     document.getElementById('printModal').classList.remove('show');
+    if (state.conflictTimer) { clearTimeout(state.conflictTimer); state.conflictTimer = null; }
   }
 
-  // Live update preview when user edits starting #
-  document.addEventListener('input', (e) => {
-    if (e.target.id === 'startNum') {
-      const n = state.selected.size;
-      const start = parseInt(e.target.value, 10);
-      if (!isNaN(start) && start > 0) {
-        const end = start + n - 1;
-        document.getElementById('previewRange').textContent =
-          n === 1 ? `#${start}` : `#${start} – #${end}`;
-      } else {
-        document.getElementById('previewRange').textContent = '—';
-      }
+  function applySequential() {
+    const start = parseInt(document.getElementById('startNum').value, 10);
+    if (isNaN(start) || start <= 0) return;
+    const sel = selectedItemsInOrder();
+    let n = start;
+    for (const it of sel) {
+      state.modalNumbers[key(it)] = String(n);
+      n++;
     }
-  });
+    renderChecksList();
+    refreshModalSummary();
+    queueConflictCheck();
+  }
+
+  function renderChecksList() {
+    const sel = selectedItemsInOrder();
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th class="col-num">Check #</th>
+            <th>Source</th>
+            <th>Payee</th>
+            <th class="col-amt">Amount</th>
+          </tr>
+        </thead>
+        <tbody>`;
+    for (const it of sel) {
+      const k = key(it);
+      const num = state.modalNumbers[k] || '';
+      const conflictMsg = conflictMessageForKey(k, num);
+      const conflictClass = conflictMsg ? ' conflict' : '';
+      html += `
+        <tr>
+          <td class="col-num">
+            <input type="number" min="1" step="1" data-key="${escapeHtml(k)}" value="${escapeHtml(num)}" class="${conflictClass}" oninput="onCheckNumberChange('${escapeHtml(k)}', this.value)">
+            ${conflictMsg ? `<div class="conflict-msg">${escapeHtml(conflictMsg)}</div>` : ''}
+          </td>
+          <td><span class="badge ${it.source}">${it.source}</span></td>
+          <td>
+            <div class="payee">${escapeHtml(it.payee || '—')}</div>
+            ${it.extra ? `<div class="subtitle">${escapeHtml(it.extra)}</div>` : ''}
+          </td>
+          <td class="col-amt">${fmtMoney(it.amount)}</td>
+        </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('checksList').innerHTML = html;
+  }
+
+  function onCheckNumberChange(k, value) {
+    state.modalNumbers[k] = String(value || '').trim();
+    refreshModalSummary();
+    // Re-render only inline conflict messages without losing focus — easiest:
+    // update just the input className based on current state, defer full conflict
+    // refresh to debounce.
+    queueConflictCheck();
+  }
+
+  function withinBatchDuplicates() {
+    // Returns map: number_string -> count (only those with count > 1)
+    const counts = {};
+    for (const k of Object.keys(state.modalNumbers)) {
+      const n = state.modalNumbers[k];
+      if (!n) continue;
+      counts[n] = (counts[n] || 0) + 1;
+    }
+    const dupes = {};
+    for (const n of Object.keys(counts)) {
+      if (counts[n] > 1) dupes[n] = counts[n];
+    }
+    return dupes;
+  }
+
+  function conflictMessageForKey(k, num) {
+    const v = String(num || '').trim();
+    if (!v) return 'Enter a check #';
+    if (!/^\d+$/.test(v) || parseInt(v, 10) <= 0) return 'Must be a positive number';
+    const dupes = withinBatchDuplicates();
+    if (dupes[v]) return `Duplicate within this batch (${dupes[v]} uses)`;
+    const ext = state.externalConflicts[v];
+    if (ext) {
+      const where = ext.source + (ext.location ? ` · ${ext.location}` : '');
+      return `Already used by ${where} for ${ext.payee || '?'}`;
+    }
+    return null;
+  }
+
+  function refreshModalSummary() {
+    const sel = selectedItemsInOrder();
+    const n = sel.length;
+    const conflicts = sel.reduce((acc, it) => {
+      const k = key(it);
+      return acc + (conflictMessageForKey(k, state.modalNumbers[k]) ? 1 : 0);
+    }, 0);
+    const summary = document.getElementById('modalSummary');
+    if (conflicts > 0) {
+      summary.textContent = `${n} checks · ${conflicts} need attention`;
+      summary.className = 'summary warn';
+    } else {
+      summary.textContent = `${n} checks ready · location: ${state.location === 'chatham' ? 'Chatham' : 'Dennis Port'}`;
+      summary.className = 'summary';
+    }
+    document.getElementById('btnConfirmPrint').disabled = (n === 0 || conflicts > 0);
+  }
+
+  function queueConflictCheck() {
+    if (state.conflictTimer) clearTimeout(state.conflictTimer);
+    state.conflictTimer = setTimeout(runConflictCheck, 350);
+  }
+
+  async function runConflictCheck() {
+    const sel = selectedItemsInOrder();
+    const numbers = sel.map(it => state.modalNumbers[key(it)])
+                        .filter(v => v && /^\d+$/.test(v))
+                        .map(v => parseInt(v, 10));
+    if (numbers.length === 0) {
+      state.externalConflicts = {};
+      renderChecksList();
+      refreshModalSummary();
+      return;
+    }
+    try {
+      const r = await fetch('/api/print-queue/check-conflicts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: state.location,
+          numbers,
+          exclude_items: sel.map(it => ({ source: it.source, id: it.id })),
+        }),
+      });
+      if (!r.ok) return;
+      const data = await r.json();
+      const map = {};
+      for (const c of (data.conflicts || [])) {
+        map[String(c.number)] = c;
+      }
+      state.externalConflicts = map;
+      renderChecksList();
+      refreshModalSummary();
+    } catch (e) {
+      // Non-fatal — POST will validate as backstop
+    }
+  }
 
   async function confirmPrint() {
-    const start = parseInt(document.getElementById('startNum').value, 10);
-    if (isNaN(start) || start <= 0) {
-      modalStatus('Enter a valid starting check number.', 'err');
-      return;
-    }
-    // Build items array preserving the order as shown in the queue
-    const selectedKeys = state.selected;
-    const items = state.items
-      .filter(it => selectedKeys.has(key(it)))
-      .map(it => ({ source: it.source, id: it.id }));
+    const sel = selectedItemsInOrder();
+    if (sel.length === 0) return;
 
-    if (items.length === 0) {
-      modalStatus('Nothing selected.', 'err');
-      return;
+    // Build items with numbers
+    const items = [];
+    for (const it of sel) {
+      const v = state.modalNumbers[key(it)];
+      const n = parseInt(v, 10);
+      if (!v || isNaN(n) || n <= 0) {
+        modalStatus(`Invalid number for ${it.payee || it.source + '#' + it.id}.`, 'err');
+        return;
+      }
+      items.push({ source: it.source, id: it.id, check_number: n });
     }
 
     document.getElementById('btnConfirmPrint').disabled = true;
@@ -379,41 +529,47 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       const r = await fetch('/api/print-queue/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: state.location,
-          starting_check_number: start,
-          items,
-        }),
+        body: JSON.stringify({ location: state.location, items }),
       });
       if (!r.ok) {
-        const errText = await r.text();
         let msg = `HTTP ${r.status}`;
-        try { msg = (JSON.parse(errText).error) || msg; } catch (_) {}
+        try {
+          const j = await r.json();
+          if (j.error) msg = j.error;
+          if (j.conflicts && j.conflicts.length) {
+            // Update external conflicts so UI reflects them
+            const map = {};
+            for (const c of j.conflicts) map[String(c.number)] = c;
+            state.externalConflicts = { ...state.externalConflicts, ...map };
+            renderChecksList();
+            refreshModalSummary();
+          }
+        } catch (_) {}
         throw new Error(msg);
       }
       const blob = await r.blob();
-      // Trigger download
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       const dispo = r.headers.get('Content-Disposition') || '';
       const m = dispo.match(/filename="?([^"]+)"?/i);
-      a.download = (m && m[1]) || `checks_${state.location}_${start}.pdf`;
+      a.download = (m && m[1]) || `checks_${state.location}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
 
-      // Reset and reload
       state.selected.clear();
       closePrintModal();
       setStatus(`Printed ${items.length} ${items.length === 1 ? 'check' : 'checks'}. PDF downloaded.`, 'ok');
       loadQueue();
     } catch (e) {
       modalStatus('Print failed: ' + e.message, 'err');
-      document.getElementById('btnConfirmPrint').disabled = false;
+      refreshModalSummary();  // re-enable button if conflicts cleared, etc.
     }
   }
+
+  // ── Status helpers ──────────────────────────────────────────────────────────
 
   function setStatus(msg, type) {
     const box = document.getElementById('statusBox');
