@@ -637,6 +637,20 @@ def print_queue_batch():
                 (bill_id, due_date, today_iso, amount, num_s, memo),
             )
 
+            # Look up the vendor's remit address from vendor_bill_pay so the
+            # check renderer can stamp it. Prefer the payable_to name (which is
+            # who the check is actually made out to); fall back to vendor_name.
+            vendor_bp = None
+            for name_to_try in (bill["payable_to"], bill["vendor_name"]):
+                if not name_to_try:
+                    continue
+                vendor_bp = conn.execute(
+                    "SELECT * FROM vendor_bill_pay WHERE vendor_name = ?",
+                    (name_to_try,),
+                ).fetchone()
+                if vendor_bp:
+                    break
+
             payment = {
                 "vendor_name": bill["payable_to"] or bill["vendor_name"],
                 "amount": amount,
@@ -645,7 +659,11 @@ def print_queue_batch():
             }
             rendered.append((
                 "recurring", num_s,
-                {"payment": payment, "invoices": [], "vendor_info": None},
+                {
+                    "payment": payment,
+                    "invoices": [],
+                    "vendor_info": dict(vendor_bp) if vendor_bp else None,
+                },
             ))
 
         if num > max_num_used:
