@@ -451,9 +451,10 @@ function renderTable(payments) {
     }
     if (p.check_number && p.status !== 'void') {
       if (p.source === 'recurring') {
-        actions += '<button class="btn-markpaid" onclick="event.stopPropagation();reprintRecurring(' + p.id + ')" style="margin-left:6px">Reprint Check</button>';
+        actions += '<button class="btn-markpaid btn-reprint" data-rs="recurring" data-rid="' + p.id + '" style="margin-left:6px">Reprint Check</button>';
       } else if (p.ap_payment_id) {
-        actions += '<button class="btn-markpaid" onclick="event.stopPropagation();reprintAp(' + p.ap_payment_id + ',' + JSON.stringify(p.location || 'chatham') + ')" style="margin-left:6px">Reprint Check</button>';
+        var locAttr = String(p.location || 'chatham').replace(/"/g, '&quot;');
+        actions += '<button class="btn-markpaid btn-reprint" data-rs="ap" data-rid="' + p.ap_payment_id + '" data-rloc="' + locAttr + '" style="margin-left:6px">Reprint Check</button>';
       }
     }
     if (actions) html += '<div style="margin-top:8px">' + actions + '</div>';
@@ -600,6 +601,21 @@ window.reprintAp = function(apPaymentId, location) {
     window.location.href = url;
   }
 };
+
+// Delegated click handler — avoids inline-onclick quoting bugs.
+document.addEventListener('click', function(e) {
+  var btn = e.target;
+  if (!btn || !btn.classList || !btn.classList.contains('btn-reprint')) return;
+  e.stopPropagation();
+  var src = btn.dataset.rs;
+  var id = parseInt(btn.dataset.rid, 10);
+  if (!id) return;
+  if (src === 'recurring') {
+    window.reprintRecurring(id);
+  } else if (src === 'ap') {
+    window.reprintAp(id, btn.dataset.rloc || 'chatham');
+  }
+});
 
 window.markPaid = function(id) {
   if (!confirm('Mark this payment as cleared? Use this once the ACH/check has actually gone through.')) return;
