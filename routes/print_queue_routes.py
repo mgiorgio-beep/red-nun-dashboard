@@ -737,4 +737,4 @@ def print_queue_batch():
         f"checks_{location}_{min(nums_used)}-{max(nums_used)}_"
         f"{date.today().isoformat()}.pdf"
     )
-    return send_file(out_path, mimetype="application/pdf", download_name=download_name)
+    return send_file(out_path, mimetype="application/pdf", download_name=download_name, as_attachment=False)

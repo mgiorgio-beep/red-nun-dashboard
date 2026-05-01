@@ -549,15 +549,21 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const dispo = r.headers.get('Content-Disposition') || '';
-      const m = dispo.match(/filename="?([^"]+)"?/i);
-      a.download = (m && m[1]) || `checks_${state.location}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      // Open inline in a new tab so the user can print without downloading.
+      const w = window.open(url, '_blank');
+      if (!w) {
+        // Popup blocked — fall back to download so the file isn't lost.
+        const a = document.createElement('a');
+        a.href = url;
+        const dispo = r.headers.get('Content-Disposition') || '';
+        const m = dispo.match(/filename="?([^"]+)"?/i);
+        a.download = (m && m[1]) || `checks_${state.location}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      // Revoke after the new tab has had time to load the blob.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
 
       state.selected.clear();
       closePrintModal();

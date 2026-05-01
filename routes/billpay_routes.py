@@ -1203,7 +1203,7 @@ def print_check(payment_id):
     )
 
     return send_file(output_path, mimetype="application/pdf",
-                     download_name=f"check_{check_num}_{payment['vendor_name']}.pdf")
+                     download_name=f"check_{check_num}_{payment['vendor_name']}.pdf", as_attachment=False)
 
 
 @billpay_bp.route("/api/billpay/payments/batch-print", methods=["POST"])
@@ -1273,7 +1273,7 @@ def batch_print_checks():
     generate_batch_checks_pdf(payments_data, dict(config), output_path)
 
     return send_file(output_path, mimetype="application/pdf",
-                     download_name=f"checks_batch_{date.today().isoformat()}.pdf")
+                     download_name=f"checks_batch_{date.today().isoformat()}.pdf", as_attachment=False)
 
 
 @billpay_bp.route("/api/billpay/print-calibration", methods=["POST"])
@@ -1602,7 +1602,7 @@ def print_payroll_check(check_id):
     )
 
     return send_file(output_path, mimetype="application/pdf",
-                     download_name=f"payroll_check_{check_num}_{payroll['employee_name']}.pdf")
+                     download_name=f"payroll_check_{check_num}_{payroll['employee_name']}.pdf", as_attachment=False)
 
 
 @billpay_bp.route("/api/billpay/payroll-checks/<int:check_id>/pdf")
@@ -1858,7 +1858,7 @@ def print_manual_check(check_id):
     )
 
     return send_file(output_path, mimetype="application/pdf",
-                     download_name=f"check_{check_num}_{mc['payee_name']}.pdf")
+                     download_name=f"check_{check_num}_{mc['payee_name']}.pdf", as_attachment=False)
 
 
 @billpay_bp.route("/api/billpay/manual-checks/<int:check_id>/void", methods=["PUT"])
