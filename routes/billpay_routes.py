@@ -1962,6 +1962,32 @@ def export_check_register():
     for r in mc_rows:
         checks.append(dict(r))
 
+    # 4. Recurring bill payments (status='paid', has check_number)
+    where_rb = ["rbp.status = 'paid'", "rbp.check_number IS NOT NULL", "rbp.check_number != ''"]
+    params_rb = []
+    if date_from:
+        where_rb.append("rbp.paid_date >= ?")
+        params_rb.append(date_from)
+    if date_to:
+        where_rb.append("rbp.paid_date <= ?")
+        params_rb.append(date_to)
+    if location:
+        where_rb.append("(rb.location = ? OR rb.location = 'both')")
+        params_rb.append(location)
+
+    rb_rows = conn.execute(f"""
+        SELECT rbp.check_number, rbp.paid_date as check_date,
+               COALESCE(rb.payable_to, rb.vendor_name) as payee,
+               rbp.amount_paid as amount,
+               rbp.memo, 'Recurring' as check_type, 'printed' as status
+        FROM recurring_bill_payments rbp
+        JOIN recurring_bills rb ON rb.id = rbp.bill_id
+        WHERE {' AND '.join(where_rb)}
+        ORDER BY CAST(rbp.check_number AS INTEGER)
+    """, params_rb).fetchall()
+    for r in rb_rows:
+        checks.append(dict(r))
+
     conn.close()
 
     # Sort all checks by check number
