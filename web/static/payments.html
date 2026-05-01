@@ -449,6 +449,13 @@ function renderTable(payments) {
     if (p.source === 'recurring' && p.status !== 'void') {
       actions += '<button class="btn-void" onclick="event.stopPropagation();voidRecurringPayment(' + p.id + ')" style="margin-left:6px">Void &amp; Reopen</button>';
     }
+    if (p.check_number && p.status !== 'void') {
+      if (p.source === 'recurring') {
+        actions += '<button class="btn-markpaid" onclick="event.stopPropagation();reprintRecurring(' + p.id + ')" style="margin-left:6px">Reprint Check</button>';
+      } else if (p.ap_payment_id) {
+        actions += '<button class="btn-markpaid" onclick="event.stopPropagation();reprintAp(' + p.ap_payment_id + ',' + JSON.stringify(p.location || 'chatham') + ')" style="margin-left:6px">Reprint Check</button>';
+      }
+    }
     if (actions) html += '<div style="margin-top:8px">' + actions + '</div>';
     html += '</div></td></tr>';
   }
@@ -572,6 +579,26 @@ window.voidRecurringPayment = function(id) {
       else alert(d.error || 'Failed to void');
     })
     .catch(function(){ alert('Network error'); });
+};
+
+window.reprintRecurring = function(rbpId) {
+  // Re-render the PDF for an already-printed recurring bill payment.
+  // No DB changes — just regenerates the check.
+  var url = '/api/payments/recurring/' + rbpId + '/reprint';
+  var w = window.open(url, '_blank');
+  if (!w) {
+    // popup blocked — fall back to navigating in-tab
+    window.location.href = url;
+  }
+};
+
+window.reprintAp = function(apPaymentId, location) {
+  // Re-render the PDF for an already-printed AP check via the existing endpoint.
+  var url = '/api/billpay/payments/' + apPaymentId + '/print-check?location=' + encodeURIComponent(location || 'chatham');
+  var w = window.open(url, '_blank');
+  if (!w) {
+    window.location.href = url;
+  }
 };
 
 window.markPaid = function(id) {

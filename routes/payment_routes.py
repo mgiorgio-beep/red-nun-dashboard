@@ -607,6 +607,82 @@ def api_void_payment(payment_id):
     return jsonify({"status": "ok"})
 
 
+@payment_bp.route("/api/payments/recurring/<int:rbp_id>/reprint", methods=["GET", "POST"])
+def api_reprint_recurring_payment(rbp_id):
+    """Re-render the PDF for a recurring bill payment using its already-
+    assigned check number. Does NOT touch the DB. Returns inline PDF."""
+    from check_printer import generate_check_pdf
+    from flask import send_file
+
+    conn = get_connection()
+    rbp = conn.execute(
+        "SELECT * FROM recurring_bill_payments WHERE id = ?", (rbp_id,)
+    ).fetchone()
+    if not rbp:
+        conn.close()
+        return jsonify({"error": "Recurring payment not found"}), 404
+    if not rbp["check_number"]:
+        conn.close()
+        return jsonify({"error": "No check number on this payment"}), 400
+
+    bill = conn.execute(
+        "SELECT * FROM recurring_bills WHERE id = ?", (rbp["bill_id"],)
+    ).fetchone()
+    if not bill:
+        conn.close()
+        return jsonify({"error": "Bill not found"}), 404
+
+    location = bill["location"] or "chatham"
+    if location == "both":
+        location = "dennis"  # arbitrary; check_config still works for either
+    config = conn.execute(
+        "SELECT * FROM check_config WHERE location = ?", (location,)
+    ).fetchone()
+    if not config:
+        config = conn.execute(
+            "SELECT * FROM check_config ORDER BY id LIMIT 1"
+        ).fetchone()
+    if not config:
+        conn.close()
+        return jsonify({"error": "Check config not set up"}), 400
+
+    # Vendor address
+    vendor_bp = None
+    for name_to_try in (bill["payable_to"], bill["vendor_name"]):
+        if not name_to_try:
+            continue
+        vendor_bp = conn.execute(
+            "SELECT * FROM vendor_bill_pay WHERE vendor_name = ?", (name_to_try,)
+        ).fetchone()
+        if vendor_bp:
+            break
+
+    payment = {
+        "vendor_name": bill["payable_to"] or bill["vendor_name"],
+        "amount": rbp["amount_paid"],
+        "payment_date": rbp["paid_date"] or "",
+        "memo": rbp["memo"] or bill["description"] or "",
+    }
+
+    conn.close()
+
+    out_path = f"/tmp/reprint_recurring_{rbp_id}_{rbp['check_number']}.pdf"
+    generate_check_pdf(
+        payment=payment,
+        invoices=[],
+        config=dict(config),
+        vendor_info=dict(vendor_bp) if vendor_bp else None,
+        check_number=rbp["check_number"],
+        output_path=out_path,
+    )
+
+    return send_file(
+        out_path, mimetype="application/pdf",
+        download_name=f"check_{rbp['check_number']}_recurring.pdf",
+        as_attachment=False,
+    )
+
+
 @payment_bp.route("/api/payments/recurring/<int:rbp_id>/void", methods=["PUT"])
 def api_void_recurring_payment(rbp_id):
     """Void a recurring_bill_payments row. Sets status='voided' so:
