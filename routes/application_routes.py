@@ -23,7 +23,7 @@ from reportlab.lib.styles import ParagraphStyle
 
 application_bp = Blueprint("application", __name__)
 
-GOOGLE_TOKEN     = os.path.join(os.path.dirname(__file__), "google_token.pickle")
+GOOGLE_TOKEN = "/opt/red-nun-dashboard/integrations/google/google_token.pickle"
 GMAIL_TOKEN      = os.path.join(os.path.dirname(__file__), "gmail_token.pickle")
 
 LOCATION_CONFIG = {

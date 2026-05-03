@@ -25,7 +25,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 availability_bp = Blueprint("availability", __name__)
 
 # ── Config ────────────────────────────────────────────────────────────
-GOOGLE_TOKEN   = os.path.join(os.path.dirname(__file__), "google_token.pickle")
+GOOGLE_TOKEN = "/opt/red-nun-dashboard/integrations/google/google_token.pickle"
 DRIVE_FOLDER   = "1fKLC6ZiIRrI7KkMqObDkFcK03H-cBgNA"  # Chatham   # paste folder ID in .env
 DAYS           = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
 SHIFTS         = ["Lunch","Dinner"]
