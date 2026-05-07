@@ -253,6 +253,45 @@ def detect_location_from_address(address):
     return None
 
 
+# ─── invoice-date fallback helper (for vendors whose templates lack a labeled date) ───
+def _earliest_date_in_pdf_bytes(pdf_bytes):
+    """Run pdftotext on bytes and return earliest MM/DD/YY[YY] date as YYYY-MM-DD, or None."""
+    import subprocess, tempfile, os, re as _re
+    from datetime import date
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
+            tf.write(pdf_bytes)
+            tmp = tf.name
+        try:
+            out = subprocess.run(
+                ["pdftotext", tmp, "-"],
+                capture_output=True, text=True, timeout=15
+            ).stdout or ""
+        finally:
+            try: os.unlink(tmp)
+            except OSError: pass
+    except Exception:
+        return None
+    return _earliest_date_in_text(out)
+
+def _earliest_date_in_text(text):
+    """Find earliest MM/DD/YY[YY] (or MM-DD-YY[YY]) date in text. Returns YYYY-MM-DD or None."""
+    import re as _re
+    from datetime import date
+    if not text: return None
+    candidates = []
+    for m in _re.finditer(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b", text):
+        mo, dy, yr = m.groups()
+        try:
+            mo, dy, yr = int(mo), int(dy), int(yr)
+            if yr < 100: yr += 2000
+            if not (1 <= mo <= 12 and 1 <= dy <= 31 and 2000 <= yr <= 2100): continue
+            candidates.append(date(yr, mo, dy))
+        except (ValueError, TypeError):
+            continue
+    return min(candidates).isoformat() if candidates else None
+
+
 def extract_invoice_data(image_base64, mime_type="image/jpeg", extra_pages=None):
     """
     Use Claude Vision API to extract structured data from an invoice image or PDF.
@@ -317,6 +356,7 @@ Return ONLY valid JSON with this structure (no other text):
 
 Rules:
 - If a field is not visible, use null
+- For invoice_date specifically: if the document does NOT have a labeled Invoice Date / Bill Date / Date field, but DOES show dated line items (service dates, delivery dates, transaction dates), use the EARLIEST such date as invoice_date. Only return null if no date appears anywhere on the document.
 - For dates, convert to YYYY-MM-DD format
 - Include ALL line items you can read
 - IMPORTANT: Read ALL three columns: SHIPPED QTY, UNIT PRICE, and EXTENSION. Set total_price = extension (read directly). Cross-check: qty × unit_price should ≈ total_price. If not, trust extension and set unit_price = total_price / quantity.
@@ -516,6 +556,18 @@ VENDOR ITEM CODE:
         conn.close()
     except Exception as e:
         logger.warning(f"Category memory lookup failed: {e}")
+
+    # Fallback: if AI couldn't pull invoice_date but the source is a PDF, regex it for the earliest date
+    try:
+        if (not data.get("invoice_date")) and mime_type == "application/pdf":
+            import base64 as _b64
+            recovered = _earliest_date_in_pdf_bytes(_b64.b64decode(image_base64))
+            if recovered:
+                data["invoice_date"] = recovered
+                data.setdefault("notes", "")
+                data["notes"] = (data["notes"] + " [invoice_date recovered from line-item dates]").strip()
+    except Exception as _e:
+        pass
 
     return data
 
