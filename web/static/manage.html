@@ -5983,7 +5983,9 @@ function bpExportCSV() {
 // ── Load vendor filter dropdown ──
 async function bpLoadVendorFilter() {
   try {
-    var r = await fetch('/api/billpay/vendors');
+    var loc = window.currentLocation || localStorage.getItem('globalLocation') || '';
+    var url = '/api/billpay/vendors' + (loc ? '?location=' + encodeURIComponent(loc) : '');
+    var r = await fetch(url);
     var d = await r.json();
     var sel = document.getElementById('bp-vendor-filter');
     if (!sel) return;
@@ -6021,10 +6023,59 @@ function bpRecordPayment() {
   document.getElementById('bp-payment-modal').style.display = 'flex';
 }
 
-function bpPayByCheck() {
-  bpRecordPayment();
-  document.getElementById('bp-pay-method').value = 'check';
-  document.getElementById('bp-modal-title').textContent = 'Pay by Check';
+async function bpPayByCheck() {
+  if (_bpSelected.size === 0) {
+    alert('Select one or more bills to pay by check.');
+    return;
+  }
+  var byVendor = {};
+  _bpInvoices.forEach(function(inv){
+    if (!_bpSelected.has(inv.id)) return;
+    var v = inv.vendor_name || '(unknown)';
+    (byVendor[v] = byVendor[v] || []).push(inv);
+  });
+  var vendors = Object.keys(byVendor);
+  var totalAmount = 0;
+  vendors.forEach(function(v){
+    byVendor[v].forEach(function(inv){ totalAmount += (inv.balance || 0); });
+  });
+  var msg = 'Create ' + vendors.length + ' pending check' + (vendors.length===1?'':'s') +
+            ' totaling $' + totalAmount.toFixed(2) + ' and go to Print Checks?';
+  if (!confirm(msg)) return;
+  var newApIds = [];
+  try {
+    for (var i = 0; i < vendors.length; i++) {
+      var v = vendors[i];
+      var invs = byVendor[v];
+      var ids = invs.map(function(x){ return x.id; });
+      var amts = invs.map(function(x){ return parseFloat((x.balance || 0).toFixed(2)); });
+      var sum = amts.reduce(function(a,b){ return a+b; }, 0);
+      var r = await fetch('/api/billpay/payments', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          vendor_name: v,
+          amount: parseFloat(sum.toFixed(2)),
+          payment_method: 'check',
+          invoice_ids: ids,
+          amounts_per_invoice: amts,
+        })
+      });
+      if (!r.ok) {
+        var err = await r.json().catch(function(){ return {}; });
+        throw new Error(err.error || ('HTTP ' + r.status + ' for ' + v));
+      }
+      var d = await r.json().catch(function(){ return {}; });
+      var newId = d.id || d.payment_id || (d.payment && d.payment.id);
+      if (newId) newApIds.push('ap:' + newId);
+    }
+  } catch (e) {
+    alert('Failed to create check payments: ' + e.message);
+    return;
+  }
+  var url = '/print-checks';
+  if (newApIds.length) url += '?select=' + encodeURIComponent(newApIds.join(','));
+  window.location.href = url;
 }
 
 async function bpPayViaPortal() {

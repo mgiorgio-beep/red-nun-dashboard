@@ -236,10 +236,43 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       state.items = data.items || [];
       state.nextCheckNumber = data.next_check_number || 1001;
       state.selected = new Set([...state.selected].filter(k => state.items.some(it => key(it) === k)));
+      await applyPreselectFromUrl();
       render();
     } catch (e) {
       setStatus('Failed to load queue: ' + e.message, 'err');
     }
+  }
+
+  async function applyPreselectFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const sel = params.get('select');
+    if (!sel) return;
+    const wanted = sel.split(',').map(s => s.trim()).filter(Boolean);
+    if (!wanted.length) return;
+    let existing = new Set(state.items.map(it => key(it)));
+    const anyHere = wanted.some(k => existing.has(k));
+    if (!anyHere) {
+      const other = state.location === 'dennis' ? 'chatham' : 'dennis';
+      try {
+        const r = await fetch('/api/print-queue?location=' + encodeURIComponent(other));
+        if (r.ok) {
+          const data = await r.json();
+          const otherItems = data.items || [];
+          if (wanted.some(k => otherItems.some(it => key(it) === k))) {
+            state.location = other;
+            state.items = otherItems;
+            state.nextCheckNumber = data.next_check_number || state.nextCheckNumber;
+            const lc = document.getElementById('locChatham');
+            const ld = document.getElementById('locDennis');
+            if (lc) lc.classList.toggle('active', other === 'chatham');
+            if (ld) ld.classList.toggle('active', other === 'dennis');
+            existing = new Set(state.items.map(it => key(it)));
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+    wanted.forEach(k => { if (existing.has(k)) state.selected.add(k); });
+    window.history.replaceState({}, '', window.location.pathname);
   }
 
   function render() {
