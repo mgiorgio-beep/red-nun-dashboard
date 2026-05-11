@@ -6081,16 +6081,41 @@ async function bpPayByCheck() {
 async function bpPayViaPortal() {
   if (_bpSelected.size === 0) return;
   var invIds = [], total = 0, vendor = null, amounts = [];
+  var bills = [], credits = [];
   _bpInvoices.forEach(function(inv){
     if (_bpSelected.has(inv.id)) {
       invIds.push(inv.id);
-      amounts.push(inv.balance || 0);
-      total += inv.balance || 0;
+      var bal = inv.balance || 0;
+      amounts.push(bal);
+      total += bal;
       if (!vendor) vendor = inv.vendor_name;
+      if (bal < 0) credits.push(inv); else bills.push(inv);
     }
   });
   if (!vendor) return;
-  if (!confirm('Pay ' + invIds.length + ' invoice(s) totaling $' + total.toFixed(2) + ' for ' + vendor + ' via vendor portal?\n\nThis will submit payment through the vendor website.')) return;
+  // Confirm with a breakdown so the user can verify both bills and credits
+  // are in the batch before the scraper runs — the portal accepts mixed
+  // selections, but the scraper has misfired on this (vp#273, May 11 2026).
+  var lines = ['Pay via ' + vendor + ' portal?'];
+  if (bills.length) {
+    lines.push('');
+    lines.push('Invoices (' + bills.length + '):');
+    bills.forEach(function(i){
+      lines.push('  #' + (i.invoice_number||'—') + '   $' + (i.balance||0).toFixed(2));
+    });
+  }
+  if (credits.length) {
+    lines.push('');
+    lines.push('Credits to apply (' + credits.length + '):');
+    credits.forEach(function(i){
+      lines.push('  #' + (i.invoice_number||'—') + '   $' + (i.balance||0).toFixed(2));
+    });
+  }
+  lines.push('');
+  lines.push('Net to portal: $' + total.toFixed(2));
+  lines.push('');
+  lines.push('Submits payment through the vendor website.');
+  if (!confirm(lines.join('\n'))) return;
   try {
     var r = await fetch('/api/payments/pay-portal', {
       method: 'POST',

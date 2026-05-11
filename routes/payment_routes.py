@@ -1077,7 +1077,13 @@ def _set_payment_result(key, exit_code, tail):
 def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
     """Run payment scraper in background thread. Update vendor_payment on completion."""
     os.makedirs(_PAYMENT_LOG_DIR, exist_ok=True)
+    # Per-key path = "latest" (used by api_payment_scraper_log).
+    # Per-vp path preserves history so a follow-up run doesn't clobber the
+    # previous run's log. This bit us on Colonial vp#273 (2026-05-11):
+    # a successful L. Knife run 40s later overwrote the Colonial failure
+    # log and the state-file results entry, losing the failure detail.
     log_path = os.path.join(_PAYMENT_LOG_DIR, f"payment_{key}.log")
+    vp_log_path = os.path.join(_PAYMENT_LOG_DIR, f"payment_{key}_vp{vendor_payment_id}.log")
     display_name = scraper_info["display_name"]
     _set_payment_running(key, display_name)
 
@@ -1094,11 +1100,15 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
             capture_output=True, text=True, timeout=300,
             env=env,
         )
-        with open(log_path, "w") as f:
-            f.write(result.stdout or "")
-            if result.stderr:
-                f.write("\n--- STDERR ---\n")
-                f.write(result.stderr)
+        log_body = result.stdout or ""
+        if result.stderr:
+            log_body += "\n--- STDERR ---\n" + result.stderr
+        for _p in (log_path, vp_log_path):
+            try:
+                with open(_p, "w") as f:
+                    f.write(log_body)
+            except OSError as _e:
+                logger.warning(f"Could not write payment log {_p}: {_e}")
 
         all_output = (result.stdout or "") + (result.stderr or "")
         tail = "\n".join(all_output.strip().splitlines()[-20:])
