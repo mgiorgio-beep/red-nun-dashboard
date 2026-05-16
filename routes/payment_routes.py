@@ -408,34 +408,39 @@ def api_list_payments():
 
     conn = get_connection()
 
-    # Build WHERE clause — qualified with vp. for the join below
+    # Build WHERE clause (no alias prefix — same `where` reused by _get_summary)
     conditions = []
     params = []
     if vendor:
-        conditions.append("vp.vendor = ?")
+        conditions.append("vendor = ?")
         params.append(vendor)
     if location:
-        conditions.append("vp.location = ?")
+        conditions.append("location = ?")
         params.append(location)
     if source:
-        conditions.append("vp.source = ?")
+        conditions.append("source = ?")
         params.append(source)
     if status:
-        conditions.append("vp.status = ?")
+        conditions.append("status = ?")
         params.append(status)
 
     where = ""
     if conditions:
         where = "WHERE " + " AND ".join(conditions)
 
-    # Fetch payments (LEFT JOIN ap_payments to surface auto_paid flag)
+    # Fetch payments. Subquery surfaces ap_payments.auto_paid without forcing
+    # a JOIN, so the WHERE clause stays alias-free and reusable downstream.
     rows = conn.execute(
         f"""
-        SELECT vp.*, COALESCE(ap.auto_paid, 0) AS ap_auto_paid
-        FROM vendor_payments vp
-        LEFT JOIN ap_payments ap ON ap.id = vp.ap_payment_id
+        SELECT *,
+               COALESCE(
+                 (SELECT auto_paid FROM ap_payments
+                  WHERE id = vendor_payments.ap_payment_id),
+                 0
+               ) AS ap_auto_paid
+        FROM vendor_payments
         {where}
-        ORDER BY vp.payment_date DESC, vp.id DESC
+        ORDER BY payment_date DESC, id DESC
         """,
         params,
     ).fetchall()
