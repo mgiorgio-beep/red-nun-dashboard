@@ -41,6 +41,15 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+# Auto-load .env from the working directory so RNPA_* env vars don't have to
+# be set externally. NSSM-friendly: just point AppDirectory at the agent
+# folder containing the .env file.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # if not installed, env can still be set externally
+
 try:
     import requests
 except ImportError:  # pragma: no cover
@@ -108,7 +117,7 @@ def _setup_logging():
 # ──────────────────────────────────────────────────────────────────────────────
 
 class ServerClient:
-    def __init__(self, base_url, api_key, agent_id, timeout=20):
+    def __init__(self, base_url, api_key, agent_id, timeout=60):
         self.base = base_url.rstrip("/")
         self.headers = {"X-API-Key": api_key}
         self.agent_id = agent_id
