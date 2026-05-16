@@ -2294,6 +2294,10 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
               <label style="font-size:13px;color:#a855f7">Pay via Portal</label>
               <input type="checkbox" id="bp-ve-portal">
             </div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <label style="font-size:13px;color:#22c55e" title="When checked, every confirmed invoice from this vendor automatically creates a payment record, assigns a check number, generates the check PDF, and queues it for printing on the home printer. Guardrails: duplicate detection + ±25% anomaly. Requires Payment Method = Check.">Auto-pay (unattended check printing)</label>
+              <input type="checkbox" id="bp-ve-autopay">
+            </div>
             <div>
               <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Payment Recipient (if different from vendor name)</label>
               <input type="text" id="bp-ve-recipient" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
@@ -6275,6 +6279,7 @@ async function bpEditVendor(name) {
     var v = await r.json();
     document.getElementById('bp-ve-enabled').checked = !!v.bill_pay_enabled;
     document.getElementById('bp-ve-portal').checked = !!v.portal_pay_enabled;
+    document.getElementById('bp-ve-autopay').checked = !!v.auto_pay;
     document.getElementById('bp-ve-recipient').value = v.payment_recipient || '';
     document.getElementById('bp-ve-addr1').value = v.remit_address_1 || '';
     document.getElementById('bp-ve-addr2').value = v.remit_address_2 || '';
@@ -6369,6 +6374,7 @@ async function bpSaveVendor() {
       body: JSON.stringify({
         bill_pay_enabled: document.getElementById('bp-ve-enabled').checked ? 1 : 0,
         portal_pay_enabled: document.getElementById('bp-ve-portal').checked ? 1 : 0,
+        auto_pay: document.getElementById('bp-ve-autopay').checked ? 1 : 0,
         payment_recipient: document.getElementById('bp-ve-recipient').value || null,
         remit_address_1: document.getElementById('bp-ve-addr1').value || null,
         remit_address_2: document.getElementById('bp-ve-addr2').value || null,

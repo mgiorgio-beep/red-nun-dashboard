@@ -458,6 +458,7 @@ def update_billpay_vendor(vendor_name):
     fields = {
         "bill_pay_enabled": data.get("bill_pay_enabled", 1),
         "portal_pay_enabled": data.get("portal_pay_enabled", 0),
+        "auto_pay": data.get("auto_pay", 0),
         "payment_recipient": data.get("payment_recipient"),
         "remit_address_1": data.get("remit_address_1"),
         "remit_address_2": data.get("remit_address_2"),

@@ -56,6 +56,7 @@ from routes.payment_routes import payment_bp, init_payment_tables
 from routes.register_routes import register_bp, init_register_tables
 from routes.bank_reconcile_routes import bank_reconcile_bp, init_bank_reconcile_tables
 from routes.print_queue_routes import print_queue_bp
+from routes.print_agent_routes import print_agent_bp
 from integrations.invoices.processor import init_invoice_tables
 import secrets
 
@@ -109,6 +110,7 @@ app.register_blueprint(payment_bp)
 app.register_blueprint(register_bp)
 app.register_blueprint(bank_reconcile_bp)
 app.register_blueprint(print_queue_bp)
+app.register_blueprint(print_agent_bp)
 app.register_blueprint(availability_bp)
 app.register_blueprint(application_bp)
 app.register_blueprint(daily_sales_bp)

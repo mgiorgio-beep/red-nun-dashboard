@@ -2338,6 +2338,15 @@ def confirm_invoice(invoice_id, updated_data=None):
 
     conn.close()
     logger.info(f"Invoice #{invoice_id} confirmed with {len(items)} items")
+
+    # ── Auto-pay: if vendor is flagged auto_pay, create payment + queue check ──
+    # Defensive: never let auto_pay raise into the confirm pipeline.
+    try:
+        from integrations.billpay.auto_pay import process_invoice_for_auto_pay
+        process_invoice_for_auto_pay(invoice_id)
+    except Exception as e:
+        logger.warning(f"auto_pay hook failed for invoice #{invoice_id}: {e}")
+
     return True
 
 

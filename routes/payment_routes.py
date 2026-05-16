@@ -408,29 +408,35 @@ def api_list_payments():
 
     conn = get_connection()
 
-    # Build WHERE clause
+    # Build WHERE clause — qualified with vp. for the join below
     conditions = []
     params = []
     if vendor:
-        conditions.append("vendor = ?")
+        conditions.append("vp.vendor = ?")
         params.append(vendor)
     if location:
-        conditions.append("location = ?")
+        conditions.append("vp.location = ?")
         params.append(location)
     if source:
-        conditions.append("source = ?")
+        conditions.append("vp.source = ?")
         params.append(source)
     if status:
-        conditions.append("status = ?")
+        conditions.append("vp.status = ?")
         params.append(status)
 
     where = ""
     if conditions:
         where = "WHERE " + " AND ".join(conditions)
 
-    # Fetch payments
+    # Fetch payments (LEFT JOIN ap_payments to surface auto_paid flag)
     rows = conn.execute(
-        f"SELECT * FROM vendor_payments {where} ORDER BY payment_date DESC, id DESC",
+        f"""
+        SELECT vp.*, COALESCE(ap.auto_paid, 0) AS ap_auto_paid
+        FROM vendor_payments vp
+        LEFT JOIN ap_payments ap ON ap.id = vp.ap_payment_id
+        {where}
+        ORDER BY vp.payment_date DESC, vp.id DESC
+        """,
         params,
     ).fetchall()
 
@@ -453,6 +459,7 @@ def api_list_payments():
             "status": r["status"] or "cleared",
             "source": r["source"] or "import",
             "ap_payment_id": r["ap_payment_id"],
+            "auto_paid": bool(r["ap_auto_paid"]),
             "created_at": r["created_at"],
             "invoices": [
                 {
