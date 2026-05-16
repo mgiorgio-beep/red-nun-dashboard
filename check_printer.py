@@ -17,11 +17,93 @@ Bottom stub:   y = 0–264pt
 
 import io
 import os
+import re
 import logging
 from datetime import datetime
 from num2words import num2words
 
 logger = logging.getLogger(__name__)
+
+
+def _build_payee_address(vendor_info, fallback_name=""):
+    """Build (recipient, line1, line2) for the payee address block.
+
+    Handles two common data shapes for vendor remit addresses:
+      A) clean: addr1='123 Main St', city/state/zip filled separately
+      B) dirty: user crammed the whole address (incl. city/state/zip) into
+         addr1 and ALSO filled city/state/zip — we must NOT duplicate the
+         city/state/zip line in that case.
+    """
+    if not vendor_info:
+        return fallback_name, "", ""
+    recipient = vendor_info.get("payment_recipient") or fallback_name
+    addr1 = (vendor_info.get("remit_address_1", "") or "").strip()
+    addr2 = (vendor_info.get("remit_address_2", "") or "").strip()
+    city = (vendor_info.get("remit_city", "") or "").strip()
+    state = (vendor_info.get("remit_state", "") or "").strip()
+    zipcode = (vendor_info.get("remit_zip", "") or "").strip()
+    csz_parts = [p for p in (city, state) if p]
+    csz = ", ".join(csz_parts)
+    if zipcode:
+        csz = f"{csz} {zipcode}" if csz else zipcode
+
+    def _already_has_csz(line):
+        if not line:
+            return False
+        if zipcode and zipcode in line:
+            return True
+        if city and city.lower() in line.lower() and not zipcode:
+            return True
+        return False
+
+    if addr2:
+        line1 = addr1
+        if _already_has_csz(addr2):
+            line2 = addr2
+        else:
+            line2 = (addr2 + "  " + csz).strip() if csz else addr2
+    else:
+        line1 = addr1
+        if _already_has_csz(addr1) or not csz:
+            line2 = ""
+        else:
+            line2 = csz
+    return recipient, line1, line2
+
+
+# Values that sometimes end up in `invoice_number` but aren't real numbers.
+_PLACEHOLDER_INV_NUMS = {"", "#", "?", "-", "--", "n/a", "na", "tbd", "none", "null"}
+
+# Matches degenerate memos like 'Inv #', 'Inv #, #', 'Inv #, #, #' — produced
+# historically by the front-end when invoice_number was null/empty.
+_DEGENERATE_MEMO_RE = re.compile(r"^\s*Inv\s*#\s*(,\s*#\s*)*$", re.IGNORECASE)
+
+
+def _build_invoice_memo(invoices):
+    """Build 'Inv #1234, #5678' style memo. Filters blanks, whitespace, and
+    placeholders. Returns '' if no real invoice numbers were found."""
+    if not invoices:
+        return ""
+    nums = []
+    for inv in invoices:
+        raw = inv.get("invoice_number") if isinstance(inv, dict) else None
+        if raw is None:
+            continue
+        num = str(raw).strip().lstrip("#").strip()
+        if not num or num.lower() in _PLACEHOLDER_INV_NUMS:
+            continue
+        nums.append(num)
+    if not nums:
+        return ""
+    return "Inv #" + ", #".join(nums)
+
+
+def _sanitize_memo(memo, invoices):
+    """If `memo` is a degenerate 'Inv #, #, #' string (no real numbers),
+    rebuild from the invoice list. Otherwise return memo unchanged."""
+    if memo and _DEGENERATE_MEMO_RE.match(memo):
+        return _build_invoice_memo(invoices)
+    return memo or ""
 
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "integrations", "quickbooks", "check_assets")
 MICR_FONT_PATH = os.path.abspath(os.path.join(ASSETS_DIR, "micr-e13b.ttf"))
@@ -145,32 +227,15 @@ def generate_check_pdf(payment, invoices, config, vendor_info=None,
     except ValueError:
         date_str = payment_date
 
-    # Build memo from invoice numbers if not provided
-    if not memo and invoices:
-        inv_nums = [inv.get("invoice_number", "") for inv in invoices if inv.get("invoice_number")]
-        if inv_nums:
-            memo = "Inv #" + ", #".join(inv_nums)
-
-    # Vendor address for bottom envelope window
-    payee_addr1 = ""
-    payee_addr2 = ""
-    if vendor_info:
-        recipient = vendor_info.get("payment_recipient") or vendor_name
-        addr1 = vendor_info.get("remit_address_1", "") or ""
-        addr2 = vendor_info.get("remit_address_2", "") or ""
-        city = vendor_info.get("remit_city", "") or ""
-        state = vendor_info.get("remit_state", "") or ""
-        zipcode = vendor_info.get("remit_zip", "") or ""
-        payee_addr1 = addr1
-        csz = ", ".join(filter(None, [city, state]))
-        if zipcode:
-            csz = f"{csz} {zipcode}" if csz else zipcode
-        payee_addr2 = csz
-        if addr2:
-            payee_addr1 = addr1
-            payee_addr2 = addr2 + ("  " + csz if csz else "")
+    # Build/sanitize memo: rebuild from invoices if empty, else heal degenerate
+    # 'Inv #, #, #' values that the front-end may have saved historically.
+    if not memo:
+        memo = _build_invoice_memo(invoices)
     else:
-        recipient = vendor_name
+        memo = _sanitize_memo(memo, invoices)
+
+    # Vendor address for bottom envelope window — dedup-aware
+    recipient, payee_addr1, payee_addr2 = _build_payee_address(vendor_info, vendor_name)
 
     account_name = config.get("account_name", "") or ""
     account_addr1 = config.get("account_address_1", "") or ""
@@ -379,31 +444,13 @@ def _draw_check_on_canvas(c, payment, invoices, config, vendor_info, check_numbe
     except ValueError:
         date_str = payment_date
 
-    if not memo and invoices:
-        inv_nums = [inv.get("invoice_number", "") for inv in invoices if inv.get("invoice_number")]
-        if inv_nums:
-            memo = "Inv #" + ", #".join(inv_nums)
-
-    # Resolve payee info
-    if vendor_info:
-        recipient = vendor_info.get("payment_recipient") or vendor_name
-        addr1 = vendor_info.get("remit_address_1", "") or ""
-        addr2 = vendor_info.get("remit_address_2", "") or ""
-        city = vendor_info.get("remit_city", "") or ""
-        state = vendor_info.get("remit_state", "") or ""
-        zipcode = vendor_info.get("remit_zip", "") or ""
-        payee_addr1 = addr1
-        csz = ", ".join(filter(None, [city, state]))
-        if zipcode:
-            csz = f"{csz} {zipcode}" if csz else zipcode
-        payee_addr2 = csz
-        if addr2:
-            payee_addr1 = addr1
-            payee_addr2 = addr2 + ("  " + csz if csz else "")
+    if not memo:
+        memo = _build_invoice_memo(invoices)
     else:
-        recipient = vendor_name
-        payee_addr1 = ""
-        payee_addr2 = ""
+        memo = _sanitize_memo(memo, invoices)
+
+    # Resolve payee info — dedup-aware
+    recipient, payee_addr1, payee_addr2 = _build_payee_address(vendor_info, vendor_name)
 
     account_name = config.get("account_name", "") or ""
     account_addr1 = config.get("account_address_1", "") or ""

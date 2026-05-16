@@ -6009,7 +6009,8 @@ function bpRecordPayment() {
   document.getElementById('bp-pay-amount').value = total.toFixed(2);
   document.getElementById('bp-pay-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('bp-pay-ref').value = '';
-  document.getElementById('bp-pay-memo').value = 'Inv #' + invs.map(function(i){ return i.invoice_number; }).join(', #');
+  var _memoNums = invs.map(function(i){ return (i.invoice_number || '').toString().trim(); }).filter(function(n){ return n && n !== '#'; });
+  document.getElementById('bp-pay-memo').value = _memoNums.length ? ('Inv #' + _memoNums.join(', #')) : '';
   document.getElementById('bp-pay-method').value = 'check';
 
   var listEl = document.getElementById('bp-pay-invoices-list');
