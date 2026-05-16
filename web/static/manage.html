@@ -1854,7 +1854,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
               <label style="font-size:12px;color:var(--text3);font-weight:600">Location:</label>
               <button id="ck-loc-chatham" onclick="bpSwitchCheckLocation('chatham')" class="bp-filter-btn active" style="padding:6px 16px">Chatham</button>
-              <button id="ck-loc-dennisport" onclick="bpSwitchCheckLocation('dennisport')" class="bp-filter-btn" style="padding:6px 16px">Dennis Port</button>
+              <button id="ck-loc-dennis" onclick="bpSwitchCheckLocation('dennis')" class="bp-filter-btn" style="padding:6px 16px">Dennis Port</button>
             </div>
             <h3 style="color:#111827;margin:0 0 16px 0;font-size:15px">Bank Information</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
@@ -6399,7 +6399,7 @@ var _bpCheckLocation = 'chatham';
 function bpSwitchCheckLocation(loc) {
   _bpCheckLocation = loc;
   document.getElementById('ck-loc-chatham').classList.toggle('active', loc === 'chatham');
-  document.getElementById('ck-loc-dennisport').classList.toggle('active', loc === 'dennisport');
+  document.getElementById('ck-loc-dennis').classList.toggle('active', loc === 'dennis');
   bpLoadCheckConfig();
 }
 
