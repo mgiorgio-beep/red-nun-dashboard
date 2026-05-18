@@ -65,7 +65,7 @@
 |---|---|---|
 | Every 5 min | `/opt/red-nun-dashboard/monitoring/ddns.py` | Update A records (`dashboard`, `wheelhouse`, `skywatch`, `northfla`, `ssh`) in Cloudflare |
 | Every 5 min | `/opt/red-nun-dashboard/integrations/invoices/watchers/email_invoice_poller.py` | Poll Gmail for invoice emails |
-| Every 30 min | `/opt/red-nun-dashboard/monitoring/server_down_check.py` | Alert if server is unreachable |
+| Every 30 min (`7,37 * * * *`) | `/opt/red-nun-dashboard/monitoring/server_down_check.py` | Alert if server is unreachable. Offset off `:00`/`:30` to avoid cron stampede; suppresses alerts when localhost:8080 is reachable (false-positive guard against Cloudflare/Comcast path blips). |
 | Daily 6am, 12pm, 6pm | `/opt/wheelhouse/logger.py` | Wheelhouse data logger |
 | Daily 7am | `/home/rednun/vendor-scrapers/run_all.sh` | Scrape vendor invoices |
 | Daily 10am | `scraping.sports_guide.fanzo_scraper.scrape_fanzo_guide()` | Fanzo sports guide scrape |

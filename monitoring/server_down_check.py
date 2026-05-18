@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
 """
 Dashboard Down Check — Red Nun Dashboard
-Checks if dashboard.rednun.com returns HTTP 200.
-Only emails on failure. Tracks state to avoid repeat alerts.
+Checks if dashboard.rednun.com returns HTTP 200, with a localhost sanity check
+to suppress false positives caused by transient Cloudflare/Comcast path blips.
 
-Cron: */30 * * * * (every 30 minutes)
+Logic:
+  1. Hit https://dashboard.rednun.com. If it returns 200, all good.
+  2. If the public check fails, hit http://127.0.0.1:8080/ (gunicorn direct).
+       - If gunicorn answers locally, the server itself is fine. The failure
+         is somewhere in the public network path (DNS, Cloudflare, Comcast).
+         Log it quietly. DO NOT email.
+       - If gunicorn also fails locally, retry the public check once after
+         30s. Only if the retry also fails do we send a DOWN alert.
+
+Cron: 7,37 * * * * (every 30 minutes, offset off the :00/:30 stampede)
 """
 
 import json
 import os
 import smtplib
+import time
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -22,25 +32,66 @@ load_dotenv("/opt/red-nun-dashboard/.env")
 
 RECIPIENT = "mgiorgio@rednun.com"
 DASHBOARD_URL = "https://dashboard.rednun.com"
+LOCAL_URL = "http://127.0.0.1:8080/"
 STATE_FILE = Path("/opt/red-nun-dashboard/monitoring/.down_state.json")
-TIMEOUT = 15
+LOG_FILE = Path("/opt/red-nun-dashboard/monitoring/down_check.log")
+PUBLIC_TIMEOUT = 25       # was 15 — too aggressive for the Cloudflare hairpin
+LOCAL_TIMEOUT = 5
+RETRY_WAIT = 30
+
+
+def _classify(exc):
+    """Translate a requests exception into a precise error label."""
+    if isinstance(exc, requests.exceptions.SSLError):
+        return f"SSL error: {exc}"
+    if isinstance(exc, requests.exceptions.Timeout):
+        return f"Timeout ({PUBLIC_TIMEOUT}s)"
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        # ConnectionError covers DNS failures, TCP refused, network unreachable,
+        # and connection resets. Try to tell them apart from the inner message.
+        msg = str(exc).lower()
+        if "name or service not known" in msg or "temporary failure in name resolution" in msg:
+            return "DNS failure"
+        if "connection refused" in msg:
+            return "Connection refused"
+        if "network is unreachable" in msg:
+            return "Network unreachable"
+        if "connection reset" in msg:
+            return "Connection reset"
+        return f"Network error: {exc.__class__.__name__}"
+    return str(exc)
+
+
+def check_url(url, timeout):
+    """Returns (is_up, status_code_or_error)."""
+    try:
+        r = requests.get(url, timeout=timeout, allow_redirects=True)
+        if r.status_code == 200:
+            return True, 200
+        return False, f"HTTP {r.status_code}"
+    except Exception as e:
+        return False, _classify(e)
 
 
 def check_dashboard():
-    """Returns (is_up, status_code_or_error)."""
+    """Returns (is_up, error_label). Wraps the public check with timeout."""
+    return check_url(DASHBOARD_URL, PUBLIC_TIMEOUT)
+
+
+def check_local():
+    """Returns (is_up, error_label). Hits gunicorn directly on 127.0.0.1:8080."""
+    return check_url(LOCAL_URL, LOCAL_TIMEOUT)
+
+
+def log_line(msg):
+    """Append a timestamped line to the local log."""
     try:
-        r = requests.get(DASHBOARD_URL, timeout=TIMEOUT, allow_redirects=True)
-        if r.status_code == 200:
-            return True, 200
-        return False, r.status_code
-    except requests.exceptions.SSLError as e:
-        return False, f"SSL error: {e}"
-    except requests.exceptions.ConnectionError as e:
-        return False, f"Connection refused"
-    except requests.exceptions.Timeout:
-        return False, f"Timeout ({TIMEOUT}s)"
-    except Exception as e:
-        return False, str(e)
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with LOG_FILE.open("a") as f:
+            f.write(f"{datetime.now().isoformat()} {msg}\n")
+    except Exception:
+        pass
+    print(msg)
 
 
 def load_state():
@@ -96,7 +147,9 @@ sudo systemctl restart nginx
 journalctl -u rednun --since "10 min ago"</pre>
     </div>
     <p style="color:#475569;font-size:12px;margin-top:20px;">
-        This check runs every 30 minutes. You will receive one alert per outage.
+        This check runs every 30 minutes. Gunicorn was also verified
+        unreachable on 127.0.0.1:8080, and a 30-second retry confirmed the
+        failure — so this is a real outage, not a network blip.
     </p>
 </div>
 </body></html>"""
@@ -162,27 +215,56 @@ def send_recovery_alert(down_since):
 
 
 def main():
-    is_up, result = check_dashboard()
+    # ---- Public check (round-trip through Cloudflare + Comcast) ----
+    public_up, public_err = check_dashboard()
     state = load_state()
 
-    if is_up:
+    if public_up:
+        # Healthy. If we were previously down + alerted, send a RECOVERED.
         if state["is_down"] and state.get("alerted"):
             send_recovery_alert(state.get("since", "unknown"))
         if state["is_down"]:
-            print(f"Dashboard recovered at {datetime.now().isoformat()}")
+            log_line(f"Dashboard recovered (public OK)")
         else:
-            print(f"Dashboard OK — HTTP {result}")
+            log_line(f"Dashboard OK — HTTP 200")
         save_state({"is_down": False, "since": None, "alerted": False})
+        return
+
+    # ---- Public failed. Sanity-check the server itself. ----
+    local_up, local_err = check_local()
+
+    if local_up:
+        # Gunicorn is fine on localhost — the public path is the only thing
+        # that failed. This is a network blip (DNS, Cloudflare, or the
+        # Comcast hairpin), NOT a server outage. Log it, don't email,
+        # and don't change down-state.
+        log_line(
+            f"Public check failed but local OK — suppressing alert "
+            f"(public_err={public_err}, local=HTTP 200)"
+        )
+        return
+
+    # ---- Both failed. Wait and retry the public check once. ----
+    log_line(
+        f"Public AND local failed (public={public_err}, local={local_err}); "
+        f"retrying public in {RETRY_WAIT}s before alerting"
+    )
+    time.sleep(RETRY_WAIT)
+    public_up2, public_err2 = check_dashboard()
+
+    if public_up2:
+        # Came back on retry. Treat as transient. Don't email.
+        log_line(f"Public check recovered on retry — suppressing alert")
+        return
+
+    # ---- Confirmed outage. Send the alert (once per outage). ----
+    now = datetime.now().isoformat()
+    if not state["is_down"]:
+        log_line(f"Dashboard DOWN (confirmed): {public_err2}")
+        sent = send_down_alert(public_err2)
+        save_state({"is_down": True, "since": now, "alerted": sent})
     else:
-        now = datetime.now().isoformat()
-        if not state["is_down"]:
-            # First failure detection
-            print(f"Dashboard DOWN: {result}")
-            sent = send_down_alert(result)
-            save_state({"is_down": True, "since": now, "alerted": sent})
-        else:
-            # Already known to be down — don't re-alert
-            print(f"Dashboard still down (since {state.get('since', '?')}): {result}")
+        log_line(f"Dashboard still down (since {state.get('since', '?')}): {public_err2}")
 
 
 if __name__ == "__main__":
