@@ -324,6 +324,13 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
                style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
       </label>
       <label style="grid-column:1/-1;font-size:12px;color:var(--text2)">
+        Expense account
+        <select id="qcGlAccount"
+                style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+          <option value="">— Select account (e.g. Repairs, Insurance) —</option>
+        </select>
+      </label>
+      <label style="grid-column:1/-1;font-size:12px;color:var(--text2)">
         Memo (optional)
         <input type="text" id="qcMemo" maxlength="80" placeholder="e.g. Reimbursement for shed lock"
                style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
@@ -592,24 +599,77 @@ window.openQuickCheck = function() {
   if (loc === 'dennis' || loc === 'chatham') {
     document.getElementById('qcLocation').value = loc;
   }
+  // Load the GL account dropdown for the chosen location.
+  loadQcGlAccounts(document.getElementById('qcLocation').value);
   document.getElementById('quickCheckModal').classList.add('open');
   setTimeout(function(){ document.getElementById('qcPayee').focus(); }, 50);
 };
+
+// Reload GL accounts when the location changes — different bank accounts may
+// have a different chart of accounts in play.
+document.getElementById('qcLocation').addEventListener('change', function() {
+  loadQcGlAccounts(this.value);
+});
+
+function loadQcGlAccounts(location) {
+  var sel = document.getElementById('qcGlAccount');
+  var prev = sel.value;
+  sel.innerHTML = '<option value="">Loading accounts...</option>';
+  // Pull Expense accounts (and Other Expense / Cost of Goods Sold for completeness)
+  // for the selected location, plus unscoped legacy accounts.
+  var url = '/api/gl-accounts?active=1&type=Expense&type=Other Expense&type=Cost of Goods Sold&location=' +
+            encodeURIComponent(location || 'chatham');
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    var accounts = (data && data.accounts) || [];
+    if (!accounts.length) {
+      sel.innerHTML = '<option value="">(No expense accounts found — add one in Register settings)</option>';
+      return;
+    }
+    // Group by subtype for readability; fall back to account_type.
+    var groups = {};
+    accounts.forEach(function(a){
+      var g = a.account_subtype || a.account_type || 'Other';
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(a);
+    });
+    var html = '<option value="">— Select account —</option>';
+    Object.keys(groups).sort().forEach(function(g){
+      html += '<optgroup label="' + esc(g) + '">';
+      groups[g].forEach(function(a){
+        var label = a.name + (a.acct_num ? ' (' + a.acct_num + ')' : '');
+        html += '<option value="' + a.id + '">' + esc(label) + '</option>';
+      });
+      html += '</optgroup>';
+    });
+    sel.innerHTML = html;
+    if (prev) sel.value = prev;  // preserve selection across location change if possible
+  }).catch(function(){
+    sel.innerHTML = '<option value="">(Failed to load accounts)</option>';
+  });
+}
 
 window.closeQuickCheck = function() {
   document.getElementById('quickCheckModal').classList.remove('open');
   ['qcPayee','qcAmount','qcCheckNum','qcMemo','qcAddr1','qcAddr2'].forEach(function(id){
     document.getElementById(id).value = '';
   });
+  document.getElementById('qcGlAccount').value = '';
   document.getElementById('qcStatus').textContent = '';
 };
 
 window.submitQuickCheck = function() {
   var payee = document.getElementById('qcPayee').value.trim();
   var amount = parseFloat(document.getElementById('qcAmount').value);
+  var glAccount = document.getElementById('qcGlAccount').value;
   var status = document.getElementById('qcStatus');
   if (!payee) { status.innerHTML = '<span style="color:var(--red)">Payee name required</span>'; return; }
   if (!amount || amount <= 0) { status.innerHTML = '<span style="color:var(--red)">Amount must be greater than zero</span>'; return; }
+  if (!glAccount) {
+    // Soft warning — let them proceed but flag it so they know it's uncoded.
+    if (!confirm('No expense account selected. The check will be printed but won\'t be coded to a GL account. Continue?')) {
+      return;
+    }
+  }
 
   var payload = {
     payee_name: payee,
@@ -619,7 +679,8 @@ window.submitQuickCheck = function() {
     check_number: document.getElementById('qcCheckNum').value.trim(),
     memo: document.getElementById('qcMemo').value.trim(),
     address_1: document.getElementById('qcAddr1').value.trim(),
-    address_2: document.getElementById('qcAddr2').value.trim()
+    address_2: document.getElementById('qcAddr2').value.trim(),
+    gl_account_id: glAccount ? parseInt(glAccount, 10) : null
   };
 
   var btn = document.getElementById('qcSubmit');

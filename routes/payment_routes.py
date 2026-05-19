@@ -73,6 +73,11 @@ def init_payment_tables():
         # Per-vendor lead time — how many days before due date this vendor's bills
         # surface in Due Soon. NULL = use the global Due Soon horizon.
         "ALTER TABLE vendor_bill_pay ADD COLUMN pay_lead_days INTEGER",
+        # GL account assignment — lets one-off / quick checks be coded to a
+        # specific expense account at the moment of creation. NULL on legacy
+        # rows; new manual checks should set it.
+        "ALTER TABLE ap_payments ADD COLUMN gl_account_id INTEGER",
+        "ALTER TABLE vendor_payments ADD COLUMN gl_account_id INTEGER",
     ]
     for sql in migrations:
         try:

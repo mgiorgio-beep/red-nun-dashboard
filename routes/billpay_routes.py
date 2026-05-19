@@ -1157,6 +1157,7 @@ def quick_check():
       check_number (str, optional)    — override; otherwise next from check_config
       address_1 (str, optional)       — envelope window line 1
       address_2 (str, optional)       — envelope window line 2 (or city/state/zip)
+      gl_account_id (int, optional)   — chart-of-accounts row to code this against
     """
     from check_printer import generate_check_pdf
 
@@ -1177,6 +1178,10 @@ def quick_check():
     override_check_num = (data.get("check_number") or "").strip() or None
     addr1 = (data.get("address_1") or "").strip()
     addr2 = (data.get("address_2") or "").strip()
+    try:
+        gl_account_id = int(data.get("gl_account_id")) if data.get("gl_account_id") else None
+    except (TypeError, ValueError):
+        gl_account_id = None
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -1202,9 +1207,9 @@ def quick_check():
     # Create the standalone payment row (status='printed' since we render now).
     cursor.execute(
         """INSERT INTO ap_payments (vendor_name, payment_date, amount, payment_method,
-                check_number, memo, status)
-           VALUES (?, ?, ?, 'check', ?, ?, 'printed')""",
-        (payee, payment_date, amount, check_num, memo),
+                check_number, memo, status, gl_account_id)
+           VALUES (?, ?, ?, 'check', ?, ?, 'printed', ?)""",
+        (payee, payment_date, amount, check_num, memo, gl_account_id),
     )
     payment_id = cursor.lastrowid
 
@@ -1220,10 +1225,11 @@ def quick_check():
         cursor.execute(
             """INSERT INTO vendor_payments
                (vendor, location, payment_date, payment_ref, payment_method,
-                payment_total, check_number, memo, status, source, ap_payment_id)
-               VALUES (?, ?, ?, ?, 'check', ?, ?, ?, 'printed', 'check', ?)""",
+                payment_total, check_number, memo, status, source, ap_payment_id,
+                gl_account_id)
+               VALUES (?, ?, ?, ?, 'check', ?, ?, ?, 'printed', 'check', ?, ?)""",
             (payee, location, payment_date, f"CHK-{check_num}",
-             amount, check_num, memo, payment_id),
+             amount, check_num, memo, payment_id, gl_account_id),
         )
     except Exception as e:
         logger.warning(f"Mirror to vendor_payments failed for quick-check #{payment_id}: {e}")
