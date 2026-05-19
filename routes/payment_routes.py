@@ -987,6 +987,41 @@ def api_export_payments():
 
 # ─── PAYMENT SCRAPER FRAMEWORK ───────────────────────────────────────────────
 
+
+# ─── PAYMENT FAILURE NOTIFICATION ────────────────────────────────────────────
+# Uses an existing Telegram bot. Configure TELEGRAM_BOT_TOKEN and
+# TELEGRAM_ALERT_CHAT_ID in /opt/red-nun-dashboard/.env to enable.
+def _notify_payment_failure(scraper_key, display_name, vp_id, exit_code, error_tail):
+    """Send a Telegram alert when a vendor payment scraper fails.
+
+    Silent no-op if env vars aren't set. Best-effort — never raises."""
+    import os as _os
+    try:
+        import requests as _requests
+    except ImportError:
+        return
+    token = _os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = _os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        return
+    body_max = 3500
+    tail = error_tail if len(error_tail) <= body_max else \
+        "...(truncated)...\n" + error_tail[-body_max:]
+    text = (
+        f"⚠️ Payment portal failure\n"
+        f"Vendor: {display_name} (key={scraper_key})\n"
+        f"vp#{vp_id} — exit {exit_code}\n"
+        f"\n--- last lines ---\n{tail}"
+    )
+    try:
+        _requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+            timeout=5,
+        )
+    except Exception:
+        pass
+
 _PAYMENT_SCRAPER_REGISTRY = {
     "usfoods": {
         "display_name": "US Foods",
@@ -1158,11 +1193,21 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
                                     datetime.now().strftime("%Y-%m-%d"))
             logger.info(f"Payment scraper {key} succeeded for vp#{vendor_payment_id}")
         else:
+            # Capture last 30 lines of combined stdout+stderr so the error is
+            # visible in the DB row, the UI/API, and the Telegram alert.
+            _tail_lines = (all_output or "").strip().splitlines()[-30:]
+            _error_tail = "\n".join(_tail_lines) if _tail_lines else f"(no output, exit {result.returncode})"
             conn.execute(
-                "UPDATE vendor_payments SET status = 'failed', updated_at = ? WHERE id = ?",
-                (now, vendor_payment_id),
+                "UPDATE vendor_payments SET status = 'failed', error_detail = ?, updated_at = ? WHERE id = ?",
+                (_error_tail, now, vendor_payment_id),
             )
             logger.warning(f"Payment scraper {key} failed for vp#{vendor_payment_id}: exit {result.returncode}")
+            # Fire-and-forget Telegram alert (best effort)
+            try:
+                _notify_payment_failure(key, display_name, vendor_payment_id,
+                                        result.returncode, _error_tail)
+            except Exception as _e:
+                logger.warning(f"Could not send payment failure notification: {_e}")
 
         conn.commit()
         conn.close()
