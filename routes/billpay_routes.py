@@ -1138,6 +1138,148 @@ def print_sample_check():
 #  CHECK PRINTING
 # ─────────────────────────────────────────────
 
+@billpay_bp.route("/api/billpay/quick-check", methods=["POST"])
+@admin_required
+def quick_check():
+    """Create a standalone (no-invoice) AP payment and immediately render its check PDF.
+
+    Use for one-off / manual checks where there is no scanned invoice to pay
+    against (reimbursements, ad-hoc vendor payments, etc.). The payment is
+    inserted into ap_payments with no ap_payment_invoices links and mirrored
+    into vendor_payments so it shows up on the Payments page.
+
+    Request JSON:
+      payee_name (str, required)      — name printed on the check
+      amount (number, required)       — positive dollar amount
+      location (str, optional)        — 'chatham' or 'dennis'; defaults to chatham
+      payment_date (YYYY-MM-DD, opt)  — defaults to today
+      memo (str, optional)            — printed on the check + stub
+      check_number (str, optional)    — override; otherwise next from check_config
+      address_1 (str, optional)       — envelope window line 1
+      address_2 (str, optional)       — envelope window line 2 (or city/state/zip)
+    """
+    from check_printer import generate_check_pdf
+
+    data = request.get_json(silent=True) or {}
+    payee = (data.get("payee_name") or "").strip()
+    try:
+        amount = float(data.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if not payee:
+        return jsonify({"error": "payee_name required"}), 400
+    if amount <= 0:
+        return jsonify({"error": "amount must be > 0"}), 400
+
+    location = (data.get("location") or "chatham").strip().lower()
+    payment_date = data.get("payment_date") or date.today().isoformat()
+    memo = (data.get("memo") or "").strip() or None
+    override_check_num = (data.get("check_number") or "").strip() or None
+    addr1 = (data.get("address_1") or "").strip()
+    addr2 = (data.get("address_2") or "").strip()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Resolve check config for the location (falls back to first row).
+    config = conn.execute(
+        "SELECT * FROM check_config WHERE location = ?", (location,)
+    ).fetchone()
+    if not config:
+        config = conn.execute(
+            "SELECT * FROM check_config ORDER BY id LIMIT 1"
+        ).fetchone()
+    if not config:
+        conn.close()
+        return jsonify({"error": "Check config not set up"}), 400
+
+    # Pick the check number — override or next sequential.
+    if override_check_num:
+        check_num = override_check_num
+    else:
+        check_num = str(config["check_number_next"] or 1001)
+
+    # Create the standalone payment row (status='printed' since we render now).
+    cursor.execute(
+        """INSERT INTO ap_payments (vendor_name, payment_date, amount, payment_method,
+                check_number, memo, status)
+           VALUES (?, ?, ?, 'check', ?, ?, 'printed')""",
+        (payee, payment_date, amount, check_num, memo),
+    )
+    payment_id = cursor.lastrowid
+
+    # Bump the check sequence if we used it.
+    if not override_check_num:
+        cursor.execute(
+            "UPDATE check_config SET check_number_next = ? WHERE location = ?",
+            ((config["check_number_next"] or 1001) + 1, location),
+        )
+
+    # Mirror into vendor_payments so the Payments page sees it.
+    try:
+        cursor.execute(
+            """INSERT INTO vendor_payments
+               (vendor, location, payment_date, payment_ref, payment_method,
+                payment_total, check_number, memo, status, source, ap_payment_id)
+               VALUES (?, ?, ?, ?, 'check', ?, ?, ?, 'printed', 'check', ?)""",
+            (payee, location, payment_date, f"CHK-{check_num}",
+             amount, check_num, memo, payment_id),
+        )
+    except Exception as e:
+        logger.warning(f"Mirror to vendor_payments failed for quick-check #{payment_id}: {e}")
+
+    conn.commit()
+
+    payment_row = conn.execute(
+        "SELECT * FROM ap_payments WHERE id = ?", (payment_id,)
+    ).fetchone()
+
+    # If we have an address from the modal, build a vendor_info-like dict so
+    # `_build_payee_address` renders the envelope-window block. Otherwise pass
+    # None and the check just shows the payee name.
+    vendor_info = None
+    if addr1 or addr2:
+        vendor_info = {
+            "payment_recipient": payee,
+            "remit_address_1": addr1,
+            "remit_address_2": addr2,
+            "remit_city": "",
+            "remit_state": "",
+            "remit_zip": "",
+        }
+    else:
+        # Try the bill-pay vendor table as a convenience for known vendors.
+        vbp = conn.execute(
+            "SELECT * FROM vendor_bill_pay WHERE vendor_name = ?", (payee,)
+        ).fetchone()
+        if vbp:
+            vendor_info = dict(vbp)
+
+    conn.close()
+
+    output_path = f"/tmp/quick_check_{payment_id}_{check_num}.pdf"
+    generate_check_pdf(
+        payment=dict(payment_row),
+        invoices=[],
+        config=dict(config),
+        vendor_info=vendor_info,
+        check_number=check_num,
+        output_path=output_path,
+    )
+
+    logger.info(
+        f"Quick check generated: payment #{payment_id}, check #{check_num}, "
+        f"${amount:,.2f} to {payee} ({location})"
+    )
+
+    return send_file(
+        output_path,
+        mimetype="application/pdf",
+        download_name=f"check_{check_num}_{payee}.pdf",
+        as_attachment=False,
+    )
+
+
 @billpay_bp.route("/api/billpay/payments/<int:payment_id>/print-check", methods=["GET", "POST"])
 @admin_required
 def print_check(payment_id):

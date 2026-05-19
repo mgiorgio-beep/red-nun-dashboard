@@ -205,6 +205,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
           <div class="page-sub">All payment records — imports, checks, and portal payments</div>
         </div>
         <div class="header-buttons">
+          <button class="btn-action btn-upload" onclick="openQuickCheck()" style="border-color:var(--blue);color:var(--blue)">Quick Check</button>
           <button class="btn-action btn-upload" onclick="openUpload()">Upload</button>
           <button class="btn-action" onclick="exportExcel()">Export</button>
           <button class="btn-action" onclick="loadData()">Refresh</button>
@@ -280,6 +281,69 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     </div>
     <input type="file" id="fileInput" accept=".xlsx,.pdf" style="display:none" onchange="handleFile(this)">
     <div id="uploadStatus"></div>
+  </div>
+</div>
+
+<!-- Quick Check Modal -->
+<div class="modal-overlay" id="quickCheckModal" onclick="if(event.target===this)closeQuickCheck()">
+  <div class="modal-box" style="max-width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="modal-title">Quick Check</div>
+      <button class="modal-close" onclick="closeQuickCheck()">&times;</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-top:4px">
+      Print a one-off check with no scanned invoice. Records the payment and bumps the check number.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+      <label style="grid-column:1/-1;font-size:12px;color:var(--text2)">
+        Pay to the order of
+        <input type="text" id="qcPayee" placeholder="Vendor or person name" autocomplete="off"
+               style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+      </label>
+      <label style="font-size:12px;color:var(--text2)">
+        Amount
+        <input type="number" id="qcAmount" step="0.01" min="0" placeholder="0.00"
+               style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+      </label>
+      <label style="font-size:12px;color:var(--text2)">
+        Date
+        <input type="date" id="qcDate"
+               style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+      </label>
+      <label style="font-size:12px;color:var(--text2)">
+        Location (bank account)
+        <select id="qcLocation"
+                style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+          <option value="chatham">Chatham</option>
+          <option value="dennis">Dennis</option>
+        </select>
+      </label>
+      <label style="font-size:12px;color:var(--text2)">
+        Check # (optional)
+        <input type="text" id="qcCheckNum" placeholder="auto-assign next"
+               style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+      </label>
+      <label style="grid-column:1/-1;font-size:12px;color:var(--text2)">
+        Memo (optional)
+        <input type="text" id="qcMemo" maxlength="80" placeholder="e.g. Reimbursement for shed lock"
+               style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+      </label>
+      <label style="grid-column:1/-1;font-size:12px;color:var(--text2)">
+        Address line 1 (optional — envelope window)
+        <input type="text" id="qcAddr1" placeholder="123 Main St"
+               style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+      </label>
+      <label style="grid-column:1/-1;font-size:12px;color:var(--text2)">
+        Address line 2 / city, state, zip (optional)
+        <input type="text" id="qcAddr2" placeholder="Chatham, MA 02633"
+               style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+      </label>
+    </div>
+    <div id="qcStatus" style="margin-top:12px;font-size:13px;color:var(--text2);min-height:18px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn-action" onclick="closeQuickCheck()">Cancel</button>
+      <button class="btn-action btn-upload" id="qcSubmit" onclick="submitQuickCheck()" style="border-color:var(--blue);color:var(--blue)">Print Check</button>
+    </div>
   </div>
 </div>
 
@@ -513,6 +577,77 @@ function esc(s) {
   d.textContent = s || '';
   return d.innerHTML;
 }
+
+// Quick Check functions
+window.openQuickCheck = function() {
+  // Default date = today, in YYYY-MM-DD format (local).
+  var d = new Date();
+  var iso = d.getFullYear() + '-' +
+            String(d.getMonth() + 1).padStart(2, '0') + '-' +
+            String(d.getDate()).padStart(2, '0');
+  document.getElementById('qcDate').value = iso;
+  document.getElementById('qcStatus').textContent = '';
+  // Default location to whatever the filter has selected (else chatham).
+  var loc = document.getElementById('filterLocation').value;
+  if (loc === 'dennis' || loc === 'chatham') {
+    document.getElementById('qcLocation').value = loc;
+  }
+  document.getElementById('quickCheckModal').classList.add('open');
+  setTimeout(function(){ document.getElementById('qcPayee').focus(); }, 50);
+};
+
+window.closeQuickCheck = function() {
+  document.getElementById('quickCheckModal').classList.remove('open');
+  ['qcPayee','qcAmount','qcCheckNum','qcMemo','qcAddr1','qcAddr2'].forEach(function(id){
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('qcStatus').textContent = '';
+};
+
+window.submitQuickCheck = function() {
+  var payee = document.getElementById('qcPayee').value.trim();
+  var amount = parseFloat(document.getElementById('qcAmount').value);
+  var status = document.getElementById('qcStatus');
+  if (!payee) { status.innerHTML = '<span style="color:var(--red)">Payee name required</span>'; return; }
+  if (!amount || amount <= 0) { status.innerHTML = '<span style="color:var(--red)">Amount must be greater than zero</span>'; return; }
+
+  var payload = {
+    payee_name: payee,
+    amount: amount,
+    payment_date: document.getElementById('qcDate').value,
+    location: document.getElementById('qcLocation').value,
+    check_number: document.getElementById('qcCheckNum').value.trim(),
+    memo: document.getElementById('qcMemo').value.trim(),
+    address_1: document.getElementById('qcAddr1').value.trim(),
+    address_2: document.getElementById('qcAddr2').value.trim()
+  };
+
+  var btn = document.getElementById('qcSubmit');
+  btn.disabled = true;
+  status.innerHTML = '<span class="spinner"></span> Generating check...';
+
+  fetch('/api/billpay/quick-check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r){
+    if (!r.ok) {
+      return r.json().then(function(d){ throw new Error(d.error || 'Server error'); });
+    }
+    return r.blob();
+  }).then(function(blob){
+    var url = URL.createObjectURL(blob);
+    // Open PDF in a new tab for printing.
+    var w = window.open(url, '_blank');
+    if (!w) { window.location.href = url; }
+    status.innerHTML = '<span style="color:var(--green)">Check generated — opening PDF...</span>';
+    btn.disabled = false;
+    setTimeout(function(){ closeQuickCheck(); loadData(); }, 800);
+  }).catch(function(err){
+    status.innerHTML = '<span style="color:var(--red)">' + esc(err.message || 'Failed to generate check') + '</span>';
+    btn.disabled = false;
+  });
+};
 
 // Upload functions
 window.openUpload = function() { document.getElementById('uploadModal').classList.add('open'); };
