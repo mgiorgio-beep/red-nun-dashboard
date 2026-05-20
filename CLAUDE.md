@@ -5,7 +5,7 @@
 ### The one repo that matters
 ```
 GitHub:  https://github.com/mgiorgio-beep/red-nun-dashboard
-Local:   C:\Users\giorg\red-nun-dashboard        (Windows working copy)
+Local:   G:\My Drive\Red NUn Dashboard           (Windows working copy, in Google Drive)
 Server:  /opt/red-nun-dashboard                   (Beelink SER5, Chatham)
 Live at: https://dashboard.rednun.com
 ```
@@ -18,7 +18,7 @@ Local IP: 10.1.10.83 (for on-network access).
 
 ### Deploy workflow
 ```
-1. Edit locally in C:\Users\giorg\red-nun-dashboard
+1. Edit locally in G:\My Drive\Red NUn Dashboard
 2. git add / git commit / git push
 3. On server: cd /opt/red-nun-dashboard && git pull && sudo systemctl restart rednun
 ```
@@ -315,9 +315,10 @@ Playwright-based scrapers that log into vendor portals, download invoices, and i
 **Separate repo (not in this one):**
 ```
 GitHub:  https://github.com/mgiorgio-beep/vendor-scrapers  (private)
+Local:   G:\My Drive\Red NUn Dashboard\vendor-scrapers     (gitignored from the dashboard repo)
 Server:  /home/rednun/vendor-scrapers                      (where cron runs from)
 ```
-Dev flow is different from the dashboard: edit in-place on the server, `git commit`, `git push` — the server's `gh` is authed. No local working copy on Windows.
+Dev flow matches the dashboard repo: edit locally in Drive, `git commit`, `git push`, then on the server `cd ~/vendor-scrapers && git pull`. All vendor scrapers (including US Foods, which used to live separately at `~/usfoods-scraper/`) now live in this one repo.
 
 - **Orchestrator:** `~/vendor-scrapers/run_all.sh` — runs all 7 scrapers sequentially, then `import_downloads.py`
 - **Cron:** `0 7 * * *` daily at 7 AM
@@ -329,7 +330,7 @@ Dev flow is different from the dashboard: edit in-place on the server, `git comm
 
 | Vendor | Dir | Type | Locations | Portal |
 |--------|-----|------|-----------|--------|
-| US Foods | `~/usfoods-scraper/` | CSV | Chatham, Dennis | order.usfoods.com |
+| US Foods | `~/vendor-scrapers/usfoods/` (symlinked from `~/usfoods-scraper/usfoods_invoice_scraper.py`) | CSV | Chatham, Dennis | order.usfoods.com |
 | PFG | `~/vendor-scrapers/pfg/` | CSV | Chatham, Dennis | customerfirstsolutions.com |
 | VTInfo (L. Knife + Colonial) | `~/vendor-scrapers/vtinfo/` | CSV | Chatham, Dennis | apps.vtinfo.com |
 | Southern Glazer's | `~/vendor-scrapers/southern-glazers/` | PDF | Chatham, Dennis (separate logins) | portal2.ftnirdc.com |

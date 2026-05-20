@@ -51,3 +51,7 @@ data/autotunes.json
 data/odds.json
 data/specials.json
 data/tvs.json
+
+# vendor-scrapers is its own private repo (https://github.com/mgiorgio-beep/vendor-scrapers).
+# When cloned alongside this repo (e.g. into the same working folder), ignore it here.
+/vendor-scrapers/
