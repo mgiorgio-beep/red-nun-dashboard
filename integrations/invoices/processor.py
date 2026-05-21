@@ -425,6 +425,26 @@ CINTAS INVOICE RULES:
 - "TOTAL USD" is the grand total (subtotal + service charge + tax). Use this as total and invoice_total.
 - CRITICAL: subtotal must NOT include tax. The "TOTAL USD" includes tax — do NOT use it as subtotal. Use the printed "SUBTOTAL" value.
 
+L. KNIFE & SON (NEW CONNECT-PORTAL PDFs) INVOICE RULES:
+- L. Knife invoices downloaded from connect.vtinfo.com are 3-page PDFs with a fixed-width monospaced text layout. Set vendor_name = "L. Knife & Son, Inc."
+- All items are BEER category — the portal is beer-only. Use category = "BEER" for every product line. Use category = "NON_COGS" only for explicit non-product fees (the "WHS CHG MISC" / "MISC. BEER PICKUP INVOICE" line is NON_COGS).
+- The header on page 1 shows the account number as "Account: AR034" or "Account: AR035". AR034 = Chatham. AR035 = Dennis Port. This is more reliable than the ship-to address.
+- The line items table on page 1 has columns: ITEM# | QTY | DESCRIPTION | PRICE | DISC | NET | DEP | EXT. Descriptions often span two lines (e.g., "GUINNESS" / "DRAUGHT K-50 LITER HB") — combine them into one product_name.
+- Use the EXT column as total_price. NET is the per-unit net price after discount; DEP is the per-unit deposit (e.g., $50 keg deposit, $1.20 bottle deposit). EXT = QTY * (NET + DEP).
+- IMPORTANT: Negative quantities are normal — they represent keg/cooperage returns (lines like "00650 -3 AB COOPERAGE ... -150.00" or "00541 -5 NON AB COOPERG ... -250.00"). Capture them with negative quantity AND negative total_price. They are part of the net invoice total and must be included.
+- The footer on page 1 shows four summary lines:
+    * "Total Sales" — sum of positive EXT values
+    * "Total Credits" — sum of negative EXT values (deposit returns)
+    * "Total Deposit" — sum of DEP * QTY across positive-qty items
+    * "Invoice Total" — the FINAL NET amount the customer owes (or is credited)
+- USE THE "Invoice Total" LINE (NOT "Total Sales") as both invoice_total AND total. This is the actual net the customer owes after deposit returns are credited. For invoice #521618 in the sample, Invoice Total = $81.20 even though Total Sales = $481.20.
+- If the Invoice Total is NEGATIVE (more returns than purchases), the invoice is effectively a credit memo. Still record it with the negative total_amount — do NOT flip the sign.
+- For invoice_number, use the number after "Invoice#:" in the header (e.g., "Invoice#: 521618" → 521618). Do NOT use the Load number, Account number, or Driver code.
+- For invoice_date, use the timestamp in the header (e.g., "Thu May 14, 2026 9:08 AM" → 2026-05-14). Ignore "Expires" dates next to License — those are unrelated.
+- For vendor_item_code, use the ITEM# column (5-digit numbers like 14320, 13802, 07414, 00650).
+- Ignore page 2 (terms/payment confirmation) and page 3 (signatures) for line-item extraction.
+- Sales tax is $0.00 for L. Knife (beer invoices in MA include tax in the unit price). Set tax / invoice_tax to 0.
+
 VENDOR ITEM CODE:
 - For vendor_item_code, look for a PRODUCT NUMBER, ITEM #, ITEM CODE, CODE, or SKU column on the invoice. This is the vendor's internal product identifier.
 - US Foods: Look for the PRODUCT NUMBER column (typically a 7-digit number like "1234567" or "7654321"). It usually appears before the DESCRIPTION column.
@@ -1922,6 +1942,15 @@ _VENDOR_ALIASES = {
     'l. knife & son, inc.': 'L. Knife & Son, Inc.',
     'l knife & son': 'L. Knife & Son, Inc.',
     'knife & son': 'L. Knife & Son, Inc.',
+    # Connect-portal PDFs spell the name slightly differently
+    'l. knife and son': 'L. Knife & Son, Inc.',
+    'l. knife and son llc': 'L. Knife & Son, Inc.',
+    'l. knife and son, llc': 'L. Knife & Son, Inc.',
+    'l knife and son': 'L. Knife & Son, Inc.',
+    'l knife and son llc': 'L. Knife & Son, Inc.',
+    'l. knife & son llc': 'L. Knife & Son, Inc.',
+    'l. knife & son, llc': 'L. Knife & Son, Inc.',
+    'l. knife & son, llc.': 'L. Knife & Son, Inc.',
     'colonial wholesale': 'Colonial Wholesale Beverage',
     'colonial wholesale bev': 'Colonial Wholesale Beverage',
     'colonial wholesale beverage': 'Colonial Wholesale Beverage',
