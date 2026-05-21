@@ -427,6 +427,7 @@ CINTAS INVOICE RULES:
 
 L. KNIFE & SON (NEW CONNECT-PORTAL PDFs) INVOICE RULES:
 - L. Knife invoices downloaded from connect.vtinfo.com are 3-page PDFs with a fixed-width monospaced text layout. Set vendor_name = "L. Knife & Son, Inc."
+- TERMS: The PDF header shows "Terms : NET 30 (LK)" — that is the payment term. Compute and return due_date = invoice_date + 30 days. Never use NET 60 / NET 45 / any other term for L. Knife — it is always NET 30 unless the header explicitly shows otherwise.
 - All items are BEER category — the portal is beer-only. Use category = "BEER" for every product line. Use category = "NON_COGS" only for explicit non-product fees (the "WHS CHG MISC" / "MISC. BEER PICKUP INVOICE" line is NON_COGS).
 - The header on page 1 shows the account number as "Account: AR034" or "Account: AR035". AR034 = Chatham. AR035 = Dennis Port. This is more reliable than the ship-to address.
 - The line items table on page 1 has columns: ITEM# | QTY | DESCRIPTION | PRICE | DISC | NET | DEP | EXT. Descriptions often span two lines (e.g., "GUINNESS" / "DRAUGHT K-50 LITER HB") — combine them into one product_name.
