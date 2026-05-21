@@ -1034,9 +1034,14 @@ _PAYMENT_SCRAPER_REGISTRY = {
         "script": "pfg_payment_scraper.py",
     },
     "vtinfo": {
-        "display_name": "VTInfo",
+        "display_name": "VTInfo (Colonial)",
         "script_dir": os.path.expanduser("~/vendor-scrapers/vtinfo-payments"),
         "script": "vtinfo_payment_scraper.py",
+    },
+    "lknife": {
+        "display_name": "L. Knife (Connect)",
+        "script_dir": os.path.expanduser("~/vendor-scrapers/lknife-payments"),
+        "script": "scraper.py",
     },
     "sg": {
         "display_name": "Southern Glazer's",
@@ -1061,7 +1066,8 @@ _VENDOR_KEY_MAP = {
     "PFG": "pfg",
     "Performance Food": "pfg",
     "Performance Foodservice": "pfg",
-    "L. Knife & Son, Inc.": "vtinfo",
+    # L. Knife moved off apps.vtinfo.com to connect.vtinfo.com in May 2026
+    "L. Knife & Son, Inc.": "lknife",
     "Colonial Wholesale Beverage": "vtinfo",
     "Southern Glazer's Beverage Company": "sg",
     "Martignetti Companies": "martignetti",
