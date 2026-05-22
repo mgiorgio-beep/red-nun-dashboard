@@ -41,6 +41,14 @@ AVG_WINDOW_DAYS = 90  # ~3 months
 # If we have fewer, we still auto-pay (don't block the very first one).
 ANOMALY_MIN_HISTORY = 2
 
+# Vendors whose bills are inherently variable month-to-month (utilities,
+# fuel, metered services). The amount-anomaly check is skipped for these —
+# we trust the invoice OCR and let auto-pay through regardless of deviation.
+# Match is case-insensitive on the canonical vendor_name.
+ANOMALY_SKIP_VENDORS = {
+    "sprague operating resources llc",   # utility — amount varies month-to-month with usage
+}
+
 # Where check PDFs land. Read by the print agent via the dashboard API.
 CHECK_PDF_DIR = "/var/lib/rednun/check_pdfs"
 
@@ -140,6 +148,9 @@ def _check_anomaly(conn, invoice_row):
     """Total must be within ±ANOMALY_PCT of trailing AVG_WINDOW_DAYS avg."""
     vendor = invoice_row["vendor_name"]
     total = float(invoice_row["total"])
+    # Variable-amount vendors (utilities, fuel) bypass the anomaly guardrail.
+    if (vendor or "").strip().lower() in ANOMALY_SKIP_VENDORS:
+        return (True, None, "vendor_in_anomaly_skip_list")
     # Pull recent confirmed totals for this vendor (excluding the current one).
     rows = conn.execute(
         f"""
