@@ -144,6 +144,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .badge-import { background: var(--blue-soft); color: var(--blue); }
 .badge-check { background: var(--green-soft); color: var(--green); }
 .badge-portal { background: rgba(168,85,247,0.12); color: #a855f7; }
+.badge-ach { background: rgba(14,165,233,0.12); color: #0ea5e9; }
+.badge-wire { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.badge-card { background: rgba(236,72,153,0.12); color: #ec4899; }
 
 /* Status pills */
 .pill-status {
@@ -431,7 +434,18 @@ function renderSummary(summary) {
   bd.innerHTML = html;
 }
 
-function sourceBadge(src) {
+function sourceBadge(src, method) {
+  // payment_method takes precedence for manual payments (source='external')
+  // so an ACH paid manually shows as "ACH" instead of generic "External".
+  var m = (method || '').toLowerCase();
+  if (src === 'external' || src === 'manual') {
+    if (m === 'ach')   return '<span class="badge-source badge-ach">ACH</span>';
+    if (m === 'wire')  return '<span class="badge-source badge-wire">Wire</span>';
+    if (m === 'card' || m === 'credit_card' || m === 'cc')
+                       return '<span class="badge-source badge-card">Card</span>';
+    if (m === 'check') return '<span class="badge-source badge-check">Check</span>';
+    return '<span class="badge-source badge-import">External</span>';
+  }
   var cls = 'badge-import', label = 'Import';
   if (src === 'check') { cls = 'badge-check'; label = 'Check'; }
   else if (src === 'portal') { cls = 'badge-portal'; label = 'Portal'; }
@@ -474,7 +488,7 @@ function renderTable(payments) {
     html += '<td style="font-weight:600">' + esc(p.vendor) + '</td>';
     html += '<td class="col-hide-mobile">' + esc(p.location || '') + '</td>';
     html += '<td class="col-mono">' + esc(p.payment_ref || '') + (p.auto_paid ? ' <span title="Printed automatically by the print agent" style="background:rgba(34,197,94,0.15);color:#16a34a;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;margin-left:6px">AUTO</span>' : '') + '</td>';
-    html += '<td class="col-hide-mobile">' + sourceBadge(p.source) + '</td>';
+    html += '<td class="col-hide-mobile">' + sourceBadge(p.source, p.payment_method) + '</td>';
     html += '<td class="col-hide-mobile">' + statusPill(p.status) + '</td>';
     html += '<td class="col-right col-hide-mobile">' + invCount + '</td>';
     html += '<td class="col-right' + amtCls + '" style="font-weight:600">' + fmtMoney(p.payment_total) + '</td>';

@@ -762,6 +762,9 @@ def mark_invoice_paid_external(invoice_id):
     payment_date = data.get("payment_date") or date.today().isoformat()
     reference = (data.get("reference") or "").strip() or None
     memo = (data.get("memo") or "Paid externally").strip()
+    # Accept payment_method so manual ACH payments label correctly on the
+    # Payments page. Defaults to 'external' for backwards compatibility.
+    payment_method = (data.get("payment_method") or "external").strip().lower()
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -788,8 +791,8 @@ def mark_invoice_paid_external(invoice_id):
             """INSERT INTO ap_payments
                (vendor_name, payment_date, amount, payment_method,
                 reference_number, memo, status)
-               VALUES (?, ?, ?, 'external', ?, ?, 'cleared')""",
-            (inv["vendor_name"], payment_date, applied, reference, memo),
+               VALUES (?, ?, ?, ?, ?, ?, 'cleared')""",
+            (inv["vendor_name"], payment_date, applied, payment_method, reference, memo),
         )
         payment_id = cursor.lastrowid
 
@@ -808,9 +811,10 @@ def mark_invoice_paid_external(invoice_id):
                balance = 0,
                payment_status = 'paid',
                paid_date = ?,
+               payment_reference = COALESCE(?, payment_reference),
                notes = COALESCE(notes, '') || ' | ' || ?
            WHERE id = ?""",
-        (payment_date, f"resolved {payment_date}: {close_memo}", invoice_id),
+        (payment_date, reference, f"resolved {payment_date}: {close_memo}", invoice_id),
     )
 
     if applied <= 0:
@@ -825,9 +829,9 @@ def mark_invoice_paid_external(invoice_id):
             """INSERT INTO vendor_payments
                (vendor, location, payment_date, payment_ref, payment_method,
                 payment_total, memo, status, source, ap_payment_id)
-               VALUES (?, ?, ?, ?, 'external', ?, ?, 'cleared', 'external', ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'cleared', 'external', ?)""",
             (inv["vendor_name"], inv["location"], payment_date, ref,
-             applied, memo, payment_id),
+             payment_method, applied, memo, payment_id),
         )
         vp_id = vp_cur.lastrowid
         inv_row = cursor.execute(
