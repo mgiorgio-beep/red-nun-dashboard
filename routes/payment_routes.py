@@ -1244,9 +1244,29 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
         _clear_payment_running(key)
 
 
+# ─── PORTAL PAY KILL SWITCH ──────────────────────────────────────────────────
+# Disabled 2026-05-27 after the vendor payment scraper produced ghost payments
+# (clicked Submit but the bank never moved on US Foods, twice on 2026-05-25:
+# vp326 Dennis $6,802.39 and vp332 Chatham $6,001.27) and paid a Martignetti
+# Dennis bill ($1,768.14) from the Chatham bank account.
+#
+# Do NOT flip this back to False unless the scrapers verify each submit
+# against the actual vendor confirmation (not the scraper's own timestamp) and
+# the bank-account selector is location-aware. Until then, users pay manually
+# on the vendor portal and mark invoices paid on the dashboard.
+PORTAL_PAY_DISABLED = True
+
+
 @payment_bp.route("/api/payments/pay-portal", methods=["POST"])
 def api_pay_portal():
     """Create a processing payment and spawn scraper to pay via vendor portal."""
+    if PORTAL_PAY_DISABLED:
+        return jsonify({
+            "error": "Portal pay is disabled. Pay manually on the vendor portal, then mark the invoice paid on the dashboard.",
+            "disabled_since": "2026-05-27",
+            "reason": "Scraper produced ghost payments and paid from the wrong bank account. See routes/payment_routes.py PORTAL_PAY_DISABLED.",
+        }), 503
+
     data = request.get_json(silent=True) or {}
     vendor_name = data.get("vendor_name")
     invoice_ids = data.get("invoice_ids", [])
