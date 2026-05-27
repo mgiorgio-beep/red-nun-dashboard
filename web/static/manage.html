@@ -6084,6 +6084,11 @@ async function bpPayByCheck() {
 }
 
 async function bpPayViaPortal() {
+  // Portal pay is disabled 2026-05-27 after the scraper produced ghost payments
+  // and paid from the wrong bank account. Pay manually on the vendor portal
+  // and use Mark Paid (ACH) to record it on the dashboard.
+  alert('Portal pay is disabled.\n\nPay manually on the vendor portal, then use "Mark Paid (ACH)" to record it on the dashboard.\n\nSee routes/payment_routes.py PORTAL_PAY_DISABLED for context.');
+  return;
   if (_bpSelected.size === 0) return;
   var invIds = [], total = 0, vendor = null, amounts = [];
   var bills = [], credits = [];

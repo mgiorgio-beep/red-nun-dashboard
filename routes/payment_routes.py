@@ -563,6 +563,42 @@ def api_void_payment(payment_id):
         (now, payment_id),
     )
 
+    # Portal payments don't have an ap_payment_id — they updated scanned_invoices
+    # directly via _cross_link_invoice. Without this branch, voiding a portal
+    # payment leaves the invoices marked paid with $0 balance and orphans them
+    # out of Outstanding. Reverse them by looking up vendor_payment_invoices.
+    if vp["source"] == "portal":
+        linked_invoice_numbers = [
+            row["invoice_number"]
+            for row in conn.execute(
+                "SELECT invoice_number FROM vendor_payment_invoices WHERE payment_id = ?",
+                (payment_id,),
+            ).fetchall()
+            if row["invoice_number"]
+        ]
+        if linked_invoice_numbers:
+            placeholders = ",".join("?" * len(linked_invoice_numbers))
+            conn.execute(
+                f"""UPDATE scanned_invoices
+                       SET payment_status = 'unpaid',
+                           balance = total,
+                           amount_paid = 0,
+                           paid_date = NULL,
+                           payment_reference = NULL,
+                           notes = COALESCE(notes, '') || ' | reopened by portal-payment void #' || ?
+                     WHERE invoice_number IN ({placeholders})
+                       AND vendor_name = ?
+                       AND COALESCE(location, '') = COALESCE(?, '')
+                       AND payment_status = 'paid'""",
+                [str(payment_id)] + linked_invoice_numbers
+                    + [vp["vendor"], vp["location"]],
+            )
+            logger.info(
+                f"Vendor payment #{payment_id} void (portal): "
+                f"reopened {len(linked_invoice_numbers)} invoice(s) "
+                f"for {vp['vendor']} {vp['location']}"
+            )
+
     # If linked to an ap_payment, void that too + reverse invoice balances
     ap_id = vp["ap_payment_id"]
     if ap_id:
