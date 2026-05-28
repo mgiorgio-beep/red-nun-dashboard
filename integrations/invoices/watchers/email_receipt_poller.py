@@ -64,9 +64,13 @@ RECEIPT_GMAIL_QUERY = (
     "from:quickbooks@notification.intuit.com OR "
     "from:no-reply@servicecore.com OR "
     "from:tigerexchange.us OR "
-    # Forwarded receipts from Mike
+    "from:noreply@vtinfo.com OR "             # L. Knife + Colonial
+    "from:usfoods-notification@usfoods.com OR "
+    "from:no-reply@valet.billfire.com OR "    # PFG via Billfire
+    # Forwarded receipts from Mike's personal inboxes
     "(from:mgiorgio@rednun.com subject:Fwd) OR "
-    "(from:mike@rednun.com subject:Fwd)"
+    "(from:mike@rednun.com subject:Fwd) OR "
+    "(from:invoice@rednun.com subject:Fwd)"
     ")"
 )
 
@@ -355,91 +359,124 @@ def run(dry_run: bool = False):
             if pdf_text:
                 receipt = classify_message(msg, pdf_text=pdf_text)
 
-        # Cap check before any DB write
-        if auto_applied_this_run >= PER_RUN_AUTO_APPLY_CAP:
-            skipped_due_to_cap += 1
-            audit("skipped_cap", message_id=msg_id, signature=receipt.signature_key,
-                  vendor=receipt.vendor_canonical, amount=receipt.amount)
-            # Don't mark processed — try again next run
-            continue
-
-        # Match against scanned_invoices
+        # (Cap is now enforced per line item inside the loop below.)
+        # Match against scanned_invoices — returns one MatchResult per line item
+        # (or one for the whole receipt if there's no invoice breakdown).
         conn = get_connection()
         try:
-            match = find_matching_invoice(receipt, conn)
+            matches = find_matching_invoice(receipt, conn)
         finally:
             conn.close()
 
-        audit_payload = {
-            "message_id": msg_id,
-            "signature": receipt.signature_key,
-            "vendor": receipt.vendor_canonical,
-            "amount": receipt.amount,
-            "invoice_number": receipt.invoice_number,
-            "payment_date": receipt.payment_date,
-            "decision": match.decision,
-            "reason": match.reason,
-            "matched_invoice_id": match.matched_invoice_id,
-            "candidate_count": match.candidate_count,
-        }
+        # Process each match independently. A multi-invoice receipt can have
+        # some lines auto-apply and others needs_review / no_match.
+        per_line_outcomes = []
+        any_apply_error = False
 
-        if match.decision == "auto_apply":
-            if dry_run:
-                logger.info(
-                    f"[DRY] Would auto-apply {receipt.vendor_canonical} "
-                    f"${receipt.amount:.2f} → invoice {match.matched_invoice_id}"
-                )
-                auto_applied_this_run += 1
-                continue
-            try:
-                payment_id = apply_payment(
-                    invoice_id=match.matched_invoice_id,
-                    amount=receipt.amount,
-                    payment_method=receipt.payment_method,
-                    payment_date=receipt.payment_date or date.today().isoformat(),
-                    reference=f"RCPT-{msg_id}",
-                    memo=f"Auto-applied from {receipt.signature_key} receipt",
-                )
-                auto_applied_this_run += 1
-                audit_payload["payment_id"] = payment_id
-                audit("auto_applied", **audit_payload)
-                logger.info(
-                    f"Auto-applied {receipt.vendor_canonical} ${receipt.amount:.2f} "
-                    f"→ invoice {match.matched_invoice_id} (ap_payment {payment_id})"
-                )
-                mark_message_read(service, msg_id)
-                processed[msg_id] = audit_payload
-            except Exception as e:
-                logger.error(f"apply_payment failed for {msg_id}: {e}")
-                audit("apply_error", message_id=msg_id, error=str(e), **audit_payload)
-                # Don't mark processed — retry next run
-        elif match.decision == "needs_review":
-            if dry_run:
-                logger.info(
-                    f"[DRY] Needs review: {receipt.vendor_canonical} "
-                    f"${receipt.amount} — {match.reason}"
-                )
-                continue
-            review_record = {
-                **audit_payload,
-                "subject": _subj(msg),
-                "candidates": match.candidates,
+        for match in matches:
+            li = match.line_item
+            line_payload = {
+                "message_id": msg_id,
+                "signature": receipt.signature_key,
+                "vendor": receipt.vendor_canonical,
+                "amount": li.amount,
+                "invoice_number": li.invoice_number,
+                "payment_date": receipt.payment_date,
+                "decision": match.decision,
+                "reason": match.reason,
+                "matched_invoice_id": match.matched_invoice_id,
+                "candidate_count": match.candidate_count,
             }
-            log_review(review_record)
-            audit("needs_review", **audit_payload)
-            processed[msg_id] = audit_payload
-            # Leave message unread so Mike sees it in the inbox too
-        else:  # no_match
-            if dry_run:
-                logger.info(
-                    f"[DRY] No match: {receipt.vendor_canonical} ${receipt.amount} "
-                    f"({receipt.signature_key}) — {match.reason}"
-                )
-                continue
-            audit("no_match", **audit_payload)
-            processed[msg_id] = audit_payload
 
+            if match.decision == "auto_apply":
+                if auto_applied_this_run >= PER_RUN_AUTO_APPLY_CAP:
+                    skipped_due_to_cap += 1
+                    audit("skipped_cap", **line_payload)
+                    per_line_outcomes.append("skipped_cap")
+                    continue
+
+                if dry_run:
+                    logger.info(
+                        f"[DRY] Would auto-apply {receipt.vendor_canonical} "
+                        f"${li.amount:.2f} → invoice #{li.invoice_number} "
+                        f"(id={match.matched_invoice_id})"
+                    )
+                    auto_applied_this_run += 1
+                    per_line_outcomes.append("dry_auto_apply")
+                    continue
+
+                try:
+                    payment_id = apply_payment(
+                        invoice_id=match.matched_invoice_id,
+                        amount=li.amount,
+                        payment_method=receipt.payment_method,
+                        payment_date=receipt.payment_date or date.today().isoformat(),
+                        reference=f"RCPT-{msg_id}",
+                        memo=f"Auto-applied from {receipt.signature_key} receipt",
+                    )
+                    auto_applied_this_run += 1
+                    line_payload["payment_id"] = payment_id
+                    audit("auto_applied", **line_payload)
+                    logger.info(
+                        f"Auto-applied {receipt.vendor_canonical} ${li.amount:.2f} "
+                        f"→ invoice #{li.invoice_number} (id={match.matched_invoice_id}, "
+                        f"ap_payment {payment_id})"
+                    )
+                    per_line_outcomes.append("auto_applied")
+                except Exception as e:
+                    logger.error(f"apply_payment failed for {msg_id} #{li.invoice_number}: {e}")
+                    audit("apply_error", error=str(e), **line_payload)
+                    any_apply_error = True
+                    per_line_outcomes.append("apply_error")
+
+            elif match.decision == "needs_review":
+                if dry_run:
+                    logger.info(
+                        f"[DRY] Needs review: {receipt.vendor_canonical} "
+                        f"#{li.invoice_number} ${li.amount} — {match.reason}"
+                    )
+                    per_line_outcomes.append("dry_needs_review")
+                    continue
+                review_record = {
+                    **line_payload,
+                    "subject": _subj(msg),
+                    "candidates": match.candidates,
+                }
+                log_review(review_record)
+                audit("needs_review", **line_payload)
+                per_line_outcomes.append("needs_review")
+
+            else:  # no_match
+                if dry_run:
+                    logger.info(
+                        f"[DRY] No match: {receipt.vendor_canonical} "
+                        f"#{li.invoice_number} ${li.amount} — {match.reason}"
+                    )
+                    per_line_outcomes.append("dry_no_match")
+                    continue
+                audit("no_match", **line_payload)
+                per_line_outcomes.append("no_match")
+
+        # Mark message processed (manifest) only if every line had a terminal
+        # decision — i.e. no transient apply errors. If we hit any errors, we'll
+        # retry next run; otherwise lock the message in so we don't re-process.
         if not dry_run:
+            if any_apply_error:
+                # Don't mark processed — re-process next run to retry failed lines.
+                # apply_payment is defensive about already-paid invoices, so
+                # re-running is safe for lines that did apply this round.
+                pass
+            else:
+                processed[msg_id] = {
+                    "vendor": receipt.vendor_canonical,
+                    "signature": receipt.signature_key,
+                    "outcomes": per_line_outcomes,
+                    "ts": datetime.utcnow().isoformat() + "Z",
+                }
+                # Mark read only if at least one line auto-applied. Leave it
+                # unread for needs_review / no_match so Mike sees it.
+                if "auto_applied" in per_line_outcomes:
+                    mark_message_read(service, msg_id)
             save_manifest(manifest)
 
     if auto_applied_this_run > 0:

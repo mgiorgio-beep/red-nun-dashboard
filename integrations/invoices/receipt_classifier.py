@@ -4,16 +4,17 @@ Receipt classifier + invoice matcher for auto-pay payment receipts.
 
 Sits in front of the regular invoice email pipeline. Given a Gmail message
 (dict, as returned by Gmail API's messages.get(format='full')), decide whether
-it's a payment receipt; if so, extract vendor/amount/date/invoice_no and find
-the matching open invoice in `scanned_invoices`.
+it's a payment receipt; if so, extract vendor / total amount / one or more
+line items (invoice_number, amount) / date / payment method.
+
+Multi-invoice receipts (L. Knife, Colonial, US Foods) are first-class: the
+`line_items` list carries 1+ entries. Single-invoice receipts (Tiger, Barrows,
+QB Payments, Suburban, PFG) have exactly one entry. The matcher and poller
+treat both the same — they iterate line items and try to match each one.
 
 Tier 1 (silent auto-apply) vendors are listed in `RECEIPT_SIGNATURES` below.
-A message that matches a Tier 1 signature AND finds exactly one open invoice
-in the matcher's window is eligible for auto-apply.
-
-Anything else (Tier 1 with no/multi match, or non-Tier-1 receipt) returns a
-ClassifiedReceipt with status='needs_review' and is meant to be surfaced on
-the Payments page for manual confirm.
+A line item that matches a Tier 1 signature AND finds exactly one open
+invoice in the matcher is eligible for auto-apply.
 
 This module is read-only and pure — no DB writes. The caller (poller or
 billpay route) is responsible for applying the payment via the existing
@@ -25,74 +26,18 @@ import re
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
 
-# ── Receipt signatures ────────────────────────────────────────────────────────
-#
-# Each signature: regex on From + regex on Subject + a body/subject parser.
-# `tier` is "auto_apply" (Tier 1) or "needs_review" (Tier 2). The poller uses
-# this to decide whether to apply silently or hold for manual confirmation.
-
-# Tier 1 vendors confirmed from samples in dashboard@rednun.com inbox.
-RECEIPT_SIGNATURES = [
-    {
-        "key": "suburban_supply_qb",
-        "from_regex": re.compile(r"quickbooks@notification\.intuit\.com", re.I),
-        "subject_regex": re.compile(r"^Payment Receipt from SUBURBAN SUPPLY", re.I),
-        "vendor_canonical": "Suburban Supply",
-        "tier": "auto_apply",
-        "payment_method": "debit_card_autopay",
-        # Amount lives only in the PDF attachment. We don't OCR here in the
-        # classifier — caller passes attachment text if available, else this
-        # signature returns amount=None and the receipt is held for review.
-        "parser": "pdf_attachment",
-    },
-    {
-        "key": "tiger_exchange",
-        "from_regex": re.compile(r"@tigerexchange\.us", re.I),
-        "subject_regex": re.compile(r"Payment Receipt.*Tiger Exchange", re.I),
-        "vendor_canonical": "Tiger Exchange",
-        "tier": "auto_apply",
-        "payment_method": "debit_card_autopay",
-        "parser": "body_regex",
-        # "Your Payment receipt -chg cc on file for 132.33 is attached."
-        "amount_regex": re.compile(r"for\s+\$?([\d,]+\.\d{2})\s+is attached", re.I),
-    },
-    {
-        "key": "quickbooks_payments",
-        "from_regex": re.compile(r"^[\"']?QuickBooks Payments[\"']?\s*<quickbooks@notification\.intuit\.com>", re.I),
-        "subject_regex": re.compile(r"^Payment confirmation: Invoice #", re.I),
-        # vendor canonical comes from the subject — see parse_quickbooks_payments
-        "vendor_canonical": None,
-        "tier": "auto_apply",
-        "payment_method": "qb_autopay",
-        "parser": "quickbooks_payments",
-    },
-    {
-        "key": "barrows_waste",
-        "from_regex": re.compile(r"no-reply@servicecore\.com", re.I),
-        "subject_regex": re.compile(r"^Payment Receipt P\d+", re.I),
-        "vendor_canonical": "Barrows Waste Systems",
-        "tier": "auto_apply",
-        "payment_method": "card_via_portal",
-        "parser": "body_regex",
-        # "Paid: 500.00"  (also appears as "$500.00" elsewhere — accept both)
-        "amount_regex": re.compile(r"Paid:\s*\$?([\d,]+\.\d{2})", re.I),
-    },
-]
-
-# Subject patterns we should always treat as "not a receipt" (statements,
-# invoices, marketing) even if other heuristics would match.
-NON_RECEIPT_SUBJECT_DENYLIST = [
-    re.compile(r"^Statement from", re.I),
-    re.compile(r"^Invoice \d+ from", re.I),
-    re.compile(r"^Inv[a-z]*\s*\d+ from", re.I),
-]
-
 
 # ── Result dataclasses ────────────────────────────────────────────────────────
+
+@dataclass
+class ReceiptLineItem:
+    invoice_number: str
+    amount: float
+
 
 @dataclass
 class ClassifiedReceipt:
@@ -100,24 +45,39 @@ class ClassifiedReceipt:
     message_id: str
     signature_key: str
     vendor_canonical: str
-    amount: Optional[float]
-    invoice_number: Optional[str]
-    payment_date: Optional[str]       # ISO YYYY-MM-DD
-    payment_method: str
-    tier: str                          # "auto_apply" or "needs_review"
-    raw_subject: str
-    raw_from: str
+    total_amount: Optional[float]
+    line_items: List[ReceiptLineItem] = field(default_factory=list)
+    payment_date: Optional[str] = None        # ISO YYYY-MM-DD
+    payment_method: str = ""
+    tier: str = "auto_apply"
+    raw_subject: str = ""
+    raw_from: str = ""
     parse_notes: List[str] = field(default_factory=list)
+
+    # Back-compat accessors so older callers still work
+    @property
+    def amount(self) -> Optional[float]:
+        if self.total_amount is not None:
+            return self.total_amount
+        if self.line_items:
+            return self.line_items[0].amount
+        return None
+
+    @property
+    def invoice_number(self) -> Optional[str]:
+        if len(self.line_items) == 1:
+            return self.line_items[0].invoice_number
+        return None
 
 
 @dataclass
 class MatchResult:
-    """The matcher's verdict for a ClassifiedReceipt."""
-    receipt: ClassifiedReceipt
+    """The matcher's verdict for a single line item."""
+    line_item: ReceiptLineItem
     matched_invoice_id: Optional[int]
-    candidate_count: int               # 0 = no match, 1 = clean, >1 = ambiguous
+    candidate_count: int
     candidates: List[dict] = field(default_factory=list)
-    decision: str = ""                 # "auto_apply" | "needs_review" | "no_match"
+    decision: str = ""        # "auto_apply" | "needs_review" | "no_match"
     reason: str = ""
 
 
@@ -133,7 +93,6 @@ def _get_header(headers: list, name: str) -> str:
 def _get_text_body(payload: dict) -> str:
     """
     Return best-effort plaintext body from a Gmail message payload.
-
     Prefers text/plain; falls back to a cheap HTML→text strip when only
     text/html is available (e.g. QuickBooks Payments emails are HTML-only).
     """
@@ -165,11 +124,12 @@ def _get_text_body(payload: dict) -> str:
     if found_plain:
         return "\n".join(found_plain)
     if found_html:
-        # Cheap HTML strip — collapse tags, decode common entities, normalize whitespace.
         html = "\n".join(found_html)
         text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.I | re.S)
         text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
         text = re.sub(r"</p\s*>", "\n", text, flags=re.I)
+        text = re.sub(r"</tr\s*>", "\n", text, flags=re.I)
+        text = re.sub(r"</td\s*>", " | ", text, flags=re.I)
         text = re.sub(r"<[^>]+>", " ", text)
         text = text.replace("&nbsp;", " ").replace("&amp;", "&")
         text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&#39;", "'")
@@ -179,7 +139,6 @@ def _get_text_body(payload: dict) -> str:
 
 
 def _parse_date_header(date_str: str) -> Optional[str]:
-    """Parse RFC 2822 date header into ISO YYYY-MM-DD."""
     from email.utils import parsedate_to_datetime
     try:
         dt = parsedate_to_datetime(date_str)
@@ -202,7 +161,6 @@ def _parse_amount_with_regex(text: str, regex: re.Pattern) -> Optional[float]:
 
 def _parse_quickbooks_payments(subject: str, body_text: str) -> dict:
     """
-    Parse a QuickBooks Payments confirmation.
     Subject: "Payment confirmation: Invoice #15857-(Fore and Aft, Inc.)"
     Body snippet: "You paid $695.00 to Fore and Aft, Inc. on 05/27/2026 ..."
     """
@@ -226,19 +184,191 @@ def _parse_quickbooks_payments(subject: str, body_text: str) -> dict:
     return out
 
 
+# Total amount regex for VTInfo-platform receipts (L. Knife, Colonial)
+_VTINFO_TOTAL_REGEX = re.compile(
+    r"received\s+your\s+pending\s+ACH\s+payment\s+of\s+\$?([\d,]+\.\d{2})",
+    re.I,
+)
+# Invoice row in VTInfo body — invoice number (digits, sometimes alphanum)
+# followed by an amount, possibly with a credits column in between.
+# Lines look like:  "552223 $565.40"   or   "206074 -$7.00"
+# Or with a credits column (often blank):  "500561  $430.10"
+_VTINFO_LINE_REGEX = re.compile(
+    r"^\s*([A-Z]{0,3}\d{4,})\s+\$?(-?[\d,]+\.\d{2})\s*$",
+    re.M,
+)
+
+
+def _parse_vtinfo_invoice_table(body_text: str) -> Tuple[Optional[float], List[ReceiptLineItem]]:
+    """L. Knife and Colonial (both noreply@vtinfo.com) share this body format."""
+    total = None
+    m = _VTINFO_TOTAL_REGEX.search(body_text or "")
+    if m:
+        try:
+            total = float(m.group(1).replace(",", ""))
+        except ValueError:
+            pass
+
+    items: List[ReceiptLineItem] = []
+    for m in _VTINFO_LINE_REGEX.finditer(body_text or ""):
+        inv_no = m.group(1).strip()
+        try:
+            amt = float(m.group(2).replace(",", ""))
+        except ValueError:
+            continue
+        # Skip lines that look like a date (e.g. "05/26/2026") — already
+        # excluded by the regex shape, but defensive.
+        if "/" in inv_no or "." in inv_no:
+            continue
+        items.append(ReceiptLineItem(invoice_number=inv_no, amount=amt))
+
+    return total, items
+
+
+# US Foods ACH remit format
+_USFOODS_TOTAL_REGEX = re.compile(
+    r"Total\s+transaction\s+amount\s*=\s*\$?([\d,]+\.\d{2})",
+    re.I,
+)
+# Body lines like: "2413406 05/04/26 INVOICE       3,494.33 EFT0528 ..."
+_USFOODS_LINE_REGEX = re.compile(
+    r"^\s*(\d{6,})\s+\d{2}/\d{2}/\d{2}\s+(?:INVOICE|CREDIT|CM|ADJ)\s+\$?(-?[\d,]+\.\d{2})",
+    re.M | re.I,
+)
+
+
+def _parse_usfoods_remit(body_text: str) -> Tuple[Optional[float], List[ReceiptLineItem]]:
+    total = None
+    m = _USFOODS_TOTAL_REGEX.search(body_text or "")
+    if m:
+        try:
+            total = float(m.group(1).replace(",", ""))
+        except ValueError:
+            pass
+
+    items: List[ReceiptLineItem] = []
+    for m in _USFOODS_LINE_REGEX.finditer(body_text or ""):
+        try:
+            items.append(ReceiptLineItem(
+                invoice_number=m.group(1).strip(),
+                amount=float(m.group(2).replace(",", "")),
+            ))
+        except ValueError:
+            continue
+
+    return total, items
+
+
+# PFG via Billfire — single total, no invoice breakdown in email
+_PFG_AMOUNT_REGEX = re.compile(
+    r"Payment\s+amount\s*\$?([\d,]+\.\d{2})",
+    re.I,
+)
+
+
+def _parse_pfg_billfire(body_text: str) -> Tuple[Optional[float], List[ReceiptLineItem]]:
+    """PFG's Billfire emails show one total — no per-invoice breakdown."""
+    amt = _parse_amount_with_regex(body_text, _PFG_AMOUNT_REGEX)
+    return amt, []   # empty line items — matcher will fuzzy-match on total
+
+
+# ── Receipt signatures ────────────────────────────────────────────────────────
+
+RECEIPT_SIGNATURES = [
+    {
+        "key": "suburban_supply_qb",
+        "from_regex": re.compile(r"quickbooks@notification\.intuit\.com", re.I),
+        "subject_regex": re.compile(r"^Payment Receipt from SUBURBAN SUPPLY", re.I),
+        "vendor_canonical": "Suburban Supply",
+        "tier": "auto_apply",
+        "payment_method": "debit_card_autopay",
+        "parser": "pdf_attachment",
+    },
+    {
+        "key": "tiger_exchange",
+        "from_regex": re.compile(r"@tigerexchange\.us", re.I),
+        "subject_regex": re.compile(r"Payment Receipt.*Tiger Exchange", re.I),
+        "vendor_canonical": "Tiger Exchange",
+        "tier": "auto_apply",
+        "payment_method": "debit_card_autopay",
+        "parser": "body_regex",
+        "amount_regex": re.compile(r"for\s+\$?([\d,]+\.\d{2})\s+is attached", re.I),
+    },
+    {
+        "key": "quickbooks_payments",
+        "from_regex": re.compile(r"^[\"']?QuickBooks Payments[\"']?\s*<quickbooks@notification\.intuit\.com>", re.I),
+        "subject_regex": re.compile(r"^Payment confirmation: Invoice #", re.I),
+        "vendor_canonical": None,
+        "tier": "auto_apply",
+        "payment_method": "qb_autopay",
+        "parser": "quickbooks_payments",
+    },
+    {
+        "key": "barrows_waste",
+        "from_regex": re.compile(r"no-reply@servicecore\.com", re.I),
+        "subject_regex": re.compile(r"^Payment Receipt P\d+", re.I),
+        "vendor_canonical": "Barrows Waste Systems",
+        "tier": "auto_apply",
+        "payment_method": "card_via_portal",
+        "parser": "body_regex",
+        "amount_regex": re.compile(r"Paid:\s*\$?([\d,]+\.\d{2})", re.I),
+    },
+    {
+        "key": "lknife_vtinfo",
+        "from_regex": re.compile(r"noreply@vtinfo\.com", re.I),
+        "subject_regex": re.compile(r"Payment confirmation from L Knife", re.I),
+        "vendor_canonical": "L. Knife & Son",
+        "tier": "auto_apply",
+        "payment_method": "ach_via_portal",
+        "parser": "vtinfo_table",
+    },
+    {
+        "key": "colonial_vtinfo",
+        "from_regex": re.compile(r"noreply@vtinfo\.com", re.I),
+        "subject_regex": re.compile(r"Colonial.*Payment Confirmation", re.I),
+        "vendor_canonical": "Colonial Wholesale Beverage",
+        "tier": "auto_apply",
+        "payment_method": "ach_via_portal",
+        "parser": "vtinfo_table",
+    },
+    {
+        "key": "usfoods_ach_remit",
+        "from_regex": re.compile(r"usfoods-notification@usfoods\.com", re.I),
+        "subject_regex": re.compile(r"^ACH Remit Advice", re.I),
+        "vendor_canonical": "US Foods",
+        "tier": "auto_apply",
+        "payment_method": "ach_remit",
+        "parser": "usfoods_remit",
+    },
+    {
+        "key": "pfg_billfire",
+        "from_regex": re.compile(r"no-reply@valet\.billfire\.com", re.I),
+        "subject_regex": re.compile(r"^Click2Pay confirmation", re.I),
+        "vendor_canonical": "Performance Foodservice",
+        "tier": "auto_apply",
+        "payment_method": "ach_via_billfire",
+        "parser": "pfg_billfire",
+    },
+]
+
+# Subjects we should never treat as receipts even if other heuristics match.
+NON_RECEIPT_SUBJECT_DENYLIST = [
+    re.compile(r"^Statement from", re.I),
+    re.compile(r"^Invoice \d+ from", re.I),
+    re.compile(r"^Inv[a-z]*\s*\d+ from", re.I),
+    re.compile(r"^Pay invoice\b", re.I),
+    re.compile(r"^US Foods Open AR", re.I),
+]
+
+
 # ── Main classifier ───────────────────────────────────────────────────────────
 
 def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[ClassifiedReceipt]:
     """
     Classify a Gmail message as a payment receipt.
 
-    Args:
-        msg: Gmail API message dict (format='full').
-        pdf_text: Optional already-extracted text from the first PDF attachment,
-                  used by signatures whose amount lives in the PDF (Suburban).
-
-    Returns:
-        A ClassifiedReceipt, or None if the message is not a recognized receipt.
+    Returns a ClassifiedReceipt with one or more line items, or None if the
+    message is not a recognized receipt.
     """
     payload = msg.get("payload", {}) or {}
     headers = payload.get("headers", []) or []
@@ -248,15 +378,11 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
     date_hdr = _get_header(headers, "Date")
     message_id = msg.get("id", "")
 
-    # If this is a forward, the original sender is the one we want to match.
-    # Heuristic: forwarded messages have "Fwd:" or "FW:" in the subject and
-    # the original "From: ..." line appears in the body.
     is_forward = bool(re.match(r"^\s*Fwd?:\s", subject, re.I))
     body_text = _get_text_body(payload)
-    # Always prepend the Gmail snippet — it's plain text and often contains
-    # the key fields even when the full body is HTML-only (QB Payments).
     snippet = msg.get("snippet", "") or ""
     body_text = (snippet + "\n" + body_text).strip()
+
     effective_from = from_hdr
     effective_subject = subject
     if is_forward:
@@ -267,7 +393,6 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
         if m:
             effective_subject = m.group(1).strip()
 
-    # Hard denylist — never classify a Statement or Invoice notification as a receipt
     for pat in NON_RECEIPT_SUBJECT_DENYLIST:
         if pat.search(effective_subject):
             return None
@@ -282,41 +407,66 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
         if is_forward:
             notes.append("classified-on-forwarded-message")
 
-        # Run the parser
-        amount = None
-        invoice_number = None
+        total_amount: Optional[float] = None
+        line_items: List[ReceiptLineItem] = []
         vendor_canonical = sig["vendor_canonical"]
         parser = sig["parser"]
 
         if parser == "body_regex":
-            amount = _parse_amount_with_regex(body_text, sig["amount_regex"])
-            if amount is None:
+            amt = _parse_amount_with_regex(body_text, sig["amount_regex"])
+            if amt is not None:
+                total_amount = amt
+                line_items = []  # no per-invoice breakdown
+            else:
                 notes.append("amount-regex-no-match")
+
         elif parser == "quickbooks_payments":
             parsed = _parse_quickbooks_payments(effective_subject, body_text)
-            amount = parsed["amount"]
-            invoice_number = parsed["invoice_number"]
+            total_amount = parsed["amount"]
             vendor_canonical = parsed["vendor_canonical"] or vendor_canonical
+            if parsed["invoice_number"] and parsed["amount"] is not None:
+                line_items = [ReceiptLineItem(
+                    invoice_number=parsed["invoice_number"],
+                    amount=parsed["amount"],
+                )]
+
         elif parser == "pdf_attachment":
             if pdf_text:
-                # Reuse the same amount regex pattern as bodies — most PDFs
-                # surface "Total" or "Amount Paid" near the dollar figure.
                 m = re.search(r"(?:Total|Amount(?:\s+Paid)?|Paid)[:\s]+\$?([\d,]+\.\d{2})",
                               pdf_text, re.I)
                 if m:
                     try:
-                        amount = float(m.group(1).replace(",", ""))
+                        total_amount = float(m.group(1).replace(",", ""))
                     except ValueError:
                         pass
-            if amount is None:
+            if total_amount is None:
                 notes.append("pdf-attachment-amount-unparsed")
+
+        elif parser == "vtinfo_table":
+            total_amount, line_items = _parse_vtinfo_invoice_table(body_text)
+            if total_amount is None:
+                notes.append("vtinfo-total-unparsed")
+            if not line_items:
+                notes.append("vtinfo-line-items-unparsed")
+
+        elif parser == "usfoods_remit":
+            total_amount, line_items = _parse_usfoods_remit(body_text)
+            if total_amount is None:
+                notes.append("usfoods-total-unparsed")
+            if not line_items:
+                notes.append("usfoods-line-items-unparsed")
+
+        elif parser == "pfg_billfire":
+            total_amount, line_items = _parse_pfg_billfire(body_text)
+            if total_amount is None:
+                notes.append("pfg-amount-unparsed")
 
         return ClassifiedReceipt(
             message_id=message_id,
             signature_key=sig["key"],
             vendor_canonical=vendor_canonical or "(unknown)",
-            amount=amount,
-            invoice_number=invoice_number,
+            total_amount=total_amount,
+            line_items=line_items,
             payment_date=_parse_date_header(date_hdr),
             payment_method=sig["payment_method"],
             tier=sig["tier"],
@@ -332,78 +482,124 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
 
 def find_matching_invoice(receipt: ClassifiedReceipt, conn,
                           amount_tolerance: float = 0.01,
-                          date_window_days: int = 60) -> MatchResult:
+                          date_window_days: int = 60) -> List[MatchResult]:
     """
-    Find an open invoice in scanned_invoices that matches this receipt.
+    Find open invoices that match this receipt.
 
-    Strategy:
-      1. If we know the invoice_number, use it as a direct lookup (vendor + num).
-      2. Else match by vendor + amount within ±tolerance + date within window
-         + payment_status unpaid.
+    If line_items is non-empty: try a direct invoice_number lookup for each.
+    Returns one MatchResult per line item.
 
-    Returns a MatchResult with decision = auto_apply / needs_review / no_match.
+    If line_items is empty: fall back to fuzzy match on the total amount.
+    Returns a single MatchResult representing the whole receipt.
     """
-    if receipt.amount is None or receipt.amount <= 0:
-        return MatchResult(receipt=receipt, matched_invoice_id=None,
-                           candidate_count=0, decision="no_match",
-                           reason="amount-unknown")
-
     cur = conn.cursor()
+    results: List[MatchResult] = []
 
-    # Strategy 1 — direct lookup by invoice_number
-    candidates = []
-    if receipt.invoice_number:
-        rows = cur.execute(
-            """SELECT id, vendor_name, invoice_number, invoice_date, total,
-                      COALESCE(balance, total) AS balance, payment_status, location
-                 FROM scanned_invoices
-                WHERE invoice_number = ?
-                  AND (payment_status != 'paid' OR payment_status IS NULL)""",
-            (receipt.invoice_number,),
-        ).fetchall()
-        candidates = [dict(r) for r in rows]
+    if receipt.line_items:
+        for li in receipt.line_items:
+            results.append(_match_one_line_item(cur, receipt, li, amount_tolerance))
+        return results
 
-    # Strategy 2 — fuzzy match on vendor + amount + recent date
-    if not candidates:
-        amount_lo = receipt.amount * (1 - amount_tolerance)
-        amount_hi = receipt.amount * (1 + amount_tolerance)
-        date_lo = None
-        if receipt.payment_date:
-            try:
-                pd = datetime.strptime(receipt.payment_date, "%Y-%m-%d")
-                date_lo = (pd - timedelta(days=date_window_days)).strftime("%Y-%m-%d")
-            except ValueError:
-                pass
+    # No line items — fuzzy-match the receipt total against any open invoice
+    # for this vendor (legacy behavior, used by Tiger / Barrows / PFG / Suburban).
+    if receipt.total_amount is None or receipt.total_amount <= 0:
+        synthetic = ReceiptLineItem(invoice_number="", amount=receipt.total_amount or 0)
+        return [MatchResult(line_item=synthetic, matched_invoice_id=None,
+                            candidate_count=0, decision="no_match",
+                            reason="amount-unknown")]
 
-        sql = """SELECT id, vendor_name, invoice_number, invoice_date, total,
-                        COALESCE(balance, total) AS balance, payment_status, location
-                   FROM scanned_invoices
-                  WHERE LOWER(vendor_name) LIKE ?
-                    AND COALESCE(balance, total) BETWEEN ? AND ?
-                    AND (payment_status != 'paid' OR payment_status IS NULL)"""
-        params = [f"%{(receipt.vendor_canonical or '').lower()}%", amount_lo, amount_hi]
-        if date_lo:
-            sql += " AND invoice_date >= ?"
-            params.append(date_lo)
-        sql += " ORDER BY invoice_date DESC"
+    return [_fuzzy_match(cur, receipt, amount_tolerance, date_window_days)]
 
-        rows = cur.execute(sql, params).fetchall()
-        candidates = [dict(r) for r in rows]
 
-    if not candidates:
-        return MatchResult(receipt=receipt, matched_invoice_id=None,
+def _match_one_line_item(cur, receipt: ClassifiedReceipt, li: ReceiptLineItem,
+                         amount_tolerance: float) -> MatchResult:
+    # Skip credit lines (negative amounts) — those reduce a balance,
+    # they shouldn't try to "find a matching open invoice".
+    if li.amount < 0:
+        return MatchResult(line_item=li, matched_invoice_id=None,
                            candidate_count=0, decision="no_match",
-                           reason=f"no open invoice for {receipt.vendor_canonical} @ ${receipt.amount:.2f}",
+                           reason="credit-line-skipped (negative amount)")
+
+    rows = cur.execute(
+        """SELECT id, vendor_name, invoice_number, invoice_date, total,
+                  COALESCE(balance, total) AS balance, payment_status, location
+             FROM scanned_invoices
+            WHERE invoice_number = ?
+              AND (payment_status != 'paid' OR payment_status IS NULL)""",
+        (li.invoice_number,),
+    ).fetchall()
+    candidates = [dict(r) for r in rows]
+
+    if not candidates:
+        return MatchResult(line_item=li, matched_invoice_id=None,
+                           candidate_count=0, decision="no_match",
+                           reason=f"no open invoice #{li.invoice_number}")
+
+    if len(candidates) == 1:
+        c = candidates[0]
+        # Sanity-check the amount before auto-applying — if balance is way off,
+        # hold for review rather than silently applying the wrong amount.
+        balance = float(c["balance"] or 0)
+        if balance > 0:
+            ratio = li.amount / balance
+            if ratio < (1 - amount_tolerance) or ratio > (1 + amount_tolerance):
+                return MatchResult(line_item=li, matched_invoice_id=None,
+                                   candidate_count=1, candidates=candidates,
+                                   decision="needs_review",
+                                   reason=f"amount mismatch: receipt ${li.amount} vs invoice balance ${balance}")
+        decision = "auto_apply" if receipt.tier == "auto_apply" else "needs_review"
+        return MatchResult(line_item=li, matched_invoice_id=c["id"],
+                           candidate_count=1, candidates=candidates,
+                           decision=decision, reason="single match")
+
+    return MatchResult(line_item=li, matched_invoice_id=None,
+                       candidate_count=len(candidates), candidates=candidates,
+                       decision="needs_review",
+                       reason=f"ambiguous: {len(candidates)} invoices share #{li.invoice_number}")
+
+
+def _fuzzy_match(cur, receipt: ClassifiedReceipt,
+                 amount_tolerance: float, date_window_days: int) -> MatchResult:
+    li = ReceiptLineItem(invoice_number="", amount=receipt.total_amount or 0)
+
+    amount_lo = receipt.total_amount * (1 - amount_tolerance)
+    amount_hi = receipt.total_amount * (1 + amount_tolerance)
+    date_lo = None
+    if receipt.payment_date:
+        try:
+            pd = datetime.strptime(receipt.payment_date, "%Y-%m-%d")
+            date_lo = (pd - timedelta(days=date_window_days)).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    sql = """SELECT id, vendor_name, invoice_number, invoice_date, total,
+                    COALESCE(balance, total) AS balance, payment_status, location
+               FROM scanned_invoices
+              WHERE LOWER(vendor_name) LIKE ?
+                AND COALESCE(balance, total) BETWEEN ? AND ?
+                AND (payment_status != 'paid' OR payment_status IS NULL)"""
+    params = [f"%{(receipt.vendor_canonical or '').lower()}%", amount_lo, amount_hi]
+    if date_lo:
+        sql += " AND invoice_date >= ?"
+        params.append(date_lo)
+    sql += " ORDER BY invoice_date DESC"
+
+    rows = cur.execute(sql, params).fetchall()
+    candidates = [dict(r) for r in rows]
+
+    if not candidates:
+        return MatchResult(line_item=li, matched_invoice_id=None,
+                           candidate_count=0, decision="no_match",
+                           reason=f"no open invoice for {receipt.vendor_canonical} @ ${receipt.total_amount:.2f}",
                            candidates=[])
 
     if len(candidates) == 1:
         decision = "auto_apply" if receipt.tier == "auto_apply" else "needs_review"
-        return MatchResult(receipt=receipt, matched_invoice_id=candidates[0]["id"],
+        return MatchResult(line_item=li, matched_invoice_id=candidates[0]["id"],
                            candidate_count=1, decision=decision,
-                           reason="single match", candidates=candidates)
+                           reason="single match (fuzzy)", candidates=candidates)
 
-    # Multiple candidates — always hold for review even if Tier 1
-    return MatchResult(receipt=receipt, matched_invoice_id=None,
+    return MatchResult(line_item=li, matched_invoice_id=None,
                        candidate_count=len(candidates), decision="needs_review",
                        reason=f"ambiguous: {len(candidates)} open invoices match",
                        candidates=candidates)

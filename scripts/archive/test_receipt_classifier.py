@@ -26,6 +26,7 @@ from integrations.invoices.receipt_classifier import (
 SAMPLE_FILES = [
     "/opt/red-nun-dashboard/scripts/archive/autopay_receipt_samples.json",
     "/opt/red-nun-dashboard/scripts/archive/tiger_sample.json",
+    "/opt/red-nun-dashboard/scripts/archive/forwarded_vendor_samples.json",
 ]
 
 
@@ -45,8 +46,14 @@ def reconstruct_message(stored: dict) -> dict:
             headers.append({"name": display, "value": v})
 
     # Re-encode the truncated bodies so the classifier's base64 decoder works.
-    text_body = stored.get("text_body") or ""
-    html_body = stored.get("html_body_first_4k") or stored.get("html_body_first_2k") or ""
+    text_body = (stored.get("text_body")
+                 or stored.get("text_body_first_5k")
+                 or stored.get("text_body_first_2k")
+                 or "")
+    html_body = (stored.get("html_body_first_5k")
+                 or stored.get("html_body_first_4k")
+                 or stored.get("html_body_first_2k")
+                 or "")
 
     parts = []
     if text_body:
@@ -80,14 +87,24 @@ def iter_sample_messages():
             continue
         with open(path) as f:
             data = json.load(f)
-        for source, batches in data.get("samples", {}).items():
-            for batch in batches:
-                for msg in batch.get("messages", []):
-                    mid = msg.get("id")
-                    if not mid or mid in seen_ids:
-                        continue
-                    seen_ids.add(mid)
-                    yield source, msg
+        # Two file shapes: {"samples": {source: [{"messages": [...]}, ...]}}
+        # OR {"messages": [...]} for the simpler forwarded_vendor_samples.json
+        if "samples" in data:
+            for source, batches in data["samples"].items():
+                for batch in batches:
+                    for msg in batch.get("messages", []):
+                        mid = msg.get("id")
+                        if not mid or mid in seen_ids:
+                            continue
+                        seen_ids.add(mid)
+                        yield source, msg
+        elif "messages" in data:
+            for msg in data["messages"]:
+                mid = msg.get("id")
+                if not mid or mid in seen_ids:
+                    continue
+                seen_ids.add(mid)
+                yield "forwarded", msg
 
 
 def main():
@@ -112,8 +129,13 @@ def main():
         matched.append((source, result))
         print(f"[{result.signature_key}] {subj}")
         print(f"    vendor: {result.vendor_canonical}")
-        print(f"    amount: {result.amount}")
-        print(f"    invoice_no: {result.invoice_number}")
+        print(f"    total: {result.total_amount}")
+        if result.line_items:
+            print(f"    line items ({len(result.line_items)}):")
+            for li in result.line_items:
+                print(f"      - #{li.invoice_number}  ${li.amount}")
+        else:
+            print(f"    line items: (none — matcher will fuzzy-match on total)")
         print(f"    date: {result.payment_date}")
         print(f"    tier: {result.tier}  payment_method: {result.payment_method}")
         if result.parse_notes:
@@ -137,13 +159,20 @@ def main():
         if sig["key"] not in seen_keys:
             print(f"WARN: signature {sig['key']!r} did not match any sample message")
 
-    # Flag any classified receipt with missing fields
-    incomplete = [r for _, r in matched if r.amount is None or r.vendor_canonical == "(unknown)"]
+    # Flag any classified receipt with missing fields. For multi-invoice
+    # signatures we expect both a total and at least one line item.
+    incomplete = []
+    for _, r in matched:
+        if r.total_amount is None:
+            incomplete.append((r, "no total_amount"))
+            continue
+        if r.signature_key in ("lknife_vtinfo", "colonial_vtinfo", "usfoods_ach_remit") and not r.line_items:
+            incomplete.append((r, "expected line items for this signature"))
     if incomplete:
         print()
-        print(f"WARN: {len(incomplete)} classified receipts have missing fields:")
-        for r in incomplete:
-            print(f"  - {r.signature_key} ({r.raw_subject}): amount={r.amount} vendor={r.vendor_canonical}")
+        print(f"WARN: {len(incomplete)} classified receipts have issues:")
+        for r, why in incomplete:
+            print(f"  - {r.signature_key} ({r.raw_subject[:60]}): {why}")
 
 
 if __name__ == "__main__":
