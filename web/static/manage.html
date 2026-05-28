@@ -6015,7 +6015,7 @@ function bpRecordPayment() {
   document.getElementById('bp-pay-ref').value = '';
   var _memoNums = invs.map(function(i){ return (i.invoice_number || '').toString().trim(); }).filter(function(n){ return n && n !== '#'; });
   document.getElementById('bp-pay-memo').value = _memoNums.length ? ('Inv #' + _memoNums.join(', #')) : '';
-  document.getElementById('bp-pay-method').value = 'check';
+  document.getElementById('bp-pay-method').value = 'ach';
 
   var listEl = document.getElementById('bp-pay-invoices-list');
   listEl.innerHTML = '<div style="margin-top:8px;font-weight:600;color:#111827;margin-bottom:6px">Invoices:</div>' +

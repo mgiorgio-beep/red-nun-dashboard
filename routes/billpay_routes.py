@@ -626,15 +626,36 @@ def create_payment():
         """, (applied, applied, applied, applied, payment_date, inv_id))
 
     # ── Mirror into vendor_payments for centralized view ──
-    ref = f"CHK-{check_number}" if check_number else f"CHK-AP{payment_id}"
+    # Reference prefix and source must match the payment method — previously
+    # both were hardcoded for checks regardless of actual method, which made
+    # ACH/cash/etc. payments appear as checks on the Payments page.
+    method_norm = (payment_method or "check").strip().lower()
+    if method_norm == "check":
+        ref_prefix = "CHK"
+        mirror_source = "check"
+    elif method_norm == "ach":
+        ref_prefix = "ACH"
+        mirror_source = "external"
+    elif method_norm == "credit_card":
+        ref_prefix = "CC"
+        mirror_source = "external"
+    elif method_norm == "cash":
+        ref_prefix = "CASH"
+        mirror_source = "external"
+    else:
+        ref_prefix = method_norm.upper()[:6] or "PMT"
+        mirror_source = "external"
+    ref = (f"{ref_prefix}-{check_number}" if check_number
+           else (reference_number if reference_number else f"{ref_prefix}-AP{payment_id}"))
+
     try:
         vp_cur = cursor.execute(
             """INSERT INTO vendor_payments
                (vendor, location, payment_date, payment_ref, payment_method,
                 payment_total, check_number, memo, status, source, ap_payment_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'check', ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
             (vendor_name, None, payment_date, ref, payment_method,
-             amount, check_number, memo, payment_id),
+             amount, check_number, memo, mirror_source, payment_id),
         )
         vp_id = vp_cur.lastrowid
         # Mirror invoice links
@@ -1301,6 +1322,18 @@ def print_check(payment_id):
     if not payment:
         conn.close()
         return jsonify({"error": "Payment not found"}), 404
+
+    # SAFETY (2026-05-28): refuse to print a check for a non-check payment method.
+    # Previously this would happily generate a check PDF for ACH/credit-card/cash
+    # payments AND write a check_number + status='printed' onto the ap_payment row,
+    # silently corrupting non-check records. Now we hard-block.
+    method = (payment["payment_method"] or "").strip().lower()
+    if method and method != "check":
+        conn.close()
+        return jsonify({
+            "error": (f"Payment #{payment_id} was recorded as '{method}', not 'check'. "
+                      f"Cannot generate a check PDF for a non-check payment.")
+        }), 400
 
     # Determine location from request or default to chatham
     location = request.args.get("location", "chatham")
