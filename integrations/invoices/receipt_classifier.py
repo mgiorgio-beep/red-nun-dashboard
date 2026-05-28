@@ -47,6 +47,7 @@ class ClassifiedReceipt:
     vendor_canonical: str
     total_amount: Optional[float]
     line_items: List[ReceiptLineItem] = field(default_factory=list)
+    location: Optional[str] = None            # 'chatham' / 'dennis' / None if not detectable
     payment_date: Optional[str] = None        # ISO YYYY-MM-DD
     payment_method: str = ""
     tier: str = "auto_apply"
@@ -278,7 +279,74 @@ def _parse_pfg_billfire(body_text: str) -> Tuple[Optional[float], List[ReceiptLi
     return amt, []   # empty line items — matcher will fuzzy-match on total
 
 
+# ── Location extractors ──────────────────────────────────────────────────────
+#
+# Each returns 'chatham', 'dennis', or None.
+
+def _loc_lknife(subject: str, body_text: str) -> Optional[str]:
+    """L. Knife: '(AR034)' = Chatham, '(AR035)' = Dennis."""
+    if re.search(r"\bAR034\b", body_text or ""):
+        return "chatham"
+    if re.search(r"\bAR035\b", body_text or ""):
+        return "dennis"
+    return None
+
+
+def _loc_colonial(subject: str, body_text: str) -> Optional[str]:
+    """Colonial: '(R2560)' = Chatham (Red Nun Bar & Grill).
+    Dennis Colonial uses a different code we don't have yet — return None there."""
+    if re.search(r"\bR2560\b", body_text or "") or "RED NUN BAR & GRILL" in (body_text or "").upper():
+        return "chatham"
+    if "DENNIS" in (body_text or "").upper() or "DENNISPORT" in (body_text or "").upper():
+        return "dennis"
+    return None
+
+
+def _loc_usfoods(subject: str, body_text: str) -> Optional[str]:
+    """US Foods: customer codes 91097345 = Dennis, 90541301 = Chatham."""
+    if re.search(r"\b91097345\b", body_text or "") or "DENNISPORT" in (body_text or "").upper():
+        return "dennis"
+    if re.search(r"\b90541301\b", body_text or "") or "CHATHAM" in (body_text or "").upper():
+        return "chatham"
+    return None
+
+
+def _loc_pfg_billfire(subject: str, body_text: str) -> Optional[str]:
+    """PFG/Billfire: subject contains 'CHAT' or 'DENNIS PORT'."""
+    s = (subject or "").upper()
+    b = (body_text or "").upper()
+    if "DENNIS PORT" in s or "DENNIS PORT" in b or "DENNIS" in s:
+        return "dennis"
+    if "CHAT" in s or "CHATHAM" in b:
+        return "chatham"
+    return None
+
+
+def _loc_suburban(subject: str, body_text: str) -> Optional[str]:
+    """Suburban Supply: body says 'Red Nun- Dennisport - AUTO' or '...Chatham- Auto Pay'."""
+    b = (body_text or "").upper()
+    if "DENNISPORT" in b or "DENNIS PORT" in b:
+        return "dennis"
+    if "CHATHAM" in b:
+        return "chatham"
+    return None
+
+
+def _loc_none(subject: str, body_text: str) -> Optional[str]:
+    """Signatures where the receipt carries no location info (Tiger, Barrows, QB Payments)."""
+    return None
+
+
 # ── Receipt signatures ────────────────────────────────────────────────────────
+
+# Tier policy (post-2026-05-28 incident):
+#   tier='auto_apply'    → signature produces explicit invoice_number line items
+#                          AND we trust direct-lookup matches. Safe to auto-apply.
+#   tier='needs_review'  → signature produces only a total (no per-invoice
+#                          breakdown), so matcher must fuzzy-match on amount+vendor.
+#                          NEVER auto-applies, always held for manual confirmation
+#                          on the payments page. Required for PFG/Billfire after
+#                          the 2026-05-28 wrong-bank mis-match.
 
 RECEIPT_SIGNATURES = [
     {
@@ -286,38 +354,42 @@ RECEIPT_SIGNATURES = [
         "from_regex": re.compile(r"quickbooks@notification\.intuit\.com", re.I),
         "subject_regex": re.compile(r"^Payment Receipt from SUBURBAN SUPPLY", re.I),
         "vendor_canonical": "Suburban Supply",
-        "tier": "auto_apply",
+        "tier": "needs_review",  # PDF amount only, no invoice number — Tier 2
         "payment_method": "debit_card_autopay",
         "parser": "pdf_attachment",
+        "location_extractor": _loc_suburban,
     },
     {
         "key": "tiger_exchange",
         "from_regex": re.compile(r"@tigerexchange\.us", re.I),
         "subject_regex": re.compile(r"Payment Receipt.*Tiger Exchange", re.I),
         "vendor_canonical": "Tiger Exchange",
-        "tier": "auto_apply",
+        "tier": "needs_review",  # No invoice number in receipt — Tier 2
         "payment_method": "debit_card_autopay",
         "parser": "body_regex",
         "amount_regex": re.compile(r"for\s+\$?([\d,]+\.\d{2})\s+is attached", re.I),
+        "location_extractor": _loc_none,
     },
     {
         "key": "quickbooks_payments",
         "from_regex": re.compile(r"^[\"']?QuickBooks Payments[\"']?\s*<quickbooks@notification\.intuit\.com>", re.I),
         "subject_regex": re.compile(r"^Payment confirmation: Invoice #", re.I),
         "vendor_canonical": None,
-        "tier": "auto_apply",
+        "tier": "auto_apply",  # Invoice # in subject — direct lookup
         "payment_method": "qb_autopay",
         "parser": "quickbooks_payments",
+        "location_extractor": _loc_none,
     },
     {
         "key": "barrows_waste",
         "from_regex": re.compile(r"no-reply@servicecore\.com", re.I),
         "subject_regex": re.compile(r"^Payment Receipt P\d+", re.I),
         "vendor_canonical": "Barrows Waste Systems",
-        "tier": "auto_apply",
+        "tier": "needs_review",  # No invoice number in receipt — Tier 2
         "payment_method": "card_via_portal",
         "parser": "body_regex",
         "amount_regex": re.compile(r"Paid:\s*\$?([\d,]+\.\d{2})", re.I),
+        "location_extractor": _loc_none,
     },
     {
         "key": "lknife_vtinfo",
@@ -327,6 +399,7 @@ RECEIPT_SIGNATURES = [
         "tier": "auto_apply",
         "payment_method": "ach_via_portal",
         "parser": "vtinfo_table",
+        "location_extractor": _loc_lknife,
     },
     {
         "key": "colonial_vtinfo",
@@ -336,6 +409,7 @@ RECEIPT_SIGNATURES = [
         "tier": "auto_apply",
         "payment_method": "ach_via_portal",
         "parser": "vtinfo_table",
+        "location_extractor": _loc_colonial,
     },
     {
         "key": "usfoods_ach_remit",
@@ -345,15 +419,17 @@ RECEIPT_SIGNATURES = [
         "tier": "auto_apply",
         "payment_method": "ach_remit",
         "parser": "usfoods_remit",
+        "location_extractor": _loc_usfoods,
     },
     {
         "key": "pfg_billfire",
         "from_regex": re.compile(r"no-reply@valet\.billfire\.com", re.I),
         "subject_regex": re.compile(r"^Click2Pay confirmation", re.I),
         "vendor_canonical": "Performance Foodservice",
-        "tier": "auto_apply",
+        "tier": "needs_review",  # Only total, no breakdown — Tier 2 after wrong-bank incident
         "payment_method": "ach_via_billfire",
         "parser": "pfg_billfire",
+        "location_extractor": _loc_pfg_billfire,
     },
 ]
 
@@ -482,12 +558,22 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
             if total_amount is None:
                 notes.append("pfg-amount-unparsed")
 
+        # Extract location for this signature. Try effective_subject (the
+        # body-extracted one if forwarded) and the body text together.
+        loc_extractor = sig.get("location_extractor") or _loc_none
+        # For multi-line forwarded subjects, also concat the outer subject.
+        loc_subject = (effective_subject or "") + " " + (subject or "")
+        location = loc_extractor(loc_subject, body_text)
+        if location is None:
+            notes.append("location-unknown")
+
         return ClassifiedReceipt(
             message_id=message_id,
             signature_key=sig["key"],
             vendor_canonical=vendor_canonical or "(unknown)",
             total_amount=total_amount,
             line_items=line_items,
+            location=location,
             payment_date=_parse_date_header(date_hdr),
             payment_method=sig["payment_method"],
             tier=sig["tier"],
@@ -541,14 +627,17 @@ def _match_one_line_item(cur, receipt: ClassifiedReceipt, li: ReceiptLineItem,
                            candidate_count=0, decision="no_match",
                            reason="credit-line-skipped (negative amount)")
 
-    rows = cur.execute(
-        """SELECT id, vendor_name, invoice_number, invoice_date, total,
-                  COALESCE(balance, total) AS balance, payment_status, location
-             FROM scanned_invoices
-            WHERE invoice_number = ?
-              AND (payment_status != 'paid' OR payment_status IS NULL)""",
-        (li.invoice_number,),
-    ).fetchall()
+    sql = ("""SELECT id, vendor_name, invoice_number, invoice_date, total,
+                     COALESCE(balance, total) AS balance, payment_status, location
+                FROM scanned_invoices
+               WHERE invoice_number = ?
+                 AND (payment_status != 'paid' OR payment_status IS NULL)""")
+    params = [li.invoice_number]
+    if receipt.location:
+        sql += " AND location = ?"
+        params.append(receipt.location)
+
+    rows = cur.execute(sql, params).fetchall()
     candidates = [dict(r) for r in rows]
 
     if not candidates:
@@ -600,6 +689,9 @@ def _fuzzy_match(cur, receipt: ClassifiedReceipt,
                 AND COALESCE(balance, total) BETWEEN ? AND ?
                 AND (payment_status != 'paid' OR payment_status IS NULL)"""
     params = [f"%{(receipt.vendor_canonical or '').lower()}%", amount_lo, amount_hi]
+    if receipt.location:
+        sql += " AND location = ?"
+        params.append(receipt.location)
     if date_lo:
         sql += " AND invoice_date >= ?"
         params.append(date_lo)

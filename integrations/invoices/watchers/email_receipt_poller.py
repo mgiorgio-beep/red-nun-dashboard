@@ -33,6 +33,7 @@ import smtplib
 from datetime import datetime, date
 from email.mime.text import MIMEText
 from email.utils import parsedate_to_datetime
+from typing import Optional
 
 sys.path.insert(0, "/opt/red-nun-dashboard")
 
@@ -201,6 +202,8 @@ def fetch_pdf_attachment_text(service, msg: dict) -> str:
 
 # ── DB write — mirrors mark_invoice_paid_external in routes/billpay_routes.py ─
 
+AMOUNT_DISCREPANCY_HARD_LIMIT = 1.00  # dollars
+
 def apply_payment(invoice_id: int, amount: float, payment_method: str,
                   payment_date: str, reference: str, memo: str) -> int:
     """
@@ -208,7 +211,14 @@ def apply_payment(invoice_id: int, amount: float, payment_method: str,
     `mark-paid-external` endpoint: insert ap_payments + ap_payment_invoices +
     vendor_payments, update scanned_invoices. Returns the ap_payments id.
 
-    Raises on any DB error so the caller can roll back.
+    The `amount` parameter is the receipt's reported amount and is what gets
+    recorded. We compare against the invoice's current balance and:
+      - Equal (within AMOUNT_DISCREPANCY_HARD_LIMIT): mark paid, balance → 0
+      - amount < balance: apply partial, leave balance positive, status partial
+      - amount > balance by more than the limit: RAISE — matcher should have
+        caught this, defensive
+
+    Raises on any DB error so the caller can hold for review.
     """
     conn = get_connection()
     cur = conn.cursor()
@@ -224,7 +234,28 @@ def apply_payment(invoice_id: int, amount: float, payment_method: str,
         if inv["payment_status"] == "paid":
             raise RuntimeError(f"invoice {invoice_id} already paid (defensive)")
 
-        applied = float(inv["balance"] or 0)
+        balance = float(inv["balance"] or 0)
+        applied = float(amount)
+
+        # Sanity check — refuse to apply more than the invoice's balance.
+        # Matcher should have caught this and held for review, but defensive.
+        if applied > balance + AMOUNT_DISCREPANCY_HARD_LIMIT:
+            raise RuntimeError(
+                f"receipt amount ${applied:.2f} exceeds invoice balance ${balance:.2f} "
+                f"by more than ${AMOUNT_DISCREPANCY_HARD_LIMIT:.2f} — refusing to over-apply"
+            )
+
+        # Are we paying the invoice in full (within tolerance) or partially?
+        is_full_pay = abs(applied - balance) <= AMOUNT_DISCREPANCY_HARD_LIMIT
+        new_balance = 0 if is_full_pay else balance - applied
+        new_status = "paid" if is_full_pay else "partial"
+        # When paying in full, record the invoice's total as amount_paid to keep
+        # the ledger square even if our receipt amount differs from balance by
+        # cents (rounding). When partial, sum prior + applied.
+        new_amount_paid = inv["total"] if is_full_pay else (
+            float(inv.get("amount_paid") or 0) + applied
+        )
+
         cur.execute(
             """INSERT INTO ap_payments
                (vendor_name, payment_date, amount, payment_method,
@@ -242,14 +273,18 @@ def apply_payment(invoice_id: int, amount: float, payment_method: str,
 
         cur.execute(
             """UPDATE scanned_invoices
-               SET amount_paid = COALESCE(total, 0),
-                   balance = 0,
-                   payment_status = 'paid',
-                   paid_date = ?,
+               SET amount_paid = ?,
+                   balance = ?,
+                   payment_status = ?,
+                   paid_date = CASE WHEN ? = 'paid' THEN ? ELSE paid_date END,
                    payment_reference = COALESCE(?, payment_reference),
                    notes = COALESCE(notes, '') || ' | ' || ?
                WHERE id = ?""",
-            (payment_date, reference, f"auto-receipt {payment_date}: {memo}", invoice_id),
+            (new_amount_paid, new_balance, new_status,
+             new_status, payment_date,
+             reference,
+             f"auto-receipt {payment_date}: {memo}",
+             invoice_id),
         )
 
         ref = reference or f"EXT-AP{payment_id}"
@@ -302,7 +337,16 @@ def send_alert(subject: str, body: str):
 
 # ── Main poll loop ────────────────────────────────────────────────────────────
 
-def run(dry_run: bool = False):
+def run(dry_run: bool = False, backfill_days: Optional[int] = None):
+    """Poll Gmail for receipts and process them.
+
+    Args:
+        dry_run: if True, log decisions but make no DB or Gmail changes.
+        backfill_days: if set, ignore the `is:unread` filter and look back this
+            many days. Useful for retroactive matching once a new signature
+            is added or after fixing matcher logic. Manifest dedup still
+            prevents already-processed messages from being touched.
+    """
     if dry_run:
         logger.info("DRY RUN — no DB writes, no Gmail labels modified, no manifest writes")
     if os.path.exists(KILL_SWITCH):
@@ -316,9 +360,19 @@ def run(dry_run: bool = False):
     manifest = load_manifest()
     processed = manifest.setdefault("processed", {})
 
+    # Construct the Gmail query — backfill mode drops `is:unread` and widens
+    # the date window. The sender list stays the same.
+    if backfill_days:
+        query = RECEIPT_GMAIL_QUERY \
+            .replace("is:unread ", "") \
+            .replace("newer_than:14d", f"newer_than:{backfill_days}d")
+        logger.info(f"BACKFILL MODE — querying all receipts in last {backfill_days}d (read or unread)")
+    else:
+        query = RECEIPT_GMAIL_QUERY
+
     try:
         resp = service.users().messages().list(
-            userId="me", q=RECEIPT_GMAIL_QUERY, maxResults=50
+            userId="me", q=query, maxResults=200 if backfill_days else 50
         ).execute()
     except Exception as e:
         logger.error(f"Gmail list failed: {e}")
@@ -509,4 +563,13 @@ def _subj(msg):
 
 
 if __name__ == "__main__":
-    run(dry_run="--dry-run" in sys.argv)
+    dry_run = "--dry-run" in sys.argv
+    backfill_days = None
+    for i, a in enumerate(sys.argv):
+        if a == "--backfill" and i + 1 < len(sys.argv):
+            try:
+                backfill_days = int(sys.argv[i + 1])
+            except ValueError:
+                logger.error(f"--backfill requires an integer (days), got {sys.argv[i + 1]!r}")
+                sys.exit(2)
+    run(dry_run=dry_run, backfill_days=backfill_days)

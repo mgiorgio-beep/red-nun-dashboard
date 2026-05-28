@@ -129,6 +129,7 @@ def main():
         matched.append((source, result))
         print(f"[{result.signature_key}] {subj}")
         print(f"    vendor: {result.vendor_canonical}")
+        print(f"    location: {result.location}")
         print(f"    total: {result.total_amount}")
         if result.line_items:
             print(f"    line items ({len(result.line_items)}):")
