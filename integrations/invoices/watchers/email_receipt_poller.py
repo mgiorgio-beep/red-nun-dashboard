@@ -56,7 +56,8 @@ REVIEW_LOG_PATH  = "/opt/red-nun-dashboard/monitoring/receipt_reviews.jsonl"
 KILL_SWITCH      = "/opt/red-nun-dashboard/.receipt_poller_disabled"
 
 PER_RUN_AUTO_APPLY_CAP = 5
-ALERT_EMAIL = "mike@rednun.com"
+ALERT_EMAIL = os.environ.get("REPORT_TO_EMAIL", "mgiorgio@rednun.com")
+FROM_EMAIL  = os.environ.get("REPORT_FROM_EMAIL", "dashboard@rednun.com")
 
 # Gmail query — narrow to known receipt senders so we never accidentally touch
 # something unrelated. Updated whenever a Tier 1 vendor is added.
@@ -314,25 +315,85 @@ def apply_payment(invoice_id: int, amount: float, payment_method: str,
 
 # ── Alerting ──────────────────────────────────────────────────────────────────
 
-def send_alert(subject: str, body: str):
-    """Best-effort SMTP alert. Silently no-ops if SMTP isn't configured."""
-    smtp_host = os.environ.get("SMTP_HOST")
+def _send_email(subject: str, body: str, content_type: str = "plain"):
+    """Best-effort SMTP send. Mirrors reports/morning_report.py env vars.
+
+    Env vars: SMTP_HOST (default smtp.gmail.com), SMTP_PORT (default 587),
+              SMTP_USER, SMTP_PASSWORD, REPORT_FROM_EMAIL, REPORT_TO_EMAIL.
+    Silently no-ops with a warning if SMTP credentials aren't set.
+    """
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ.get("SMTP_USER")
-    smtp_pass = os.environ.get("SMTP_PASS")
-    if not (smtp_host and smtp_user and smtp_pass):
-        logger.warning(f"Alert (SMTP not configured): {subject}")
+    smtp_pass = os.environ.get("SMTP_PASSWORD")
+    if not (smtp_user and smtp_pass):
+        logger.warning(f"Email skipped (SMTP not configured): {subject}")
         return
     try:
-        msg = MIMEText(body)
+        msg = MIMEText(body, content_type)
         msg["Subject"] = subject
-        msg["From"] = smtp_user
+        msg["From"] = FROM_EMAIL
         msg["To"] = ALERT_EMAIL
-        with smtplib.SMTP(smtp_host, 587) as s:
+        with smtplib.SMTP(smtp_host, smtp_port) as s:
+            s.ehlo()
             s.starttls()
             s.login(smtp_user, smtp_pass)
             s.send_message(msg)
+        logger.info(f"Email sent to {ALERT_EMAIL}: {subject}")
     except Exception as e:
-        logger.error(f"Alert send failed: {e}")
+        logger.error(f"Email send failed: {e}")
+
+
+def send_alert(subject: str, body: str):
+    """Back-compat wrapper for the cap-exceeded alert path."""
+    _send_email(subject, body, content_type="plain")
+
+
+def send_apply_notification(applied_events: list):
+    """Email a summary of every auto-apply that happened this cron run."""
+    if not applied_events:
+        return
+    n = len(applied_events)
+    total = sum(e["amount"] for e in applied_events)
+
+    subject = f"[Red Nun] Receipt poller auto-applied {n} payment{'s' if n != 1 else ''} (${total:,.2f})"
+
+    rows = []
+    for e in applied_events:
+        rows.append(
+            f"<tr>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee'>{e['vendor']}</td>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;font-family:monospace'>#{e['invoice_number'] or '—'}</td>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600'>${e['amount']:,.2f}</td>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#666'>inv {e['invoice_id']}</td>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#666'>ap_payment {e['payment_id']}</td>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;color:#666;font-size:11px'>{e['signature']}</td>"
+            f"</tr>"
+        )
+
+    html = f"""<html><body style="font-family:-apple-system,Helvetica,Arial,sans-serif;color:#222">
+<h2 style="color:#0f172a;margin:0 0 8px 0">Receipt poller auto-applied {n} payment{'s' if n != 1 else ''}</h2>
+<div style="color:#666;font-size:13px;margin-bottom:16px">Total: <strong>${total:,.2f}</strong> · cron run at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</div>
+<table style="border-collapse:collapse;width:100%;max-width:760px;font-size:13px">
+<thead><tr style="background:#f5f5f5">
+<th style="padding:8px 10px;text-align:left">Vendor</th>
+<th style="padding:8px 10px;text-align:left">Invoice #</th>
+<th style="padding:8px 10px;text-align:right">Amount</th>
+<th style="padding:8px 10px;text-align:left">Dashboard ID</th>
+<th style="padding:8px 10px;text-align:left">Payment ID</th>
+<th style="padding:8px 10px;text-align:left">Source</th>
+</tr></thead>
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>
+<p style="color:#666;font-size:12px;margin-top:24px">
+If any of these were applied incorrectly: kill switch is <code>touch /opt/red-nun-dashboard/.receipt_poller_disabled</code>.
+Audit log: <code>/opt/red-nun-dashboard/monitoring/receipt_poller_audit.jsonl</code>.
+</p>
+</body></html>"""
+
+    _send_email(subject, html, content_type="html")
 
 
 # ── Main poll loop ────────────────────────────────────────────────────────────
@@ -390,6 +451,7 @@ def run(dry_run: bool = False, backfill_days: Optional[int] = None):
 
     auto_applied_this_run = 0
     skipped_due_to_cap = 0
+    applied_events = []   # collected for the end-of-run notification email
 
     for meta in msg_metas:
         msg_id = meta["id"]
@@ -486,6 +548,14 @@ def run(dry_run: bool = False, backfill_days: Optional[int] = None):
                         f"ap_payment {payment_id})"
                     )
                     per_line_outcomes.append("auto_applied")
+                    applied_events.append({
+                        "vendor": receipt.vendor_canonical,
+                        "invoice_number": li.invoice_number,
+                        "amount": float(li.amount),
+                        "invoice_id": match.matched_invoice_id,
+                        "payment_id": payment_id,
+                        "signature": receipt.signature_key,
+                    })
                 except Exception as e:
                     logger.error(f"apply_payment failed for {msg_id} #{li.invoice_number}: {e}")
                     audit("apply_error", error=str(e), **line_payload)
@@ -544,6 +614,10 @@ def run(dry_run: bool = False, backfill_days: Optional[int] = None):
 
     logger.info(f"Run complete: {auto_applied_this_run} auto-applied, "
                 f"{skipped_due_to_cap} deferred by cap")
+
+    # Notify Mike of every auto-apply in one summary email per run
+    if not dry_run and applied_events:
+        send_apply_notification(applied_events)
 
     if skipped_due_to_cap > 0:
         send_alert(
