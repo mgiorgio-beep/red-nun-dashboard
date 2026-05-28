@@ -389,18 +389,33 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
         m = re.search(r"From:\s*([^\r\n]+?)<([^>]+)>", body_text)
         if m:
             effective_from = f"{m.group(1).strip()}<{m.group(2).strip()}>"
-        m = re.search(r"Subject:\s*([^\r\n]+)", body_text)
+        # Capture the original Subject — Gmail wraps long subjects across
+        # multiple lines in forwarded bodies, so grab everything until we hit
+        # the next header (To:/From:/Date:/Cc:) or a blank line.
+        m = re.search(
+            r"Subject:\s*(.+?)(?:\r?\n(?:To|From|Date|Cc|Bcc|Reply-To):\s|\r?\n\r?\n)",
+            body_text,
+            re.S,
+        )
         if m:
-            effective_subject = m.group(1).strip()
+            effective_subject = re.sub(r"\s+", " ", m.group(1)).strip()
 
+    # Match candidates — for forwards we ALSO try the outer "Fwd:" subject
+    # because the body-extracted one can be truncated by quoting or wrapping.
+    subjects_to_try = [effective_subject]
+    if is_forward and subject not in subjects_to_try:
+        subjects_to_try.append(subject)
+
+    # Deny on either subject (so we don't accidentally classify a forwarded
+    # Statement / Invoice email as a receipt).
     for pat in NON_RECEIPT_SUBJECT_DENYLIST:
-        if pat.search(effective_subject):
+        if any(pat.search(s) for s in subjects_to_try):
             return None
 
     for sig in RECEIPT_SIGNATURES:
         if not sig["from_regex"].search(effective_from):
             continue
-        if not sig["subject_regex"].search(effective_subject):
+        if not any(sig["subject_regex"].search(s) for s in subjects_to_try):
             continue
 
         notes = []
