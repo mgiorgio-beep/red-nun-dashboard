@@ -293,7 +293,18 @@ def get_print_queue():
         })
 
     # ── Payroll checks ────────────────────────────────────────────────────────
-    pr_where = ["voided = 0", "check_number IS NULL", "printed_at IS NULL"]
+    # SAFETY (2026-05-28): exclude direct deposit employees from the print queue.
+    # Payroll import inserts payroll_checks rows for ALL employees, with
+    # check_number = NULL for direct deposit ones. Without the payment_method
+    # filter below, every DD employee would land in the Chatham/Dennis print
+    # check register and pull pre-printed check stock for no reason.
+    pr_where = [
+        "voided = 0",
+        "check_number IS NULL",
+        "printed_at IS NULL",
+        "(payment_method IS NULL OR LOWER(TRIM(payment_method)) != 'direct deposit')",
+        "COALESCE(net_pay, 0) > 0",  # also skip $0 payroll runs
+    ]
     pr_params = []
     if location:
         pr_where.append("location = ?")
