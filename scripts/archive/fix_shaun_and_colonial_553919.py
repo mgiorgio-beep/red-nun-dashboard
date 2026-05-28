@@ -85,17 +85,27 @@ def main(apply: bool):
     shaun_inv, shaun_links = shaun
     colonial_inv, colonial_links = colonial
 
-    # ── Shaun: decide which link to drop ──────────────────────────────────────
+    # ── Shaun: decide which link to drop, then mark paid ──────────────────────
     print("\n" + "-" * 72)
     print("SHAUN PLAN")
     print("-" * 72)
-    if len(shaun_links) < 2:
-        print(f"  Only {len(shaun_links)} ap_payment_invoices link(s) found — "
-              f"not the expected duplicate. Skipping Shaun cleanup.")
-        shaun_to_delete = None
+    shaun_to_delete = None
+    shaun_keep = None
+    if len(shaun_links) == 0:
+        print("  No ap_payment_invoices links — skipping Shaun cleanup.")
+    elif len(shaun_links) == 1:
+        # Either pre-cleaned or never had a duplicate. Still need to mark paid
+        # if the invoice is currently unpaid.
+        shaun_keep = shaun_links[0]
+        print(f"  Single link present: payment_id={shaun_keep['payment_id']}  "
+              f"amount=${shaun_keep['amount_applied']}  date={shaun_keep['payment_date']}")
+        if shaun_inv["payment_status"] != "paid":
+            print(f"  Will mark invoice paid via this link.")
+        else:
+            print(f"  Invoice already paid — nothing to do.")
     else:
         # Keep the earliest link, delete the later one.
-        shaun_to_delete = shaun_links[-1]  # latest-payment link
+        shaun_to_delete = shaun_links[-1]
         shaun_keep = shaun_links[0]
         print(f"  Keep:   payment_id={shaun_keep['payment_id']}  "
               f"amount=${shaun_keep['amount_applied']}  date={shaun_keep['payment_date']}")
@@ -129,9 +139,8 @@ def main(apply: bool):
     print("APPLYING")
     print("=" * 72)
 
-    # Shaun
+    # Shaun — delete dupe if present, then mark paid if still unpaid
     if shaun_to_delete is not None:
-        shaun_keep_payment = shaun_links[0]
         cur.execute(
             "DELETE FROM ap_payment_invoices WHERE payment_id = ? AND invoice_id = ?",
             (shaun_to_delete["payment_id"], SHAUN_INVOICE_ID),
@@ -140,7 +149,11 @@ def main(apply: bool):
               f"(payment_id={shaun_to_delete['payment_id']}, "
               f"rowcount={cur.rowcount})")
 
-        # Mark invoice paid via the surviving link
+    if shaun_keep is not None and shaun_inv["payment_status"] != "paid":
+        shaun_note = (
+            " | fix-shaun-dupe 2026-05-28: deleted duplicate ap_payment_invoices "
+            f"link, paid via payment #{shaun_keep['payment_id']}"
+        )
         cur.execute(
             """UPDATE scanned_invoices
                   SET amount_paid = COALESCE(total, 0),
@@ -148,35 +161,38 @@ def main(apply: bool):
                       payment_status = 'paid',
                       paid_date = ?,
                       payment_reference = COALESCE(?, payment_reference),
-                      notes = COALESCE(notes, '') || ' | fix-shaun-dupe 2026-05-28: '
-                              'deleted duplicate ap_payment_invoices link, '
-                              'paid via payment ' || ?
+                      notes = COALESCE(notes, '') || ?
                 WHERE id = ?""",
-            (shaun_keep_payment["payment_date"],
-             shaun_keep_payment["reference_number"],
-             str(shaun_keep_payment["payment_id"]),
+            (shaun_keep["payment_date"],
+             shaun_keep["reference_number"],
+             shaun_note,
              SHAUN_INVOICE_ID),
         )
         print(f"  Marked Shaun invoice #{SHAUN_INVOICE_ID} paid (rowcount={cur.rowcount})")
 
-    # Colonial
-    paid_date = (colonial_links[-1]["payment_date"]
-                 if colonial_links else "2026-05-26")
-    cur.execute(
-        """UPDATE scanned_invoices
-              SET amount_paid = COALESCE(total, 0),
-                  balance = 0,
-                  payment_status = 'paid',
-                  paid_date = ?,
-                  notes = COALESCE(notes, '') || ' | fix-colonial-553919 2026-05-28: '
-                          'phantom $7 cleared — portal scraper applied $404.40 (net of -$7 '
-                          'credit on invoice #206074) instead of gross $411.40. '
-                          'Colonial portal confirms #553919 is fully paid.'
-            WHERE id = ?""",
-        (paid_date, COLONIAL_INVOICE_ID),
-    )
-    print(f"  Marked Colonial #553919 (invoice id {COLONIAL_INVOICE_ID}) paid "
-          f"(rowcount={cur.rowcount})")
+    # Colonial — zero the phantom $7
+    if colonial_inv["payment_status"] != "paid":
+        paid_date = (colonial_links[-1]["payment_date"]
+                     if colonial_links else "2026-05-26")
+        colonial_note = (
+            " | fix-colonial-553919 2026-05-28: phantom $7 cleared — portal scraper "
+            "applied $404.40 (net of -$7 credit on invoice #206074) instead of gross "
+            "$411.40. Colonial portal confirms #553919 is fully paid."
+        )
+        cur.execute(
+            """UPDATE scanned_invoices
+                  SET amount_paid = COALESCE(total, 0),
+                      balance = 0,
+                      payment_status = 'paid',
+                      paid_date = ?,
+                      notes = COALESCE(notes, '') || ?
+                WHERE id = ?""",
+            (paid_date, colonial_note, COLONIAL_INVOICE_ID),
+        )
+        print(f"  Marked Colonial #553919 (invoice id {COLONIAL_INVOICE_ID}) paid "
+              f"(rowcount={cur.rowcount})")
+    else:
+        print(f"  Colonial #553919 already paid — nothing to do.")
 
     conn.commit()
     conn.close()
