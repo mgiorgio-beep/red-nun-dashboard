@@ -69,6 +69,7 @@ def main(apply: bool):
     updates_full = []
     updates_partial = []
     skipped_no_money = []
+    overapplied = []           # applied > balance + tolerance — needs human review
 
     for r in rows:
         applied = float(r["total_applied"] or 0)
@@ -83,16 +84,23 @@ def main(apply: bool):
             skipped_no_money.append(r)
             continue
 
-        if abs(applied - balance) <= AMOUNT_TOLERANCE or applied >= balance:
+        if abs(applied - balance) <= AMOUNT_TOLERANCE:
+            # Close-enough match (within $1) — safe to mark fully paid
             updates_full.append(r)
-        else:
+        elif applied < balance - AMOUNT_TOLERANCE:
+            # Applied less than balance — true partial payment
             updates_partial.append(r)
+        else:
+            # Applied > balance by more than tolerance — duplicate link,
+            # mismatched data, or already-partially-paid. Don't touch.
+            overapplied.append(r)
 
     # Per-vendor summary
     print(f"\nTotal invoices with linked ap_payments but still unpaid: {len(rows)}")
-    print(f"  → will mark FULL paid: {len(updates_full)}")
-    print(f"  → will mark PARTIAL:    {len(updates_partial)}")
-    print(f"  → skip (no $$ linked): {len(skipped_no_money)}")
+    print(f"  → will mark FULL paid:        {len(updates_full)}")
+    print(f"  → will mark PARTIAL:          {len(updates_partial)}")
+    print(f"  → skip (no $$ linked):        {len(skipped_no_money)}")
+    print(f"  → skip (overapplied, review): {len(overapplied)}")
     print()
     print(f"{'Vendor':<40}  {'#':>4}  {'Balance':>11}  {'Applied':>11}")
     print("-" * 78)
@@ -123,6 +131,16 @@ def main(apply: bool):
             print(f"  {r['id']:>7}  {(r['vendor_name'] or '?')[:30]:<30}  "
                   f"#{r['invoice_number']}  bal=${balance:,.2f}  applied=${applied:,.2f}  "
                   f"remaining=${balance - applied:,.2f}")
+
+    if overapplied:
+        print()
+        print(f"OVERAPPLIED — NOT TOUCHED (review manually):")
+        for r in overapplied:
+            applied = float(r["total_applied"] or 0)
+            balance = float(r["balance"] or 0)
+            print(f"  inv {r['id']:>7}  {(r['vendor_name'] or '?')[:30]:<30}  "
+                  f"#{r['invoice_number'] or '(null)'}  bal=${balance:,.2f}  "
+                  f"applied=${applied:,.2f}  excess=${applied - balance:,.2f}")
 
     if not apply:
         print()
