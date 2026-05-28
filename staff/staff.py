@@ -29,6 +29,14 @@ staff_bp = Blueprint('staff', __name__,
 
 DATA_DIR = '/opt/red-nun-dashboard/data'
 
+# Per-instance location. Set RN_LOCATION=dennis on the Dennis Beelink.
+# Defaults to 'chatham' so the existing Chatham install is unchanged.
+LOCATION = os.environ.get('RN_LOCATION', 'chatham').strip().lower()
+LOCATION_DISPLAY = {
+    'chatham': 'CHATHAM',
+    'dennis': 'DENNIS',
+}.get(LOCATION, LOCATION.upper())
+
 ROKU_APP_IDS = {
     'ESPN+': '34376', 'ESPN App': '34376',
     'Peacock': '593099', 'Peacock App': '593099',
@@ -37,7 +45,7 @@ ROKU_APP_IDS = {
     'YouTube TV': '195316',
 }
 
-DEFAULT_TVS = [
+DEFAULT_TVS_CHATHAM = [
     {"id": "bar-left", "name": "Bar Left", "dtv_ip": "", "roku_ip": "", "channel": ""},
     {"id": "bar-middle", "name": "Bar Middle", "dtv_ip": "", "roku_ip": "", "channel": ""},
     {"id": "bar-right", "name": "Bar Right", "dtv_ip": "", "roku_ip": "", "channel": ""},
@@ -45,6 +53,20 @@ DEFAULT_TVS = [
     {"id": "dr-middle", "name": "DR Middle", "dtv_ip": "", "roku_ip": "", "channel": ""},
     {"id": "dr-right", "name": "DR Right", "dtv_ip": "", "roku_ip": "", "channel": ""},
 ]
+
+DEFAULT_TVS_DENNIS = [
+    {"id": "bar-1", "name": "Bar 1", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "bar-2", "name": "Bar 2", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "bar-3", "name": "Bar 3", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "bar-back", "name": "Bar Back", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "dr-1", "name": "DR 1", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "dr-2", "name": "DR 2", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "dr-3", "name": "DR 3", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "dr-4", "name": "DR 4", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "pallet-room", "name": "Pallet Room", "dtv_ip": "", "roku_ip": "", "channel": ""},
+]
+
+DEFAULT_TVS = DEFAULT_TVS_DENNIS if LOCATION == 'dennis' else DEFAULT_TVS_CHATHAM
 
 
 def _load_sports_data():
@@ -106,7 +128,13 @@ def staff_home():
         except Exception:
             stale = True
     from flask import make_response
-    resp = make_response(render_template('staff.html', data=data, stale=stale))
+    resp = make_response(render_template(
+        'staff.html',
+        data=data,
+        stale=stale,
+        location=LOCATION,
+        location_display=LOCATION_DISPLAY,
+    ))
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
@@ -169,7 +197,7 @@ def sync_toast_specials():
     try:
         from integrations.toast.toast_client import ToastAPIClient
         client = ToastAPIClient()
-        location = (request.json or {}).get('location', 'chatham')
+        location = (request.json or {}).get('location', LOCATION)
         menus = client.get_menus(location)
 
         soup = {}
