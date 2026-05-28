@@ -44,21 +44,30 @@ def reconstruct_message(stored: dict) -> dict:
                        "subject": "Subject", "date": "Date"}[hdr_name]
             headers.append({"name": display, "value": v})
 
-    # Re-encode the truncated text body so the classifier's base64 decoder works.
+    # Re-encode the truncated bodies so the classifier's base64 decoder works.
     text_body = stored.get("text_body") or ""
-    encoded = base64.urlsafe_b64encode(text_body.encode("utf-8")).decode("ascii")
+    html_body = stored.get("html_body_first_4k") or stored.get("html_body_first_2k") or ""
+
+    parts = []
+    if text_body:
+        parts.append({
+            "mimeType": "text/plain",
+            "body": {"data": base64.urlsafe_b64encode(text_body.encode("utf-8")).decode("ascii")},
+            "filename": "",
+        })
+    if html_body:
+        parts.append({
+            "mimeType": "text/html",
+            "body": {"data": base64.urlsafe_b64encode(html_body.encode("utf-8")).decode("ascii")},
+            "filename": "",
+        })
 
     return {
         "id": stored.get("id", ""),
+        "snippet": stored.get("snippet", ""),
         "payload": {
             "headers": headers,
-            "parts": [
-                {
-                    "mimeType": "text/plain",
-                    "body": {"data": encoded},
-                    "filename": "",
-                },
-            ],
+            "parts": parts,
         },
     }
 

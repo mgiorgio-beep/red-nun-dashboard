@@ -131,10 +131,18 @@ def _get_header(headers: list, name: str) -> str:
 
 
 def _get_text_body(payload: dict) -> str:
-    """Return best-effort plaintext body from a Gmail message payload."""
+    """
+    Return best-effort plaintext body from a Gmail message payload.
+
+    Prefers text/plain; falls back to a cheap HTML→text strip when only
+    text/html is available (e.g. QuickBooks Payments emails are HTML-only).
+    """
     import base64
 
-    def walk(part) -> Optional[str]:
+    found_plain = []
+    found_html = []
+
+    def walk(part):
         mime = part.get("mimeType", "")
         body = part.get("body", {}) or {}
         data = body.get("data")
@@ -143,16 +151,31 @@ def _get_text_body(payload: dict) -> str:
             try:
                 decoded = base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
             except Exception:
-                return None
-            if mime == "text/plain":
-                return decoded
+                decoded = None
+            if decoded:
+                if mime == "text/plain":
+                    found_plain.append(decoded)
+                elif mime == "text/html":
+                    found_html.append(decoded)
         for sub in part.get("parts", []) or []:
-            r = walk(sub)
-            if r:
-                return r
-        return None
+            walk(sub)
 
-    return walk(payload) or ""
+    walk(payload)
+
+    if found_plain:
+        return "\n".join(found_plain)
+    if found_html:
+        # Cheap HTML strip — collapse tags, decode common entities, normalize whitespace.
+        html = "\n".join(found_html)
+        text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.I | re.S)
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+        text = re.sub(r"</p\s*>", "\n", text, flags=re.I)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = text.replace("&nbsp;", " ").replace("&amp;", "&")
+        text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&#39;", "'")
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+    return ""
 
 
 def _parse_date_header(date_str: str) -> Optional[str]:
@@ -230,6 +253,10 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
     # the original "From: ..." line appears in the body.
     is_forward = bool(re.match(r"^\s*Fwd?:\s", subject, re.I))
     body_text = _get_text_body(payload)
+    # Always prepend the Gmail snippet — it's plain text and often contains
+    # the key fields even when the full body is HTML-only (QB Payments).
+    snippet = msg.get("snippet", "") or ""
+    body_text = (snippet + "\n" + body_text).strip()
     effective_from = from_hdr
     effective_subject = subject
     if is_forward:
