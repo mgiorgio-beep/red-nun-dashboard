@@ -191,12 +191,23 @@ _VTINFO_TOTAL_REGEX = re.compile(
 )
 # Invoice row in VTInfo body — invoice number (digits, sometimes alphanum)
 # followed by an amount, possibly with a credits column in between.
-# Lines look like:  "552223 $565.40"   or   "206074 -$7.00"
-# Or with a credits column (often blank):  "500561  $430.10"
+# Lines look like:  "552223 $565.40"   or   "206074 -$7.00"   or "500561  $430.10"
+# The amount can be: $X.XX, -$X.XX, $-X.XX, -X.XX, X.XX
 _VTINFO_LINE_REGEX = re.compile(
-    r"^\s*([A-Z]{0,3}\d{4,})\s+\$?(-?[\d,]+\.\d{2})\s*$",
+    r"^\s*([A-Z]{0,3}\d{4,})\s+(-?\$?-?[\d,]+\.\d{2})\s*$",
     re.M,
 )
+
+
+def _parse_money(s: str) -> Optional[float]:
+    """Parse a money string like '$1,416.20', '-$7.00', or '3494.33'."""
+    s = (s or "").replace("$", "").replace(",", "").strip()
+    # Handle accidental double negative ("--7.00")
+    s = re.sub(r"^--", "-", s)
+    try:
+        return float(s)
+    except ValueError:
+        return None
 
 
 def _parse_vtinfo_invoice_table(body_text: str) -> Tuple[Optional[float], List[ReceiptLineItem]]:
@@ -204,20 +215,15 @@ def _parse_vtinfo_invoice_table(body_text: str) -> Tuple[Optional[float], List[R
     total = None
     m = _VTINFO_TOTAL_REGEX.search(body_text or "")
     if m:
-        try:
-            total = float(m.group(1).replace(",", ""))
-        except ValueError:
-            pass
+        total = _parse_money(m.group(1))
 
     items: List[ReceiptLineItem] = []
     for m in _VTINFO_LINE_REGEX.finditer(body_text or ""):
         inv_no = m.group(1).strip()
-        try:
-            amt = float(m.group(2).replace(",", ""))
-        except ValueError:
+        amt = _parse_money(m.group(2))
+        if amt is None:
             continue
-        # Skip lines that look like a date (e.g. "05/26/2026") — already
-        # excluded by the regex shape, but defensive.
+        # Skip lines that look like a date (e.g. "05/26/2026") — defensive.
         if "/" in inv_no or "." in inv_no:
             continue
         items.append(ReceiptLineItem(invoice_number=inv_no, amount=amt))
