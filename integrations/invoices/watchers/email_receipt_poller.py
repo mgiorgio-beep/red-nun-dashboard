@@ -325,6 +325,8 @@ def run(dry_run: bool = False):
         return
 
     msg_metas = resp.get("messages", []) or []
+    logger.info(f"Gmail query returned {len(msg_metas)} candidate messages "
+                f"({len(processed)} in manifest)")
     if not msg_metas:
         return
 
@@ -334,6 +336,9 @@ def run(dry_run: bool = False):
     for meta in msg_metas:
         msg_id = meta["id"]
         if msg_id in processed:
+            prior = processed[msg_id]
+            sig = prior.get("signature") or prior.get("decision") or "?"
+            logger.info(f"Skipping {msg_id} — already in manifest ({sig})")
             continue
 
         try:
@@ -479,9 +484,8 @@ def run(dry_run: bool = False):
                     mark_message_read(service, msg_id)
             save_manifest(manifest)
 
-    if auto_applied_this_run > 0:
-        logger.info(f"Run complete: {auto_applied_this_run} auto-applied, "
-                    f"{skipped_due_to_cap} deferred by cap")
+    logger.info(f"Run complete: {auto_applied_this_run} auto-applied, "
+                f"{skipped_due_to_cap} deferred by cap")
 
     if skipped_due_to_cap > 0:
         send_alert(
