@@ -350,8 +350,12 @@ def run(dry_run: bool = False, backfill_days: Optional[int] = None):
     if dry_run:
         logger.info("DRY RUN — no DB writes, no Gmail labels modified, no manifest writes")
     if os.path.exists(KILL_SWITCH):
-        logger.info(f"Kill switch present at {KILL_SWITCH}; exiting without polling")
-        return
+        if dry_run:
+            logger.info(f"Kill switch present at {KILL_SWITCH} — proceeding anyway "
+                        f"(dry-run is read-only)")
+        else:
+            logger.info(f"Kill switch present at {KILL_SWITCH}; exiting without polling")
+            return
 
     service = get_gmail_service()
     if service is None:
