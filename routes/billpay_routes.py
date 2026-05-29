@@ -451,8 +451,12 @@ def update_billpay_vendor(vendor_name):
     data = request.get_json()
     conn = get_connection()
 
+    # Case-insensitive match so saving with different capitalization updates the
+    # existing record instead of creating a duplicate row (e.g. "...LLC" vs
+    # "...Llc"). Duplicates here previously broke auto-pay: the invoice matched
+    # one row while the auto_pay flag lived on the other.
     existing = conn.execute(
-        "SELECT id FROM vendor_bill_pay WHERE vendor_name = ?", (vendor_name,)
+        "SELECT id FROM vendor_bill_pay WHERE vendor_name = ? COLLATE NOCASE", (vendor_name,)
     ).fetchone()
 
     fields = {
@@ -482,8 +486,8 @@ def update_billpay_vendor(vendor_name):
     if existing:
         sets = ", ".join(f"{k} = ?" for k in fields)
         conn.execute(
-            f"UPDATE vendor_bill_pay SET {sets} WHERE vendor_name = ?",
-            list(fields.values()) + [vendor_name]
+            f"UPDATE vendor_bill_pay SET {sets} WHERE id = ?",
+            list(fields.values()) + [existing["id"]]
         )
     else:
         fields["vendor_name"] = vendor_name

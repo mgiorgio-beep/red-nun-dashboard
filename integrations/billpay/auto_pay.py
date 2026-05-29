@@ -80,9 +80,16 @@ def _log_decision(conn, invoice_id, vendor_name, total, decision, reason,
 def _check_vendor_eligible(conn, invoice_row):
     """Vendor must be auto_pay=1, bill_pay_enabled=1, payment_method='check'."""
     vendor = invoice_row["vendor_name"]
+    # Match case-insensitively. The OCR'd vendor_name on an invoice can differ
+    # in capitalization from the configured vendor_bill_pay record (e.g.
+    # "...LLC" vs "...Llc"). A case-sensitive match would silently report the
+    # vendor as having no bill-pay record (or hit the wrong duplicate row) and
+    # skip auto-pay. If case-variant duplicates still exist, prefer the
+    # auto-pay-enabled one.
     bp = conn.execute(
         "SELECT auto_pay, bill_pay_enabled, payment_method FROM vendor_bill_pay "
-        "WHERE vendor_name = ?",
+        "WHERE vendor_name = ? COLLATE NOCASE "
+        "ORDER BY auto_pay DESC, bill_pay_enabled DESC LIMIT 1",
         (vendor,),
     ).fetchone()
     if not bp:
@@ -152,17 +159,24 @@ def _check_anomaly(conn, invoice_row):
     if (vendor or "").strip().lower() in ANOMALY_SKIP_VENDORS:
         return (True, None, "vendor_in_anomaly_skip_list")
     # Pull recent confirmed totals for this vendor (excluding the current one).
+    # Compare per-location: a vendor can bill a different standing amount at
+    # each location (e.g. Caron — $260 Chatham, $440 Dennis). Pooling both
+    # locations makes the average meaningless and trips the guardrail on every
+    # invoice. vendor_name is matched case-insensitively for the same reason as
+    # in _check_vendor_eligible.
+    location = invoice_row["location"] or "chatham"
     rows = conn.execute(
         f"""
         SELECT total FROM scanned_invoices
-        WHERE vendor_name = ?
+        WHERE vendor_name = ? COLLATE NOCASE
+          AND location = ?
           AND status = 'confirmed'
           AND id != ?
           AND DATE(COALESCE(invoice_date, confirmed_at, created_at)) >=
               DATE('now', '-{AVG_WINDOW_DAYS} days')
           AND total > 0
         """,
-        (vendor, invoice_row["id"]),
+        (vendor, location, invoice_row["id"]),
     ).fetchall()
     history = [float(r["total"]) for r in rows if r["total"]]
     if len(history) < ANOMALY_MIN_HISTORY:
