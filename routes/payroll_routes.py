@@ -130,6 +130,21 @@ def _fmt_date(d):
         return d or ""
 
 
+# Location aliasing. The payroll UI historically sent 'dennisport' while the
+# rest of the app (and the check_config table) keys on 'dennis'. That mismatch
+# made the check_config lookup miss and silently fall back to the first row
+# (Chatham) — so Dennis payroll checks printed with Chatham's name, address,
+# and bank account number. Normalize every location before it touches
+# check_config so this can never happen again, even if an old/cached page
+# still submits 'dennisport'.
+_LOCATION_ALIASES = {"dennisport": "dennis", "dennis port": "dennis"}
+
+
+def _norm_loc(loc):
+    loc = (loc or "chatham").strip().lower()
+    return _LOCATION_ALIASES.get(loc, loc)
+
+
 def parse_journal_csv(csv_text):
     """
     Parse a 7shifts payroll-journal CSV.
@@ -271,7 +286,7 @@ def create_payroll_run():
         _check_printer_available = False
         logger.warning("check_printer not available — checks PDF will be skipped")
 
-    location      = (request.form.get("location") or "chatham").lower()
+    location      = _norm_loc(request.form.get("location"))
     memo          = (request.form.get("memo") or "").strip()
     assign_checks = request.form.get("assign_checks", "1") == "1"
 
@@ -841,7 +856,7 @@ def print_run_checks(run_id):
         conn.close()
         return jsonify({"error": "Run not found"}), 404
     run = dict(run)
-    location = run["location"]
+    location = _norm_loc(run["location"])
 
     checks = conn.execute("""
         SELECT * FROM payroll_checks
@@ -855,12 +870,13 @@ def print_run_checks(run_id):
         conn.close()
         return jsonify({"error": "No paper checks found for this run"}), 400
 
+    # Exact match only — do NOT fall back to another location's config. A
+    # silent fallback here is what printed Dennis checks on the Chatham
+    # account. If the config is genuinely missing, fail loudly instead.
     config = conn.execute("SELECT * FROM check_config WHERE location = ?", (location,)).fetchone()
     if not config:
-        config = conn.execute("SELECT * FROM check_config ORDER BY id LIMIT 1").fetchone()
-    if not config:
         conn.close()
-        return jsonify({"error": "Check config not set up for this location"}), 400
+        return jsonify({"error": f"No check config set up for location '{location}'. Set it up in Check Setup before printing."}), 400
 
     config_dict = dict(config)
     next_check   = config_dict.get("check_number_next") or 2001
@@ -981,14 +997,13 @@ def reprint_single_check(check_id):
         conn.close()
         return jsonify({"error": "Parent payroll run not found"}), 404
     run = dict(run)
-    location = check["location"] or run["location"]
+    location = _norm_loc(check["location"] or run["location"])
 
+    # Exact match only — never fall back to another location's bank config.
     config = conn.execute("SELECT * FROM check_config WHERE location=?", (location,)).fetchone()
     if not config:
-        config = conn.execute("SELECT * FROM check_config ORDER BY id LIMIT 1").fetchone()
-    if not config:
         conn.close()
-        return jsonify({"error": "Check config not set up for this location"}), 400
+        return jsonify({"error": f"No check config set up for location '{location}'. Set it up in Check Setup before reprinting."}), 400
     config_dict = dict(config)
 
     old_check_num = check.get("check_number")

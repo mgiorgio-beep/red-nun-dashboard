@@ -1940,7 +1940,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
             <label style="font-size:12px;color:var(--text3);font-weight:600">Location:</label>
             <button id="pr-loc-chatham" onclick="prSwitchLocation('chatham')" class="bp-filter-btn active" style="padding:6px 16px">Chatham</button>
-            <button id="pr-loc-dennisport" onclick="prSwitchLocation('dennisport')" class="bp-filter-btn" style="padding:6px 16px">Dennis Port</button>
+            <button id="pr-loc-dennisport" onclick="prSwitchLocation('dennis')" class="bp-filter-btn" style="padding:6px 16px">Dennis Port</button>
             <div style="flex:1"></div>
             <button onclick="prOpenUpload()" style="padding:8px 20px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer">+ New Payroll Run</button>
           </div>
@@ -2006,7 +2006,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Location</label>
             <select id="pr-up-location" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:#fff;color:#111827;font-size:13px">
               <option value="chatham">Chatham</option>
-              <option value="dennisport">Dennis Port</option>
+              <option value="dennis">Dennis Port</option>
             </select>
           </div>
 
@@ -2185,7 +2185,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
               <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Location</label>
               <select id="mc-location" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
                 <option value="chatham">Chatham</option>
-                <option value="dennisport">Dennis Port</option>
+                <option value="dennis">Dennis Port</option>
               </select>
             </div>
           </div>
@@ -6515,7 +6515,7 @@ var _prLocation = 'chatham';
 function prSwitchLocation(loc) {
   _prLocation = loc;
   document.getElementById('pr-loc-chatham').classList.toggle('active', loc === 'chatham');
-  document.getElementById('pr-loc-dennisport').classList.toggle('active', loc === 'dennisport');
+  document.getElementById('pr-loc-dennisport').classList.toggle('active', loc === 'dennis');
   prLoadRuns();
   prLoadLegacy();
 }
