@@ -478,6 +478,75 @@ def _yttv_save(channels):
     return data
 
 
+YT_CHANNELS_FILE = os.path.join(DATA_DIR, 'yt_channels.json')
+
+
+def _yt_load():
+    """Return regular-YouTube (app 837) channels."""
+    if os.path.exists(YT_CHANNELS_FILE):
+        with open(YT_CHANNELS_FILE) as f:
+            return json.load(f)
+    return {'channels': {}, 'updated': 0}
+
+
+def _yt_save(channels):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    data = {'channels': channels, 'updated': int(time.time())}
+    with open(YT_CHANNELS_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+    return data
+
+
+def _yt_extract_id(url):
+    """Pull an 11-char video ID from any common YouTube URL form."""
+    for pat in (r'[?&]v=([a-zA-Z0-9_-]{11})',
+                r'youtu\.be/([a-zA-Z0-9_-]{11})',
+                r'/live/([a-zA-Z0-9_-]{11})',
+                r'/watch/([a-zA-Z0-9_-]{11})',
+                r'/embed/([a-zA-Z0-9_-]{11})'):
+        m = re.search(pat, url)
+        if m:
+            return m.group(1)
+    return ''
+
+
+@staff_bp.route('/staff/api/yt/channels')
+def api_yt_channels():
+    """Return regular-YouTube channel -> videoId mapping."""
+    return jsonify(_yt_load())
+
+
+@staff_bp.route('/staff/api/yt/channels', methods=['POST'])
+def api_yt_save_channel():
+    """Add/update a regular-YouTube channel. Body: {name, video_id} or {name, url}."""
+    data = request.json or {}
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'Channel name required'}), 400
+    video_id = data.get('video_id', '').strip()
+    if not video_id and data.get('url'):
+        video_id = _yt_extract_id(data['url'])
+    if len(video_id) != 11:
+        video_id = _yt_extract_id(video_id) or video_id
+    if len(video_id) != 11:
+        return jsonify({'ok': False, 'error': 'Could not read a YouTube video ID from that'}), 400
+    current = _yt_load()
+    current['channels'][name] = video_id
+    result = _yt_save(current['channels'])
+    return jsonify({'ok': True, 'channels': result['channels']})
+
+
+@staff_bp.route('/staff/api/yt/channels', methods=['DELETE'])
+def api_yt_delete_channel():
+    """Remove a regular-YouTube channel. Body: {name}."""
+    data = request.json or {}
+    name = data.get('name', '').strip()
+    current = _yt_load()
+    current['channels'].pop(name, None)
+    result = _yt_save(current['channels'])
+    return jsonify({'ok': True, 'channels': result['channels']})
+
+
 @staff_bp.route('/staff/api/yttv/channels')
 def api_yttv_channels():
     """Return YTTV channel → videoId mapping."""
