@@ -5706,6 +5706,12 @@ function _bpInvoiceMeta(inv) {
   return { age: age, daysUntilDue: daysUntilDue };
 }
 
+// Money formatter that shows credits (negative) as -$X.XX rather than $-X.XX.
+function _bpMoney(n) {
+  n = n || 0;
+  return (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2);
+}
+
 // Render one <tr> row (shared by grouped and flat modes).
 // `effectiveDays` (optional): override days-until-due for the colored hint,
 // used when a vendor's Net Days setting overrides the OCR'd due_date.
@@ -5722,8 +5728,14 @@ function _bpRowHtml(inv, effectiveDays) {
     else if (d === 0) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(today)</span>'; }
     else if (d <= 3) { dueColor = '#b45309'; dueSuffix = ' <span style="font-size:11px;color:#b45309;font-weight:600">(in '+d+'d)</span>'; }
   }
+  var bal = (inv.balance != null) ? inv.balance : (inv.total || 0);
+  var isCredit = bal < 0;
   var payCell;
-  if (inv.payment_url) {
+  if (isCredit) {
+    // Credits are "unused" until applied — they net down the amount due, nothing to pay.
+    payCell = '<td style="padding:8px;text-align:center;white-space:nowrap">' +
+      '<span style="display:inline-block;padding:3px 10px;border-radius:12px;background:#22c55e15;color:#16a34a;font-size:11px;font-weight:600">Unused</span></td>';
+  } else if (inv.payment_url) {
     payCell = '<td style="padding:8px;text-align:center;white-space:nowrap">' +
       '<a href="' + inv.payment_url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" ' +
         'title="Open payment link" ' +
@@ -5739,12 +5751,13 @@ function _bpRowHtml(inv, effectiveDays) {
   }
   return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'rgba(0,0,0,0.03)\'" onmouseout="this.style.background=\'\'">' +
     '<td style="padding:8px"><input type="checkbox" data-id="' + inv.id + '" onchange="bpToggleSelect(this,' + inv.id + ')"' + (_bpSelected.has(inv.id) ? ' checked' : '') + '></td>' +
-    '<td style="padding:8px;color:#111827;font-weight:500">' + (inv.vendor_name||'—') + '</td>' +
+    '<td style="padding:8px;color:#111827;font-weight:500">' + (inv.vendor_name||'—') +
+      (isCredit ? ' <span style="display:inline-block;padding:1px 7px;border-radius:10px;background:var(--red-soft,#ef444415);color:var(--red);font-size:10px;font-weight:700;vertical-align:middle">CREDIT</span>' : '') + '</td>' +
     '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_number||'—') + '</td>' +
     '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_date||'—') + '</td>' +
     '<td style="padding:8px;color:' + dueColor + '">' + (inv.due_date||'—') + dueSuffix + '</td>' +
-    '<td style="padding:8px;text-align:right;color:#111827">$' + (inv.total||0).toFixed(2) + '</td>' +
-    '<td style="padding:8px;text-align:right;color:#111827;font-weight:600">$' + (inv.balance||0).toFixed(2) + '</td>' +
+    '<td style="padding:8px;text-align:right;color:' + (isCredit ? 'var(--red)' : '#111827') + '">' + _bpMoney(inv.total||0) + '</td>' +
+    '<td style="padding:8px;text-align:right;color:' + (isCredit ? 'var(--red)' : '#111827') + ';font-weight:600">' + _bpMoney(bal) + '</td>' +
     '<td style="padding:8px;text-align:center" title="Days since invoice date"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;color:' + ageColor + ';background:' + ageColor + '15">' + ageLabel + '</span></td>' +
     payCell +
     '</tr>';
@@ -5966,7 +5979,7 @@ function bpUpdateActionBar() {
     }
   });
   document.getElementById('bp-selected-summary').textContent =
-    _bpSelected.size + ' invoice' + (_bpSelected.size>1?'s':'') + ' selected — $' + total.toFixed(2) +
+    _bpSelected.size + ' invoice' + (_bpSelected.size>1?'s':'') + ' selected — ' + _bpMoney(total) +
     (mixed ? ' (multiple vendors)' : ' — ' + vendor);
   // Show/hide "Pay via Portal" button based on vendor portal_pay_enabled
   var portalBtn = document.getElementById('bp-btn-portal');

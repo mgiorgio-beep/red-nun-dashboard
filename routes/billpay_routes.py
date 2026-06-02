@@ -93,14 +93,23 @@ def get_billpay_invoices():
     today = date.today().isoformat()
 
     if status == "unpaid":
-        where.append("(si.payment_status = 'unpaid' OR si.payment_status IS NULL)")
-        where.append("(si.balance > 0 OR si.balance IS NULL)")
+        # Outstanding = unpaid positive-balance invoices PLUS unused credits.
+        # Credits carry a negative balance; they appear as their own line items
+        # and net down the amount due (mirrors the US Foods / vendor portal).
+        # This clause is additive — it never hides a positive-balance bill.
+        where.append(
+            "((( si.payment_status = 'unpaid' OR si.payment_status IS NULL ) "
+            "AND ( si.balance > 0 OR si.balance IS NULL )) "
+            "OR COALESCE(si.balance, si.total, 0) < 0)"
+        )
     elif status == "partial":
         where.append("si.payment_status = 'partial'")
     elif status == "pending_review":
         where.append("si.payment_status = 'pending_review'")
     elif status == "paid":
-        where.append("(si.payment_status = 'paid' OR si.balance <= 0)")
+        # A fully-paid invoice has a zero balance with a positive total.
+        # Exclude credits (negative balance/total) — they are "unused", not "paid".
+        where.append("(si.payment_status = 'paid' OR (si.balance <= 0 AND COALESCE(si.total, 0) > 0))")
     elif status == "overdue":
         where.append("(si.payment_status != 'paid' OR si.payment_status IS NULL)")
         where.append("si.due_date < ?")
