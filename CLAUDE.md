@@ -445,7 +445,9 @@ location = (request.json or {}).get('location', LOCATION)             # line ~20
 
 The two Beelinks share the **repo** but must operate **totally independently**. We have already been burned by cross-contamination: installing TV control from Dennis once **overwrote Chatham's config**. Rules:
 
-1. **Machine-local config is per-box and NOT in git:** `data/tvs.json`, `data/site_config.json`, and the `RN_LOCATION` env var. Each Beelink owns its own copies. Never commit a machine's local config and pull it onto the other.
+1. **Machine-local config is per-box and NOT in git:** `data/tvs.json` (gitignored) and the `RN_LOCATION` env var (set in each box's systemd unit). Each Beelink owns its own copy. **Never commit a machine's `tvs.json` and pull it onto the other** — that is exactly how the earlier overwrite happened.
+   - **How TV config stays separate:** `staff/staff.py` `_load_tvs()` reads that box's own `data/tvs.json`; if the file is absent it falls back to `DEFAULT_TVS_DENNIS` or `DEFAULT_TVS_CHATHAM` keyed on `RN_LOCATION`. So both the saved TV list and the fallback defaults are per-location. Edit TVs per box via `…/staff → Manage TVs`, which writes only that box's local `tvs.json`.
+   - There is no `data/site_config.json` in use — location is driven entirely by the `RN_LOCATION` env var, not a committed/synced file. (Earlier handoff notes mentioned `site_config.json`; that approach was dropped in favor of the env var.)
 2. **Do NOT run `monitoring/ddns.py` on Dennis.** Its `.env` `CF_SSH_RECORD_ID` was copied from Chatham and points at Chatham's `ssh.rednun.com` record — running it on Dennis would overwrite Chatham's DNS with the Dennis IP and break Chatham SSH. Dennis doesn't need DDNS; the Cloudflare tunnel handles IP changes.
 3. **Different services:** Chatham = `rednun` (full dashboard). Dennis = `rednun-staff` (staff/TV only). Restart the right one.
 4. **TODO (rotate secret):** the `CF_API_TOKEN` in `.env` was exposed in a chat transcript. Generate a new token in Cloudflare and update `.env` on both Beelinks. Not urgent, but it's a live DNS-edit token.

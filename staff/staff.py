@@ -876,7 +876,10 @@ def set_lights():
 
 # ── Sonos ──
 
-SONOS_IP = '10.1.10.242'
+# Per-instance amp IP. Defaults to Chatham's Dining Room amp; set RN_SONOS_IP in
+# the Dennis Beelink's rednun-staff systemd unit to point at its own amp.
+# Machine-local, same pattern as RN_LOCATION — keeps the two boxes independent.
+SONOS_IP = os.environ.get('RN_SONOS_IP', '10.1.10.242').strip()
 
 SONOS_SID_MAP = {
     '9': 'Spotify', '12': 'Spotify', '160': 'Spotify',
