@@ -6,22 +6,28 @@
 ```
 GitHub:  https://github.com/mgiorgio-beep/red-nun-dashboard
 Local:   G:\My Drive\Red NUn Dashboard           (Windows working copy, in Google Drive)
-Server:  /opt/red-nun-dashboard                   (Beelink SER5, Chatham)
-Live at: https://dashboard.rednun.com
+Server:  /opt/red-nun-dashboard                   (BOTH Beelinks — Chatham SER5 + Dennis ME Mini)
+Live at: https://dashboard.rednun.com             (Chatham, full dashboard)
+         https://dennis.rednun.com/staff          (Dennis, staff/TV app only)
 ```
+Both Beelinks pull from the same repo. They run **different services** and use **machine-local config** so they stay fully independent (see "Two Beelinks — Keep Them Separate" below).
 
-### SSH to server
+### SSH to servers
 ```
-ssh -p 2222 rednun@ssh.rednun.com
+Chatham:  ssh -p 2222 rednun@ssh.rednun.com        # local IP 10.1.10.83
+Dennis:   ssh -p 2222 rednun@10.1.10.84            # on-site
+          ssh -p 2222 rednun@ssh-dennis.rednun.com # remote (Cloudflare tunnel, IP-proof)
 ```
-Local IP: 10.1.10.83 (for on-network access).
 
 ### Deploy workflow
 ```
 1. Edit locally in G:\My Drive\Red NUn Dashboard
 2. git add / git commit / git push
-3. On server: cd /opt/red-nun-dashboard && git pull && sudo systemctl restart rednun
+3. Chatham: cd /opt/red-nun-dashboard && git pull && sudo systemctl restart rednun
+4. Dennis:  cd /opt/red-nun-dashboard && git pull && sudo systemctl restart rednun-staff
 ```
+Restart the service that runs on each box: `rednun` (Chatham, full dashboard) vs
+`rednun-staff` (Dennis, staff/TV app). A shared-code change usually means pulling on both.
 
 ---
 
@@ -406,10 +412,51 @@ Dev flow matches the dashboard repo: edit locally in Drive, `git commit`, `git p
 
 ---
 
-## Planned / Not Yet Built
+## Dennis Port Beelink (Staff/TV App) — LIVE
 
-### Second Beelink (Dennis Port)
-Beelink ME Mini N95 earmarked for Dennis Port. Will run the **TV/specials app for the Dennis location** (mirror of the Chatham TV Control setup). Not built yet — no service, no config, no DNS. When it happens, model it on the existing Chatham `rednun-tv.service` and `/opt/tv_control/` layout.
+Second Beelink (ME Mini N95) at the Dennis Port location, mirroring the Chatham SER5. **Live and running.** It serves only the staff/TV specials app — NOT the full dashboard.
+
+- **Local IP:** `10.1.10.84` (DHCP reservation, MAC `78:55:36:04:10:5d`)
+- **SSH (on-site):** `ssh -p 2222 rednun@10.1.10.84`
+- **SSH (remote):** WAN port-forward, or the IP-proof Cloudflare tunnel `ssh-dennis.rednun.com`
+- **Live at:** `https://dennis.rednun.com/staff` (staff + TV specials only)
+- **App path:** `/opt/red-nun-dashboard` (same repo as Chatham)
+- **Runs:** `staff_server.py` (loads only `staff_bp` + `tv_power_bp`) via gunicorn under systemd service **`rednun-staff`** on port 8080 — distinct from Chatham's full `rednun` service.
+- **Cloudflare tunnel:** `dennis` (ID `82009d56-ad32-4d7f-86ad-66e426b70f7e`): `dennis.rednun.com` → `localhost:8080`, `ssh-dennis.rednun.com` → `ssh://localhost:2222`.
+- **Sports guide:** scraped only on Chatham. Dennis pulls it nightly at **5:15 AM** via cron (scp from Chatham → `data/sports_guide.json`).
+
+### Service management (Dennis)
+```bash
+sudo systemctl restart rednun-staff   # staff/TV app (Dennis)
+sudo systemctl status  rednun-staff
+journalctl -u rednun-staff -f
+```
+
+### Location default (how Dennis knows it's Dennis)
+`staff/staff.py` reads a **per-machine env var**, NOT a committed file:
+```python
+LOCATION = os.environ.get('RN_LOCATION', 'chatham').strip().lower()   # line ~34
+...
+location = (request.json or {}).get('location', LOCATION)             # line ~200 (Toast specials sync)
+```
+`RN_LOCATION=dennis` is set in the Dennis `rednun-staff` systemd unit. Chatham leaves it unset → falls back to `chatham` (unchanged). An explicit `location` in the request still overrides. This is deliberately an env var (not a file in git) so one box can never push its location onto the other.
+
+## ⛔ Two Beelinks — Keep Them Separate
+
+The two Beelinks share the **repo** but must operate **totally independently**. We have already been burned by cross-contamination: installing TV control from Dennis once **overwrote Chatham's config**. Rules:
+
+1. **Machine-local config is per-box and NOT in git:** `data/tvs.json`, `data/site_config.json`, and the `RN_LOCATION` env var. Each Beelink owns its own copies. Never commit a machine's local config and pull it onto the other.
+2. **Do NOT run `monitoring/ddns.py` on Dennis.** Its `.env` `CF_SSH_RECORD_ID` was copied from Chatham and points at Chatham's `ssh.rednun.com` record — running it on Dennis would overwrite Chatham's DNS with the Dennis IP and break Chatham SSH. Dennis doesn't need DDNS; the Cloudflare tunnel handles IP changes.
+3. **Different services:** Chatham = `rednun` (full dashboard). Dennis = `rednun-staff` (staff/TV only). Restart the right one.
+4. **TODO (rotate secret):** the `CF_API_TOKEN` in `.env` was exposed in a chat transcript. Generate a new token in Cloudflare and update `.env` on both Beelinks. Not urgent, but it's a live DNS-edit token.
+
+### On-site setup still pending (do not attempt remotely)
+- Enter Dennis DirecTV / Roku / Samsung TV IPs in `dennis.rednun.com/staff` → Manage TVs (`data/tvs.json`).
+- Set up Fire TV ADB pointing at the Dennis Fire TVs.
+
+---
+
+## Planned / Not Yet Built
 
 ### Claude Code Channels on Beelink
 Goal: flat-subscription replacement for per-token API costs. Not yet set up.
