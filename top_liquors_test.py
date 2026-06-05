@@ -58,6 +58,16 @@ cat_col = max(cat_candidates, key=nonnull) if cat_candidates else None
 print(f"using -> name={name_col}  qty={qty_col}  category={cat_col}  "
       f"location={loc_col}  date={date_col}  voided={void_col}\n")
 
+# ---- show exact location values so we filter on the right string ----
+if loc_col:
+    print(f"--- distinct '{loc_col}' values ---")
+    for r in cur.execute(
+        f"SELECT {loc_col}, COUNT(*) c FROM order_items "
+        f"GROUP BY {loc_col} ORDER BY c DESC"
+    ).fetchall():
+        print(f"  {str(r[0])[:30]:32} {r[1]}")
+    print()
+
 # ---- 2. show the beverage-ish categories so we can sanity-check the filter ----
 if cat_col:
     print(f"--- distinct '{cat_col}' values (top 50 by line count) ---")
@@ -76,8 +86,8 @@ if date_col:
     base.append(f"{date_col} >= strftime('%Y%m%d','now', ?)")
     params.append(f"-{DAYS} days")
 if LOCATION and loc_col:
-    base.append(f"LOWER({loc_col}) = ?")
-    params.append(LOCATION)
+    base.append(f"LOWER({loc_col}) LIKE ?")     # substring: 'dennis' matches 'Dennis Port'
+    params.append(f"%{LOCATION}%")
 if void_col:
     base.append(f"({void_col} IS NULL OR {void_col} IN (0,'0','false','False'))")
 
