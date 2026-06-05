@@ -39,20 +39,31 @@ def pick(*candidates):
 
 name_col = pick("name", "item_name", "menu_item_name", "display_name")
 qty_col  = pick("quantity", "qty", "count")
-cat_col  = pick("sales_category", "sales_category_name", "category", "menu_group",
-                "menu_group_name", "group_name")
 loc_col  = pick("location", "location_name")
 date_col = pick("business_date", "businessDate", "order_date")
+void_col = pick("voided", "is_voided", "void")
+
+# choose the category-like column that actually has data (category was all NULL)
+def nonnull(c):
+    if not c:
+        return 0
+    return cur.execute(
+        f"SELECT COUNT(*) FROM order_items WHERE {c} IS NOT NULL AND {c} != ''"
+    ).fetchone()[0]
+
+cat_candidates = [c for c in ("menu_group", "menu_group_name", "category",
+                              "sales_category", "group_name") if c in cols]
+cat_col = max(cat_candidates, key=nonnull) if cat_candidates else None
 
 print(f"using -> name={name_col}  qty={qty_col}  category={cat_col}  "
-      f"location={loc_col}  date={date_col}\n")
+      f"location={loc_col}  date={date_col}  voided={void_col}\n")
 
-# ---- 2. show the beverage-ish sales categories so we can sanity-check the filter ----
+# ---- 2. show the beverage-ish categories so we can sanity-check the filter ----
 if cat_col:
-    print(f"--- distinct '{cat_col}' values (top 40 by line count) ---")
+    print(f"--- distinct '{cat_col}' values (top 50 by line count) ---")
     rows = cur.execute(
         f"SELECT {cat_col}, COUNT(*) c FROM order_items "
-        f"GROUP BY {cat_col} ORDER BY c DESC LIMIT 40"
+        f"GROUP BY {cat_col} ORDER BY c DESC LIMIT 50"
     ).fetchall()
     for r in rows:
         print(f"  {str(r[0])[:40]:42} {r[1]}")
@@ -67,6 +78,8 @@ if date_col:
 if LOCATION and loc_col:
     where.append(f"LOWER({loc_col}) = ?")
     params.append(LOCATION)
+if void_col:
+    where.append(f"({void_col} IS NULL OR {void_col} IN (0,'0','false','False'))")
 if cat_col:
     like = " OR ".join([f"LOWER({cat_col}) LIKE ?" for _ in LIQUOR_HINTS])
     where.append("(" + like + ")")
