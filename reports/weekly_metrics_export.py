@@ -98,6 +98,44 @@ def _recipe_margins(limit=15):
         conn.close()
 
 
+# Non-product line items (fees/taxes/surcharges) that pollute the price-creep list.
+_FEE_TERMS = (
+    "sales tax", "delivery adjustment", "adjustment", "defe charge",
+    "energy, insurance", "compliance", "surcharge", "deposit", "freight",
+    "fuel", "gratuity", "service charge",
+)
+
+
+def _is_fee(name):
+    n = (name or "").lower()
+    return any(term in n for term in _FEE_TERMS)
+
+
+def _clean_price_creep(creep, real_limit=12, review_limit=10):
+    """Strip non-product fees + same-day noise; split likely unit-mismatches from real moves."""
+    if not isinstance(creep, dict) or "increases" not in creep:
+        return creep  # error payload or unexpected shape — pass through
+
+    def split(items, is_mismatch):
+        real, review = [], []
+        for it in items or []:
+            if _is_fee(it.get("product_name")):
+                continue
+            if it.get("current_date") and it.get("current_date") == it.get("previous_date"):
+                continue  # same-day comparison = noise
+            (review if is_mismatch(it.get("change_pct")) else real).append(it)
+        return real[:real_limit], review[:review_limit]
+
+    inc_real, inc_review = split(creep.get("increases"), lambda p: p is not None and p > 100)
+    dec_real, dec_review = split(creep.get("decreases"), lambda p: p is not None and p < -60)
+    return {
+        "increases_real": inc_real,
+        "increases_review_unit_mismatch": inc_review,
+        "decreases_real": dec_real,
+        "decreases_review_unit_mismatch": dec_review,
+    }
+
+
 def build_window():
     """Trailing WINDOW_DAYS full business days ending yesterday (YYYYMMDD)."""
     today_et = datetime.now(ZoneInfo("America/New_York")).date()
@@ -112,8 +150,8 @@ def export():
         "exported_at": datetime.now().isoformat(),
         "window": {"start": start_date, "end": end_date, "days": WINDOW_DAYS},
         "locations": {},
-        # Price creep is vendor-wide (not location-specific in the price history).
-        "price_creep": _safe("price_movers", get_price_movers, limit=15),
+        # Price creep is vendor-wide; filtered to drop fees + flag unit-mismatch noise.
+        "price_creep": _clean_price_creep(_safe("price_movers", get_price_movers, limit=60)),
         "recipe_margins": _safe("recipe_margins", _recipe_margins),
     }
 
