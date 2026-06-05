@@ -98,6 +98,61 @@ def _recipe_margins(limit=15):
         conn.close()
 
 
+def _theoretical_food_cost(location, start_date, end_date):
+    """
+    Food cost % from recipe costs via the pmix mapping (mirrors /api/pmix/report).
+    Only menu items mapped to a recipe with cost > 0 are counted; coverage_pct says
+    how much of the window's revenue that represents, so the number is trustworthy.
+    Revenue uses SUM(price) to match the existing PMIX report convention.
+    """
+    conn = get_connection()
+    try:
+        total_rev = conn.execute(
+            "SELECT COALESCE(SUM(price), 0) FROM order_items "
+            "WHERE voided = 0 AND location = ? AND business_date BETWEEN ? AND ?",
+            (location, start_date, end_date),
+        ).fetchone()[0] or 0
+
+        rows = conn.execute(
+            """
+            SELECT r.category AS category,
+                   COALESCE(SUM(oi.price), 0) AS revenue,
+                   COALESCE(SUM(oi.quantity * r.cost_per_serving * COALESCE(pm.multiplier, 1)), 0) AS cost
+            FROM order_items oi
+            JOIN pmix_mapping pm ON pm.menu_item_name = oi.item_name
+            JOIN recipes r ON pm.recipe_id = r.id
+            WHERE oi.voided = 0 AND oi.location = ?
+              AND oi.business_date BETWEEN ? AND ?
+              AND r.cost_per_serving > 0
+            GROUP BY r.category
+            ORDER BY revenue DESC
+            """,
+            (location, start_date, end_date),
+        ).fetchall()
+
+        by_cat, costed_rev, total_cost = [], 0.0, 0.0
+        for r in rows:
+            rev, cost = (r["revenue"] or 0), (r["cost"] or 0)
+            costed_rev += rev
+            total_cost += cost
+            by_cat.append({
+                "category": r["category"],
+                "revenue": round(rev, 2),
+                "cost": round(cost, 2),
+                "food_cost_pct": round(cost / rev * 100, 1) if rev > 0 else None,
+            })
+
+        return {
+            "overall_food_cost_pct": round(total_cost / costed_rev * 100, 1) if costed_rev > 0 else None,
+            "by_category": by_cat,
+            "costed_revenue": round(costed_rev, 2),
+            "window_revenue": round(total_rev, 2),
+            "coverage_pct": round(costed_rev / total_rev * 100, 1) if total_rev > 0 else 0,
+        }
+    finally:
+        conn.close()
+
+
 # Non-product line items (fees/taxes/surcharges) that pollute the price-creep list.
 _FEE_TERMS = (
     "sales tax", "delivery adjustment", "adjustment", "defe charge",
@@ -162,6 +217,7 @@ def export():
             "labor_daily": _safe("daily_labor", get_daily_labor, loc, start_date, end_date),
             "labor_by_role": _safe("labor_by_role", get_labor_by_role, loc, start_date, end_date),
             "pour_cost": _safe("pour_cost", get_pour_cost_by_category, loc, start_date, end_date),
+            "food_cost_theoretical": _safe("food_cost", _theoretical_food_cost, loc, start_date, end_date),
             "sales_mix": _safe("sales_mix", get_sales_mix, loc, start_date, end_date),
         }
 
