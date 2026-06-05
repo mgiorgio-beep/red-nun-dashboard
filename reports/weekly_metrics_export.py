@@ -53,8 +53,11 @@ from reports.analytics import (
 )
 from integrations.toast.data_store import get_connection
 
-# Default output: Drive-synced cowork mirror (bisyncs to G:\My Drive\Red NUn Dashboard\reports).
-DEFAULT_OUTPUT = os.path.expanduser("~/cowork/red-nun-dashboard/reports/weekly_metrics.json")
+# Default output: the diagnostics/ folder, which the rclone bisync filter already carries
+# to Drive (same channel as scraper_health.md). reports/ is NOT in the bisync filter, so
+# writing there never reaches G:\My Drive\Red NUn Dashboard. Lands at
+# G:\My Drive\Red NUn Dashboard\diagnostics\weekly_metrics.json.
+DEFAULT_OUTPUT = os.path.expanduser("~/cowork/red-nun-dashboard/diagnostics/weekly_metrics.json")
 LOCATIONS = ["chatham", "dennis"]
 WINDOW_DAYS = int(os.getenv("METRICS_DAYS", "7"))
 
