@@ -1620,7 +1620,7 @@ Return ONLY the JSON array, no other text. Example:
         if isinstance(deductions, str):
             try:
                 deductions = json_mod.loads(deductions)
-            except:
+            except (ValueError, TypeError):
                 deductions = {}
 
         ytd = rec.get("ytd", {})
@@ -1875,14 +1875,14 @@ def print_all_payroll():
         if isinstance(ded, str):
             try:
                 ded = json_mod.loads(ded)
-            except:
+            except (ValueError, TypeError):
                 ded = {}
 
         ytd_raw = c["ytd_data"] or "{}"
         if isinstance(ytd_raw, str):
             try:
                 ytd_d = json_mod.loads(ytd_raw)
-            except:
+            except (ValueError, TypeError):
                 ytd_d = {}
         else:
             ytd_d = ytd_raw or {}

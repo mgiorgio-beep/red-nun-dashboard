@@ -66,14 +66,14 @@ def delete_location(loc_id):
 
     # Delete associated product-location mappings first
     conn.execute(
-        "DELETE FROM product_storage_locations WHERE location_id = ?",
-        (location_id,)
+        "DELETE FROM product_storage_locations WHERE storage_location_id = ?",
+        (loc_id,)
     )
 
     # Delete the location
     conn.execute(
         "DELETE FROM storage_locations WHERE id = ?",
-        (location_id,)
+        (loc_id,)
     )
 
     conn.commit()

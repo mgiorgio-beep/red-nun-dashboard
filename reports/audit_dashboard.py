@@ -71,7 +71,7 @@ for f in py_files:
             if 'Flask(__name__)' in content or 'Flask( __name__)' in content:
                 main_app = f
                 info(f"Main Flask app: {f}")
-    except:
+    except Exception:
         pass
 
 if not main_app:
@@ -202,7 +202,7 @@ else:
             count = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
             if count > 0:
                 info(f"  {table}: {count:,} rows")
-        except:
+        except Exception:
             info(f"  {table}: (error reading)")
     
     conn.close()
@@ -453,7 +453,7 @@ try:
         warn(f"Disk space getting tight: {free_gb:.1f}GB free ({use_pct:.0f}% used)")
     else:
         ok(f"Disk space OK: {free_gb:.1f}GB free ({use_pct:.0f}% used)")
-except:
+except Exception:
     pass
 
 
@@ -472,7 +472,7 @@ try:
             info(f"  {line.strip()[:100]}")
     else:
         warn("gunicorn is NOT running — systemctl restart rednun")
-except:
+except Exception:
     warn("Could not check gunicorn status")
 
 # Check port 8080
@@ -482,7 +482,7 @@ try:
         ok("Port 8080 is listening")
     else:
         warn("Port 8080 not listening — service may be down")
-except:
+except Exception:
     pass
 
 # Check cron jobs
@@ -495,7 +495,7 @@ try:
                 info(f"  {line.strip()}")
     else:
         info("No cron jobs configured")
-except:
+except Exception:
     pass
 
 # Check ffmpeg (needed for inventory)
@@ -505,7 +505,7 @@ try:
         ok(f"ffmpeg installed: {result.stdout.strip()}")
     else:
         warn("ffmpeg NOT installed — needed for inventory video processing",)
-except:
+except Exception:
     pass
 
 # Check Whisper
@@ -519,7 +519,7 @@ try:
         ok("openai-whisper is installed")
     else:
         info("openai-whisper not yet installed (needed for inventory audio)")
-except:
+except Exception:
     pass
 
 # Check rapidfuzz
@@ -533,7 +533,7 @@ try:
         ok("rapidfuzz is installed")
     else:
         info("rapidfuzz not yet installed (needed for inventory product matching)")
-except:
+except Exception:
     pass
 
 

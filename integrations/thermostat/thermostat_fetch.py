@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """Fetch thermostat data and cache to JSON file. Run via cron every 5 min."""
 import json
+import os
 import sys
 import somecomfort
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+
+HONEYWELL_USER = os.getenv('HONEYWELL_USER')
+HONEYWELL_PASS = os.getenv('HONEYWELL_PASS')
 
 DEVICE_LABELS = {
     6583982: "Restaurant",
@@ -15,8 +22,12 @@ LOCATIONS = {
     3272967: "chatham",
 }
 
+if not HONEYWELL_USER or not HONEYWELL_PASS:
+    print("ERROR: HONEYWELL_USER / HONEYWELL_PASS not set in .env", file=sys.stderr)
+    sys.exit(1)
+
 try:
-    client = somecomfort.SomeComfort('mike@rednun.com', 'Mollypj2029')
+    client = somecomfort.SomeComfort(HONEYWELL_USER, HONEYWELL_PASS)
 except Exception as e:
     print(f"Login failed: {e}", file=sys.stderr)
     sys.exit(1)
