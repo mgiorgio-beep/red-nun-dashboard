@@ -69,34 +69,39 @@ if cat_col:
         print(f"  {str(r[0])[:40]:42} {r[1]}")
     print()
 
-# ---- 3. top liquor items by quantity sold ----
-where = []
+# ---- 3. top items by quantity sold (category cols are empty, so filter by NAME) ----
+base = []
 params = []
 if date_col:
-    where.append(f"{date_col} >= strftime('%Y%m%d','now', ?)")
+    base.append(f"{date_col} >= strftime('%Y%m%d','now', ?)")
     params.append(f"-{DAYS} days")
 if LOCATION and loc_col:
-    where.append(f"LOWER({loc_col}) = ?")
+    base.append(f"LOWER({loc_col}) = ?")
     params.append(LOCATION)
 if void_col:
-    where.append(f"({void_col} IS NULL OR {void_col} IN (0,'0','false','False'))")
-if cat_col:
-    like = " OR ".join([f"LOWER({cat_col}) LIKE ?" for _ in LIQUOR_HINTS])
-    where.append("(" + like + ")")
-    params += [f"%{h}%" for h in LIQUOR_HINTS]
+    base.append(f"({void_col} IS NULL OR {void_col} IN (0,'0','false','False'))")
 
-where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+base_sql = ("WHERE " + " AND ".join(base)) if base else ""
 qexpr = f"SUM({qty_col})" if qty_col else "COUNT(*)"
+hdr = f"(last {DAYS} days{', '+LOCATION if LOCATION else ''})"
 
-sql = (f"SELECT {name_col} AS item, {qexpr} AS sold "
-       f"FROM order_items {where_sql} "
-       f"GROUP BY {name_col} ORDER BY sold DESC LIMIT 40")
+def run(title, extra_sql="", extra_params=()):
+    sql = (f"SELECT {name_col} AS item, {qexpr} AS sold FROM order_items "
+           f"{base_sql} {extra_sql} GROUP BY {name_col} "
+           f"ORDER BY sold DESC LIMIT 80")
+    print(f"--- {title} {hdr} ---")
+    for i, r in enumerate(cur.execute(sql, list(params)+list(extra_params)).fetchall(), 1):
+        print(f"  {i:>2}. {str(r[0])[:50]:52} {r[1]}")
+    print()
 
-print(f"--- TOP LIQUOR/COCKTAIL ITEMS  (last {DAYS} days"
-      f"{', '+LOCATION if LOCATION else ''}) ---")
-for i, r in enumerate(cur.execute(sql, params).fetchall(), 1):
-    print(f"  {i:>2}. {str(r[0])[:45]:47} {r[1]}")
+# (a) everything, so we can see the whole drink/food mix
+run("TOP 80 ITEMS OVERALL")
+
+# (b) items whose NAME looks like a liquor/cocktail
+name_like = " OR ".join(["LOWER(%s) LIKE ?" % name_col for _ in LIQUOR_HINTS])
+extra = ("AND (" + name_like + ")") if base_sql else ("WHERE (" + name_like + ")")
+run("TOP ITEMS WITH LIQUOR/COCKTAIL-ISH NAMES", extra, [f"%{h}%" for h in LIQUOR_HINTS])
 
 conn.close()
-print("\nThese are DRINKS, not bottles. Send me this output and I'll map the "
-      "top drinks back to the ~15 spirit bottles you should physically count.")
+print("These are DRINKS, not bottles. Paste me BOTH lists and I'll map the top "
+      "drinks back to the ~15 spirit bottles you should physically count.")
