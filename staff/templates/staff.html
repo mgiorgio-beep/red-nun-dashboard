@@ -843,11 +843,11 @@ tr.game-final td{opacity:0.4}
     <div style="padding:0 16px 16px" id="manage-tv-list"></div>
 </div>
 
-<!-- Drawer: YouTube TV Channel Picker -->
+<!-- Drawer: YouTube Channel Picker -->
 <div id="drawer-yttv" class="drawer dark">
     <span class="drawer-handle"></span>
     <div class="drawer-title">
-        <span style="color:#FF0000">YouTube TV</span>
+        <span style="color:#FF0000">YouTube</span>
         <button class="drawer-cancel" onclick="closeDrawers()">Cancel</button>
     </div>
     <div id="yttv-tv-label" style="padding:0 16px 8px;font-size:12px;color:#8E8E93"></div>
@@ -959,7 +959,7 @@ fetch('/staff/api/tvs').then(function(r){return r.json()}).then(function(data){
 fetch('/staff/api/roku/apps').then(function(r){return r.json()}).then(function(data){
     rokuAppIds = data;
 }).catch(function(){});
-fetch('/staff/api/yttv/channels').then(function(r){return r.json()}).then(function(data){
+fetch('/staff/api/yt/channels').then(function(r){return r.json()}).then(function(data){
     yttvChannels = data.channels || {};
 }).catch(function(){});
 function loadAutotunes() {
@@ -1270,11 +1270,11 @@ function showWhatsOn() {
         if(hasDtv) {
             (function(t){ card.onclick = function(){ openDtvRemote(t); }; })(tv);
         }
-        // YouTube TV button for Roku TVs
+        // YouTube button for Roku TVs
         if(tv.roku_ip) {
             var ytBtn = document.createElement('button');
             ytBtn.className = 'wo-yttv-btn';
-            ytBtn.textContent = 'YouTube TV';
+            ytBtn.textContent = 'YouTube';
             (function(t){
                 ytBtn.onclick = function(e){
                     e.stopPropagation();
@@ -1305,8 +1305,8 @@ function openYttvPicker(tv) {
     var launchBtn = document.createElement('button');
     launchBtn.className = 'yttv-ch-btn';
     launchBtn.style.background = '#FF0000';
-    launchBtn.innerHTML = '<span>Launch YouTube TV</span><span class="yttv-ch-label">home screen</span>';
-    launchBtn.onclick = function(){ launchYttv(tv, '', 'YouTube TV'); };
+    launchBtn.innerHTML = '<span>Launch YouTube</span><span class="yttv-ch-label">home screen</span>';
+    launchBtn.onclick = function(){ launchYttv(tv, '', 'YouTube'); };
     list.appendChild(launchBtn);
 
     // Channel buttons
@@ -1331,9 +1331,9 @@ function openYttvPicker(tv) {
     var addSec = document.createElement('div');
     addSec.className = 'yttv-cookies-section';
     addSec.innerHTML = '<div style="font-size:11px;color:#8E8E93;font-weight:600;text-transform:uppercase;letter-spacing:.3px">Add / Update Channel</div>' +
-        '<div style="font-size:11px;color:#636366;margin-top:4px">Go to tv.youtube.com/live, click a channel, copy the URL</div>' +
+        '<div style="font-size:11px;color:#636366;margin-top:4px">Paste any YouTube link — youtube.com, youtu.be or m.youtube.com</div>' +
         '<input class="yttv-cookies-input" id="yttv-add-name" placeholder="Channel name (e.g. ESPN)" style="min-height:auto;padding:10px 12px;resize:none">' +
-        '<input class="yttv-cookies-input" id="yttv-add-url" placeholder="Paste URL from tv.youtube.com/watch/..." style="min-height:auto;padding:10px 12px;resize:none">' +
+        '<input class="yttv-cookies-input" id="yttv-add-url" placeholder="Paste any YouTube link" style="min-height:auto;padding:10px 12px;resize:none">' +
         '<button class="yttv-cookies-save" onclick="saveYttvChannel()">Add Channel</button>';
     list.appendChild(addSec);
 
@@ -1343,8 +1343,8 @@ function openYttvPicker(tv) {
 
 function launchYttv(tv, videoId, label) {
     closeDrawers();
-    var appId = rokuAppIds['YouTube TV'] || '195316';
-    var msg = videoId ? ('Tuning ' + tv.name + ' \u2192 ' + label) : ('Launching YouTube TV on ' + tv.name);
+    var appId = '837';
+    var msg = videoId ? ('Tuning ' + tv.name + ' \u2192 ' + label) : ('Launching YouTube on ' + tv.name);
     showToast(msg);
 
     // Wake TV
@@ -1367,7 +1367,7 @@ function launchYttv(tv, videoId, label) {
     }).then(function(r){ return r.json(); })
     .then(function(d){
         if(d.status === 'ok') {
-            tv.channel = label || 'YouTube TV';
+            tv.channel = label || 'YouTube';
             updateBadges();
         } else {
             showToast('Launch failed');
@@ -1380,7 +1380,7 @@ window.saveYttvChannel = function(){
     var url = document.getElementById('yttv-add-url').value.trim();
     if(!name) { showToast('Enter channel name'); return; }
     if(!url) { showToast('Paste the URL'); return; }
-    fetch('/staff/api/yttv/channels', {
+    fetch('/staff/api/yt/channels', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({name: name, url: url})
