@@ -109,6 +109,27 @@ def _age_str(dt):
     return f"{delta.seconds // 60}m ago"
 
 
+SPORTS_GUIDE_PATH = os.path.join(_REPO_ROOT, "scraping", "data", "sports_guide.json")
+
+
+def _sports_guide_problem():
+    """Reason string if the Fanzo sports guide JSON is missing/stale, else None."""
+    path = SPORTS_GUIDE_PATH
+    if not os.path.exists(path):
+        return "MISSING — sports_guide.json not found (Fanzo scrape never produced output)"
+    ts = None
+    try:
+        with open(path) as f:
+            ts = _parse_dt(json.load(f).get("updated_at"))
+    except Exception:
+        ts = None
+    if ts is None:
+        ts = datetime.fromtimestamp(os.path.getmtime(path))
+    if ts < datetime.now() - timedelta(hours=STALE_HOURS):
+        return f"STALE — sports guide not updated in over {STALE_HOURS}h (last {_age_str(ts)})"
+    return None
+
+
 def find_problems():
     """Return {vendor_name: reason} for every expired or stale scraper."""
     from integrations.toast.data_store import get_connection
@@ -133,6 +154,9 @@ def find_problems():
             problems[vendor] = "NEVER scraped successfully"
         elif last_ok < cutoff:
             problems[vendor] = f"STALE — no successful scrape in over {STALE_HOURS}h (last {_age_str(last_ok)})"
+    sg = _sports_guide_problem()
+    if sg:
+        problems["Sports Guide (Fanzo)"] = sg
     return problems
 
 

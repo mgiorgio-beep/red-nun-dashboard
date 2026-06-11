@@ -142,6 +142,25 @@ _LOG_NAME = {
 }
 
 
+def _sports_guide_status():
+    """(_ok, message) for the Fanzo sports guide JSON freshness (mirrors STALE_HOURS)."""
+    from datetime import timedelta
+    path = os.path.join(_REPO_ROOT, "scraping", "data", "sports_guide.json")
+    if not os.path.exists(path):
+        return False, "MISSING — sports_guide.json not found"
+    ts = None
+    try:
+        with open(path) as f:
+            ts = _parse_dt(json.load(f).get("updated_at"))
+    except Exception:
+        ts = None
+    if ts is None:
+        ts = datetime.fromtimestamp(os.path.getmtime(path))
+    if ts < datetime.now() - timedelta(hours=STALE_HOURS):
+        return False, f"STALE — last update {_age(ts.isoformat())}"
+    return True, f"fresh — updated {_age(ts.isoformat())}"
+
+
 def build_report():
     sessions = _read_sessions()
     run_text = _latest_run_text()
@@ -159,6 +178,8 @@ def build_report():
     out.append("## Summary")
     out.append("")
     out.append(f"- Vendors: **{len(sessions)}** · Healthy: **{healthy_n}** · Problems: **{len(problems)}**")
+    _sg_ok, _sg_msg = _sports_guide_status()
+    out.append(f"- {'✅' if _sg_ok else '🔴'} Sports Guide (Fanzo): {_sg_msg}")
     if problems:
         for r, p in problems:
             out.append(f"- 🔴 **{r.get('vendor_name')}** — {p}")
