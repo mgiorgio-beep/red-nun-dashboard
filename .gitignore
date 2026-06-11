@@ -58,3 +58,12 @@ data/tvs.json
 
 # Cowork GitHub token (lives in Drive only — NEVER commit)
 .cowork_github_token*
+
+# server-side runtime state (accumulates on live boxes; never commit)
+.email_receipt_poller_manifest.json
+data/coa.csv
+data/site_config.json
+data/yt_channels.json
+data/yttv_channels.json
+monitoring/receipt_poller_audit.jsonl
+monitoring/receipt_reviews.jsonl
