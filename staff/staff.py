@@ -1121,6 +1121,8 @@ _sonos_linking = {}  # service_name -> MusicService instance (during linking)
 _SONOS_LINK_FILE = '/tmp/rednun_sonos_linking.json'  # shared across gunicorn workers
 _sonos_svc_cache = {}  # service_name -> (MusicService, timestamp)
 _SONOS_SVC_TTL = 300  # cache linked service objects for 5 min
+_sonos_svc_fail = {}  # service_name -> timestamp of last failed SMAPI check
+_SONOS_FAIL_TTL = 60  # don't re-test a failing service for 60s
 
 
 def _is_service_linked(name):
@@ -1146,6 +1148,10 @@ def _get_music_service(name):
     cached = _sonos_svc_cache.get(name)
     if cached and time.time() - cached[1] < _SONOS_SVC_TTL:
         return cached[0]
+    # Don't hammer SMAPI for a service that just failed (stale/dead tokens)
+    failed_at = _sonos_svc_fail.get(name)
+    if failed_at and time.time() - failed_at < _SONOS_FAIL_TTL:
+        return None
     try:
         svc = MusicService(name)
         # Use raw SOAP call to test — SoCo's get_metadata parser is buggy
@@ -1154,18 +1160,26 @@ def _get_music_service(name):
             [("id", "root"), ("index", 0), ("count", 1), ("recursive", 0)],
         )
         _sonos_svc_cache[name] = (svc, time.time())
+        _sonos_svc_fail.pop(name, None)
         return svc
     except Exception:
         _sonos_svc_cache.pop(name, None)
+        _sonos_svc_fail[name] = time.time()
         return None
 
 
 @staff_bp.route('/staff/api/sonos/services')
 def sonos_services():
-    """List music services with their linked status."""
+    """List music services with their linked status.
+
+    Token presence alone is NOT enough: SoCo keys tokens by
+    service_id#household_id, and re-setting up the Sonos system creates a new
+    household ID — leaving stale tokens that look linked but fail every SMAPI
+    call. So if tokens exist, verify with a real (cached) SMAPI test.
+    """
     result = []
     for name in SONOS_SERVICES:
-        linked = _is_service_linked(name)
+        linked = _is_service_linked(name) and _get_music_service(name) is not None
         result.append({'name': name, 'linked': linked})
     return jsonify({'services': result})
 
@@ -1224,6 +1238,9 @@ def sonos_link_complete():
     try:
         svc.complete_authentication()
         _sonos_linking.pop(name, None)
+        # Fresh tokens — drop any cached failure/instance so the new link is used
+        _sonos_svc_fail.pop(name, None)
+        _sonos_svc_cache.pop(name, None)
         # Clean up shared file
         try:
             with open(_SONOS_LINK_FILE, 'r') as f:

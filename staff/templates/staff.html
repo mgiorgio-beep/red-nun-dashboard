@@ -2478,6 +2478,14 @@ function _renderBrowse() {
     fetch('/staff/api/sonos/browse?service='+encodeURIComponent(current.service)+'&id='+encodeURIComponent(current.id))
     .then(function(r){return r.json()}).then(function(d){
         if(d.error) {
+            if(d.not_linked) {
+                // Stale/dead tokens (e.g. Sonos household was re-set-up) — re-link
+                sonosBrowseClose();
+                showToast(current.service+' needs to be re-linked');
+                loadSonosServices();
+                sonosLinkStart(current.service);
+                return;
+            }
             list.innerHTML = '<div style="text-align:center;color:#8E8E93;padding:40px">'+d.error+'</div>';
             return;
         }
