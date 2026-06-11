@@ -29,6 +29,11 @@ Dennis:   ssh -p 2222 rednun@10.1.10.84            # on-site
 Restart the service that runs on each box: `rednun` (Chatham, full dashboard) vs
 `rednun-staff` (Dennis, staff/TV app). A shared-code change usually means pulling on both.
 
+### Auto-deploy timer (Chatham)
+`rednun-autodeploy.timer` (→ `rednun-autodeploy.service`, script at `/usr/local/bin/rednun-autodeploy.sh`, **outside the repo**) runs every 2 min as root: `git fetch`, and if local `main` is behind `origin/main` **and the working tree is clean**, it does `git pull --ff-only` then restarts `rednun.service` (skipping the restart when the pull only touched `docs/` or `*.md`). It never forces and never stashes — a dirty tree, diverged history, or failed pull just logs to the journal (`journalctl -u rednun-autodeploy`) and does nothing.
+
+**Claude Code running on this server MAY edit tracked files, but must `git commit` AND `git push` them the same session so the tree stays clean — the auto-deploy timer skips pulls whenever the tree is dirty.** Always check `git status` / `git diff` first; if you can't push from this box, surface the diff for review instead of leaving uncommitted edits behind.
+
 ---
 
 ## What This Is
