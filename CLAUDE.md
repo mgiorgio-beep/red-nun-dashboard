@@ -407,9 +407,9 @@ Dev flow matches the dashboard repo: edit locally in Drive, `git commit`, `git p
 
 ---
 
-## Known Issues (carried forward from Mar 23, 2026 — re-verify)
-1. `analytics.py` line 331: one `where_clauses = []` missing voided/deleted filter
-2. Net sales discrepancy: ~$181 off vs Toast ($4,242 vs $4,061 for Chatham Feb 13)
+## Known Issues (updated Jun 11, 2026)
+1. ~~`analytics.py` line 331 missing voided/deleted filter~~ — RESOLVED/stale: that line is in `get_labor_by_role` (time_entries — no void concept; orders-side labor queries already filter). Separately, 2026-06-11 added ORDER-level void/delete exclusion to `get_sales_mix`, `get_pour_cost_by_category`, `get_bartender_pour_variance` (item-level `voided=0` missed whole-check voids).
+2. Net sales discrepancy: ~$181 off vs Toast ($4,242 vs $4,061 for Chatham Feb 13) — NOT explained by the void filter (daily revenue already filtered); suspect refunds/service-charge handling, still open
 3. Database size: 1.1GB — orders/order_items/payments are the bulk. Consider pruning >13 months + VACUUM.
 4. Duplicate cron: `email_poller.py` runs twice every 5 min
 5. VTInfo scraper: Location picker and "View and Pay Invoices" button not found — portal UI may have changed. Needs manual investigation.
