@@ -124,7 +124,14 @@ def get_sales_mix(location=None, start_date=None, end_date=None):
     Get sales mix by category using item name pattern matching.
     """
     conn = get_connection()
-    where_clauses = ["voided = 0", "price > 0"]
+    where_clauses = [
+        "voided = 0",
+        "price > 0",
+        # Exclude items whose parent ORDER was voided/deleted (item-level
+        # voided=0 doesn't catch whole-check voids)
+        "NOT EXISTS (SELECT 1 FROM orders o WHERE o.guid = order_items.order_guid "
+        "AND (json_extract(o.raw_json, '$.deleted') = 1 OR json_extract(o.raw_json, '$.voided') = 1))",
+    ]
     params = []
     if location:
         where_clauses.append("location = ?")
@@ -436,7 +443,13 @@ def get_pour_cost_by_category(location=None, start_date=None, end_date=None):
         List of dicts: [{category, revenue, cost, pour_cost_pct, item_count}, ...]
     """
     conn = get_connection()
-    where_clauses = ["oi.voided = 0"]
+    where_clauses = [
+        "oi.voided = 0",
+        # Exclude items whose parent ORDER was voided/deleted (item-level
+        # voided=0 doesn't catch whole-check voids)
+        "NOT EXISTS (SELECT 1 FROM orders o WHERE o.guid = oi.order_guid "
+        "AND (json_extract(o.raw_json, '$.deleted') = 1 OR json_extract(o.raw_json, '$.voided') = 1))",
+    ]
     params = []
 
     if location:
@@ -488,7 +501,12 @@ def get_bartender_pour_variance(location=None, start_date=None, end_date=None):
         theoretical vs actual cost.
     """
     conn = get_connection()
-    where_clauses = ["oi.voided = 0"]
+    where_clauses = [
+        "oi.voided = 0",
+        # orders is joined as o — exclude voided/deleted checks
+        "json_extract(o.raw_json, '$.deleted') != 1",
+        "json_extract(o.raw_json, '$.voided') != 1",
+    ]
     params = []
 
     if location:
