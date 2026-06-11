@@ -10,7 +10,7 @@ import json
 import base64
 import logging
 from datetime import datetime
-from flask import Blueprint, request, jsonify, send_from_directory
+from flask import Blueprint, request, jsonify, send_from_directory, session, redirect
 from PIL import Image
 from routes.auth_routes import admin_required
 
@@ -115,6 +115,31 @@ def _auto_orient_page(img, page_num=0):
 
 
 invoice_bp = Blueprint("invoices", __name__)
+
+
+@invoice_bp.before_request
+def _require_auth():
+    """Auth gate for ALL invoice routes (CLAUDE.md Critical Rule #1).
+
+    Allows:
+      1. Logged-in dashboard users (session cookie, same as @login_required).
+      2. Direct localhost callers — vendor scrapers (run_all.sh cron),
+         email_invoice_poller.py, and deploy health checks all POST to
+         http://127.0.0.1:8080 straight into gunicorn. Real web traffic
+         arrives via nginx/Cloudflare which sets X-Forwarded-For, so
+         "127.0.0.1 with no X-Forwarded-For" can only be on-box automation.
+
+    Do NOT replace with @login_required on individual routes — that would
+    break the 7AM scraper imports and the 5-min email poller.
+    """
+    if 'user_id' in session:
+        return None
+    if request.remote_addr == '127.0.0.1' and not request.headers.get('X-Forwarded-For'):
+        return None
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Authentication required"}), 401
+    return redirect('/login')
+
 
 # Directory for storing invoice images
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "invoice_images")
