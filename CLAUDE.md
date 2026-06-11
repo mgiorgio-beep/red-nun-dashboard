@@ -34,6 +34,9 @@ Restart the service that runs on each box: `rednun` (Chatham, full dashboard) vs
 
 **Claude Code running on this server MAY edit tracked files, but must `git commit` AND `git push` them the same session so the tree stays clean — the auto-deploy timer skips pulls whenever the tree is dirty.** Always check `git status` / `git diff` first; if you can't push from this box, surface the diff for review instead of leaving uncommitted edits behind.
 
+### Cowork agent — push, don't pull
+`rednun-autodeploy.timer` is the ONLY thing that deploys to `/opt` on Chatham. The Cowork agent (commits authored "Red Nun Cowork") must NOT run `git pull`, `git stash`, or any auto-stash against `/opt/red-nun-dashboard` — it races the timer and has silently orphaned uncommitted work before (an April auto-stash sat lost until rescued). Cowork's job ends at `git push` to GitHub; the timer fast-forwards `/opt` within 2 min (no stash, no force). The Drive↔Beelink `rclone bisync` cron is unaffected — it only syncs `~/cowork/red-nun-dashboard`, never `/opt` or git.
+
 ---
 
 ## What This Is
