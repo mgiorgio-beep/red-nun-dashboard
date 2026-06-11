@@ -55,3 +55,6 @@ data/tvs.json
 # vendor-scrapers is its own private repo (https://github.com/mgiorgio-beep/vendor-scrapers).
 # When cloned alongside this repo (e.g. into the same working folder), ignore it here.
 /vendor-scrapers/
+
+# Cowork GitHub token (lives in Drive only — NEVER commit)
+.cowork_github_token*
