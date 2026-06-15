@@ -135,11 +135,25 @@ def get_location_products(loc_id):
     conn = get_connection()
     rows = conn.execute("""
         SELECT p.id, p.name, p.category, p.unit, p.inventory_unit, p.current_price,
-               psl.sort_order, psl.id as assignment_id
+               psl.sort_order, psl.id as assignment_id, psl.section_id
         FROM product_storage_locations psl
         JOIN products p ON psl.product_id = p.id
         WHERE psl.storage_location_id = ? AND p.active = 1
         ORDER BY psl.sort_order
+    """, (loc_id,)).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@storage_bp.route('/api/storage/locations/<int:loc_id>/sections', methods=['GET'])
+def get_location_sections(loc_id):
+    """Get shelves (sub-sections) for a storage location, in order."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT id, name, sort_order
+        FROM storage_sections
+        WHERE storage_location_id = ?
+        ORDER BY sort_order, name
     """, (loc_id,)).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])

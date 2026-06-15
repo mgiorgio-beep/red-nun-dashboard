@@ -72,6 +72,16 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
   color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s}
 .tf-btn.sel{border-color:var(--blue);background:rgba(10,132,255,0.12);color:var(--blue)}
 
+/* Shelves (sub-sections within an area) */
+.shelf-header{display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px;
+  padding-bottom:6px;border-bottom:1px solid var(--border)}
+.shelf-name{font-size:14px;font-weight:700;color:var(--blue)}
+.shelf-empty{padding:6px 4px 10px;color:var(--text3);font-size:12px}
+.shelf-select{background:var(--card2);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;font-size:12px;font-weight:600;padding:7px 8px;cursor:pointer;flex-shrink:0;max-width:140px}
+.shelf-select:focus{border-color:var(--blue);outline:none}
+.add-shelf-row{display:flex;justify-content:flex-end;margin-bottom:6px}
+
 /* Right: Product list */
 .main{flex:1;overflow-y:auto;padding:20px 24px}
 .main-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
@@ -331,7 +341,7 @@ async function loadLocations() {
 async function selectLoc(locId, locName) {
   S.selectedLoc = locId;
   document.getElementById('main-title').textContent = locName;
-  document.getElementById('main-sub').textContent = 'Drag to reorder • Click ✕ to remove';
+  document.getElementById('main-sub').textContent = 'Add shelves • use each item\'s dropdown to place it • ✕ removes from area';
   document.getElementById('search').value = '';
   
   // Highlight active in sidebar
@@ -344,38 +354,110 @@ async function selectLoc(locId, locName) {
 }
 
 async function renderLocationProducts(locId) {
-  const res = await fetch(API + '/locations/' + locId + '/products');
-  const products = await res.json();
+  const [pRes, sRes] = await Promise.all([
+    fetch(API + '/locations/' + locId + '/products'),
+    fetch(API + '/locations/' + locId + '/sections')
+  ]);
+  let products = await pRes.json();
+  const sections = await sRes.json();
+
+  products = products.filter(p => inType(p.category));
   const search = (document.getElementById('search').value || '').toLowerCase();
-  
-  let filtered = products.filter(p => inType(p.category));
-  if (search) filtered = filtered.filter(p => p.name.toLowerCase().includes(search));
-  
+  if (search) products = products.filter(p => p.name.toLowerCase().includes(search));
+
   const main = document.getElementById('main-content');
-  
-  if (filtered.length === 0 && !search) {
-    main.innerHTML = '<div class="empty"><div class="empty-icon">📦</div>' +
-      '<div class="empty-text">No products in this area yet.<br>Select "Unassigned" to add products.</div></div>';
+
+  // "+ Add Shelf" action (always available for an area)
+  let html = '<div class="add-shelf-row"><button class="add-area-btn" onclick="addShelf(' + locId + ')">+ Add Shelf</button></div>';
+
+  if (products.length === 0) {
+    html += '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' +
+      (search ? 'No products match your search.'
+              : 'No products in this area yet.<br>Select "Unassigned" to add products.') +
+      '</div></div>';
+    main.innerHTML = html;
     return;
   }
-  
-  main.innerHTML = filtered.map((p, i) => {
-    const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
-    return '<div class="product-card" draggable="true" data-pid="' + p.id + '" data-idx="' + i + '">' +
-      '<div class="pc-order">' + (i + 1) + '</div>' +
-      '<div class="drag-handle">⠿</div>' +
-      '<div class="pc-info">' +
-        '<div class="pc-name">' + esc(p.name) + '</div>' +
-        '<div class="pc-meta"><span class="pc-tag ' + tagClass + '">' + catLabel(p.category) + '</span> ' +
-          (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
-        '</div>' +
-      '</div>' +
-      '<button class="pc-remove" onclick="removeProduct(' + locId + ',' + p.id + ')" title="Remove from this area">✕</button>' +
+
+  // Build the shelf <option> list (shared)
+  function shelfOptions(selId) {
+    let o = '<option value=""' + (!selId ? ' selected' : '') + '>— Unshelved —</option>';
+    sections.forEach(s => {
+      o += '<option value="' + s.id + '"' + (selId === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+    });
+    return o;
+  }
+
+  // Group: each shelf in order, then an Unshelved bucket
+  const groups = sections.map(s => ({ id: s.id, name: s.name, items: products.filter(p => p.section_id === s.id) }));
+  groups.push({ id: null, name: 'Unshelved', items: products.filter(p => !p.section_id) });
+
+  groups.forEach(g => {
+    if (g.id === null && g.items.length === 0) return; // hide empty Unshelved
+    html += '<div class="shelf-header">' +
+      '<span class="shelf-name">' + esc(g.name) + ' <span style="color:var(--text3);font-weight:600">(' + g.items.length + ')</span></span>' +
+      (g.id !== null ? '<button class="loc-del" title="Delete shelf" onclick="deleteShelf(' + g.id + ',' + locId + ',\'' + esc(g.name).replace(/'/g, "\\'") + '\')">✕</button>' : '') +
     '</div>';
-  }).join('');
-  
-  // Setup drag & drop
-  setupDragDrop(locId);
+
+    if (g.items.length === 0) {
+      html += '<div class="shelf-empty">No items here yet — use a product\'s dropdown to move it onto this shelf.</div>';
+      return;
+    }
+
+    g.items.forEach(p => {
+      const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
+      html += '<div class="product-card" style="cursor:default">' +
+        '<div class="pc-info">' +
+          '<div class="pc-name">' + esc(p.name) + '</div>' +
+          '<div class="pc-meta"><span class="pc-tag ' + tagClass + '">' + catLabel(p.category) + '</span> ' +
+            (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
+          '</div>' +
+        '</div>' +
+        '<select class="shelf-select" onchange="assignToShelf(' + p.assignment_id + ',this.value,' + locId + ')">' + shelfOptions(p.section_id) + '</select>' +
+        '<button class="pc-remove" onclick="removeProduct(' + locId + ',' + p.id + ')" title="Remove from this area">✕</button>' +
+      '</div>';
+    });
+  });
+
+  main.innerHTML = html;
+}
+
+// ============================================
+// SHELVES (sub-sections within an area)
+// ============================================
+async function addShelf(locId) {
+  const name = (prompt('New shelf name (e.g. "Shelf 3"):') || '').trim();
+  if (!name) return;
+  try {
+    const res = await fetch('/api/inventory/count/sections', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ storage_location_id: locId, name })
+    });
+    if (!res.ok) { showToast('Could not add shelf', true); return; }
+    showToast('✓ Added "' + name + '"');
+    renderLocationProducts(locId);
+  } catch(e) { showToast('Error adding shelf', true); }
+}
+
+async function deleteShelf(sectionId, locId, name) {
+  if (!confirm('Delete shelf "' + name + '"?\n\nIts items stay in the area but become Unshelved.')) return;
+  try {
+    const res = await fetch('/api/inventory/count/sections/' + sectionId, { method: 'DELETE' });
+    if (!res.ok) { showToast('Could not delete shelf', true); return; }
+    showToast('Deleted "' + name + '"');
+    renderLocationProducts(locId);
+  } catch(e) { showToast('Error deleting shelf', true); }
+}
+
+async function assignToShelf(assignmentId, sectionId, locId) {
+  try {
+    await fetch('/api/inventory/count/assign-section', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ psl_id: assignmentId, section_id: sectionId ? parseInt(sectionId) : null })
+    });
+    showToast('Moved');
+    renderLocationProducts(locId);
+  } catch(e) { showToast('Error moving item', true); }
 }
 
 // ============================================
