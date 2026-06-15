@@ -1157,6 +1157,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             <option value="">Select...</option>
             <option value="each">Each</option>
             <option value="package">Package</option>
+            <option value="case">Case</option>
             <option value="bottle">Bottle</option>
             <option value="can">Can</option>
             <option value="keg">Keg</option>
@@ -1213,6 +1214,26 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             <div id="merge-product-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;z-index:100;font-size:12px;"></div>
           </div>
         </div>
+      </div>
+
+      <!-- Unit Conversions (shown when editing) -->
+      <div id="product-conversions" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">
+        <label class="form-label" style="margin-bottom:6px;">Unit Conversions</label>
+        <small style="color:var(--text3);font-size:11px;display:block;margin-bottom:8px;">How the units break down — e.g. <b>1 case = 2 package</b>, then <b>1 package = 144 slice</b>. Used by recipe costing. One line per "from" unit.</small>
+        <div id="pconv-list" style="font-size:13px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:13px;color:var(--text3)">1</span>
+          <input list="pconv-units" id="pconv-from" placeholder="case" style="width:100px" class="form-input">
+          <span style="font-size:13px;color:var(--text3)">=</span>
+          <input type="number" step="0.01" id="pconv-toqty" placeholder="2" style="width:80px" class="form-input">
+          <input list="pconv-units" id="pconv-to" placeholder="package" style="width:100px" class="form-input">
+          <button type="button" class="btn btn-secondary" onclick="addProductConversion()">+ Add</button>
+        </div>
+        <datalist id="pconv-units">
+          <option value="case"></option><option value="package"></option><option value="slice"></option><option value="each"></option>
+          <option value="lb"></option><option value="oz"></option><option value="bottle"></option><option value="can"></option>
+          <option value="keg"></option><option value="gal"></option><option value="liter"></option>
+        </datalist>
       </div>
 
       <button type="submit" class="btn btn-primary" style="margin-top:16px;width:100%;">Save Product</button>
@@ -2632,6 +2653,8 @@ async function editProduct(id) {
     const viSection = document.getElementById('product-vendor-items');
     const viList = document.getElementById('product-vi-list');
     viSection.style.display = 'block';
+    const convSection = document.getElementById('product-conversions');
+    if (convSection) { convSection.style.display = 'block'; loadProductConversions(id); }
     if (viData.length) {
       const activeViId = product.active_vendor_item_id;
       viList.innerHTML = viData.map(vi => {
@@ -2661,6 +2684,37 @@ async function editProduct(id) {
     console.error('Error loading product:', e);
     alert('Error loading product details');
   }
+}
+
+function _pesc(s){const d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML;}
+async function loadProductConversions(id){
+  try{
+    const rows=await fetch('/api/inventory/products/'+id+'/conversions').then(r=>r.json());
+    const el=document.getElementById('pconv-list');
+    if(!el)return;
+    if(!rows.length){el.innerHTML='<div style="color:var(--text3);font-size:12px">No conversions yet.</div>';return;}
+    el.innerHTML=rows.map(c=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">'+
+      '<span>1 '+_pesc(c.from_unit)+' = <b>'+(+c.to_qty)+'</b> '+_pesc(c.to_unit)+
+      (c.cost_preview!=null?' <span style="color:var(--text3)">($'+(+c.cost_preview).toFixed(3)+'/'+_pesc(c.to_unit)+')</span>':'')+'</span>'+
+      '<button type="button" onclick="deleteProductConversion('+c.id+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:0 6px">&times;</button></div>').join('');
+  }catch(e){}
+}
+async function addProductConversion(){
+  const id=editingProductId;
+  if(!id){alert('Save the product first, then add conversions.');return;}
+  const from=(document.getElementById('pconv-from').value||'').trim();
+  const toq=parseFloat(document.getElementById('pconv-toqty').value);
+  const to=(document.getElementById('pconv-to').value||'').trim();
+  if(!from||!to||!toq||toq<=0){alert('Enter it as: 1 <from unit> = <qty> <to unit>');return;}
+  try{
+    const r=await fetch('/api/inventory/products/'+id+'/conversions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from_qty:1,from_unit:from,to_qty:toq,to_unit:to})});
+    if(!r.ok)throw new Error();
+    document.getElementById('pconv-from').value='';document.getElementById('pconv-toqty').value='';document.getElementById('pconv-to').value='';
+    loadProductConversions(id);
+  }catch(e){alert('Could not add conversion (one line per "from" unit — adding the same from-unit again updates it).');}
+}
+async function deleteProductConversion(cid){
+  try{const r=await fetch('/api/inventory/products/conversions/'+cid,{method:'DELETE'});if(r.ok)loadProductConversions(editingProductId);}catch(e){}
 }
 
 async function saveProduct(e) {
@@ -4246,6 +4300,7 @@ async function openProductModal() {
   document.getElementById('form-product').reset();
   document.querySelector('#modal-product .modal-title').textContent = 'Add Product';
   document.getElementById('product-vendor-items').style.display = 'none';
+  document.getElementById('product-conversions').style.display = 'none';
   await loadStorageLocationCheckboxes(null);
   document.getElementById('modal-product').classList.add('active');
 }

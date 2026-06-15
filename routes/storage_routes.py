@@ -145,6 +145,38 @@ def get_location_products(loc_id):
     return jsonify([dict(r) for r in rows])
 
 
+@storage_bp.route('/api/storage/product/<int:product_id>/units', methods=['POST'])
+def set_product_units(product_id):
+    """Set count unit / conversion / recipe unit, or archive a product (active=0).
+
+    Exists because the main product PUT in inventory_routes does not touch the
+    inventory_unit, unit_conversion or active columns. Only updates fields that
+    are explicitly present in the request body.
+    """
+    data = request.json or {}
+    sets, vals = [], []
+    if 'inventory_unit' in data:
+        sets.append('inventory_unit=?'); vals.append(data.get('inventory_unit') or None)
+    if 'unit_conversion' in data:
+        uc = data.get('unit_conversion')
+        sets.append('unit_conversion=?'); vals.append(uc if uc not in ('', None) else None)
+    if 'recipe_unit' in data:
+        sets.append('recipe_unit=?'); vals.append(data.get('recipe_unit') or None)
+    if 'inventory_to_recipe' in data:
+        ir = data.get('inventory_to_recipe')
+        sets.append('inventory_to_recipe=?'); vals.append(ir if ir not in ('', None) else None)
+    if 'active' in data:
+        sets.append('active=?'); vals.append(1 if data.get('active') else 0)
+    if not sets:
+        return jsonify({'error': 'no fields to update'}), 400
+    vals.append(product_id)
+    conn = get_connection()
+    conn.execute("UPDATE products SET " + ", ".join(sets) + ", updated_at=CURRENT_TIMESTAMP WHERE id=?", vals)
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
 @storage_bp.route('/api/storage/locations/<int:loc_id>/sections', methods=['GET'])
 def get_location_sections(loc_id):
     """Get shelves (sub-sections) for a storage location, in order."""

@@ -71,7 +71,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <thead><tr>
       <th style="width:30px"><input type="checkbox" id="checkall" onchange="toggleAll(this)"></th>
       <th>Product</th><th>Category</th><th>Pack parsed</th><th>Current</th>
-      <th>Count unit</th><th>Conversion</th><th>Recipe hint</th><th>Conf.</th>
+      <th>Count unit</th><th>Conversion</th><th>Recipe hint</th><th>Conf.</th><th></th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
@@ -84,7 +84,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
 <script>
 const BOOZE=['BEER','LIQUOR','WINE'];
-const UNIT_OPTS=['','each','package','bottle','can','keg','lb','oz','gal','liter','slice','serving','portion'];
+const UNIT_OPTS=['','each','package','case','bottle','can','keg','lb','oz','gal','liter','slice','serving','portion'];
 let DATA=[];        // {prod, parsed, sug, checked}
 let FILTER='all';
 
@@ -175,6 +175,7 @@ function render(){
       '<td><input class="cell-num" type="number" step="0.01" value="'+(d.conv!==''&&d.conv!=null?d.conv:'')+'" onchange="DATA['+i+'].conv=this.value"></td>'+
       '<td class="hint">'+esc(d.sug.hint||'')+'</td>'+
       '<td class="conf-'+d.conf+'" style="font-size:11px;font-weight:700">'+d.conf.toUpperCase()+'</td>'+
+      '<td><button title="Archive (hide from inventory)" onclick="archive('+d.prod.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px 7px;border-radius:6px" onmouseover="this.style.color=\'#FF453A\';this.style.background=\'rgba(255,69,58,0.12)\'" onmouseout="this.style.color=\'\';this.style.background=\'none\'">🗑</button></td>'+
     '</tr>';
   }).join('');
   document.getElementById('summary').textContent=rows.length+' shown · '+DATA.length+' total · '+DATA.filter(d=>d.checked).length+' checked';
@@ -195,19 +196,29 @@ async function applyChecked(){
   let ok=0,fail=0;
   for(const d of todo){
     const p=d.prod;
-    const body={
-      display_name:p.display_name||'',name:p.name||'',category:p.category||'FOOD',unit:p.unit||'',
-      pack_size:p.pack_size||'',inventory_unit:d.unit||'',unit_conversion:(d.conv!==''&&d.conv!=null)?d.conv:(p.unit_conversion||1),
-      current_price:p.current_price||'',par_level:p.par_level||'',reorder_point:p.reorder_point||'',notes:p.notes||''
-    };
+    const body={inventory_unit:d.unit||null, unit_conversion:(d.conv!==''&&d.conv!=null)?d.conv:null};
     try{
-      const r=await fetch('/api/inventory/products/'+p.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const r=await fetch('/api/storage/product/'+p.id+'/units',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       if(r.ok){ok++;p.inventory_unit=d.unit;p.unit_conversion=body.unit_conversion;d.checked=false;}else fail++;
     }catch(e){fail++;}
   }
   btn.textContent='Apply checked';
   showToast('✓ '+ok+' updated'+(fail?' · '+fail+' failed':''),fail>0);
   render();
+}
+
+async function archive(id){
+  const idx=DATA.findIndex(d=>d.prod.id===id);
+  if(idx<0)return;
+  const d=DATA[idx];
+  if(!confirm('Archive "'+(d.prod.display_name||d.prod.name)+'"?\n\nIt will be hidden from Inventory, Count, and Storage. Invoice history is kept; you can restore it later.'))return;
+  try{
+    const r=await fetch('/api/storage/product/'+id+'/units',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:false})});
+    if(!r.ok){showToast('Could not archive',true);return;}
+    DATA.splice(idx,1);
+    showToast('Archived');
+    render();
+  }catch(e){showToast('Error archiving',true);}
 }
 
 load();

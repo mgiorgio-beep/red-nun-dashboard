@@ -198,7 +198,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     </div>
     <div class="fld"><label>Count unit (how you inventory it)</label><select id="ed-invunit">
       <option value="">— same as purchase unit —</option>
-      <option value="each">Each</option><option value="package">Package</option><option value="bottle">Bottle</option><option value="can">Can</option>
+      <option value="each">Each</option><option value="package">Package</option><option value="case">Case</option><option value="bottle">Bottle</option><option value="can">Can</option>
       <option value="keg">Keg</option><option value="lb">Pound (lb)</option><option value="oz">Ounce (oz)</option>
       <option value="gal">Gallon</option><option value="liter">Liter</option><option value="slice">Slice</option>
       <option value="serving">Serving</option><option value="portion">Portion</option>
@@ -703,7 +703,7 @@ async function openEdit(id) {
     const cats = ['FOOD','BEER','LIQUOR','WINE','NA_BEVERAGES','SUPPLIES'];
     document.getElementById('ed-cat').value = cats.includes(p.category) ? p.category : 'FOOD';
     document.getElementById('ed-unit').value = p.unit || '';
-    document.getElementById('ed-invunit').value = ['each','package','bottle','can','keg','lb','oz','gal','liter','slice','serving','portion'].includes(p.inventory_unit) ? p.inventory_unit : '';
+    document.getElementById('ed-invunit').value = ['each','package','case','bottle','can','keg','lb','oz','gal','liter','slice','serving','portion'].includes(p.inventory_unit) ? p.inventory_unit : '';
     document.getElementById('ed-price').value = p.current_price || '';
     document.getElementById('ed-par').value = p.par_level || '';
     document.getElementById('ed-reorder').value = p.reorder_point || '';
@@ -735,6 +735,11 @@ async function saveEdit() {
       method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
     });
     if (!res.ok) { showToast('Save failed', true); return; }
+    // The product PUT doesn't touch inventory_unit, so persist the count unit separately.
+    await fetch('/api/storage/product/' + _editId + '/units', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ inventory_unit: document.getElementById('ed-invunit').value || null })
+    });
     showToast('✓ Saved');
     closeEdit();
     renderMain();
