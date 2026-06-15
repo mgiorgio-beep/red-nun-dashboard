@@ -32,6 +32,7 @@ var sections=[
   {id:'nav-vendors',label:'Vendors',page:'/manage',tab:'vendors'},
   {id:'nav-inventory',label:'Inventory',page:'/manage',tab:'inv'},
   {id:'nav-storage',label:'Storage Layout',page:'/storage'},
+  {id:'nav-unitsetup',label:'Unit Setup',page:'/unit-setup'},
   {id:'nav-foodcount',label:'Food Count',page:'/count?type=food'},
   {id:'nav-boozecount',label:'Booze Count',page:'/count?type=booze'},
   {id:'nav-orderguide',label:'Order Guide',page:'/order-guide'},
@@ -125,6 +126,7 @@ if(path==='/sales-journal'){var sp=new URLSearchParams(window.location.search);r
 if(path==='/reports')return 'nav-acct-reports';
 if(path==='/sales-mapping')return 'nav-acct-mapping';
 if(path==='/storage')return 'nav-storage';
+if(path==='/unit-setup')return 'nav-unitsetup';
 if(path==='/count'){var ct=(new URLSearchParams(window.location.search).get('type')||'').toLowerCase();return ct==='booze'?'nav-boozecount':'nav-foodcount';}
 return 'nav-dashboard';
 }

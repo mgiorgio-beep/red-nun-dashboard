@@ -215,6 +215,11 @@ def storage_page():
     """Serve the storage layout interface."""
     return send_from_directory("static", "storage.html")
 
+@app.route("/unit-setup")
+def unit_setup_page():
+    """Serve the unit-setup review interface (parse pack data, propose count unit + conversion)."""
+    return send_from_directory("static", "unit_setup.html")
+
 @app.route("/ai-inventory")
 @login_required
 def ai_inventory_page():

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Red Nun — Unit Setup</title>
+<style>
+:root{--bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);
+--border2:rgba(255,255,255,0.15);--text:#f5f5f7;--text2:rgba(245,245,247,0.6);
+--text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;--orange:#FF9F0A;--purple:#BF5AF2}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.hdr{position:sticky;top:0;z-index:100;padding:16px 24px;background:rgba(10,10,12,0.92);
+backdrop-filter:blur(30px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.hdr-title{font-size:18px;font-weight:700}
+.hdr-sub{font-size:11px;color:var(--text3)}
+.btn{padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none}
+.btn-primary{background:var(--green);color:#000}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed}
+a.btn{text-decoration:none;background:var(--card);color:var(--text);border:1px solid var(--border)}
+.wrap{padding:18px 24px 120px;max-width:1200px;margin:0 auto}
+.note{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.5}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.fbtn{padding:7px 13px;border-radius:8px;background:var(--card2);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer}
+.fbtn.sel{border-color:var(--blue);background:rgba(10,132,255,0.12);color:var(--blue)}
+.search{margin-left:auto;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none;width:240px}
+.summary{font-size:12px;color:var(--text3);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 10px;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);position:sticky;top:65px;background:var(--bg)}
+td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.pname{font-weight:600}
+.pdesc{font-size:11px;color:var(--text3);margin-top:2px}
+.tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase}
+.conf-high{color:var(--green)} .conf-med{color:var(--orange)} .conf-low{color:var(--text3)}
+.cell-sel{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 7px;font-size:12px;width:110px}
+.cell-num{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 7px;font-size:12px;width:80px}
+.hint{font-size:11px;color:var(--purple)}
+.applybar{position:fixed;bottom:0;left:0;right:0;padding:14px 24px;background:rgba(10,10,12,0.95);backdrop-filter:blur(30px);border-top:1px solid var(--border);display:flex;align-items:center;gap:14px;z-index:90}
+.applybar .info{flex:1;font-size:13px;color:var(--text2)}
+.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--green);color:#000;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:700;opacity:0;transition:all .3s;z-index:200;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{background:var(--red);color:#fff}
+.cat-pill{font-size:10px;color:var(--text3)}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div><div class="hdr-title">Unit Setup</div><div class="hdr-sub">PARSE PACK DATA → REVIEW → APPLY COUNT UNIT &amp; CONVERSION</div></div>
+  <a href="/storage" class="btn">← Storage</a>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="wrap">
+  <div class="note">
+    Parsed from each product's vendor description and pack data. <b>Count unit</b> = how you inventory it; <b>Conversion</b> = how many of that count unit are in one purchase unit (e.g. 6 packages per case, 9 lb per case, 288 each per case).
+    Review and edit any row, then <b>Apply checked</b> — only checked rows are written (to <code>inventory_unit</code> and <code>unit_conversion</code>); everything else on the product is left untouched. The slice/recipe hint is informational only (needs a separate recipe-conversion field, not written here).
+  </div>
+
+  <div class="controls">
+    <button class="fbtn sel" data-f="all" onclick="setFilter(this)">All</button>
+    <button class="fbtn" data-f="food" onclick="setFilter(this)">🍴 Food</button>
+    <button class="fbtn" data-f="booze" onclick="setFilter(this)">🍸 Booze</button>
+    <button class="fbtn" data-f="high" onclick="setFilter(this)">High confidence</button>
+    <button class="fbtn" data-f="review" onclick="setFilter(this)">Needs review</button>
+    <input class="search" id="search" placeholder="Search products..." oninput="render()">
+  </div>
+
+  <div class="summary" id="summary">Loading catalog…</div>
+  <table>
+    <thead><tr>
+      <th style="width:30px"><input type="checkbox" id="checkall" onchange="toggleAll(this)"></th>
+      <th>Product</th><th>Category</th><th>Pack parsed</th><th>Current</th>
+      <th>Count unit</th><th>Conversion</th><th>Recipe hint</th><th>Conf.</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<div class="applybar">
+  <div class="info" id="applyinfo">—</div>
+  <button class="btn-primary" id="applybtn" onclick="applyChecked()" disabled>Apply checked</button>
+</div>
+
+<script>
+const BOOZE=['BEER','LIQUOR','WINE'];
+const UNIT_OPTS=['','each','package','bottle','can','keg','lb','oz','gal','liter','slice','serving','portion'];
+let DATA=[];        // {prod, parsed, sug, checked}
+let FILTER='all';
+
+function showToast(m,e){const t=document.getElementById('toast');t.textContent=m;t.className='toast show'+(e?' error':'');setTimeout(()=>t.className='toast',2200);}
+
+function parsePack(rec){
+  const text=((rec.vdesc||'')+' '+(rec.name||'')).trim();
+  const o={packs:null,eachQty:null,eachUnit:null,count:null,keg:false};
+  const m=text.match(/\b(\d{1,3})\s*\/\s*(\d{1,4}(?:\.\d+)?)\s*(lb|oz|ea|gal|ct)?\b/i);
+  if(m){o.packs=+m[1];o.eachQty=+m[2];o.eachUnit=(m[3]||'').toUpperCase();}
+  const c=text.match(/\b(\d{1,4})(?:\s*-\s*(\d{1,4}))?\s*(ct|cnt|count)\b/i);
+  if(c){o.count=c[2]?Math.round((+c[1]+ +c[2])/2):+c[1];}
+  o.keg=/\bk-?\d{1,3}\b/i.test(text)||/keg/i.test(text);
+  return o;
+}
+function suggest(rec,p){
+  const base=rec.pcontains, cu=(rec.cunit||'').toUpperCase(), ppu=rec.ppu, price=rec.price;
+  let unit='',conv='',hint='',conf='low';
+  if(BOOZE.includes(rec.cat)){
+    if(p.keg){unit='keg';conv=1;conf='med';}
+    else if(rec.cat==='WINE'||rec.cat==='LIQUOR'){unit='bottle';if(p.packs){conv=p.packs;conf='med';}else conf='low';}
+    else {unit='';conf='low';}
+  } else if(p.packs&&(p.eachUnit==='LB'||p.eachUnit==='OZ')){
+    unit='package';conv=p.packs;
+    if(p.count&&base)hint=Math.round(p.count/base)+' slices/'+cu.toLowerCase()+' ('+p.count+'/case)';
+    conf='high';
+  } else if(p.count&&base&&cu==='LB'){
+    unit='lb';conv=base;hint=Math.round(p.count/base)+' slices/lb ('+p.count+'/case)';conf='high';
+  } else if(base&&cu==='EA'){
+    unit='each';conv=base;conf='high';
+  } else if(base&&cu==='LB'){
+    unit='lb';conv=base;conf='med';
+  } else if(p.count){
+    unit='each';conv=p.count;conf='med';
+  }
+  return {unit,conv,hint,conf};
+}
+
+async function load(){
+  const all=await fetch('/api/inventory/products',{credentials:'include'}).then(r=>r.json());
+  const P=all.filter(p=>(p.location==='chatham'||p.location==='both')&&p.active!==0);
+  document.getElementById('summary').textContent='Loading pack data for '+P.length+' products…';
+  const chunk=25;
+  for(let i=0;i<P.length;i+=chunk){
+    const slice=P.slice(i,i+chunk);
+    const vis=await Promise.all(slice.map(p=>fetch('/api/inventory/products/'+p.id+'/vendor-items',{credentials:'include'}).then(r=>r.ok?r.json():[]).catch(()=>[])));
+    slice.forEach((p,j)=>{
+      const vi=vis[j]||[];
+      const v=vi.find(x=>x.id===p.active_vendor_item_id)||vi.find(x=>x.pack_contains)||vi[0]||{};
+      const rec={cat:p.category,name:p.name,vdesc:v.vendor_description,pcontains:v.pack_contains,cunit:v.contains_unit,ppu:v.price_per_unit,price:p.current_price};
+      const parsed=parsePack(rec), sug=suggest(rec,parsed);
+      DATA.push({prod:p,rec,parsed,sug,unit:p.inventory_unit||sug.unit,conv:(p.unit_conversion&&p.unit_conversion!=1)?p.unit_conversion:sug.conv,conf:sug.conf,checked:sug.conf==='high'});
+    });
+    document.getElementById('summary').textContent='Parsed '+DATA.length+'/'+P.length+'…';
+  }
+  render();
+}
+
+function visible(){
+  const s=(document.getElementById('search').value||'').toLowerCase();
+  return DATA.filter(d=>{
+    if(FILTER==='food'&&BOOZE.includes(d.prod.category))return false;
+    if(FILTER==='booze'&&!BOOZE.includes(d.prod.category))return false;
+    if(FILTER==='high'&&d.conf!=='high')return false;
+    if(FILTER==='review'&&d.conf!=='low'&&d.sug.unit)return false;
+    if(s&&!(d.prod.name||'').toLowerCase().includes(s))return false;
+    return true;
+  });
+}
+function setFilter(el){document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('sel'));el.classList.add('sel');FILTER=el.dataset.f;render();}
+function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+
+function render(){
+  const rows=visible();
+  const tb=document.getElementById('rows');
+  tb.innerHTML=rows.map(d=>{
+    const i=DATA.indexOf(d);
+    const opts=UNIT_OPTS.map(u=>'<option value="'+u+'"'+(u===d.unit?' selected':'')+'>'+(u||'—')+'</option>').join('');
+    const packTxt=[d.parsed.packs?d.parsed.packs+'×'+(d.parsed.eachQty||'')+(d.parsed.eachUnit||''):'',
+      d.parsed.count?d.parsed.count+' ct':'', d.rec.pcontains?d.rec.pcontains+' '+(d.rec.cunit||''):''].filter(Boolean).join(' · ');
+    return '<tr>'+
+      '<td><input type="checkbox" '+(d.checked?'checked':'')+' onchange="DATA['+i+'].checked=this.checked;upd()"></td>'+
+      '<td><div class="pname">'+esc(d.prod.display_name||d.prod.name)+'</div><div class="pdesc">'+esc(d.rec.vdesc||'')+'</div></td>'+
+      '<td><span class="cat-pill">'+esc(d.prod.category||'')+'</span></td>'+
+      '<td style="font-size:11px;color:var(--text2)">'+esc(packTxt||'—')+'</td>'+
+      '<td style="font-size:11px;color:var(--text3)">'+esc(d.prod.inventory_unit||'(none)')+'</td>'+
+      '<td><select class="cell-sel" onchange="DATA['+i+'].unit=this.value">'+opts+'</select></td>'+
+      '<td><input class="cell-num" type="number" step="0.01" value="'+(d.conv!==''&&d.conv!=null?d.conv:'')+'" onchange="DATA['+i+'].conv=this.value"></td>'+
+      '<td class="hint">'+esc(d.sug.hint||'')+'</td>'+
+      '<td class="conf-'+d.conf+'" style="font-size:11px;font-weight:700">'+d.conf.toUpperCase()+'</td>'+
+    '</tr>';
+  }).join('');
+  document.getElementById('summary').textContent=rows.length+' shown · '+DATA.length+' total · '+DATA.filter(d=>d.checked).length+' checked';
+  upd();
+}
+function toggleAll(cb){visible().forEach(d=>d.checked=cb.checked);render();}
+function upd(){
+  const n=DATA.filter(d=>d.checked).length;
+  document.getElementById('applyinfo').textContent=n+' product'+(n===1?'':'s')+' will be updated (count unit + conversion).';
+  document.getElementById('applybtn').disabled=n===0;
+}
+
+async function applyChecked(){
+  const todo=DATA.filter(d=>d.checked);
+  if(!todo.length)return;
+  if(!confirm('Apply count unit + conversion to '+todo.length+' products?'))return;
+  const btn=document.getElementById('applybtn');btn.disabled=true;btn.textContent='Applying…';
+  let ok=0,fail=0;
+  for(const d of todo){
+    const p=d.prod;
+    const body={
+      display_name:p.display_name||'',name:p.name||'',category:p.category||'FOOD',unit:p.unit||'',
+      pack_size:p.pack_size||'',inventory_unit:d.unit||'',unit_conversion:(d.conv!==''&&d.conv!=null)?d.conv:(p.unit_conversion||1),
+      current_price:p.current_price||'',par_level:p.par_level||'',reorder_point:p.reorder_point||'',notes:p.notes||''
+    };
+    try{
+      const r=await fetch('/api/inventory/products/'+p.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(r.ok){ok++;p.inventory_unit=d.unit;p.unit_conversion=body.unit_conversion;d.checked=false;}else fail++;
+    }catch(e){fail++;}
+  }
+  btn.textContent='Apply checked';
+  showToast('✓ '+ok+' updated'+(fail?' · '+fail+' failed':''),fail>0);
+  render();
+}
+
+load();
+</script>
+</body>
+</html>
