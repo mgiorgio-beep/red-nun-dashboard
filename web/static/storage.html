@@ -82,6 +82,11 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .shelf-select:focus{border-color:var(--blue);outline:none}
 .add-shelf-row{display:flex;justify-content:flex-end;margin-bottom:6px}
 
+/* Link from a product to its edit page */
+.prod-link{color:inherit;text-decoration:none}
+.prod-link:hover{color:var(--blue);text-decoration:underline}
+.prod-link .ext{color:var(--text3);font-size:10px;margin-left:3px}
+
 /* Right: Product list */
 .main{flex:1;overflow-y:auto;padding:20px 24px}
 .main-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
@@ -408,7 +413,7 @@ async function renderLocationProducts(locId) {
       const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
       html += '<div class="product-card" style="cursor:default">' +
         '<div class="pc-info">' +
-          '<div class="pc-name">' + esc(p.name) + '</div>' +
+          '<div class="pc-name"><a class="prod-link" href="/manage?product=' + p.id + '" target="_blank" title="Edit this product">' + esc(p.name) + '<span class="ext">↗</span></a></div>' +
           '<div class="pc-meta"><span class="pc-tag ' + tagClass + '">' + catLabel(p.category) + '</span> ' +
             (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
           '</div>' +
@@ -517,7 +522,7 @@ async function selectUnassigned() {
       '<div class="unassigned-card">' +
         '<input type="checkbox" class="product-check" value="' + p.id + '" style="flex-shrink:0">' +
         '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(p.name) + '</div>' +
+          '<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><a class="prod-link" href="/manage?product=' + p.id + '" target="_blank" title="Edit this product">' + esc(p.name) + '<span class="ext">↗</span></a></div>' +
           '<div style="font-size:11px;color:var(--text3)">' +
             (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
           '</div>' +

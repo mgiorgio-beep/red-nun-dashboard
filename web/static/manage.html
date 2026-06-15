@@ -8838,5 +8838,23 @@ async function maRecalcCosts() {
   </div>
 </div>
 
+<script>
+/* Deep link: /manage?product=<id> opens that product's editor in Product Setup */
+(function(){
+  var pid = new URLSearchParams(window.location.search).get('product');
+  if (!pid) return;
+  var tries = 0;
+  (function open(){
+    tries++;
+    if (typeof showView === 'function' && typeof editProduct === 'function') {
+      showView('prodsetup');
+      setTimeout(function(){ try { editProduct(parseInt(pid)); } catch(e){} }, 400);
+    } else if (tries < 30) {
+      setTimeout(open, 150);
+    }
+  })();
+})();
+</script>
+
 </body>
 </html>
