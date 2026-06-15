@@ -39,7 +39,12 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 /* Left: Storage locations */
 .sidebar{width:280px;border-right:1px solid var(--border);overflow-y:auto;background:var(--card)}
 .loc-header{padding:16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;
-  color:var(--text3);text-transform:uppercase;letter-spacing:0.8px}
+  color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;
+  display:flex;justify-content:space-between;align-items:center}
+.add-area-btn{background:rgba(10,132,255,0.12);color:var(--blue);border:1px solid rgba(10,132,255,0.3);
+  border-radius:7px;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;
+  text-transform:none;letter-spacing:0;transition:all 0.15s}
+.add-area-btn:hover{background:rgba(10,132,255,0.2)}
 .loc-item{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;
   display:flex;justify-content:space-between;align-items:center;transition:all 0.15s}
 .loc-item:hover{background:rgba(255,255,255,0.03)}
@@ -143,7 +148,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
       <button class="rest-btn sel" data-loc="dennis" onclick="pickRest(this)">Dennis Port</button>
       <button class="rest-btn" data-loc="chatham" onclick="pickRest(this)">Chatham</button>
     </div>
-    <div class="loc-header">Storage Areas</div>
+    <div class="loc-header"><span>Storage Areas</span><button class="add-area-btn" onclick="addArea()">+ Add Area</button></div>
     <div id="loc-list"></div>
   </div>
 
@@ -173,6 +178,40 @@ function pickRest(el) {
   S.restaurant = el.dataset.loc;
   S.selectedLoc = null;
   loadLocations();
+}
+
+// ============================================
+// ADD AREA
+// ============================================
+async function addArea() {
+  const restLabel = S.restaurant === 'dennis' ? 'Dennis Port' : 'Chatham';
+  const name = (prompt('New storage area name for ' + restLabel + ':\n(e.g. Back Freezer, Shed Freezer, Back Shelves)') || '').trim();
+  if (!name) return;
+
+  // Guard against a duplicate name already shown for this restaurant
+  if (S.locations.some(l => l.name.toLowerCase() === name.toLowerCase())) {
+    showToast('"' + name + '" already exists', true);
+    return;
+  }
+
+  try {
+    const res = await fetch(API + '/locations', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name, location: S.restaurant })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data.error || 'Could not add area', true);
+      return;
+    }
+    showToast('✓ Added "' + name + '" to ' + restLabel);
+    // Jump straight into the new area so items can be assigned to it
+    if (data.id) S.selectedLoc = data.id;
+    await loadLocations();
+  } catch(e) {
+    showToast('Error adding area', true);
+  }
 }
 
 // ============================================
