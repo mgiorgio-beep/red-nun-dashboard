@@ -87,6 +87,22 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .prod-link:hover{color:var(--blue);text-decoration:underline}
 .prod-link .ext{color:var(--text3);font-size:10px;margin-left:3px}
 
+/* In-page product edit panel */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:300;padding:20px}
+.modal-ov.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:440px;padding:22px;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:17px;font-weight:700;margin-bottom:4px}
+.modal .msub{font-size:12px;color:var(--text3);margin-bottom:16px}
+.fld{margin-bottom:12px}
+.fld label{display:block;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px}
+.fld input,.fld select{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 10px;font-size:14px;outline:none}
+.fld input:focus,.fld select:focus{border-color:var(--blue)}
+.modal-row{display:flex;gap:10px}.modal-row .fld{flex:1}
+.modal-actions{display:flex;gap:10px;margin-top:18px}
+.modal-actions button{flex:1;padding:11px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:none}
+.btn-save{background:var(--green);color:#000}
+.btn-cancel{background:var(--card2);color:var(--text2);border:1px solid var(--border)}
+
 /* Right: Product list */
 .main{flex:1;overflow-y:auto;padding:20px 24px}
 .main-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
@@ -165,6 +181,32 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- In-page product editor -->
+<div class="modal-ov" id="edit-ov" onclick="if(event.target===this)closeEdit()">
+  <div class="modal">
+    <h3 id="edit-title">Edit product</h3>
+    <div class="msub">Changes save to the product catalog.</div>
+    <div class="fld"><label>Display name</label><input id="ed-display"></div>
+    <div class="fld"><label>Full name</label><input id="ed-name"></div>
+    <div class="modal-row">
+      <div class="fld"><label>Category</label><select id="ed-cat">
+        <option value="FOOD">Food</option><option value="BEER">Beer</option><option value="LIQUOR">Liquor</option>
+        <option value="WINE">Wine</option><option value="NA_BEVERAGES">NA Beverages</option><option value="SUPPLIES">Supplies</option>
+      </select></div>
+      <div class="fld"><label>Unit</label><input id="ed-unit"></div>
+    </div>
+    <div class="modal-row">
+      <div class="fld"><label>Price ($)</label><input id="ed-price" type="number" step="0.01"></div>
+      <div class="fld"><label>Par</label><input id="ed-par" type="number" step="0.5"></div>
+      <div class="fld"><label>Reorder</label><input id="ed-reorder" type="number" step="0.5"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEdit()">Cancel</button>
+      <button class="btn-save" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
 
 <div class="layout">
   <!-- Sidebar: Storage Locations -->
@@ -413,7 +455,7 @@ async function renderLocationProducts(locId) {
       const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
       html += '<div class="product-card" style="cursor:default">' +
         '<div class="pc-info">' +
-          '<div class="pc-name"><a class="prod-link" href="/manage?product=' + p.id + '" target="_blank" title="Edit this product">' + esc(p.name) + '<span class="ext">↗</span></a></div>' +
+          '<div class="pc-name"><a class="prod-link" href="/manage?product=' + p.id + '" onclick="openEdit(' + p.id + ');return false" title="Edit this product">' + esc(p.name) + '<span class="ext">✎</span></a></div>' +
           '<div class="pc-meta"><span class="pc-tag ' + tagClass + '">' + catLabel(p.category) + '</span> ' +
             (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
           '</div>' +
@@ -522,7 +564,7 @@ async function selectUnassigned() {
       '<div class="unassigned-card">' +
         '<input type="checkbox" class="product-check" value="' + p.id + '" style="flex-shrink:0">' +
         '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><a class="prod-link" href="/manage?product=' + p.id + '" target="_blank" title="Edit this product">' + esc(p.name) + '<span class="ext">↗</span></a></div>' +
+          '<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><a class="prod-link" href="/manage?product=' + p.id + '" onclick="openEdit(' + p.id + ');return false" title="Edit this product">' + esc(p.name) + '<span class="ext">✎</span></a></div>' +
           '<div style="font-size:11px;color:var(--text3)">' +
             (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
           '</div>' +
@@ -640,6 +682,57 @@ async function saveOrder(locId, productIds) {
 // ============================================
 // HELPERS
 // ============================================
+// ============================================
+// IN-PAGE PRODUCT EDIT
+// ============================================
+let _editId = null, _editRaw = null;
+async function openEdit(id) {
+  try {
+    const p = await fetch('/api/inventory/products/' + id).then(r => r.json());
+    _editId = id; _editRaw = p;
+    document.getElementById('edit-title').textContent = 'Edit: ' + (p.display_name || p.name || 'Product');
+    document.getElementById('ed-display').value = p.display_name || '';
+    document.getElementById('ed-name').value = p.name || '';
+    const cats = ['FOOD','BEER','LIQUOR','WINE','NA_BEVERAGES','SUPPLIES'];
+    document.getElementById('ed-cat').value = cats.includes(p.category) ? p.category : 'FOOD';
+    document.getElementById('ed-unit').value = p.unit || '';
+    document.getElementById('ed-price').value = p.current_price || '';
+    document.getElementById('ed-par').value = p.par_level || '';
+    document.getElementById('ed-reorder').value = p.reorder_point || '';
+    document.getElementById('edit-ov').classList.add('open');
+  } catch(e) { showToast('Could not load product', true); }
+}
+function closeEdit() {
+  document.getElementById('edit-ov').classList.remove('open');
+  _editId = null; _editRaw = null;
+}
+async function saveEdit() {
+  if (!_editId) return;
+  const r = _editRaw || {};
+  const body = {
+    display_name: document.getElementById('ed-display').value,
+    name: document.getElementById('ed-name').value,
+    category: document.getElementById('ed-cat').value,
+    unit: document.getElementById('ed-unit').value,
+    pack_size: r.pack_size || '',
+    inventory_unit: r.inventory_unit || '',
+    unit_conversion: r.unit_conversion || 1,
+    current_price: document.getElementById('ed-price').value,
+    par_level: document.getElementById('ed-par').value,
+    reorder_point: document.getElementById('ed-reorder').value,
+    notes: r.notes || ''
+  };
+  try {
+    const res = await fetch('/api/inventory/products/' + _editId, {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if (!res.ok) { showToast('Save failed', true); return; }
+    showToast('✓ Saved');
+    closeEdit();
+    renderMain();
+  } catch(e) { showToast('Error saving', true); }
+}
+
 function renderMain() {
   if (S.selectedLoc === 'unassigned') {
     selectUnassigned();
