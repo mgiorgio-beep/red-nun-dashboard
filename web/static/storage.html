@@ -194,8 +194,15 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
         <option value="FOOD">Food</option><option value="BEER">Beer</option><option value="LIQUOR">Liquor</option>
         <option value="WINE">Wine</option><option value="NA_BEVERAGES">NA Beverages</option><option value="SUPPLIES">Supplies</option>
       </select></div>
-      <div class="fld"><label>Unit</label><input id="ed-unit"></div>
+      <div class="fld"><label>Purchase unit</label><input id="ed-unit"></div>
     </div>
+    <div class="fld"><label>Count unit (how you inventory it)</label><select id="ed-invunit">
+      <option value="">— same as purchase unit —</option>
+      <option value="each">Each</option><option value="package">Package</option><option value="bottle">Bottle</option><option value="can">Can</option>
+      <option value="keg">Keg</option><option value="lb">Pound (lb)</option><option value="oz">Ounce (oz)</option>
+      <option value="gal">Gallon</option><option value="liter">Liter</option><option value="slice">Slice</option>
+      <option value="serving">Serving</option><option value="portion">Portion</option>
+    </select></div>
     <div class="modal-row">
       <div class="fld"><label>Price ($)</label><input id="ed-price" type="number" step="0.01"></div>
       <div class="fld"><label>Par</label><input id="ed-par" type="number" step="0.5"></div>
@@ -696,6 +703,7 @@ async function openEdit(id) {
     const cats = ['FOOD','BEER','LIQUOR','WINE','NA_BEVERAGES','SUPPLIES'];
     document.getElementById('ed-cat').value = cats.includes(p.category) ? p.category : 'FOOD';
     document.getElementById('ed-unit').value = p.unit || '';
+    document.getElementById('ed-invunit').value = ['each','package','bottle','can','keg','lb','oz','gal','liter','slice','serving','portion'].includes(p.inventory_unit) ? p.inventory_unit : '';
     document.getElementById('ed-price').value = p.current_price || '';
     document.getElementById('ed-par').value = p.par_level || '';
     document.getElementById('ed-reorder').value = p.reorder_point || '';
@@ -715,7 +723,7 @@ async function saveEdit() {
     category: document.getElementById('ed-cat').value,
     unit: document.getElementById('ed-unit').value,
     pack_size: r.pack_size || '',
-    inventory_unit: r.inventory_unit || '',
+    inventory_unit: document.getElementById('ed-invunit').value || r.inventory_unit || '',
     unit_conversion: r.unit_conversion || 1,
     current_price: document.getElementById('ed-price').value,
     par_level: document.getElementById('ed-par').value,
