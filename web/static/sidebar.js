@@ -31,6 +31,9 @@ var sections=[
 {id:'sec-mgmt',label:'Management',icon:'mgmt',children:[
   {id:'nav-vendors',label:'Vendors',page:'/manage',tab:'vendors'},
   {id:'nav-inventory',label:'Inventory',page:'/manage',tab:'inv'},
+  {id:'nav-storage',label:'Storage Layout',page:'/storage'},
+  {id:'nav-foodcount',label:'Food Count',page:'/count?type=food'},
+  {id:'nav-boozecount',label:'Booze Count',page:'/count?type=booze'},
   {id:'nav-orderguide',label:'Order Guide',page:'/order-guide'},
   {id:'nav-aicount',label:'Smart Count',page:'/ai-inventory',mobileOnly:true},
   {id:'nav-specials',label:'Specials Board',page:'/specials-admin'}
@@ -121,6 +124,8 @@ if(path==='/opening-balances')return 'nav-acct-openbal';
 if(path==='/sales-journal'){var sp=new URLSearchParams(window.location.search);return sp.get('tab')==='export'?'nav-acct-export':'nav-acct-entries';}
 if(path==='/reports')return 'nav-acct-reports';
 if(path==='/sales-mapping')return 'nav-acct-mapping';
+if(path==='/storage')return 'nav-storage';
+if(path==='/count'){var ct=(new URLSearchParams(window.location.search).get('type')||'').toLowerCase();return ct==='booze'?'nav-boozecount':'nav-foodcount';}
 return 'nav-dashboard';
 }
 function setActiveItem(id){

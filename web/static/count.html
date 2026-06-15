@@ -207,6 +207,17 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 <script>
 const S = { location: null, sections: [], counts: {}, countId: null, totalProducts: 0 };
 
+// Count type comes from the URL (?type=food | ?type=booze). No param = full count (unchanged).
+const COUNT_TYPE = (new URLSearchParams(location.search).get('type') || 'all').toLowerCase();
+const BOOZE_CATS = ['BEER', 'LIQUOR', 'WINE'];
+const TYPE_LABEL = COUNT_TYPE === 'food' ? 'Food' : COUNT_TYPE === 'booze' ? 'Booze' : 'Full';
+const TYPE_NOTE  = COUNT_TYPE === 'food' ? 'Food count' : COUNT_TYPE === 'booze' ? 'Booze count' : 'Full count';
+function inCountType(cat) {
+  if (COUNT_TYPE === 'all') return true;
+  const isBooze = BOOZE_CATS.includes((cat || '').toUpperCase());
+  return COUNT_TYPE === 'booze' ? isBooze : !isBooze;
+}
+
 function pickLoc(el) {
   document.querySelectorAll('.loc-btn').forEach(b => b.classList.remove('sel'));
   el.classList.add('sel');
@@ -232,8 +243,16 @@ async function startCount() {
     return;
   }
 
+  // Filter to the selected count type (food / booze) and drop areas left empty.
+  if (COUNT_TYPE !== 'all') {
+    S.sections = S.sections
+      .map(sec => Object.assign({}, sec, { products: (sec.products || []).filter(p => inCountType(p.category)) }))
+      .filter(sec => sec.products.length > 0);
+  }
+
   if (S.sections.length === 0) {
-    showToast('No products assigned to storage areas. Go to Storage Layout to set up.', true);
+    const what = COUNT_TYPE !== 'all' ? TYPE_LABEL.toLowerCase() + ' ' : '';
+    showToast('No ' + what + 'products assigned to storage areas. Go to Storage Layout to set up.', true);
     return;
   }
 
@@ -242,7 +261,7 @@ async function startCount() {
     const res = await fetch('/api/inventory/counts', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ location: S.location, notes: 'Full count' })
+      body: JSON.stringify({ location: S.location, notes: TYPE_NOTE })
     });
     const data = await res.json();
     S.countId = data.id;
@@ -441,13 +460,23 @@ function discardCount() {
 // ============================================
 // HISTORY
 // ============================================
+function countTypeOf(c) {
+  const n = (c.notes || '').toLowerCase();
+  if (n.indexOf('booze') !== -1) return 'Booze';
+  if (n.indexOf('food') !== -1) return 'Food';
+  return 'Full';
+}
+
 async function loadHistory() {
   try {
     const res = await fetch('/api/inventory/counts/history');
-    const data = await res.json();
+    let data = await res.json();
+    // On a Food/Booze page, only show that type's counts.
+    if (COUNT_TYPE !== 'all') data = data.filter(c => countTypeOf(c).toLowerCase() === COUNT_TYPE);
     const el = document.getElementById('history-list');
     if (!data.length) {
-      el.innerHTML = '<div class="empty" style="padding:30px 0"><div class="empty-icon">📋</div><div class="empty-text">No counts yet</div></div>';
+      el.innerHTML = '<div class="empty" style="padding:30px 0"><div class="empty-icon">📋</div><div class="empty-text">No ' +
+        (COUNT_TYPE !== 'all' ? TYPE_LABEL.toLowerCase() + ' ' : '') + 'counts yet</div></div>';
       return;
     }
     el.innerHTML = data.slice(0, 10).map(c => {
@@ -455,10 +484,11 @@ async function loadHistory() {
       const dateStr = d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
       const timeStr = d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
       const loc = c.location === 'dennis' ? 'Dennis' : 'Chatham';
+      const typ = countTypeOf(c);
       return '<div class="history-card"><div class="history-top">' +
         '<div class="history-date">' + dateStr + ' · ' + timeStr + '</div>' +
         '<span class="history-badge badge-complete">Complete</span>' +
-        '</div><div class="history-meta">' + loc + ' · ' + (c.item_count || 0) + ' items</div></div>';
+        '</div><div class="history-meta">' + loc + ' · ' + typ + ' · ' + (c.item_count || 0) + ' items</div></div>';
     }).join('');
   } catch(e) {}
 }
@@ -468,6 +498,16 @@ function esc(s) { const d=document.createElement('div');d.textContent=s;return d
 function showToast(msg,isError) {
   const t=document.getElementById('toast');t.textContent=msg;
   t.className='toast show'+(isError?' error':'');setTimeout(()=>t.className='toast',2500);
+}
+// Reflect the count type in the page title / intro.
+if (COUNT_TYPE !== 'all') {
+  const emoji = COUNT_TYPE === 'booze' ? '🍸 ' : '🍴 ';
+  const st = document.querySelector('.setup-title'); if (st) st.textContent = 'New ' + TYPE_LABEL + ' Count';
+  const ht = document.querySelector('.hdr-title');   if (ht) ht.textContent = emoji + TYPE_LABEL + ' Count';
+  const ss = document.querySelector('.setup-sub');   if (ss) ss.textContent =
+    'Counting ' + TYPE_LABEL.toLowerCase() + ' only — ' +
+    (COUNT_TYPE === 'booze' ? 'beer, liquor & wine.' : 'food, NA beverages & supplies.') +
+    ' Pick a location to start.';
 }
 loadHistory();
 </script>
