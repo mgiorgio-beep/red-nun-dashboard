@@ -7721,7 +7721,7 @@ async function thermoAdj(location, deviceId, delta) {
 var psData = [];
 var psExpanded = null;
 var PS_CATS = {'':'--','FOOD':'Food','BEER':'Beer','LIQUOR':'Liquor','WINE':'Wine','NA_BEVERAGES':'NA Bev','NON_COGS':'Non-COGS','TOGO_SUPPLIES':'Togo','DR_SUPPLIES':'DR','KITCHEN_SUPPLIES':'Kitchen'};
-var PS_RECIPE_UNITS = ['OZ','LB','EA','FL_OZ','GAL','QT','PT','CUP','TBSP','TSP','ML','L','DOZ'];
+var PS_RECIPE_UNITS = ['OZ','LB','EA','SLICE','FL_OZ','GAL','QT','PT','CUP','TBSP','TSP','ML','L','DOZ'];
 var PS_CAT_COLORS = {'FOOD':'var(--green)','BEER':'var(--orange)','LIQUOR':'var(--red)','WINE':'var(--purple)','NA_BEVERAGES':'var(--blue)','NON_COGS':'var(--text3)','TOGO_SUPPLIES':'var(--text3)','KITCHEN_SUPPLIES':'var(--text3)'};
 
 async function loadProductSetup() {

@@ -86,6 +86,26 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="fld"><label>Par</label><input id="ep-par" type="number" step="0.5"></div>
       <div class="fld"><label>Reorder</label><input id="ep-reorder" type="number" step="0.5"></div>
     </div>
+    <div class="fld"><label>Count unit (how you inventory it)</label><select id="ep-invunit">
+      <option value="">— not set —</option>
+      <option value="each">Each</option><option value="package">Package</option><option value="case">Case</option>
+      <option value="bottle">Bottle</option><option value="can">Can</option><option value="keg">Keg</option>
+      <option value="lb">Pound (lb)</option><option value="oz">Ounce (oz)</option><option value="gal">Gallon</option>
+      <option value="liter">Liter</option><option value="slice">Slice</option><option value="serving">Serving</option><option value="portion">Portion</option>
+    </select></div>
+    <div class="fld">
+      <label>Unit conversions <span style="text-transform:none;color:var(--text3);font-weight:500">— e.g. 1 case = 2 package, then 1 package = 144 slice</span></label>
+      <div id="ep-conv-list" style="font-size:13px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text3)">1</span>
+        <input list="ep-units" id="ep-cf" placeholder="case" style="flex:1;min-width:64px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px;font-size:13px">
+        <span style="font-size:13px;color:var(--text3)">=</span>
+        <input type="number" step="0.01" id="ep-cq" placeholder="2" style="width:62px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px;font-size:13px">
+        <input list="ep-units" id="ep-ct" placeholder="package" style="flex:1;min-width:64px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px;font-size:13px">
+        <button class="btn-cancel" style="flex:0 0 auto;padding:8px 12px" onclick="epAddConv()">+ Add</button>
+      </div>
+      <datalist id="ep-units"><option value="case"></option><option value="package"></option><option value="slice"></option><option value="each"></option><option value="lb"></option><option value="oz"></option><option value="bottle"></option><option value="can"></option><option value="keg"></option><option value="gal"></option><option value="liter"></option></datalist>
+    </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeEditProduct()">Cancel</button>
       <button class="btn-save" onclick="saveEditProduct()">Save</button>
@@ -209,7 +229,7 @@ function render(){
       d.parsed.count?d.parsed.count+' ct':'', d.rec.pcontains?d.rec.pcontains+' '+(d.rec.cunit||''):''].filter(Boolean).join(' · ');
     return '<tr>'+
       '<td><input type="checkbox" '+(d.checked?'checked':'')+' onchange="DATA['+i+'].checked=this.checked;upd()"></td>'+
-      '<td><div class="pname pname-link" onclick="openEditProduct('+d.prod.id+')" title="Edit product">'+esc(d.prod.display_name||d.prod.name)+' <span style="color:var(--text3);font-size:11px">✎</span></div><div class="pdesc">'+esc(d.rec.vdesc||'')+'</div></td>'+
+      '<td><div class="pname pname-link" onclick="openProductEditor('+d.prod.id+',{onSaved:rnpeSaved})" title="Edit product">'+esc(d.prod.display_name||d.prod.name)+' <span style="color:var(--text3);font-size:11px">✎</span></div><div class="pdesc">'+esc(d.rec.vdesc||'')+'</div></td>'+
       '<td><span class="cat-pill">'+esc(d.prod.category||'')+'</span></td>'+
       '<td style="font-size:11px;color:var(--text2)">'+esc(packTxt||'—')+'</td>'+
       '<td style="font-size:11px;color:var(--text3)">'+esc(d.prod.inventory_unit||'(none)')+'</td>'+
@@ -230,7 +250,17 @@ function upd(){
   document.getElementById('applybtn').disabled=n===0;
 }
 
-// ---- Product editor (rename / recategorize, e.g. Heineken NA→Beer) ----
+// Shared product editor saved-callback: update the row (or drop it if archived)
+function rnpeSaved(p, meta){
+  const oid = (meta && meta.id) ? meta.id : (p && p.id);
+  const idx = DATA.findIndex(x => x.prod.id === oid);
+  if (idx < 0) return;
+  if (meta && meta.archived) { DATA.splice(idx, 1); }
+  else if (p) { Object.assign(DATA[idx].prod, p); if (p.inventory_unit) DATA[idx].unit = p.inventory_unit; }
+  render();
+}
+
+// ---- (legacy in-page editor, no longer wired) ----
 let _epId=null;
 function openEditProduct(id){
   const d=DATA.find(x=>x.prod.id===id); if(!d)return;
@@ -302,5 +332,6 @@ async function archive(id){
 
 load();
 </script>
+<script src="/static/product_editor.js"></script>
 </body>
 </html>

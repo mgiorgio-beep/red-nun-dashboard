@@ -462,7 +462,7 @@ async function renderLocationProducts(locId) {
       const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
       html += '<div class="product-card" style="cursor:default">' +
         '<div class="pc-info">' +
-          '<div class="pc-name"><a class="prod-link" href="/manage?product=' + p.id + '" onclick="openEdit(' + p.id + ');return false" title="Edit this product">' + esc(p.name) + '<span class="ext">✎</span></a></div>' +
+          '<div class="pc-name"><a class="prod-link" href="/manage?product=' + p.id + '" onclick="openProductEditor(' + p.id + ',{onSaved:function(){loadLocations();}});return false" title="Edit this product">' + esc(p.name) + '<span class="ext">✎</span></a></div>' +
           '<div class="pc-meta"><span class="pc-tag ' + tagClass + '">' + catLabel(p.category) + '</span> ' +
             (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
           '</div>' +
@@ -571,7 +571,7 @@ async function selectUnassigned() {
       '<div class="unassigned-card">' +
         '<input type="checkbox" class="product-check" value="' + p.id + '" style="flex-shrink:0">' +
         '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><a class="prod-link" href="/manage?product=' + p.id + '" onclick="openEdit(' + p.id + ');return false" title="Edit this product">' + esc(p.name) + '<span class="ext">✎</span></a></div>' +
+          '<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><a class="prod-link" href="/manage?product=' + p.id + '" onclick="openProductEditor(' + p.id + ',{onSaved:function(){loadLocations();}});return false" title="Edit this product">' + esc(p.name) + '<span class="ext">✎</span></a></div>' +
           '<div style="font-size:11px;color:var(--text3)">' +
             (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
           '</div>' +
@@ -770,5 +770,6 @@ function showToast(msg, isError) {
 // Init
 loadLocations();
 </script>
+<script src="/static/product_editor.js"></script>
 </body>
 </html>
