@@ -73,11 +73,29 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .section-count{font-size:11px;color:var(--text3);font-weight:600}
 .section-icon{margin-right:6px}
 
-.product-list{padding:0 16px calc(var(--safe-bottom) + 80px)}
-.product-row{display:flex;align-items:center;gap:12px;padding:14px 0;
-  border-bottom:1px solid var(--border)}
+.product-list{padding:0 14px calc(var(--safe-bottom) + 90px)}
+.product-row{display:flex;align-items:center;gap:12px;padding:12px 12px;margin-bottom:8px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px}
 .product-info{flex:1;min-width:0}
-.product-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.product-name{font-size:15px;font-weight:600;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* Big tap-friendly quantity stepper */
+.qty-stepper{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.step-btn{width:42px;height:42px;border-radius:11px;background:var(--card2);
+  border:1px solid var(--border2);color:var(--text);font-size:24px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  user-select:none;-webkit-user-select:none;transition:all .12s}
+.step-btn:active{background:var(--blue);border-color:var(--blue);color:#fff;transform:scale(0.92)}
+.qty-wrap{display:flex;flex-direction:column;align-items:center}
+
+/* iPad / wide: two columns, centered, roomier */
+@media (min-width:768px){
+  .product-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:1000px;margin:0 auto}
+  .section-header{grid-column:1 / -1}
+  .setup,.count-stats,.jump-nav,.search-wrap{max-width:1000px;margin-left:auto;margin-right:auto}
+  .save-bar>*{max-width:1000px}
+}
 .product-meta{font-size:11px;color:var(--text3);margin-top:2px;display:flex;gap:8px;align-items:center}
 .product-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;flex-shrink:0}
 .tag-beer{background:rgba(255,159,10,0.15);color:var(--orange)}
@@ -87,13 +105,13 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .tag-na_beverages{background:rgba(10,132,255,0.15);color:var(--blue)}
 .tag-other,.tag-supplies{background:rgba(255,255,255,0.08);color:var(--text3)}
 
-.qty-input{width:72px;padding:10px 8px;background:var(--card2);border:1.5px solid var(--border);
-  border-radius:10px;color:var(--text);font-size:16px;font-weight:700;text-align:center;
+.qty-input{width:62px;padding:11px 6px;background:var(--card2);border:1.5px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:18px;font-weight:700;text-align:center;
   outline:none;-moz-appearance:textfield;flex-shrink:0}
 .qty-input::-webkit-inner-spin-button,.qty-input::-webkit-outer-spin-button{-webkit-appearance:none}
 .qty-input:focus{border-color:var(--blue);background:rgba(10,132,255,0.08)}
 .qty-input.has-value{border-color:var(--green);background:rgba(48,209,88,0.08)}
-.qty-unit{font-size:10px;color:var(--text3);font-weight:600;text-align:center;width:72px;flex-shrink:0;margin-top:-2px}
+.qty-unit{font-size:10px;color:var(--text3);font-weight:600;text-align:center;width:62px;flex-shrink:0;margin-top:3px}
 .product-prev{font-size:10px;color:var(--text3)}
 .product-prev b{color:var(--text2)}
 
@@ -349,10 +367,14 @@ function renderCount() {
             prevHtml +
           '</div>' +
         '</div>' +
-        '<div style="text-align:center">' +
-          '<input class="qty-input' + (hasVal ? ' has-value' : '') + '" type="number" inputmode="decimal" step="0.5" ' +
-            'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + p.id + ',' + si + ',this)" data-pid="' + p.id + '">' +
-          '<div class="qty-unit">' + (p.inventory_unit || p.unit || 'ea') + '</div>' +
+        '<div class="qty-stepper">' +
+          '<button class="step-btn" onclick="stepQty(' + p.id + ',' + si + ',-1)" aria-label="minus">−</button>' +
+          '<div class="qty-wrap">' +
+            '<input class="qty-input' + (hasVal ? ' has-value' : '') + '" type="number" inputmode="decimal" step="0.5" ' +
+              'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + p.id + ',' + si + ',this)" data-pid="' + p.id + '">' +
+            '<div class="qty-unit">' + (p.inventory_unit || p.unit || 'ea') + '</div>' +
+          '</div>' +
+          '<button class="step-btn" onclick="stepQty(' + p.id + ',' + si + ',1)" aria-label="plus">+</button>' +
         '</div>' +
       '</div>';
     });
@@ -367,6 +389,16 @@ function renderCount() {
 
 function countedInSection(sec) {
   return sec.products.filter(p => S.counts[p.id] !== undefined).length;
+}
+
+function stepQty(pid, sectionIdx, delta) {
+  const el = document.querySelector('.qty-input[data-pid="' + pid + '"]');
+  if (!el) return;
+  let v = parseFloat(el.value);
+  if (isNaN(v)) v = 0;
+  v = Math.max(0, Math.round((v + delta) * 100) / 100);
+  el.value = v;
+  setQty(pid, sectionIdx, el);
 }
 
 function setQty(pid, sectionIdx, el) {
