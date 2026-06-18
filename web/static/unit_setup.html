@@ -42,6 +42,22 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.error{background:var(--red);color:#fff}
 .cat-pill{font-size:10px;color:var(--text3)}
+.pname-link{cursor:pointer}
+.pname-link:hover{color:var(--blue);text-decoration:underline}
+/* Product edit modal */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:300;padding:20px}
+.modal-ov.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:440px;padding:22px;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:17px;font-weight:700;margin-bottom:4px}
+.modal .msub{font-size:12px;color:var(--text3);margin-bottom:16px}
+.fld{margin-bottom:12px}
+.fld label{display:block;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px}
+.fld input,.fld select{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 10px;font-size:14px;outline:none}
+.modal-row{display:flex;gap:10px}.modal-row .fld{flex:1}
+.modal-actions{display:flex;gap:10px;margin-top:18px}
+.modal-actions button{flex:1;padding:11px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:none}
+.btn-save{background:var(--green);color:#000}
+.btn-cancel{background:var(--card2);color:var(--text2);border:1px solid var(--border)}
 </style>
 </head>
 <body>
@@ -50,6 +66,32 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <a href="/storage" class="btn">← Storage</a>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- Product editor -->
+<div class="modal-ov" id="edit-ov" onclick="if(event.target===this)closeEditProduct()">
+  <div class="modal">
+    <h3 id="ep-title">Edit product</h3>
+    <div class="msub">Saves to the product catalog — name, category, price.</div>
+    <div class="fld"><label>Display name</label><input id="ep-display"></div>
+    <div class="fld"><label>Full name</label><input id="ep-name"></div>
+    <div class="modal-row">
+      <div class="fld"><label>Category</label><select id="ep-cat">
+        <option value="FOOD">Food</option><option value="BEER">Beer</option><option value="LIQUOR">Liquor</option>
+        <option value="WINE">Wine</option><option value="NA_BEVERAGES">NA Beverages</option><option value="SUPPLIES">Supplies</option>
+      </select></div>
+      <div class="fld"><label>Purchase unit</label><input id="ep-unit"></div>
+    </div>
+    <div class="modal-row">
+      <div class="fld"><label>Price ($)</label><input id="ep-price" type="number" step="0.01"></div>
+      <div class="fld"><label>Par</label><input id="ep-par" type="number" step="0.5"></div>
+      <div class="fld"><label>Reorder</label><input id="ep-reorder" type="number" step="0.5"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEditProduct()">Cancel</button>
+      <button class="btn-save" onclick="saveEditProduct()">Save</button>
+    </div>
+  </div>
+</div>
 
 <div class="wrap">
   <div class="note">
@@ -167,7 +209,7 @@ function render(){
       d.parsed.count?d.parsed.count+' ct':'', d.rec.pcontains?d.rec.pcontains+' '+(d.rec.cunit||''):''].filter(Boolean).join(' · ');
     return '<tr>'+
       '<td><input type="checkbox" '+(d.checked?'checked':'')+' onchange="DATA['+i+'].checked=this.checked;upd()"></td>'+
-      '<td><div class="pname">'+esc(d.prod.display_name||d.prod.name)+'</div><div class="pdesc">'+esc(d.rec.vdesc||'')+'</div></td>'+
+      '<td><div class="pname pname-link" onclick="openEditProduct('+d.prod.id+')" title="Edit product">'+esc(d.prod.display_name||d.prod.name)+' <span style="color:var(--text3);font-size:11px">✎</span></div><div class="pdesc">'+esc(d.rec.vdesc||'')+'</div></td>'+
       '<td><span class="cat-pill">'+esc(d.prod.category||'')+'</span></td>'+
       '<td style="font-size:11px;color:var(--text2)">'+esc(packTxt||'—')+'</td>'+
       '<td style="font-size:11px;color:var(--text3)">'+esc(d.prod.inventory_unit||'(none)')+'</td>'+
@@ -186,6 +228,43 @@ function upd(){
   const n=DATA.filter(d=>d.checked).length;
   document.getElementById('applyinfo').textContent=n+' product'+(n===1?'':'s')+' will be updated (count unit + conversion).';
   document.getElementById('applybtn').disabled=n===0;
+}
+
+// ---- Product editor (rename / recategorize, e.g. Heineken NA→Beer) ----
+let _epId=null;
+function openEditProduct(id){
+  const d=DATA.find(x=>x.prod.id===id); if(!d)return;
+  const p=d.prod; _epId=id;
+  document.getElementById('ep-title').textContent='Edit: '+(p.display_name||p.name);
+  document.getElementById('ep-display').value=p.display_name||'';
+  document.getElementById('ep-name').value=p.name||'';
+  const cats=['FOOD','BEER','LIQUOR','WINE','NA_BEVERAGES','SUPPLIES'];
+  document.getElementById('ep-cat').value=cats.includes(p.category)?p.category:'FOOD';
+  document.getElementById('ep-unit').value=p.unit||'';
+  document.getElementById('ep-price').value=p.current_price||'';
+  document.getElementById('ep-par').value=p.par_level||'';
+  document.getElementById('ep-reorder').value=p.reorder_point||'';
+  document.getElementById('edit-ov').classList.add('open');
+}
+function closeEditProduct(){document.getElementById('edit-ov').classList.remove('open');_epId=null;}
+async function saveEditProduct(){
+  if(!_epId)return;
+  const d=DATA.find(x=>x.prod.id===_epId); if(!d)return; const p=d.prod;
+  const body={
+    display_name:document.getElementById('ep-display').value, name:document.getElementById('ep-name').value,
+    category:document.getElementById('ep-cat').value, subcategory:p.subcategory||'',
+    unit:document.getElementById('ep-unit').value, pack_size:p.pack_size||'', pack_unit:p.pack_unit||'',
+    preferred_vendor_id:p.preferred_vendor_id||null,
+    current_price:document.getElementById('ep-price').value, par_level:document.getElementById('ep-par').value,
+    reorder_point:document.getElementById('ep-reorder').value, storage_location:p.storage_location||'', notes:p.notes||''
+  };
+  try{
+    const r=await fetch('/api/inventory/products/'+_epId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){showToast('Save failed',true);return;}
+    p.display_name=body.display_name; p.name=body.name; p.category=body.category; p.unit=body.unit;
+    p.current_price=parseFloat(body.current_price)||p.current_price; p.par_level=body.par_level; p.reorder_point=body.reorder_point;
+    showToast('✓ Saved'); closeEditProduct(); render();
+  }catch(e){showToast('Error saving',true);}
 }
 
 async function applyChecked(){
