@@ -325,19 +325,26 @@ def get_count_sheet():
     for loc in locs:
         products = conn.execute("""
             SELECT p.id, p.name, p.category, p.unit, p.inventory_unit, p.current_price,
-                   p.par_level, psl.sort_order,
+                   p.par_level, psl.sort_order, psl.section_id,
                    inv.quantity as current_qty
             FROM product_storage_locations psl
             JOIN products p ON psl.product_id = p.id
             LEFT JOIN inventory inv ON inv.product_id = p.id AND inv.location = ?
             WHERE psl.storage_location_id = ? AND p.active = 1
-            ORDER BY psl.sort_order
+            ORDER BY psl.section_id NULLS LAST, psl.sort_order
         """, (location, loc['id'])).fetchall()
-        
+
+        sections = conn.execute("""
+            SELECT id, name, sort_order FROM storage_sections
+            WHERE storage_location_id = ?
+            ORDER BY sort_order, name
+        """, (loc['id'],)).fetchall()
+
         if products:
             result.append({
                 'location_id': loc['id'],
                 'location_name': loc['name'],
+                'sections': [dict(s) for s in sections],
                 'products': [dict(p) for p in products]
             })
     

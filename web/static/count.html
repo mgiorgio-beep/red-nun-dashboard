@@ -88,11 +88,22 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   user-select:none;-webkit-user-select:none;transition:all .12s}
 .step-btn:active{background:var(--blue);border-color:var(--blue);color:#fff;transform:scale(0.92)}
 .qty-wrap{display:flex;flex-direction:column;align-items:center}
+.half-btn{margin-top:5px;font-size:10px;font-weight:700;color:var(--text2);background:var(--card2);
+  border:1px solid var(--border);border-radius:6px;padding:2px 7px;cursor:pointer;line-height:1.2}
+.half-btn:active{background:var(--blue);border-color:var(--blue);color:#fff}
+
+/* Shelf sub-headers within an area */
+.shelf-subhead{font-size:12px;font-weight:700;color:var(--text2);padding:12px 4px 4px;letter-spacing:0.3px}
+.shelf-subhead span{color:var(--text3);font-weight:600}
+/* Count unit chip — so it's obvious what to count */
+.unit-chip{font-size:11px;font-weight:700;color:var(--blue);background:rgba(10,132,255,0.12);
+  padding:2px 8px;border-radius:6px}
 
 /* iPad / wide: two columns, centered, roomier */
 @media (min-width:768px){
   .product-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:1000px;margin:0 auto}
   .section-header{grid-column:1 / -1}
+  .shelf-subhead{grid-column:1 / -1}
   .setup,.count-stats,.jump-nav,.search-wrap{max-width:1000px;margin-left:auto;margin-right:auto}
   .save-bar>*{max-width:1000px}
 }
@@ -344,39 +355,24 @@ function renderCount() {
     if (search) products = products.filter(p => p.name.toLowerCase().includes(search));
     if (products.length === 0 && search) return;
 
-    // Section header
+    // Area header
     html += '<div class="section-header" id="section-' + si + '">' +
       '<div class="section-name">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + '</div>' +
       '<div class="section-count" id="sec-count-' + si + '">' + countedInSection(sec) + '/' + sec.products.length + '</div>' +
     '</div>';
 
-    products.forEach((p, i) => {
-      const val = S.counts[p.id] !== undefined ? S.counts[p.id] : '';
-      const hasVal = val !== '';
-      const prev = p.current_qty;
-      const prevHtml = prev !== null && prev !== undefined
-        ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
-      const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
+    // Group by shelf (section), then an Unshelved bucket
+    const shelves = sec.sections || [];
+    const hasShelves = shelves.length > 0;
+    const groups = shelves.map(s => ({ name: s.name, items: products.filter(p => p.section_id === s.id) }));
+    groups.push({ name: 'Unshelved', items: products.filter(p => !p.section_id) });
 
-      html += '<div class="product-row fade-up" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
-        '<div class="product-info">' +
-          '<div class="product-name">' + esc(p.name) + '</div>' +
-          '<div class="product-meta">' +
-            '<span class="product-tag ' + tagClass + '">' + catLabel(p.category) + '</span>' +
-            (p.current_price ? '<span>$' + Number(p.current_price).toFixed(2) + '</span>' : '') +
-            prevHtml +
-          '</div>' +
-        '</div>' +
-        '<div class="qty-stepper">' +
-          '<button class="step-btn" onclick="stepQty(' + p.id + ',' + si + ',-1)" aria-label="minus">−</button>' +
-          '<div class="qty-wrap">' +
-            '<input class="qty-input' + (hasVal ? ' has-value' : '') + '" type="number" inputmode="decimal" step="0.5" ' +
-              'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + p.id + ',' + si + ',this)" data-pid="' + p.id + '">' +
-            '<div class="qty-unit">' + (p.inventory_unit || p.unit || 'ea') + '</div>' +
-          '</div>' +
-          '<button class="step-btn" onclick="stepQty(' + p.id + ',' + si + ',1)" aria-label="plus">+</button>' +
-        '</div>' +
-      '</div>';
+    groups.forEach(g => {
+      if (!g.items.length) return;
+      if (hasShelves) {
+        html += '<div class="shelf-subhead">' + esc(g.name) + ' <span>(' + g.items.length + ')</span></div>';
+      }
+      g.items.forEach((p, i) => { html += productRowHtml(p, si, i); });
     });
   });
 
@@ -389,6 +385,36 @@ function renderCount() {
 
 function countedInSection(sec) {
   return sec.products.filter(p => S.counts[p.id] !== undefined).length;
+}
+
+function productRowHtml(p, si, i) {
+  const val = S.counts[p.id] !== undefined ? S.counts[p.id] : '';
+  const hasVal = val !== '';
+  const prev = p.current_qty;
+  const unit = p.inventory_unit || p.unit || 'ea';
+  const prevHtml = prev !== null && prev !== undefined
+    ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
+  const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
+  return '<div class="product-row fade-up" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
+    '<div class="product-info">' +
+      '<div class="product-name">' + esc(p.name) + '</div>' +
+      '<div class="product-meta">' +
+        '<span class="product-tag ' + tagClass + '">' + catLabel(p.category) + '</span>' +
+        '<span class="unit-chip">count: ' + esc(unit) + '</span>' +
+        prevHtml +
+      '</div>' +
+    '</div>' +
+    '<div class="qty-stepper">' +
+      '<button class="step-btn" onclick="stepQty(' + p.id + ',' + si + ',-1)" aria-label="minus">−</button>' +
+      '<div class="qty-wrap">' +
+        '<input class="qty-input' + (hasVal ? ' has-value' : '') + '" type="number" inputmode="decimal" step="0.5" ' +
+          'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + p.id + ',' + si + ',this)" data-pid="' + p.id + '">' +
+        '<div class="qty-unit">' + esc(unit) + '</div>' +
+        '<button class="half-btn" onclick="stepQty(' + p.id + ',' + si + ',0.5)">+½</button>' +
+      '</div>' +
+      '<button class="step-btn" onclick="stepQty(' + p.id + ',' + si + ',1)" aria-label="plus">+</button>' +
+    '</div>' +
+  '</div>';
 }
 
 function stepQty(pid, sectionIdx, delta) {
