@@ -99,6 +99,29 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .unit-chip{font-size:11px;font-weight:700;color:var(--blue);background:rgba(10,132,255,0.12);
   padding:2px 8px;border-radius:6px}
 
+/* Drill-down: areas → shelves → items */
+.nav-bar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:10px;padding:calc(var(--safe-top) + 10px) 16px 10px;
+  background:rgba(10,10,12,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.nav-back{background:var(--card2);border:1px solid var(--border2);color:var(--text);border-radius:10px;
+  min-width:40px;height:40px;font-size:20px;font-weight:700;cursor:pointer;flex-shrink:0}
+.nav-title{flex:1;min-width:0}
+.nav-title .t{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-title .s{font-size:11px;color:var(--text3);margin-top:1px}
+.nav-pct{font-size:15px;font-weight:800;flex-shrink:0}
+.drill{display:flex;align-items:center;gap:12px;padding:14px;margin-bottom:8px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer}
+.drill:active{background:var(--card2)}
+.drill-main{flex:1;min-width:0}
+.drill-name{font-size:15px;font-weight:600}
+.drill-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.pbar{height:6px;background:var(--card2);border-radius:4px;overflow:hidden;margin-top:8px}
+.pbar>i{display:block;height:100%;background:var(--green);border-radius:4px;transition:width .2s}
+.drill-pct{font-size:15px;font-weight:800;flex-shrink:0;width:48px;text-align:right}
+.chev{color:var(--text3);font-size:20px;flex-shrink:0}
+.out-btn{font-size:10px;font-weight:700;color:var(--red);background:rgba(255,69,58,0.1);
+  border:1px solid rgba(255,69,58,0.3);border-radius:6px;padding:3px 9px;cursor:pointer}
+.done-100{color:var(--green)} .done-part{color:var(--orange)} .done-0{color:var(--text3)}
+
 /* iPad / wide: two columns, centered, roomier */
 @media (min-width:768px){
   .product-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:1000px;margin:0 auto}
@@ -214,16 +237,15 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 
 <!-- ========== COUNT ========== -->
 <div class="count-screen" id="count-screen">
-  <div class="jump-nav" id="jump-nav"></div>
+  <div class="nav-bar" id="nav-bar"></div>
 
-  <div class="search-wrap">
+  <div class="search-wrap" id="search-wrap" style="display:none">
     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
     </svg>
-    <input class="search-input" id="search" placeholder="Search products..." oninput="renderCount()">
+    <input class="search-input" id="search" placeholder="Search this shelf..." oninput="renderShelf()">
   </div>
 
-  <div class="count-stats" id="count-stats"></div>
   <div class="product-list" id="product-list"></div>
 
   <div class="save-bar">
@@ -299,27 +321,13 @@ async function startCount() {
   S.counts = {};
   S.totalProducts = S.sections.reduce((sum, sec) => sum + sec.products.length, 0);
 
-  // Pre-fill with last counts (Smart Pre-Fill)
-  S.sections.forEach(sec => {
-    sec.products.forEach(p => {
-      if (p.current_qty !== null && p.current_qty !== undefined && p.current_qty > 0) {
-        S.counts[p.id] = p.current_qty;
-      }
-    });
-  });
-
-  // Build jump nav
-  document.getElementById('jump-nav').innerHTML = S.sections.map((sec, i) =>
-    '<button class="jump-pill' + (i === 0 ? ' active' : '') + '" onclick="jumpTo(' + i + ')">' +
-      sectionIcon(sec.location_name) + ' ' + sec.location_name + ' (' + sec.products.length + ')</button>'
-  ).join('');
-
+  // No smart pre-fill: blank = not counted yet, 0 = counted as out (forced-zero model).
+  S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('count-screen').style.display = 'block';
   document.getElementById('total-num').textContent = S.totalProducts;
-
-  renderCount();
-  updateStats();
+  render();
+  updateProgress();
 }
 
 function sectionIcon(name) {
@@ -332,137 +340,133 @@ function sectionIcon(name) {
   return '📍';
 }
 
-function jumpTo(idx) {
-  const el = document.getElementById('section-' + idx);
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    document.querySelectorAll('.jump-pill').forEach((p, i) => {
-      p.classList.toggle('active', i === idx);
-    });
-  }
+// ============================================
+// DRILL-DOWN RENDER:  areas → shelves → shelf items
+// ============================================
+function counted(p){ return S.counts[p.id] !== undefined; }
+function shelfItems(sec, key){
+  if (key === 'un') return (sec.products || []).filter(p => !p.section_id);
+  return (sec.products || []).filter(p => String(p.section_id) === String(key));
+}
+function pct(items){ return items.length ? Math.round(items.filter(counted).length / items.length * 100) : 0; }
+function pctClass(p){ return p >= 100 ? 'done-100' : p > 0 ? 'done-part' : 'done-0'; }
+
+function render(){
+  if (S.view === 'shelf')   return renderShelf();
+  if (S.view === 'shelves') return renderShelves();
+  return renderAreas();
+}
+function navBar(html){ document.getElementById('nav-bar').innerHTML = html; }
+
+function renderAreas(){
+  document.getElementById('search-wrap').style.display = 'none';
+  const overall = pct(S.sections.flatMap(s => s.products));
+  navBar('<div class="nav-title"><div class="t">' + TYPE_LABEL + ' Count · ' + (S.location === 'dennis' ? 'Dennis' : 'Chatham') + '</div>' +
+    '<div class="s">Pick an area</div></div><div class="nav-pct ' + pctClass(overall) + '">' + overall + '%</div>');
+  document.getElementById('product-list').innerHTML = S.sections.map((sec, i) => {
+    const items = sec.products, p = pct(items), c = items.filter(counted).length;
+    return '<div class="drill" onclick="goShelves(' + i + ')"><div class="drill-main">' +
+      '<div class="drill-name">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + '</div>' +
+      '<div class="drill-sub">' + c + ' of ' + items.length + ' counted</div>' +
+      '<div class="pbar"><i style="width:' + p + '%"></i></div></div>' +
+      '<div class="drill-pct ' + pctClass(p) + '">' + p + '%</div><div class="chev">›</div></div>';
+  }).join('');
 }
 
-// ============================================
-// RENDER
-// ============================================
-function renderCount() {
+function renderShelves(){
+  document.getElementById('search-wrap').style.display = 'none';
+  const sec = S.sections[S.areaIdx]; if (!sec) return renderAreas();
+  const ap = pct(sec.products);
+  navBar('<button class="nav-back" onclick="goAreas()">‹</button><div class="nav-title">' +
+    '<div class="t">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + '</div><div class="s">Pick a shelf</div></div>' +
+    '<div class="nav-pct ' + pctClass(ap) + '">' + ap + '%</div>');
+  const shelves = (sec.sections || []).map(s => ({ key: s.id, name: s.name }));
+  if (shelfItems(sec, 'un').length) shelves.push({ key: 'un', name: 'Unshelved' });
+  document.getElementById('product-list').innerHTML = shelves.length ? shelves.map(sh => {
+    const items = shelfItems(sec, sh.key), p = pct(items), c = items.filter(counted).length;
+    return '<div class="drill" onclick="goShelf(\'' + sh.key + '\')"><div class="drill-main">' +
+      '<div class="drill-name">' + esc(sh.name) + '</div><div class="drill-sub">' + c + ' of ' + items.length + ' counted</div>' +
+      '<div class="pbar"><i style="width:' + p + '%"></i></div></div>' +
+      '<div class="drill-pct ' + pctClass(p) + '">' + p + '%</div><div class="chev">›</div></div>';
+  }).join('') : '<div class="empty"><div class="empty-text">No shelves in this area.</div></div>';
+}
+
+function renderShelf(){
+  const sec = S.sections[S.areaIdx]; if (!sec) return renderAreas();
+  document.getElementById('search-wrap').style.display = 'block';
   const search = (document.getElementById('search').value || '').toLowerCase();
-  const list = document.getElementById('product-list');
-  let html = '';
-
-  S.sections.forEach((sec, si) => {
-    let products = sec.products;
-    if (search) products = products.filter(p => p.name.toLowerCase().includes(search));
-    if (products.length === 0 && search) return;
-
-    // Area header
-    html += '<div class="section-header" id="section-' + si + '">' +
-      '<div class="section-name">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + '</div>' +
-      '<div class="section-count" id="sec-count-' + si + '">' + countedInSection(sec) + '/' + sec.products.length + '</div>' +
-    '</div>';
-
-    // Group by shelf (section), then an Unshelved bucket
-    const shelves = sec.sections || [];
-    const hasShelves = shelves.length > 0;
-    const groups = shelves.map(s => ({ name: s.name, items: products.filter(p => p.section_id === s.id) }));
-    groups.push({ name: 'Unshelved', items: products.filter(p => !p.section_id) });
-
-    groups.forEach(g => {
-      if (!g.items.length) return;
-      if (hasShelves) {
-        html += '<div class="shelf-subhead">' + esc(g.name) + ' <span>(' + g.items.length + ')</span></div>';
-      }
-      g.items.forEach((p, i) => { html += productRowHtml(p, si, i); });
-    });
-  });
-
-  if (!html) {
-    html = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">No products found</div></div>';
-  }
-
-  list.innerHTML = html;
+  let items = shelfItems(sec, S.shelfKey);
+  const shName = S.shelfKey === 'un' ? 'Unshelved' : (((sec.sections || []).find(s => String(s.id) === String(S.shelfKey)) || {}).name || 'Shelf');
+  const p = pct(items);
+  navBar('<button class="nav-back" onclick="goShelves(' + S.areaIdx + ')">‹</button><div class="nav-title">' +
+    '<div class="t">' + esc(shName) + '</div><div class="s">' + esc(sec.location_name) + '</div></div>' +
+    '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div>');
+  if (search) items = items.filter(x => x.name.toLowerCase().includes(search));
+  document.getElementById('product-list').innerHTML = items.length
+    ? items.map((x, i) => productRowHtml(x, i)).join('')
+    : '<div class="empty"><div class="empty-text">No items here.</div></div>';
 }
 
-function countedInSection(sec) {
-  return sec.products.filter(p => S.counts[p.id] !== undefined).length;
-}
+function goAreas(){ S.view = 'areas'; S.areaIdx = null; S.shelfKey = null; document.getElementById('search').value = ''; render(); }
+function goShelves(idx){ S.view = 'shelves'; S.areaIdx = idx; S.shelfKey = null; document.getElementById('search').value = ''; render(); }
+function goShelf(key){ S.view = 'shelf'; S.shelfKey = key; render(); }
 
-function productRowHtml(p, si, i) {
+function productRowHtml(p, i) {
   const val = S.counts[p.id] !== undefined ? S.counts[p.id] : '';
   const hasVal = val !== '';
   const prev = p.current_qty;
   const unit = p.inventory_unit || p.unit || 'ea';
-  const prevHtml = prev !== null && prev !== undefined
-    ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
-  const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
+  const prevHtml = prev !== null && prev !== undefined ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
   return '<div class="product-row fade-up" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
     '<div class="product-info">' +
       '<div class="product-name">' + esc(p.name) + '</div>' +
       '<div class="product-meta">' +
-        '<span class="product-tag ' + tagClass + '">' + catLabel(p.category) + '</span>' +
-        '<span class="unit-chip">count: ' + esc(unit) + '</span>' +
-        prevHtml +
+        '<span class="unit-chip">count: ' + esc(unit) + '</span>' + prevHtml +
+        '<button class="out-btn" onclick="markOut(' + p.id + ')">Out (0)</button>' +
       '</div>' +
     '</div>' +
     '<div class="qty-stepper">' +
-      '<button class="step-btn" onclick="stepQty(' + p.id + ',' + si + ',-1)" aria-label="minus">−</button>' +
+      '<button class="step-btn" onclick="stepQty(' + p.id + ',-1)" aria-label="minus">−</button>' +
       '<div class="qty-wrap">' +
         '<input class="qty-input' + (hasVal ? ' has-value' : '') + '" type="number" inputmode="decimal" step="0.5" ' +
-          'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + p.id + ',' + si + ',this)" data-pid="' + p.id + '">' +
+          'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + p.id + ',this)" data-pid="' + p.id + '">' +
         '<div class="qty-unit">' + esc(unit) + '</div>' +
-        '<button class="half-btn" onclick="stepQty(' + p.id + ',' + si + ',0.25)">+¼</button>' +
+        '<button class="half-btn" onclick="stepQty(' + p.id + ',0.25)">+¼</button>' +
       '</div>' +
-      '<button class="step-btn" onclick="stepQty(' + p.id + ',' + si + ',1)" aria-label="plus">+</button>' +
+      '<button class="step-btn" onclick="stepQty(' + p.id + ',1)" aria-label="plus">+</button>' +
     '</div>' +
   '</div>';
 }
 
-function stepQty(pid, sectionIdx, delta) {
+function markOut(pid){
+  const el = document.querySelector('.qty-input[data-pid="' + pid + '"]');
+  if (el){ el.value = 0; setQty(pid, el); }
+  else { S.counts[pid] = 0; updateProgress(); }
+}
+
+function stepQty(pid, delta) {
   const el = document.querySelector('.qty-input[data-pid="' + pid + '"]');
   if (!el) return;
-  let v = parseFloat(el.value);
-  if (isNaN(v)) v = 0;
+  let v = parseFloat(el.value); if (isNaN(v)) v = 0;
   v = Math.max(0, Math.round((v + delta) * 100) / 100);
-  el.value = v;
-  setQty(pid, sectionIdx, el);
+  el.value = v; setQty(pid, el);
 }
 
-function setQty(pid, sectionIdx, el) {
+function setQty(pid, el) {
   const v = el.value.trim();
-  if (v === '') {
-    delete S.counts[pid];
-    el.classList.remove('has-value');
-  } else {
-    S.counts[pid] = parseFloat(v);
-    el.classList.add('has-value');
-  }
-  updateStats();
-  // Update section counter
-  const sec = S.sections[sectionIdx];
-  if (sec) {
-    const el2 = document.getElementById('sec-count-' + sectionIdx);
-    if (el2) el2.textContent = countedInSection(sec) + '/' + sec.products.length;
-  }
+  if (v === '') { delete S.counts[pid]; el.classList.remove('has-value'); }
+  else { S.counts[pid] = parseFloat(v); el.classList.add('has-value'); }
+  updateProgress();
 }
 
-function updateStats() {
-  const counted = Object.keys(S.counts).length;
-  document.getElementById('counted-num').textContent = counted;
+function updateProgress() {
+  document.getElementById('counted-num').textContent = Object.keys(S.counts).length;
   document.getElementById('total-num').textContent = S.totalProducts;
-
-  const pct = S.totalProducts > 0 ? Math.round(counted / S.totalProducts * 100) : 0;
-  let totalVal = 0;
-  for (const [pid, qty] of Object.entries(S.counts)) {
-    for (const sec of S.sections) {
-      const prod = sec.products.find(p => p.id == pid);
-      if (prod && prod.current_price) { totalVal += qty * prod.current_price; break; }
-    }
+  if (S.view === 'shelf') {
+    const sec = S.sections[S.areaIdx];
+    const el = document.getElementById('shelf-pct');
+    if (sec && el) { const p = pct(shelfItems(sec, S.shelfKey)); el.textContent = p + '%'; el.className = 'nav-pct ' + pctClass(p); }
   }
-
-  document.getElementById('count-stats').innerHTML =
-    '<div class="mini-stat"><div class="mini-stat-label">Progress</div><div class="mini-stat-val">' + pct + '%</div></div>' +
-    '<div class="mini-stat"><div class="mini-stat-label">Counted</div><div class="mini-stat-val">' + counted + '/' + S.totalProducts + '</div></div>' +
-    '<div class="mini-stat"><div class="mini-stat-label">Est. Value</div><div class="mini-stat-val">$' + totalVal.toLocaleString(undefined,{maximumFractionDigits:0}) + '</div></div>';
 }
 
 // ============================================
@@ -471,6 +475,8 @@ function updateStats() {
 async function saveCount() {
   const counted = Object.keys(S.counts).length;
   if (counted === 0) { showToast('No items counted yet', true); return; }
+  const blanks = S.totalProducts - counted;
+  if (blanks > 0 && !confirm(blanks + ' item' + (blanks === 1 ? '' : 's') + ' still blank (not counted). Anything you\'re OUT of should be entered as 0, not left blank.\n\nSave anyway?')) return;
 
   const btn = document.getElementById('save-btn');
   btn.disabled = true; btn.textContent = 'Saving...';
