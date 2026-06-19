@@ -122,6 +122,25 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   border:1px solid rgba(255,69,58,0.3);border-radius:6px;padding:3px 9px;cursor:pointer}
 .done-100{color:var(--green)} .done-part{color:var(--orange)} .done-0{color:var(--text3)}
 
+/* Add item to shelf */
+.addrow{display:block;width:100%;margin-bottom:10px;padding:13px;border-radius:12px;
+  background:rgba(10,132,255,0.12);border:1px dashed rgba(10,132,255,0.45);color:var(--blue);
+  font-size:14px;font-weight:700;cursor:pointer}
+.ai-ov{position:fixed;inset:0;background:rgba(10,10,12,0.97);display:none;flex-direction:column;
+  z-index:150;padding:calc(var(--safe-top) + 14px) 14px calc(var(--safe-bottom) + 14px)}
+.ai-ov.open{display:flex}
+.ai-head{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.ai-search{flex:1;padding:13px 14px;background:var(--card);border:1px solid var(--border2);
+  border-radius:11px;color:var(--text);font-size:16px;outline:none}
+.ai-close{background:var(--card2);border:1px solid var(--border);color:var(--text);
+  border-radius:11px;padding:13px 16px;font-weight:700;cursor:pointer}
+.ai-results{flex:1;overflow-y:auto}
+.ai-item{padding:14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;
+  justify-content:space-between;align-items:center;font-size:15px}
+.ai-item:active{background:var(--card2)}
+.ai-add{color:var(--blue);font-weight:700;flex-shrink:0;margin-left:10px}
+.ai-new{padding:14px;color:var(--green);font-weight:700;cursor:pointer;border-top:1px solid var(--border)}
+
 /* iPad / wide: two columns, centered, roomier */
 @media (min-width:768px){
   .product-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:1000px;margin:0 auto}
@@ -253,6 +272,15 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
     <div class="save-info"><b id="counted-num">0</b> of <span id="total-num">0</span> counted</div>
     <button class="save-btn" id="save-btn" onclick="saveCount()">Save Count</button>
   </div>
+</div>
+
+<!-- Add item to the current shelf -->
+<div class="ai-ov" id="ai-ov">
+  <div class="ai-head">
+    <input class="ai-search" id="ai-search" placeholder="Search a product, or type a new name…" oninput="aiRender()">
+    <button class="ai-close" onclick="closeAddItem()">Done</button>
+  </div>
+  <div class="ai-results" id="ai-results"></div>
 </div>
 
 <script>
@@ -402,9 +430,74 @@ function renderShelf(){
     '<div class="t">' + esc(shName) + '</div><div class="s">' + esc(sec.location_name) + '</div></div>' +
     '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div>');
   if (search) items = items.filter(x => x.name.toLowerCase().includes(search));
-  document.getElementById('product-list').innerHTML = items.length
+  const addBtn = '<button class="addrow" onclick="openAddItem()">+ Add item to this shelf</button>';
+  document.getElementById('product-list').innerHTML = addBtn + (items.length
     ? items.map((x, i) => productRowHtml(x, i)).join('')
-    : '<div class="empty"><div class="empty-text">No items here.</div></div>';
+    : '<div class="empty"><div class="empty-text">No items here yet — add one above.</div></div>');
+}
+
+// ---- Add item to the shelf you're on ----
+async function ensureCatalog(){
+  if (S.catalog) return;
+  const all = await fetch('/api/inventory/products', {credentials:'include'}).then(r => r.json()).catch(() => []);
+  S.catalog = (all || []).filter(p => p.active !== 0 && inCountType(p.category));
+}
+async function openAddItem(){
+  document.getElementById('ai-ov').classList.add('open');
+  document.getElementById('ai-search').value = '';
+  document.getElementById('ai-results').innerHTML = '<div style="padding:14px;color:var(--text3)">Loading catalog…</div>';
+  await ensureCatalog();
+  aiRender();
+  document.getElementById('ai-search').focus();
+}
+function closeAddItem(){ document.getElementById('ai-ov').classList.remove('open'); }
+function aiRender(){
+  const q = (document.getElementById('ai-search').value || '').trim();
+  const ql = q.toLowerCase();
+  let list = (S.catalog || []);
+  if (ql) list = list.filter(p => (p.name||'').toLowerCase().includes(ql) || (p.display_name||'').toLowerCase().includes(ql));
+  list = list.slice(0, 40);
+  let html = list.map(p => '<div class="ai-item" onclick="addExistingToShelf(' + p.id + ')"><span>' + esc(p.display_name||p.name) + '</span><span class="ai-add">+ Add</span></div>').join('');
+  if (q && !(S.catalog||[]).some(p => (p.display_name||p.name||'').toLowerCase() === ql)) {
+    html += '<div class="ai-new" onclick="aiCreate()">+ Create new product “' + esc(q) + '”</div>';
+  }
+  if (!html) html = '<div style="padding:14px;color:var(--text3)">Type to search products…</div>';
+  document.getElementById('ai-results').innerHTML = html;
+}
+function aiCreate(){ const name = (document.getElementById('ai-search').value || '').trim(); if (name) createAndAddItem(name); }
+
+async function addExistingToShelf(pid){
+  const sec = S.sections[S.areaIdx]; if (!sec) return;
+  const loc = sec.location_id;
+  try {
+    await fetch('/api/storage/locations/' + loc + '/products', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({product_id:pid})}).catch(()=>{});
+    const rows = await fetch('/api/storage/locations/' + loc + '/products', {credentials:'include'}).then(r => r.json());
+    const row = (rows || []).find(r => r.id === pid);
+    const secId = (S.shelfKey === 'un') ? null : Number(S.shelfKey);
+    if (secId != null && row) {
+      await fetch('/api/inventory/count/assign-section', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({psl_id:row.assignment_id, section_id:secId})});
+    }
+    const existing = sec.products.find(p => p.id === pid);
+    if (existing) { existing.section_id = secId; }
+    else {
+      const c = (S.catalog || []).find(x => x.id === pid) || {};
+      sec.products.push({ id:pid, name:c.name||(row&&row.name)||'Item', category:c.category, unit:c.unit, inventory_unit:c.inventory_unit, current_price:c.current_price, section_id:secId, current_qty:null });
+      S.totalProducts++;
+    }
+    closeAddItem(); render(); updateProgress();
+    showToast('Added to shelf');
+  } catch(e) { showToast('Could not add item', true); }
+}
+async function createAndAddItem(name){
+  const cat = COUNT_TYPE === 'booze' ? 'BEER' : 'FOOD';
+  try {
+    const r = await fetch('/api/inventory/products', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({name:name, category:cat})});
+    const d = await r.json(); const pid = d.id || d.product_id;
+    if (!pid) throw new Error();
+    await fetch('/api/storage/product/' + pid + '/units', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({active:true})}).catch(()=>{});
+    S.catalog = S.catalog || []; S.catalog.push({ id:pid, name:name, category:cat });
+    await addExistingToShelf(pid);
+  } catch(e) { showToast('Could not create product', true); }
 }
 
 function goAreas(){ S.view = 'areas'; S.areaIdx = null; S.shelfKey = null; document.getElementById('search').value = ''; render(); }
