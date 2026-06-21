@@ -548,9 +548,9 @@ function productRowHtml(p, i) {
   const prevHtml = prev !== null && prev !== undefined ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
   return '<div class="product-row fade-up" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
     '<div class="product-info">' +
-      '<div class="product-name">' + esc(p.name) + '</div>' +
+      '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(p.name) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
       '<div class="product-meta">' +
-        '<span class="unit-chip">count: ' + esc(unit) + '</span>' + prevHtml +
+        '<span class="unit-chip" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">count: ' + esc(unit) + '</span>' + prevHtml +
         '<button class="out-btn" onclick="markOut(' + p.id + ')">Out (0)</button>' +
       '</div>' +
     '</div>' +
@@ -565,6 +565,22 @@ function productRowHtml(p, i) {
       '<button class="step-btn" onclick="stepQty(' + p.id + ',1)" aria-label="plus">+</button>' +
     '</div>' +
   '</div>';
+}
+
+// Edit a product (count unit, name, conversions, archive) from the count screen — shared card.
+function editFromCount(pid){
+  if (typeof openProductEditor !== 'function') { showToast('Editor not loaded', true); return; }
+  openProductEditor(pid, { onSaved: function(p, meta){
+    for (const sec of S.sections){
+      const idx = sec.products.findIndex(x => x.id === pid);
+      if (idx >= 0){
+        if (meta && meta.archived){ sec.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); delete S.counts[pid]; }
+        else if (p){ Object.assign(sec.products[idx], { name:p.name, category:p.category, unit:p.unit, inventory_unit:p.inventory_unit, current_price:p.current_price }); }
+        break;
+      }
+    }
+    render(); updateProgress();
+  }});
 }
 
 function markOut(pid){
@@ -714,5 +730,6 @@ if (COUNT_TYPE !== 'all') {
 }
 loadHistory();
 </script>
+<script src="/static/product_editor.js"></script>
 </body>
 </html>
