@@ -339,17 +339,8 @@ async function startCount() {
     return;
   }
 
-  // Create count session
-  try {
-    const res = await fetch('/api/inventory/counts', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ location: S.location, notes: TYPE_NOTE })
-    });
-    const data = await res.json();
-    S.countId = data.id;
-  } catch(e) {}
-
+  // Session is created on SAVE (not on start), so abandoned/test counts don't clutter history.
+  S.countId = null;
   S.counts = {};
   S.totalProducts = S.sections.reduce((sum, sec) => sum + sec.products.length, 0);
 
@@ -614,6 +605,14 @@ async function saveCount() {
   btn.disabled = true; btn.textContent = 'Saving...';
 
   try {
+    // Create the session now (on save) so abandoned counts never create a row.
+    if (!S.countId) {
+      const cr = await fetch('/api/inventory/counts', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ location: S.location, notes: TYPE_NOTE })
+      });
+      S.countId = (await cr.json()).id;
+    }
     const items = [];
     for (const [pid, qty] of Object.entries(S.counts)) {
       let unit = 'ea';
@@ -667,6 +666,8 @@ async function loadHistory() {
   try {
     const res = await fetch('/api/inventory/counts/history');
     let data = await res.json();
+    // Hide empty/abandoned sessions (0 items) — only real saved counts.
+    data = data.filter(c => (c.item_count || 0) > 0);
     // On a Food/Booze page, only show that type's counts.
     if (COUNT_TYPE !== 'all') data = data.filter(c => countTypeOf(c).toLowerCase() === COUNT_TYPE);
     const el = document.getElementById('history-list');
