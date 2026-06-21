@@ -152,6 +152,8 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 /* Arrange (reorder) mode */
 .arrange-btns{display:flex;gap:8px;flex-shrink:0}
 .step-btn:disabled{opacity:0.3;cursor:default}
+.rm-btn{color:var(--red);border-color:rgba(255,69,58,0.4)}
+.rm-btn:active{background:var(--red);border-color:var(--red);color:#fff}
 
 /* iPad / wide: two columns, centered, roomier */
 @media (min-width:768px){
@@ -450,6 +452,7 @@ function arrangeRowHtml(p, i, n){
     '<div class="arrange-btns">' +
       '<button class="step-btn" onclick="moveItem(' + p.id + ',-1)" ' + (i === 0 ? 'disabled' : '') + '>▲</button>' +
       '<button class="step-btn" onclick="moveItem(' + p.id + ',1)" ' + (i === n - 1 ? 'disabled' : '') + '>▼</button>' +
+      '<button class="step-btn rm-btn" onclick="removeFromShelf(' + p.id + ')" title="Remove from area">✕</button>' +
     '</div></div>';
 }
 function toggleReorder(){ S.reorder = !S.reorder; document.getElementById('search').value = ''; render(); }
@@ -464,6 +467,18 @@ function moveItem(pid, dir){
   const tmp = area.products[aPos]; area.products[aPos] = area.products[bPos]; area.products[bPos] = tmp;
   render();
   persistOrder(area);
+}
+async function removeFromShelf(pid){
+  const area = S.sections[S.areaIdx]; if (!area) return;
+  const item = area.products.find(p => p.id === pid);
+  if (!confirm('Remove "' + (item ? (item.display_name || item.name) : 'this item') + '" from this area?\n\nIt stays in the catalog but won\'t be counted here.')) return;
+  try {
+    await fetch('/api/storage/locations/' + area.location_id + '/products/' + pid, { method:'DELETE', credentials:'include' });
+    const idx = area.products.findIndex(p => p.id === pid);
+    if (idx >= 0) { area.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); delete S.counts[pid]; }
+    render(); updateProgress();
+    showToast('Removed from area');
+  } catch(e) { showToast('Could not remove', true); }
 }
 function persistOrder(area){
   fetch('/api/storage/locations/' + area.location_id + '/reorder', {
