@@ -10,7 +10,7 @@
 (function(){
   if (window.openProductEditor) return;
 
-  var COUNT_UNITS = ['each','package','case','bottle','can','keg','lb','oz','gal','liter','slice','serving','portion'];
+  var COUNT_UNITS = ['each','package','case','bag','bottle','can','keg','lb','oz','gal','liter','slice','serving','portion'];
   var RECIPE_UNITS = ['oz','lb','ea','slice','fl_oz','gal','qt','pt','cup','tbsp','tsp','ml','l'];
   var PURCHASE_UNITS = ['case','each','lb','oz','gal','liter','bottle','can','keg','bag','box'];
   var CATS = [['FOOD','Food'],['BEER','Beer'],['LIQUOR','Liquor'],['WINE','Wine'],['NA_BEVERAGES','NA Beverages'],
@@ -84,10 +84,10 @@
           '<div class="convs" id="rnpe-convs"></div>'+
           '<div class="convadd">'+
             '<span style="font-size:13px;color:rgba(245,245,247,0.4)">1</span>'+
-            '<input list="rnpe-units" id="rnpe-cf" placeholder="case" style="flex:1;min-width:64px">'+
+            '<input list="rnpe-units" id="rnpe-cf" placeholder="from unit" style="flex:1;min-width:64px">'+
             '<span style="font-size:13px;color:rgba(245,245,247,0.4)">=</span>'+
-            '<input type="number" step="0.01" id="rnpe-cq" placeholder="2" style="width:60px">'+
-            '<input list="rnpe-units" id="rnpe-ct" placeholder="package" style="flex:1;min-width:64px">'+
+            '<input type="number" step="0.01" id="rnpe-cq" placeholder="qty" style="width:60px">'+
+            '<input list="rnpe-units" id="rnpe-ct" placeholder="to unit" style="flex:1;min-width:64px">'+
             '<button class="mini" id="rnpe-cadd">+ Add</button>'+
           '</div>'+
           '<datalist id="rnpe-units">'+COUNT_UNITS.map(function(u){return '<option value="'+u+'">';}).join('')+'</datalist>'+
