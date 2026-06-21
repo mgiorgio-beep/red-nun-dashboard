@@ -120,6 +120,7 @@
     document.getElementById('rnpe-ov').classList.add('open');
     document.getElementById('rnpe-title').textContent='Loading…';
     document.getElementById('rnpe-convs').innerHTML='';
+    ['rnpe-cf','rnpe-cq','rnpe-ct'].forEach(function(eid){ var e=document.getElementById(eid); if(e) e.value=''; });
     fetch('/api/inventory/products/'+id,{credentials:'include'}).then(function(r){return r.json();}).then(function(p){
       cur.prod=p;
       document.getElementById('rnpe-title').textContent='Edit: '+(p.display_name||p.name||'Product');
