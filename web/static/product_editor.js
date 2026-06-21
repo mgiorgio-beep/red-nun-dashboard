@@ -17,6 +17,7 @@
               ['SUPPLIES','Supplies'],['NON_COGS','Non-COGS'],['TOGO_SUPPLIES','Togo'],['DR_SUPPLIES','DR'],['KITCHEN_SUPPLIES','Kitchen']];
 
   var cur = { id:null, prod:null, onSaved:null };
+  var catalog = null;
 
   function esc(s){ var d=document.createElement('div'); d.textContent=(s==null?'':s); return d.innerHTML; }
 
@@ -92,6 +93,11 @@
           '</div>'+
           '<datalist id="rnpe-units">'+COUNT_UNITS.map(function(u){return '<option value="'+u+'">';}).join('')+'</datalist>'+
         '</div>'+
+        '<div class="hr"></div>'+
+        '<div class="f" style="position:relative"><label>Combine brands — merge a duplicate into this product</label>'+
+          '<input id="rnpe-merge" placeholder="Search a product to merge in…" autocomplete="off">'+
+          '<div id="rnpe-merge-res" style="position:absolute;left:0;right:0;top:100%;background:#222226;border:1px solid rgba(255,255,255,0.15);border-radius:8px;max-height:210px;overflow-y:auto;z-index:10;display:none"></div>'+
+        '</div>'+
         '<div class="acts"><button class="cancel" id="rnpe-cancel">Cancel</button><button class="save" id="rnpe-save">Save</button></div>'+
         '<button class="arch" id="rnpe-arch">Archive — don\'t inventory this item</button>'+
       '</div>';
@@ -102,6 +108,41 @@
     document.getElementById('rnpe-save').addEventListener('click', save);
     document.getElementById('rnpe-arch').addEventListener('click', archive);
     document.getElementById('rnpe-cadd').addEventListener('click', addConv);
+    document.getElementById('rnpe-merge').addEventListener('input', mergeSearch);
+  }
+
+  function mergeSearch(){
+    var q = (document.getElementById('rnpe-merge').value || '').trim().toLowerCase();
+    var box = document.getElementById('rnpe-merge-res');
+    if (q.length < 2){ box.style.display = 'none'; return; }
+    function go(){
+      var list = (catalog || []).filter(function(p){ return p.id !== cur.id && p.active !== 0 &&
+        (((p.name||'').toLowerCase().indexOf(q) !== -1) || ((p.display_name||'').toLowerCase().indexOf(q) !== -1)); }).slice(0, 12);
+      box.innerHTML = list.length ? list.map(function(p){
+        return '<div class="rnpe-mi" data-id="'+p.id+'" data-name="'+esc(p.display_name||p.name)+'" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px">'+esc(p.display_name||p.name)+'</div>';
+      }).join('') : '<div style="padding:10px 12px;color:rgba(245,245,247,0.4);font-size:13px">No match</div>';
+      box.style.display = 'block';
+      box.querySelectorAll('.rnpe-mi').forEach(function(d){ d.addEventListener('click', function(){ doMerge(+d.getAttribute('data-id'), d.getAttribute('data-name')); }); });
+    }
+    if (catalog) go();
+    else fetch('/api/inventory/products', {credentials:'include'}).then(function(r){return r.json();}).then(function(a){ catalog = a; go(); });
+  }
+  function doMerge(otherId, otherName){
+    if (!cur.id || !otherId || !cur.prod) return;
+    if (!confirm('Merge "' + otherName + '" into "' + (cur.prod.display_name||cur.prod.name) + '"?\n\nIts vendor items and recipe links move here, and "' + otherName + '" is deactivated.')) return;
+    fetch('/api/inventory/products/' + cur.id + '/merge', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({merge_product_id:otherId})})
+      .then(function(r){ if(!r.ok) throw new Error(); return r; })
+      .then(function(){
+        toast('Merged');
+        document.getElementById('rnpe-merge').value=''; document.getElementById('rnpe-merge-res').style.display='none';
+        if (catalog) catalog = catalog.filter(function(p){ return p.id !== otherId; });
+        fetch('/api/inventory/products/'+cur.id+'/vendor-items',{credentials:'include'}).then(function(r){return r.ok?r.json():[];}).then(function(vi){
+          var v=(vi||[]).find(function(x){return x.pack_contains;})||(vi||[])[0]; var el=document.getElementById('rnpe-vline');
+          if(v){ el.style.display='block'; el.innerHTML='<b>'+esc(v.vendor_name||'Vendor')+'</b> — '+esc(v.pack_size||'')+' &middot; $'+(v.purchase_price||0).toFixed(2); }
+        });
+        if (cur.onSaved) cur.onSaved(cur.prod, { merged: otherId });
+      })
+      .catch(function(){ toast('Merge failed', true); });
   }
 
   function toast(msg, err){
@@ -120,7 +161,8 @@
     document.getElementById('rnpe-ov').classList.add('open');
     document.getElementById('rnpe-title').textContent='Loading…';
     document.getElementById('rnpe-convs').innerHTML='';
-    ['rnpe-cf','rnpe-cq','rnpe-ct'].forEach(function(eid){ var e=document.getElementById(eid); if(e) e.value=''; });
+    ['rnpe-cf','rnpe-cq','rnpe-ct','rnpe-merge'].forEach(function(eid){ var e=document.getElementById(eid); if(e) e.value=''; });
+    var mres=document.getElementById('rnpe-merge-res'); if(mres) mres.style.display='none';
     fetch('/api/inventory/products/'+id,{credentials:'include'}).then(function(r){return r.json();}).then(function(p){
       cur.prod=p;
       document.getElementById('rnpe-title').textContent='Edit: '+(p.display_name||p.name||'Product');
