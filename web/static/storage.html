@@ -77,6 +77,18 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
   padding-bottom:6px;border-bottom:1px solid var(--border)}
 .shelf-name{font-size:14px;font-weight:700;color:var(--blue)}
 .shelf-empty{padding:6px 4px 10px;color:var(--text3);font-size:12px}
+.arr-btns{display:flex;flex-direction:column;gap:3px;flex-shrink:0;margin-right:6px}
+.arr-up{width:30px;height:22px;border-radius:6px;background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:12px;cursor:pointer;line-height:1}
+.arr-up:disabled{opacity:0.3;cursor:default}
+.sa-ov{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;flex-direction:column;z-index:320;padding:24px}
+.sa-ov.open{display:flex}
+.sa-box{background:var(--card);border:1px solid var(--border2);border-radius:14px;max-width:560px;width:100%;margin:0 auto;display:flex;flex-direction:column;max-height:85vh;overflow:hidden}
+.sa-head{padding:16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center}
+.sa-head input{flex:1;padding:11px 12px;background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:15px;outline:none}
+.sa-head button{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:11px 14px;font-weight:700;cursor:pointer}
+.sa-results{overflow-y:auto;padding:6px}
+.sa-item{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.sa-item:hover{background:var(--card2)}
 .shelf-select{background:var(--card2);border:1px solid var(--border);color:var(--text);
   border-radius:8px;font-size:12px;font-weight:600;padding:7px 8px;cursor:pointer;flex-shrink:0;max-width:140px}
 .shelf-select:focus{border-color:var(--blue);outline:none}
@@ -183,6 +195,17 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 <div class="toast" id="toast"></div>
 
 <!-- In-page product editor -->
+<div class="sa-ov" id="sa-ov">
+  <div class="sa-box">
+    <div class="sa-head">
+      <div style="flex:1"><div id="sa-title" style="font-weight:700;font-size:15px;margin-bottom:6px">Add items</div>
+      <input id="sa-search" placeholder="Search products…" oninput="saRender()"></div>
+      <button onclick="closeAddToShelf()">Done</button>
+    </div>
+    <div class="sa-results" id="sa-results"></div>
+  </div>
+</div>
+
 <div class="modal-ov" id="edit-ov" onclick="if(event.target===this)closeEdit()">
   <div class="modal">
     <h3 id="edit-title">Edit product</h3>
@@ -412,68 +435,113 @@ async function renderLocationProducts(locId) {
     fetch(API + '/locations/' + locId + '/products'),
     fetch(API + '/locations/' + locId + '/sections')
   ]);
-  let products = await pRes.json();
+  const allProducts = await pRes.json();
   const sections = await sRes.json();
+  _areaCache[locId] = { products: allProducts, sections };
 
-  products = products.filter(p => inType(p.category));
   const search = (document.getElementById('search').value || '').toLowerCase();
+  const canReorder = (S.typeFilter === 'all') && !search;
+  let products = allProducts.filter(p => inType(p.category));
   if (search) products = products.filter(p => p.name.toLowerCase().includes(search));
 
   const main = document.getElementById('main-content');
-
-  // "+ Add Shelf" action (always available for an area)
   let html = '<div class="add-shelf-row"><button class="add-area-btn" onclick="addShelf(' + locId + ')">+ Add Shelf</button></div>';
 
-  if (products.length === 0) {
-    html += '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' +
-      (search ? 'No products match your search.'
-              : 'No products in this area yet.<br>Select "Unassigned" to add products.') +
-      '</div></div>';
-    main.innerHTML = html;
-    return;
-  }
-
-  // Build the shelf <option> list (shared)
   function shelfOptions(selId) {
     let o = '<option value=""' + (!selId ? ' selected' : '') + '>— Unshelved —</option>';
-    sections.forEach(s => {
-      o += '<option value="' + s.id + '"' + (selId === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>';
-    });
+    sections.forEach(s => { o += '<option value="' + s.id + '"' + (selId === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>'; });
     return o;
   }
+  function rowHtml(p, i, n, secId) {
+    const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
+    return '<div class="product-card" style="cursor:default">' +
+      (canReorder ? '<div class="arr-btns">' +
+        '<button class="arr-up" onclick="moveStorageItem(' + p.id + ',-1,' + locId + ',' + (secId === null ? 'null' : secId) + ')" ' + (i === 0 ? 'disabled' : '') + '>▲</button>' +
+        '<button class="arr-up" onclick="moveStorageItem(' + p.id + ',1,' + locId + ',' + (secId === null ? 'null' : secId) + ')" ' + (i === n - 1 ? 'disabled' : '') + '>▼</button></div>' : '') +
+      '<div class="pc-info">' +
+        '<div class="pc-name"><a class="prod-link" href="/manage?product=' + p.id + '" onclick="openProductEditor(' + p.id + ',{onSaved:function(){loadLocations();}});return false" title="Edit this product">' + esc(p.display_name || p.name) + '<span class="ext">✎</span></a></div>' +
+        '<div class="pc-meta"><span class="pc-tag ' + tagClass + '">' + catLabel(p.category) + '</span> ' +
+          (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') + '</div>' +
+      '</div>' +
+      '<select class="shelf-select" onchange="assignToShelf(' + p.assignment_id + ',this.value,' + locId + ')">' + shelfOptions(p.section_id) + '</select>' +
+      '<button class="pc-remove" onclick="removeProduct(' + locId + ',' + p.id + ')" title="Remove from this area">✕</button>' +
+    '</div>';
+  }
 
-  // Group: each shelf in order, then an Unshelved bucket
   const groups = sections.map(s => ({ id: s.id, name: s.name, items: products.filter(p => p.section_id === s.id) }));
   groups.push({ id: null, name: 'Unshelved', items: products.filter(p => !p.section_id) });
 
   groups.forEach(g => {
-    if (g.id === null && g.items.length === 0) return; // hide empty Unshelved
+    if (g.id === null && g.items.length === 0) return; // hide empty Unshelved bucket
     html += '<div class="shelf-header">' +
       '<span class="shelf-name">' + esc(g.name) + ' <span style="color:var(--text3);font-weight:600">(' + g.items.length + ')</span></span>' +
-      (g.id !== null ? '<button class="loc-del" title="Delete shelf" onclick="deleteShelf(' + g.id + ',' + locId + ',\'' + esc(g.name).replace(/'/g, "\\'") + '\')">✕</button>' : '') +
+      '<span style="display:flex;gap:6px;align-items:center">' +
+        (g.id !== null ? '<button class="add-area-btn" onclick="openAddToShelf(' + locId + ',' + g.id + ',\'' + esc(g.name).replace(/'/g, "\\'") + '\')">+ Add items</button>' : '') +
+        (g.id !== null ? '<button class="loc-del" title="Delete shelf" onclick="deleteShelf(' + g.id + ',' + locId + ',\'' + esc(g.name).replace(/'/g, "\\'") + '\')">✕</button>' : '') +
+      '</span>' +
     '</div>';
-
-    if (g.items.length === 0) {
-      html += '<div class="shelf-empty">No items here yet — use a product\'s dropdown to move it onto this shelf.</div>';
-      return;
-    }
-
-    g.items.forEach(p => {
-      const tagClass = 'tag-' + (p.category || 'other').toLowerCase();
-      html += '<div class="product-card" style="cursor:default">' +
-        '<div class="pc-info">' +
-          '<div class="pc-name"><a class="prod-link" href="/manage?product=' + p.id + '" onclick="openProductEditor(' + p.id + ',{onSaved:function(){loadLocations();}});return false" title="Edit this product">' + esc(p.name) + '<span class="ext">✎</span></a></div>' +
-          '<div class="pc-meta"><span class="pc-tag ' + tagClass + '">' + catLabel(p.category) + '</span> ' +
-            (p.current_price ? '$' + Number(p.current_price).toFixed(2) + '/' + (p.unit || 'ea') : '') +
-          '</div>' +
-        '</div>' +
-        '<select class="shelf-select" onchange="assignToShelf(' + p.assignment_id + ',this.value,' + locId + ')">' + shelfOptions(p.section_id) + '</select>' +
-        '<button class="pc-remove" onclick="removeProduct(' + locId + ',' + p.id + ')" title="Remove from this area">✕</button>' +
-      '</div>';
-    });
+    if (g.items.length === 0) { html += '<div class="shelf-empty">No items here yet — “+ Add items”.</div>'; return; }
+    g.items.forEach((p, i) => { html += rowHtml(p, i, g.items.length, g.id); });
   });
 
+  if (sections.length === 0 && products.length === 0) {
+    html += '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' +
+      (search ? 'No products match your search.' : 'Empty area. Add a shelf, then “+ Add items” — or use the Unassigned list.') + '</div></div>';
+  }
   main.innerHTML = html;
+}
+
+// Reorder an item within its shelf (and persist the area's order)
+let _areaCache = {};
+function moveStorageItem(pid, dir, locId, sectionId) {
+  const cache = _areaCache[locId]; if (!cache) return;
+  const arr = cache.products;
+  const inShelf = arr.filter(p => sectionId === null ? !p.section_id : p.section_id === sectionId);
+  const idx = inShelf.findIndex(p => p.id === pid);
+  const j = idx + dir;
+  if (idx < 0 || j < 0 || j >= inShelf.length) return;
+  const aPos = arr.indexOf(inShelf[idx]);
+  const bPos = arr.indexOf(inShelf[j]);
+  const tmp = arr[aPos]; arr[aPos] = arr[bPos]; arr[bPos] = tmp;
+  fetch(API + '/locations/' + locId + '/reorder', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ product_ids: arr.map(p => p.id) }) }).catch(() => {});
+  renderLocationProducts(locId);
+}
+
+// ============================================
+// ADD ITEMS DIRECTLY TO A SHELF
+// ============================================
+let _stCatalog = null, _addTarget = null;
+async function ensureStorageCatalog(){ if (_stCatalog) return; const a = await fetch('/api/inventory/products').then(r => r.json()).catch(() => []); _stCatalog = (a || []).filter(p => p.active !== 0); }
+async function openAddToShelf(locId, sectionId, shelfName){
+  _addTarget = { locId, sectionId, shelfName };
+  document.getElementById('sa-title').textContent = 'Add items to ' + shelfName;
+  document.getElementById('sa-search').value = '';
+  document.getElementById('sa-results').innerHTML = '<div style="padding:14px;color:var(--text3)">Loading…</div>';
+  document.getElementById('sa-ov').classList.add('open');
+  await ensureStorageCatalog();
+  saRender();
+  document.getElementById('sa-search').focus();
+}
+function closeAddToShelf(){ document.getElementById('sa-ov').classList.remove('open'); if (_addTarget){ renderLocationProducts(_addTarget.locId); loadLocations(); } }
+function saRender(){
+  const q = (document.getElementById('sa-search').value || '').trim().toLowerCase();
+  let list = (_stCatalog || []).filter(p => inType(p.category));
+  if (q) list = list.filter(p => ((p.name||'') + ' ' + (p.display_name||'')).toLowerCase().includes(q));
+  list = list.slice(0, 60);
+  document.getElementById('sa-results').innerHTML = list.length
+    ? list.map(p => '<div class="sa-item" onclick="addProductToShelf(' + p.id + ')"><span>' + esc(p.display_name || p.name) + '</span><span style="color:var(--blue);font-weight:700">+ Add</span></div>').join('')
+    : '<div style="padding:14px;color:var(--text3)">No match</div>';
+}
+async function addProductToShelf(pid){
+  if (!_addTarget) return;
+  const locId = _addTarget.locId, sectionId = _addTarget.sectionId;
+  try {
+    await fetch(API + '/locations/' + locId + '/products', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:pid})}).catch(()=>{});
+    const rows = await fetch(API + '/locations/' + locId + '/products').then(r => r.json());
+    const row = (rows || []).find(r => r.id === pid);
+    if (row) await fetch('/api/inventory/count/assign-section', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({psl_id:row.assignment_id, section_id:sectionId})});
+    showToast('✓ Added');
+  } catch(e) { showToast('Could not add', true); }
 }
 
 // ============================================
