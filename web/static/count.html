@@ -163,6 +163,27 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   .setup,.count-stats,.jump-nav,.search-wrap{max-width:1000px;margin-left:auto;margin-right:auto}
   .save-bar>*{max-width:1000px}
 }
+
+/* iPad master-detail: rail of areas/shelves + items panel */
+#md-layout{display:none}
+@media (min-width:768px){
+  #count-screen #nav-bar, #count-screen .search-wrap, #count-screen #product-list { display:none !important; }
+  #md-layout{display:flex;gap:16px;padding:16px;max-width:1120px;margin:0 auto;align-items:flex-start}
+  #md-rail{width:300px;flex-shrink:0;background:var(--card);border:1px solid var(--border);border-radius:14px;
+    overflow:hidden;position:sticky;top:16px;max-height:calc(100vh - 150px);overflow-y:auto}
+  #md-main{flex:1;min-width:0}
+  .md-area{padding:11px 14px;font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;
+    letter-spacing:.6px;background:rgba(255,255,255,0.02);border-top:1px solid var(--border)}
+  .md-shelf{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;
+    cursor:pointer;border-top:1px solid var(--border);border-left:3px solid transparent}
+  .md-shelf:hover{background:var(--card2)}
+  .md-shelf.sel{background:rgba(10,132,255,0.12);border-left-color:var(--blue)}
+  .md-shelf-name{font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .md-shelf-pct{font-size:13px;font-weight:800;flex-shrink:0}
+  .md-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .md-head .t{font-size:19px;font-weight:700}
+  #md-main .product-row{max-width:100%}
+}
 .product-meta{font-size:11px;color:var(--text3);margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;row-gap:5px}
 .product-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;flex-shrink:0}
 .tag-beer{background:rgba(255,159,10,0.15);color:var(--orange)}
@@ -280,6 +301,9 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   </div>
 
   <div class="product-list" id="product-list"></div>
+
+  <!-- iPad master-detail (≥768px) -->
+  <div id="md-layout"><div id="md-rail"></div><div id="md-main"></div></div>
 
   <div class="save-bar">
     <button class="discard-btn" onclick="discardCount()">✕</button>
@@ -437,10 +461,55 @@ function shelfItems(sec, key){
 function pct(items){ return items.length ? Math.round(items.filter(counted).length / items.length * 100) : 0; }
 function pctClass(p){ return p >= 100 ? 'done-100' : p > 0 ? 'done-part' : 'done-0'; }
 
+function isTablet(){ return window.innerWidth >= 768; }
 function render(){
+  if (isTablet()) return renderMaster();
   if (S.view === 'shelf')   return renderShelf();
   if (S.view === 'shelves') return renderShelves();
   return renderAreas();
+}
+
+// ===== iPad master-detail =====
+function renderMaster(){
+  if (S.areaIdx == null || !S.sections[S.areaIdx]) { S.areaIdx = 0; S.shelfKey = null; }
+  // default a shelf selection
+  if (S.shelfKey == null) {
+    const sec0 = S.sections[S.areaIdx] || {};
+    S.shelfKey = (sec0.sections && sec0.sections[0]) ? sec0.sections[0].id : 'un';
+  }
+  let rail = '';
+  S.sections.forEach((sec, ai) => {
+    rail += '<div class="md-area">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + ' · ' + pct(sec.products) + '%</div>';
+    const shelves = (sec.sections || []).map(s => ({ key: s.id, name: s.name }));
+    if (shelfItems(sec, 'un').length) shelves.push({ key: 'un', name: 'Unshelved' });
+    if (!shelves.length) shelves.push({ key: 'un', name: '(no shelves yet)' });
+    shelves.forEach(sh => {
+      const items = shelfItems(sec, sh.key), p = pct(items);
+      const seld = (ai === S.areaIdx && String(sh.key) === String(S.shelfKey));
+      rail += '<div class="md-shelf' + (seld ? ' sel' : '') + '" onclick="mdSelect(' + ai + ',\'' + sh.key + '\')">' +
+        '<span class="md-shelf-name">' + esc(sh.name) + ' <span style="color:var(--text3);font-size:12px">(' + items.filter(counted).length + '/' + items.length + ')</span></span>' +
+        '<span class="md-shelf-pct ' + pctClass(p) + '">' + p + '%</span></div>';
+    });
+  });
+  document.getElementById('md-rail').innerHTML = rail;
+  document.getElementById('md-main').innerHTML = mdMainHtml();
+}
+function mdSelect(ai, key){ S.areaIdx = ai; S.shelfKey = key; S.reorder = false; renderMaster(); }
+function mdMainHtml(){
+  const sec = S.sections[S.areaIdx]; if (!sec) return '';
+  const items = shelfItems(sec, S.shelfKey);
+  const shName = S.shelfKey === 'un' ? 'Unshelved' : (((sec.sections || []).find(s => String(s.id) === String(S.shelfKey)) || {}).name || 'Shelf');
+  const p = pct(items);
+  let h = '<div class="md-head"><div class="t">' + esc(sec.location_name) + ' · ' + esc(shName) + '</div>' +
+    '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div></div>';
+  h += S.reorder
+    ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
+    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ Add item</button>' +
+      '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
+  h += items.length
+    ? items.map((x, i) => S.reorder ? arrangeRowHtml(x, i, items.length) : productRowHtml(x, i)).join('')
+    : '<div class="empty"><div class="empty-text">No items here yet — add one above.</div></div>';
+  return h;
 }
 function navBar(html){ document.getElementById('nav-bar').innerHTML = html; }
 
@@ -677,11 +746,11 @@ function setQty(pid, el) {
 function updateProgress() {
   document.getElementById('counted-num').textContent = Object.keys(S.counts).length;
   document.getElementById('total-num').textContent = S.totalProducts;
-  if (S.view === 'shelf') {
-    const sec = S.sections[S.areaIdx];
-    const el = document.getElementById('shelf-pct');
-    if (sec && el) { const p = pct(shelfItems(sec, S.shelfKey)); el.textContent = p + '%'; el.className = 'nav-pct ' + pctClass(p); }
-  }
+  const sec = S.sections[S.areaIdx];
+  const el = document.getElementById('shelf-pct');
+  if (sec && el) { const p = pct(shelfItems(sec, S.shelfKey)); el.textContent = p + '%'; el.className = 'nav-pct ' + pctClass(p); }
+  const railSel = document.querySelector('#md-rail .md-shelf.sel .md-shelf-pct');
+  if (sec && railSel) { const p = pct(shelfItems(sec, S.shelfKey)); railSel.textContent = p + '%'; railSel.className = 'md-shelf-pct ' + pctClass(p); }
 }
 
 // ============================================
@@ -803,6 +872,7 @@ if (COUNT_TYPE !== 'all') {
 loadHistory();
 updateConn();
 if (navigator.onLine) flushPending();
+let _rzT; window.addEventListener('resize', function(){ clearTimeout(_rzT); _rzT = setTimeout(function(){ var cs=document.getElementById('count-screen'); if (cs && cs.style.display==='block') render(); }, 200); });
 </script>
 <script src="/static/product_editor.js"></script>
 </body>
