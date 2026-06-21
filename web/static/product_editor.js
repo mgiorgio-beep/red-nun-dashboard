@@ -140,7 +140,7 @@
           var v=(vi||[]).find(function(x){return x.pack_contains;})||(vi||[])[0]; var el=document.getElementById('rnpe-vline');
           if(v){ el.style.display='block'; el.innerHTML='<b>'+esc(v.vendor_name||'Vendor')+'</b> — '+esc(v.pack_size||'')+' &middot; $'+(v.purchase_price||0).toFixed(2); }
         });
-        if (cur.onSaved) cur.onSaved(cur.prod, { merged: otherId });
+        try{ if (cur.onSaved) cur.onSaved(cur.prod, { merged: otherId }); }catch(e){}
       })
       .catch(function(){ toast('Merge failed', true); });
   }
@@ -163,6 +163,7 @@
     document.getElementById('rnpe-convs').innerHTML='';
     ['rnpe-cf','rnpe-cq','rnpe-ct','rnpe-merge'].forEach(function(eid){ var e=document.getElementById(eid); if(e) e.value=''; });
     var mres=document.getElementById('rnpe-merge-res'); if(mres) mres.style.display='none';
+    var sb=document.getElementById('rnpe-save'); if(sb){ sb.textContent='Save'; sb.disabled=false; }
     fetch('/api/inventory/products/'+id,{credentials:'include'}).then(function(r){return r.json();}).then(function(p){
       cur.prod=p;
       document.getElementById('rnpe-title').textContent='Edit: '+(p.display_name||p.name||'Product');
@@ -223,23 +224,23 @@
     var invUnit=document.getElementById('rnpe-invunit').value||null;
     var recUnit=document.getElementById('rnpe-recunit').value||null;
     var btn=document.getElementById('rnpe-save'); btn.textContent='Saving…'; btn.disabled=true;
+    function _done(){ btn.textContent='Save'; btn.disabled=false; }
     fetch('/api/inventory/products/'+cur.id,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)})
       .then(function(r){ if(!r.ok) throw new Error(); return fetch('/api/storage/product/'+cur.id+'/units',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({inventory_unit:invUnit,recipe_unit:recUnit})}); })
-      .then(function(){
+      .then(function(r2){ if(r2 && !r2.ok) throw new Error();
         var updated=Object.assign({},p,{display_name:body.display_name,name:body.name,category:body.category,unit:body.unit,current_price:parseFloat(body.current_price)||null,par_level:body.par_level,reorder_point:body.reorder_point,inventory_unit:invUnit,recipe_unit:recUnit});
-        btn.textContent='Save'; btn.disabled=false;
-        toast('Saved');
-        if(cur.onSaved) cur.onSaved(updated, {});
+        _done(); toast('Saved');
+        try{ if(cur.onSaved) cur.onSaved(updated, {}); }catch(e){}
         close();
       })
-      .catch(function(){ btn.textContent='Save'; btn.disabled=false; toast('Save failed',true); });
+      .catch(function(){ _done(); toast('Save failed',true); });
   }
 
   function archive(){
     if(!cur.id||!cur.prod)return;
     if(!confirm('Archive "'+(cur.prod.display_name||cur.prod.name)+'"?\n\nHidden from Inventory, Count and Storage. Invoice history is kept; can be restored later.')) return;
     fetch('/api/storage/product/'+cur.id+'/units',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({active:false})})
-      .then(function(r){ if(!r.ok) throw new Error(); toast('Archived'); var oid=cur.id; if(cur.onSaved) cur.onSaved(null,{archived:true,id:oid}); close(); })
+      .then(function(r){ if(!r.ok) throw new Error(); toast('Archived'); var oid=cur.id; try{ if(cur.onSaved) cur.onSaved(null,{archived:true,id:oid}); }catch(e){} close(); })
       .catch(function(){ toast('Could not archive',true); });
   }
 

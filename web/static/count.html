@@ -445,7 +445,7 @@ function renderShelf(){
 
 function arrangeRowHtml(p, i, n){
   return '<div class="product-row" style="align-items:center">' +
-    '<div class="product-info"><div class="product-name">' + esc(p.name) + '</div>' +
+    '<div class="product-info"><div class="product-name">' + esc(p.display_name || p.name) + '</div>' +
       '<div class="product-meta"><span class="unit-chip">count: ' + esc(p.inventory_unit || p.unit || 'ea') + '</span></div></div>' +
     '<div class="arrange-btns">' +
       '<button class="step-btn" onclick="moveItem(' + p.id + ',-1)" ' + (i === 0 ? 'disabled' : '') + '>▲</button>' +
@@ -517,7 +517,7 @@ async function addExistingToShelf(pid){
     if (existing) { existing.section_id = secId; }
     else {
       const c = (S.catalog || []).find(x => x.id === pid) || {};
-      sec.products.push({ id:pid, name:c.name||(row&&row.name)||'Item', category:c.category, unit:c.unit, inventory_unit:c.inventory_unit, current_price:c.current_price, section_id:secId, current_qty:null });
+      sec.products.push({ id:pid, name:c.name||(row&&row.name)||'Item', display_name:c.display_name, category:c.category, unit:c.unit, inventory_unit:c.inventory_unit, current_price:c.current_price, section_id:secId, current_qty:null });
       S.totalProducts++;
     }
     closeAddItem(); render(); updateProgress();
@@ -548,7 +548,7 @@ function productRowHtml(p, i) {
   const prevHtml = prev !== null && prev !== undefined ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
   return '<div class="product-row fade-up" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
     '<div class="product-info">' +
-      '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(p.name) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
+      '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(p.display_name || p.name) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
       '<div class="product-meta">' +
         '<span class="unit-chip" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">count: ' + esc(unit) + '</span>' + prevHtml +
         '<button class="out-btn" onclick="markOut(' + p.id + ')">Out (0)</button>' +
@@ -575,7 +575,7 @@ function editFromCount(pid){
       const idx = sec.products.findIndex(x => x.id === pid);
       if (idx >= 0){
         if (meta && meta.archived){ sec.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); delete S.counts[pid]; }
-        else if (p){ Object.assign(sec.products[idx], { name:p.name, category:p.category, unit:p.unit, inventory_unit:p.inventory_unit, current_price:p.current_price }); }
+        else if (p){ Object.assign(sec.products[idx], { name:p.name, display_name:p.display_name, category:p.category, unit:p.unit, inventory_unit:p.inventory_unit, current_price:p.current_price }); }
         break;
       }
     }

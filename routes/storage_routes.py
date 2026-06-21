@@ -324,7 +324,7 @@ def get_count_sheet():
     result = []
     for loc in locs:
         products = conn.execute("""
-            SELECT p.id, p.name, p.category, p.unit, p.inventory_unit, p.current_price,
+            SELECT p.id, p.name, p.display_name, p.category, p.unit, p.inventory_unit, p.current_price,
                    p.par_level, psl.sort_order, psl.section_id,
                    inv.quantity as current_qty
             FROM product_storage_locations psl
