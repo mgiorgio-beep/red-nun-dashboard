@@ -141,6 +141,10 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .ai-add{color:var(--blue);font-weight:700;flex-shrink:0;margin-left:10px}
 .ai-new{padding:14px;color:var(--green);font-weight:700;cursor:pointer;border-top:1px solid var(--border)}
 
+/* Arrange (reorder) mode */
+.arrange-btns{display:flex;gap:8px;flex-shrink:0}
+.step-btn:disabled{opacity:0.3;cursor:default}
+
 /* iPad / wide: two columns, centered, roomier */
 @media (min-width:768px){
   .product-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:1000px;margin:0 auto}
@@ -429,11 +433,46 @@ function renderShelf(){
   navBar('<button class="nav-back" onclick="goShelves(' + S.areaIdx + ')">‹</button><div class="nav-title">' +
     '<div class="t">' + esc(shName) + '</div><div class="s">' + esc(sec.location_name) + '</div></div>' +
     '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div>');
-  if (search) items = items.filter(x => x.name.toLowerCase().includes(search));
-  const addBtn = '<button class="addrow" onclick="openAddItem()">+ Add item to this shelf</button>';
-  document.getElementById('product-list').innerHTML = addBtn + (items.length
-    ? items.map((x, i) => productRowHtml(x, i)).join('')
-    : '<div class="empty"><div class="empty-text">No items here yet — add one above.</div></div>');
+  if (search && !S.reorder) items = items.filter(x => x.name.toLowerCase().includes(search));
+  const topBar = S.reorder
+    ? '<button class="addrow" style="background:rgba(48,209,88,0.14);border-color:rgba(48,209,88,0.5);color:var(--green)" onclick="toggleReorder()">✓ Done arranging</button>'
+    : '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+        '<button class="addrow" style="flex:1;margin:0" onclick="openAddItem()">+ Add item</button>' +
+        '<button class="addrow" style="flex:0 0 auto;margin:0" onclick="toggleReorder()">↕ Arrange</button>' +
+      '</div>';
+  const rowsHtml = items.length
+    ? items.map((x, i) => S.reorder ? arrangeRowHtml(x, i, items.length) : productRowHtml(x, i)).join('')
+    : '<div class="empty"><div class="empty-text">No items here yet — add one above.</div></div>';
+  document.getElementById('product-list').innerHTML = topBar + rowsHtml;
+}
+
+function arrangeRowHtml(p, i, n){
+  return '<div class="product-row" style="align-items:center">' +
+    '<div class="product-info"><div class="product-name">' + esc(p.name) + '</div>' +
+      '<div class="product-meta"><span class="unit-chip">count: ' + esc(p.inventory_unit || p.unit || 'ea') + '</span></div></div>' +
+    '<div class="arrange-btns">' +
+      '<button class="step-btn" onclick="moveItem(' + p.id + ',-1)" ' + (i === 0 ? 'disabled' : '') + '>▲</button>' +
+      '<button class="step-btn" onclick="moveItem(' + p.id + ',1)" ' + (i === n - 1 ? 'disabled' : '') + '>▼</button>' +
+    '</div></div>';
+}
+function toggleReorder(){ S.reorder = !S.reorder; document.getElementById('search').value = ''; render(); }
+function moveItem(pid, dir){
+  const area = S.sections[S.areaIdx]; if (!area) return;
+  const shelfList = shelfItems(area, S.shelfKey);
+  const idx = shelfList.findIndex(p => p.id === pid);
+  const j = idx + dir;
+  if (idx < 0 || j < 0 || j >= shelfList.length) return;
+  const aPos = area.products.indexOf(shelfList[idx]);
+  const bPos = area.products.indexOf(shelfList[j]);
+  const tmp = area.products[aPos]; area.products[aPos] = area.products[bPos]; area.products[bPos] = tmp;
+  render();
+  persistOrder(area);
+}
+function persistOrder(area){
+  fetch('/api/storage/locations/' + area.location_id + '/reorder', {
+    method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body: JSON.stringify({ product_ids: area.products.map(p => p.id) })
+  }).catch(()=>{});
 }
 
 // ---- Add item to the shelf you're on ----
@@ -500,9 +539,9 @@ async function createAndAddItem(name){
   } catch(e) { showToast('Could not create product', true); }
 }
 
-function goAreas(){ S.view = 'areas'; S.areaIdx = null; S.shelfKey = null; document.getElementById('search').value = ''; render(); }
-function goShelves(idx){ S.view = 'shelves'; S.areaIdx = idx; S.shelfKey = null; document.getElementById('search').value = ''; render(); }
-function goShelf(key){ S.view = 'shelf'; S.shelfKey = key; render(); }
+function goAreas(){ S.view = 'areas'; S.areaIdx = null; S.shelfKey = null; S.reorder = false; document.getElementById('search').value = ''; render(); }
+function goShelves(idx){ S.view = 'shelves'; S.areaIdx = idx; S.shelfKey = null; S.reorder = false; document.getElementById('search').value = ''; render(); }
+function goShelf(key){ S.view = 'shelf'; S.shelfKey = key; S.reorder = false; render(); }
 
 function productRowHtml(p, i) {
   const val = S.counts[p.id] !== undefined ? S.counts[p.id] : '';
