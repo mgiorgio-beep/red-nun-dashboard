@@ -283,7 +283,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 
   <div class="save-bar">
     <button class="discard-btn" onclick="discardCount()">✕</button>
-    <div class="save-info"><b id="counted-num">0</b> of <span id="total-num">0</span> counted</div>
+    <div class="save-info"><b id="counted-num">0</b> of <span id="total-num">0</span> counted <span id="conn-dot" style="font-size:11px;font-weight:700;margin-left:6px"></span></div>
     <button class="save-btn" id="save-btn" onclick="saveCount()">Save Count</button>
   </div>
 </div>
@@ -319,21 +319,76 @@ function pickLoc(el) {
 }
 
 // ============================================
+// OFFLINE PERSISTENCE  (count works in the walk-in dead zone)
+// ============================================
+function lsKey(loc){ return 'rn_count_' + loc + '_' + COUNT_TYPE; }
+function saveLocal(){
+  if (!S.location) return;
+  try { localStorage.setItem(lsKey(S.location), JSON.stringify({ sheet:S.sections, counts:S.counts, countId:S.countId, total:S.totalProducts, ts:Date.now() })); } catch(e){}
+}
+function loadLocal(loc){ try { return JSON.parse(localStorage.getItem(lsKey(loc)) || 'null'); } catch(e){ return null; } }
+function clearLocal(loc){ try { localStorage.removeItem(lsKey(loc)); } catch(e){} }
+function pendingCount(){ try { return JSON.parse(localStorage.getItem('rn_count_pending') || '[]').length; } catch(e){ return 0; } }
+function queuePending(payload){ try { var q = JSON.parse(localStorage.getItem('rn_count_pending') || '[]'); q.push(payload); localStorage.setItem('rn_count_pending', JSON.stringify(q)); } catch(e){} }
+async function flushPending(){
+  var q; try { q = JSON.parse(localStorage.getItem('rn_count_pending') || '[]'); } catch(e){ q = []; }
+  if (!q.length) return;
+  var remain = [], synced = 0;
+  for (var i=0; i<q.length; i++){
+    var p = q[i];
+    try {
+      var cr = await fetch('/api/inventory/counts', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:p.location, notes:p.notes})});
+      var cid = (await cr.json()).id;
+      var r = await fetch('/api/inventory/counts/batch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count_id:cid, location:p.location, items:p.items})});
+      if (!r.ok) throw new Error();
+      synced++;
+    } catch(e){ remain.push(p); }
+  }
+  try { localStorage.setItem('rn_count_pending', JSON.stringify(remain)); } catch(e){}
+  updateConn();
+  if (synced) showToast('✓ Synced ' + synced + ' saved count' + (synced>1?'s':''));
+}
+function updateConn(){
+  var el = document.getElementById('conn-dot'); if (!el) return;
+  var on = navigator.onLine, pend = pendingCount();
+  el.textContent = (on ? '● Online' : '● Offline') + (pend ? (' · ' + pend + ' to sync') : '');
+  el.style.color = on ? (pend ? 'var(--orange)' : 'var(--green)') : 'var(--red)';
+}
+window.addEventListener('online', function(){ updateConn(); flushPending(); });
+window.addEventListener('offline', updateConn);
+
+// ============================================
 // START COUNT
 // ============================================
 async function startCount() {
   if (!S.location) return;
+  document.getElementById('count-location-label').textContent = S.location === 'dennis' ? 'DENNIS PORT' : 'CHATHAM';
 
-  const label = S.location === 'dennis' ? 'DENNIS PORT' : 'CHATHAM';
-  document.getElementById('count-location-label').textContent = label;
+  // Resume an in-progress count saved on this device (survives reload / dead zone).
+  const saved = loadLocal(S.location);
+  if (saved && saved.counts && Object.keys(saved.counts).length) {
+    if (confirm('You have an in-progress ' + TYPE_LABEL.toLowerCase() + ' count here with ' + Object.keys(saved.counts).length + ' items counted.\n\nResume it?  (Cancel = start a new count)')) {
+      S.sections = saved.sheet || [];
+      S.counts = saved.counts || {};
+      S.countId = saved.countId || null;
+      S.totalProducts = saved.total || S.sections.reduce((s, sec) => s + (sec.products || []).length, 0);
+      S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
+      document.getElementById('setup-screen').style.display = 'none';
+      document.getElementById('count-screen').style.display = 'block';
+      document.getElementById('total-num').textContent = S.totalProducts;
+      render(); updateProgress(); updateConn();
+      return;
+    }
+    clearLocal(S.location);
+  }
 
-  // Load count sheet organized by storage location
+  // Load count sheet — fall back to the last cached sheet if we're offline.
   try {
     const res = await fetch('/api/storage/count-sheet?location=' + S.location);
     S.sections = await res.json();
   } catch(e) {
-    showToast('Failed to load count sheet', true);
-    return;
+    if (saved && saved.sheet && saved.sheet.length) { S.sections = saved.sheet; showToast('Offline — using last loaded sheet', true); }
+    else { showToast('Need a connection to load the count sheet the first time', true); return; }
   }
 
   // Filter to the selected count type (food / booze) and drop areas left empty.
@@ -349,18 +404,16 @@ async function startCount() {
     return;
   }
 
-  // Session is created on SAVE (not on start), so abandoned/test counts don't clutter history.
+  // Session is created on SAVE (not on start). Blank = not counted, 0 = counted-out.
   S.countId = null;
   S.counts = {};
   S.totalProducts = S.sections.reduce((sum, sec) => sum + sec.products.length, 0);
-
-  // No smart pre-fill: blank = not counted yet, 0 = counted as out (forced-zero model).
   S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('count-screen').style.display = 'block';
   document.getElementById('total-num').textContent = S.totalProducts;
-  render();
-  updateProgress();
+  saveLocal();
+  render(); updateProgress(); updateConn();
 }
 
 function sectionIcon(name) {
@@ -466,6 +519,7 @@ function moveItem(pid, dir){
   const bPos = area.products.indexOf(shelfList[j]);
   const tmp = area.products[aPos]; area.products[aPos] = area.products[bPos]; area.products[bPos] = tmp;
   render();
+  saveLocal();
   persistOrder(area);
 }
 async function removeFromShelf(pid){
@@ -476,7 +530,7 @@ async function removeFromShelf(pid){
     await fetch('/api/storage/locations/' + area.location_id + '/products/' + pid, { method:'DELETE', credentials:'include' });
     const idx = area.products.findIndex(p => p.id === pid);
     if (idx >= 0) { area.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); delete S.counts[pid]; }
-    render(); updateProgress();
+    render(); updateProgress(); saveLocal();
     showToast('Removed from area');
   } catch(e) { showToast('Could not remove', true); }
 }
@@ -535,7 +589,7 @@ async function addExistingToShelf(pid){
       sec.products.push({ id:pid, name:c.name||(row&&row.name)||'Item', display_name:c.display_name, category:c.category, unit:c.unit, inventory_unit:c.inventory_unit, current_price:c.current_price, section_id:secId, current_qty:null });
       S.totalProducts++;
     }
-    closeAddItem(); render(); updateProgress();
+    closeAddItem(); render(); updateProgress(); saveLocal();
     showToast('Added to shelf');
   } catch(e) { showToast('Could not add item', true); }
 }
@@ -617,6 +671,7 @@ function setQty(pid, el) {
   if (v === '') { delete S.counts[pid]; el.classList.remove('has-value'); }
   else { S.counts[pid] = parseFloat(v); el.classList.add('has-value'); }
   updateProgress();
+  saveLocal();
 }
 
 function updateProgress() {
@@ -641,47 +696,49 @@ async function saveCount() {
   const btn = document.getElementById('save-btn');
   btn.disabled = true; btn.textContent = 'Saving...';
 
-  try {
-    // Create the session now (on save) so abandoned counts never create a row.
-    if (!S.countId) {
-      const cr = await fetch('/api/inventory/counts', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ location: S.location, notes: TYPE_NOTE })
-      });
-      S.countId = (await cr.json()).id;
+  // Build items first so we can queue them even with no connection.
+  const items = [];
+  for (const [pid, qty] of Object.entries(S.counts)) {
+    let unit = 'ea';
+    for (const sec of S.sections) {
+      const prod = sec.products.find(p => p.id == pid);
+      if (prod) { unit = prod.inventory_unit || prod.unit || 'ea'; break; }
     }
-    const items = [];
-    for (const [pid, qty] of Object.entries(S.counts)) {
-      let unit = 'ea';
-      for (const sec of S.sections) {
-        const prod = sec.products.find(p => p.id == pid);
-        if (prod) { unit = prod.inventory_unit || prod.unit || 'ea'; break; }
-      }
-      items.push({ product_id: parseInt(pid), quantity: qty, unit });
-    }
+    items.push({ product_id: parseInt(pid), quantity: qty, unit });
+  }
 
-    const res = await fetch('/api/inventory/counts/batch', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ count_id: S.countId, location: S.location, items })
-    });
-    if (!res.ok) throw new Error('Save failed');
-
-    showToast('✓ ' + counted + ' items saved!');
+  function finish(msg, err) {
+    showToast(msg, err);
+    clearLocal(S.location);
+    S.counts = {};
+    updateConn();
     setTimeout(() => {
       document.getElementById('count-screen').style.display = 'none';
       document.getElementById('setup-screen').style.display = 'block';
       document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
+      btn.disabled = false; btn.textContent = 'Save Count';
       loadHistory();
-    }, 1500);
+    }, 1200);
+  }
+
+  try {
+    if (!S.countId) {
+      const cr = await fetch('/api/inventory/counts', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:S.location, notes:TYPE_NOTE})});
+      if (!cr.ok) throw new Error(); S.countId = (await cr.json()).id;
+    }
+    const res = await fetch('/api/inventory/counts/batch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count_id:S.countId, location:S.location, items})});
+    if (!res.ok) throw new Error();
+    finish('✓ ' + counted + ' items saved!');
   } catch(e) {
-    showToast('Error saving count', true);
-    btn.disabled = false; btn.textContent = 'Save Count';
+    // Offline or the save failed — keep it on the device and upload when back online.
+    queuePending({ location: S.location, notes: TYPE_NOTE, items: items, ts: Date.now() });
+    finish('Saved on this device — will upload when back online');
   }
 }
 
 function discardCount() {
   if (Object.keys(S.counts).length > 0 && !confirm('Discard this count?')) return;
+  if (S.location) clearLocal(S.location);
   document.getElementById('count-screen').style.display = 'none';
   document.getElementById('setup-screen').style.display = 'block';
   document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
@@ -744,6 +801,8 @@ if (COUNT_TYPE !== 'all') {
     ' Pick a location to start.';
 }
 loadHistory();
+updateConn();
+if (navigator.onLine) flushPending();
 </script>
 <script src="/static/product_editor.js"></script>
 </body>
