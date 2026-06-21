@@ -212,7 +212,10 @@ function visible(){
     if(FILTER==='booze'&&!BOOZE.includes(d.prod.category))return false;
     if(FILTER==='high'&&d.conf!=='high')return false;
     if(FILTER==='review'&&d.conf!=='low'&&d.sug.unit)return false;
-    if(s&&!(d.prod.name||'').toLowerCase().includes(s))return false;
+    if(s){
+      const hay=((d.prod.name||'')+' '+(d.prod.display_name||'')+' '+(d.rec.vdesc||'')).toLowerCase();
+      if(!hay.includes(s)) return false;
+    }
     return true;
   });
 }

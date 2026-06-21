@@ -432,7 +432,7 @@ function renderShelf(){
   navBar('<button class="nav-back" onclick="goShelves(' + S.areaIdx + ')">‹</button><div class="nav-title">' +
     '<div class="t">' + esc(shName) + '</div><div class="s">' + esc(sec.location_name) + '</div></div>' +
     '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div>');
-  if (search && !S.reorder) items = items.filter(x => x.name.toLowerCase().includes(search));
+  if (search && !S.reorder) items = items.filter(x => ((x.name||'') + ' ' + (x.display_name||'')).toLowerCase().includes(search));
   const topBar = S.reorder
     ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
     : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ Add item</button>' +
