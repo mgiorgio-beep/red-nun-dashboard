@@ -126,6 +126,14 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .addrow{display:block;width:100%;margin-bottom:10px;padding:13px;border-radius:12px;
   background:rgba(10,132,255,0.12);border:1px dashed rgba(10,132,255,0.45);color:var(--blue);
   font-size:14px;font-weight:700;cursor:pointer}
+/* Equal-width shelf action buttons */
+.shelf-actions{display:flex;gap:10px;margin-bottom:12px}
+.sa-btn,.sa-done{flex:1 1 0;min-width:0;padding:14px 10px;border-radius:12px;font-size:14px;
+  font-weight:700;cursor:pointer;border:1px solid;text-align:center;transition:all .12s}
+.sa-btn:active,.sa-done:active{transform:scale(0.98)}
+.sa-add{background:rgba(10,132,255,0.14);border-color:rgba(10,132,255,0.45);color:var(--blue)}
+.sa-arrange{background:var(--card);border-color:var(--border2);color:var(--text2)}
+.sa-done{background:rgba(48,209,88,0.14);border-color:rgba(48,209,88,0.5);color:var(--green)}
 .ai-ov{position:fixed;inset:0;background:rgba(10,10,12,0.97);display:none;flex-direction:column;
   z-index:150;padding:calc(var(--safe-top) + 14px) 14px calc(var(--safe-bottom) + 14px)}
 .ai-ov.open{display:flex}
@@ -153,7 +161,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   .setup,.count-stats,.jump-nav,.search-wrap{max-width:1000px;margin-left:auto;margin-right:auto}
   .save-bar>*{max-width:1000px}
 }
-.product-meta{font-size:11px;color:var(--text3);margin-top:2px;display:flex;gap:8px;align-items:center}
+.product-meta{font-size:11px;color:var(--text3);margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;row-gap:5px}
 .product-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;flex-shrink:0}
 .tag-beer{background:rgba(255,159,10,0.15);color:var(--orange)}
 .tag-liquor{background:rgba(255,69,58,0.15);color:var(--red)}
@@ -426,11 +434,9 @@ function renderShelf(){
     '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div>');
   if (search && !S.reorder) items = items.filter(x => x.name.toLowerCase().includes(search));
   const topBar = S.reorder
-    ? '<button class="addrow" style="background:rgba(48,209,88,0.14);border-color:rgba(48,209,88,0.5);color:var(--green)" onclick="toggleReorder()">✓ Done arranging</button>'
-    : '<div style="display:flex;gap:8px;margin-bottom:10px">' +
-        '<button class="addrow" style="flex:1;margin:0" onclick="openAddItem()">+ Add item</button>' +
-        '<button class="addrow" style="flex:0 0 auto;margin:0" onclick="toggleReorder()">↕ Arrange</button>' +
-      '</div>';
+    ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
+    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ Add item</button>' +
+      '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
   const rowsHtml = items.length
     ? items.map((x, i) => S.reorder ? arrangeRowHtml(x, i, items.length) : productRowHtml(x, i)).join('')
     : '<div class="empty"><div class="empty-text">No items here yet — add one above.</div></div>';
