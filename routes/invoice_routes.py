@@ -1102,6 +1102,15 @@ def api_create_manual_invoice():
                           "quantity": 1, "unit": "charge", "unit_price": other_charge,
                           "total_price": other_charge, "category_type": "NON_COGS"})
 
+        # Credit / Return invoices are stored as NEGATIVE amounts (matches CSV
+        # credit-memo convention — see processor.py "do NOT flip the sign").
+        # Selecting the Credit type should make the whole invoice reduce AP.
+        if invoice_type == "credit":
+            for it in items:
+                it["unit_price"] = -abs(it["unit_price"])
+                it["total_price"] = -abs(it["total_price"])
+            total = -abs(total)
+
         # Determine category from vendor
         from integrations.invoices.processor import categorize_vendor
         category = categorize_vendor(vendor_name)

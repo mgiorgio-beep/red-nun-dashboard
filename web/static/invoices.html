@@ -3500,6 +3500,7 @@ function ciCalcTotal() {
   var credit = parseFloat((document.getElementById('ciCredit') || {}).value) || 0;
   var other = parseFloat((document.getElementById('ciOther') || {}).value) || 0;
   var total = sum + tax + fuel - credit + other;
+  if (ciState.type === 'credit') total = -Math.abs(total);
   var el = document.getElementById('ciTotal');
   if (el) el.textContent = '$' + total.toFixed(2);
 }
@@ -3550,6 +3551,7 @@ async function ciSubmit() {
   if (ciState.detailLevel === 'category') categories.forEach(function(c){itemSum+=c.amount;});
   else line_items.forEach(function(li){itemSum+=li.total_price;});
   var total = itemSum + tax + fuel - credit + other;
+  if (ciState.type === 'credit') total = -Math.abs(total);
 
   var payload = {
     invoice_type: ciState.type,
