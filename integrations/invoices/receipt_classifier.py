@@ -279,6 +279,40 @@ def _parse_pfg_billfire(body_text: str) -> Tuple[Optional[float], List[ReceiptLi
     return amt, []   # empty line items — matcher will fuzzy-match on total
 
 
+# ── Cintas (support@cintas.com) ───────────────────────────────────────────────
+# Two formats, both HTML-only (so _get_text_body flattens them to one line with
+# " | " cell separators — we parse that flattened form, not per-line):
+#   "myCintas Payment Confirmation" — table with per-invoice rows
+#       (Invoice Date | Account | Invoice # | Invoice Total | Payment). The
+#       Account cell carries the payer code (0025041129=Dennis, 0025003893=Chatham).
+#   "myCintas Autopay Confirmation" — weekly autopay summary, lump total only
+#       ("Autopay Amount Processed: $X"), NO invoice numbers.
+_CINTAS_ROW_REGEX = re.compile(
+    r"(\d{2}/\d{2}/\d{4})\s*\|\s*(.+?)\s*\|\s*(\d{6,})\s*\|\s*\$?([\d,]+\.\d{2})\s*\|\s*\$?([\d,]+\.\d{2})"
+)
+_CINTAS_AUTOPAY_AMOUNT_REGEX = re.compile(
+    r"Autopay\s+Amount\s+Processed:\s*\$?([\d,]+\.\d{2})", re.I
+)
+
+
+def _parse_cintas_payment_confirmation(body_text: str) -> Tuple[Optional[float], List[ReceiptLineItem]]:
+    """Per-invoice rows — use the 'Payment' column (amount actually paid)."""
+    items: List[ReceiptLineItem] = []
+    for m in _CINTAS_ROW_REGEX.finditer(body_text or ""):
+        amt = _parse_money(m.group(5))
+        if amt is None:
+            continue
+        items.append(ReceiptLineItem(invoice_number=m.group(3).strip(), amount=amt))
+    total = round(sum(li.amount for li in items), 2) if items else None
+    return total, items
+
+
+def _parse_cintas_autopay(body_text: str) -> Tuple[Optional[float], List[ReceiptLineItem]]:
+    """Weekly autopay summary — lump total only, no invoice breakdown."""
+    amt = _parse_amount_with_regex(body_text, _CINTAS_AUTOPAY_AMOUNT_REGEX)
+    return amt, []
+
+
 # ── Location extractors ──────────────────────────────────────────────────────
 #
 # Each returns 'chatham', 'dennis', or None.
@@ -328,6 +362,16 @@ def _loc_suburban(subject: str, body_text: str) -> Optional[str]:
     if "DENNISPORT" in b or "DENNIS PORT" in b:
         return "dennis"
     if "CHATHAM" in b:
+        return "chatham"
+    return None
+
+
+def _loc_cintas(subject: str, body_text: str) -> Optional[str]:
+    """Cintas payer codes: 0025041129 = Dennis, 0025003893 = Chatham."""
+    b = (body_text or "").upper()
+    if "0025041129" in b or "DENNIS PORT" in b or "DENNISPORT" in b:
+        return "dennis"
+    if "0025003893" in b or "CHATHAM" in b:
         return "chatham"
     return None
 
@@ -430,6 +474,26 @@ RECEIPT_SIGNATURES = [
         "payment_method": "ach_via_billfire",
         "parser": "pfg_billfire",
         "location_extractor": _loc_pfg_billfire,
+    },
+    {
+        "key": "cintas_payment_confirmation",
+        "from_regex": re.compile(r"support@cintas\.com", re.I),
+        "subject_regex": re.compile(r"myCintas Payment Confirmation", re.I),
+        "vendor_canonical": "Cintas",
+        "tier": "auto_apply",   # per-invoice # + amount table — exact direct match
+        "payment_method": "ach_autopay",
+        "parser": "cintas_payment_confirmation",
+        "location_extractor": _loc_cintas,
+    },
+    {
+        "key": "cintas_autopay",
+        "from_regex": re.compile(r"support@cintas\.com", re.I),
+        "subject_regex": re.compile(r"myCintas Autopay Confirmation", re.I),
+        "vendor_canonical": "Cintas",
+        "tier": "needs_review",  # lump total only, no invoice # — fuzzy, hold for review
+        "payment_method": "ach_autopay",
+        "parser": "cintas_autopay",
+        "location_extractor": _loc_cintas,
     },
 ]
 
@@ -557,6 +621,16 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
             total_amount, line_items = _parse_pfg_billfire(body_text)
             if total_amount is None:
                 notes.append("pfg-amount-unparsed")
+
+        elif parser == "cintas_payment_confirmation":
+            total_amount, line_items = _parse_cintas_payment_confirmation(body_text)
+            if not line_items:
+                notes.append("cintas-line-items-unparsed")
+
+        elif parser == "cintas_autopay":
+            total_amount, line_items = _parse_cintas_autopay(body_text)
+            if total_amount is None:
+                notes.append("cintas-autopay-amount-unparsed")
 
         # Extract location for this signature. Try effective_subject (the
         # body-extracted one if forwarded) and the body text together.

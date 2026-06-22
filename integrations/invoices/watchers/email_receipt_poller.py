@@ -69,6 +69,7 @@ RECEIPT_GMAIL_QUERY = (
     "from:noreply@vtinfo.com OR "             # L. Knife + Colonial
     "from:usfoods-notification@usfoods.com OR "
     "from:no-reply@valet.billfire.com OR "    # PFG via Billfire
+    "from:support@cintas.com OR "             # Cintas autopay + payment confirmations
     # Forwarded receipts from Mike's personal inboxes
     "(from:mgiorgio@rednun.com subject:Fwd) OR "
     "(from:mike@rednun.com subject:Fwd) OR "
