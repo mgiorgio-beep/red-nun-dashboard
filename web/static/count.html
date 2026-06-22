@@ -18,7 +18,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);
-  min-height:100vh;min-height:100dvh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  min-height:100vh;min-height:100dvh;-webkit-font-smoothing:antialiased;overflow-x:hidden;overscroll-behavior-y:contain}
 
 .hdr{position:sticky;top:0;z-index:100;padding:calc(var(--safe-top) + 12px) 16px 12px;
   background:rgba(10,10,12,0.85);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
@@ -168,10 +168,10 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 #md-layout{display:none}
 @media (min-width:768px){
   #count-screen #nav-bar, #count-screen .search-wrap, #count-screen #product-list { display:none !important; }
-  #md-layout{display:flex;gap:16px;padding:16px;max-width:1120px;margin:0 auto;align-items:flex-start}
+  #md-layout{display:flex;gap:16px;padding:16px 16px calc(var(--safe-bottom) + 96px);max-width:1120px;margin:0 auto;align-items:flex-start}
   #md-rail{width:300px;flex-shrink:0;background:var(--card);border:1px solid var(--border);border-radius:14px;
-    overflow:hidden;position:sticky;top:16px;max-height:calc(100vh - 150px);overflow-y:auto}
-  #md-main{flex:1;min-width:0}
+    position:sticky;top:16px;max-height:calc(100dvh - 130px);overflow-y:auto;overscroll-behavior:contain}
+  #md-main{flex:1;min-width:0;padding-bottom:24px}
   .md-area{padding:11px 14px;font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;
     letter-spacing:.6px;background:rgba(255,255,255,0.02);border-top:1px solid var(--border)}
   .md-shelf{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;
@@ -872,7 +872,18 @@ if (COUNT_TYPE !== 'all') {
 loadHistory();
 updateConn();
 if (navigator.onLine) flushPending();
-let _rzT; window.addEventListener('resize', function(){ clearTimeout(_rzT); _rzT = setTimeout(function(){ var cs=document.getElementById('count-screen'); if (cs && cs.style.display==='block') render(); }, 200); });
+// Only re-render on a real breakpoint change (rotation) — NOT on iOS toolbar show/hide,
+// which fires resize during scroll and was causing the jumpiness.
+let _rzT, _wasTablet = isTablet();
+window.addEventListener('resize', function(){
+  clearTimeout(_rzT);
+  _rzT = setTimeout(function(){
+    var cs = document.getElementById('count-screen');
+    if (!cs || cs.style.display !== 'block') return;
+    var t = isTablet();
+    if (t !== _wasTablet) { _wasTablet = t; render(); }
+  }, 250);
+});
 </script>
 <script src="/static/product_editor.js"></script>
 </body>
