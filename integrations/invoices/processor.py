@@ -1961,6 +1961,12 @@ _VENDOR_ALIASES = {
     'cintas': 'Cintas',
     'cintas corp': 'Cintas',
     'cintas corporation': 'Cintas',
+    # Craft Collective bills through "Atlantic Beverage Distributors" on TermSync
+    # and historically appeared as "Craft Collective Homegrown" — all one vendor.
+    'craft collective': 'Craft Collective',
+    'craft collective homegrown': 'Craft Collective',
+    'atlantic beverage distributors': 'Craft Collective',
+    'atlantic beverage': 'Craft Collective',
 }
 
 def _normalize_vendor_name(name):
