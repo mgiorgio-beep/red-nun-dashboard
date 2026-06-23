@@ -479,8 +479,12 @@ def run(dry_run: bool = False, backfill_days: Optional[int] = None):
             # Don't mark read — the user may have other reasons to want it unread.
             continue
 
-        # For Suburban (PDF-attached amount), do a second pass with PDF text
-        if receipt.amount is None and "pdf-attachment-amount-unparsed" in receipt.parse_notes:
+        # Second pass with PDF text for signatures whose key data lives in the
+        # attachment (Suburban: amount; Tiger: invoice number).
+        if (not receipt.line_items) and any(
+            n in receipt.parse_notes
+            for n in ("pdf-attachment-amount-unparsed", "tiger-needs-pdf")
+        ):
             pdf_text = fetch_pdf_attachment_text(service, msg)
             if pdf_text:
                 receipt = classify_message(msg, pdf_text=pdf_text)

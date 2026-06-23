@@ -54,6 +54,7 @@ class ClassifiedReceipt:
     raw_subject: str = ""
     raw_from: str = ""
     parse_notes: List[str] = field(default_factory=list)
+    require_invoice_for_auto: bool = False
 
     # Back-compat accessors so older callers still work
     @property
@@ -313,6 +314,16 @@ def _parse_cintas_autopay(body_text: str) -> Tuple[Optional[float], List[Receipt
     return amt, []
 
 
+# Tiger Exchange — the payment receipt PDF carries the invoice number (the email
+# body only has the amount). Pull the digits so we can do a direct invoice match.
+_TIGER_PDF_INV_REGEX = re.compile(r"invoice[^\d\n]{0,15}?0*(\d{4,7})", re.I)
+
+
+def _parse_tiger_pdf_invoice(pdf_text: str) -> Optional[str]:
+    m = _TIGER_PDF_INV_REGEX.search(pdf_text or "")
+    if not m:
+        return None
+    return str(int(m.group(1)))  # normalize, drop any leading zeros
 # ── Location extractors ──────────────────────────────────────────────────────
 #
 # Each returns 'chatham', 'dennis', or None.
@@ -408,9 +419,10 @@ RECEIPT_SIGNATURES = [
         "from_regex": re.compile(r"@tigerexchange\.us", re.I),
         "subject_regex": re.compile(r"Payment Receipt.*Tiger Exchange", re.I),
         "vendor_canonical": "Tiger Exchange",
-        "tier": "needs_review",  # No invoice number in receipt — Tier 2
+        "tier": "auto_apply",  # invoice # comes from the attached PDF (parsed below)
+        "require_invoice_for_auto": True,  # never auto-apply on amount-only fuzzy match
         "payment_method": "debit_card_autopay",
-        "parser": "body_regex",
+        "parser": "tiger_pdf",
         "amount_regex": re.compile(r"for\s+\$?([\d,]+\.\d{2})\s+is attached", re.I),
         "location_extractor": _loc_none,
     },
@@ -632,6 +644,20 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
             if total_amount is None:
                 notes.append("cintas-autopay-amount-unparsed")
 
+        elif parser == "tiger_pdf":
+            amt = _parse_amount_with_regex(body_text, sig["amount_regex"])
+            if amt is not None:
+                total_amount = amt
+            if pdf_text:
+                inv_no = _parse_tiger_pdf_invoice(pdf_text)
+                pdf_amt = amt if amt is not None else _parse_amount_with_regex(
+                    pdf_text, re.compile(r"\$?([\d,]+\.\d{2})"))
+                if inv_no and pdf_amt is not None:
+                    line_items = [ReceiptLineItem(invoice_number=inv_no, amount=pdf_amt)]
+                    total_amount = pdf_amt
+            if not line_items:
+                notes.append("tiger-needs-pdf")
+
         # Extract location for this signature. Try effective_subject (the
         # body-extracted one if forwarded) and the body text together.
         loc_extractor = sig.get("location_extractor") or _loc_none
@@ -654,6 +680,7 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
             raw_subject=subject,
             raw_from=from_hdr,
             parse_notes=notes,
+            require_invoice_for_auto=sig.get("require_invoice_for_auto", False),
         )
 
     return None
@@ -781,7 +808,8 @@ def _fuzzy_match(cur, receipt: ClassifiedReceipt,
                            candidates=[])
 
     if len(candidates) == 1:
-        decision = "auto_apply" if receipt.tier == "auto_apply" else "needs_review"
+        can_auto = receipt.tier == "auto_apply" and not receipt.require_invoice_for_auto
+        decision = "auto_apply" if can_auto else "needs_review"
         return MatchResult(line_item=li, matched_invoice_id=candidates[0]["id"],
                            candidate_count=1, decision=decision,
                            reason="single match (fuzzy)", candidates=candidates)
