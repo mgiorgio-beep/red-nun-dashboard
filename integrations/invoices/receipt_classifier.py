@@ -316,14 +316,22 @@ def _parse_cintas_autopay(body_text: str) -> Tuple[Optional[float], List[Receipt
 
 # Tiger Exchange — the payment receipt PDF carries the invoice number (the email
 # body only has the amount). Pull the digits so we can do a direct invoice match.
-_TIGER_PDF_INV_REGEX = re.compile(r"invoice[^\d\n]{0,15}?0*(\d{4,7})", re.I)
+# Tiger's receipt PDF has an "Invoices Paid" table; each row is:
+#   <date> <invoice#> $<amount due> $<amount applied>
+# e.g. "6/1/2026 36166 $132.69 $132.69". Capture every row (one receipt can
+# pay more than one invoice).
+_TIGER_PDF_ROW_REGEX = re.compile(
+    r"\d{1,2}/\d{1,2}/\d{4}\s+(\d{4,7})\s+\$[\d,]+\.\d{2}\s+\$([\d,]+\.\d{2})"
+)
 
 
-def _parse_tiger_pdf_invoice(pdf_text: str) -> Optional[str]:
-    m = _TIGER_PDF_INV_REGEX.search(pdf_text or "")
-    if not m:
-        return None
-    return str(int(m.group(1)))  # normalize, drop any leading zeros
+def _parse_tiger_pdf_rows(pdf_text: str) -> List[ReceiptLineItem]:
+    items: List[ReceiptLineItem] = []
+    for m in _TIGER_PDF_ROW_REGEX.finditer(pdf_text or ""):
+        amt = _parse_money(m.group(2))
+        if amt is not None:
+            items.append(ReceiptLineItem(invoice_number=str(int(m.group(1))), amount=amt))
+    return items
 # ── Location extractors ──────────────────────────────────────────────────────
 #
 # Each returns 'chatham', 'dennis', or None.
@@ -649,12 +657,10 @@ def classify_message(msg: dict, pdf_text: Optional[str] = None) -> Optional[Clas
             if amt is not None:
                 total_amount = amt
             if pdf_text:
-                inv_no = _parse_tiger_pdf_invoice(pdf_text)
-                pdf_amt = amt if amt is not None else _parse_amount_with_regex(
-                    pdf_text, re.compile(r"\$?([\d,]+\.\d{2})"))
-                if inv_no and pdf_amt is not None:
-                    line_items = [ReceiptLineItem(invoice_number=inv_no, amount=pdf_amt)]
-                    total_amount = pdf_amt
+                items = _parse_tiger_pdf_rows(pdf_text)
+                if items:
+                    line_items = items
+                    total_amount = round(sum(li.amount for li in items), 2)
             if not line_items:
                 notes.append("tiger-needs-pdf")
 
