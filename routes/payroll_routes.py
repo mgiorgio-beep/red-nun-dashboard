@@ -6,6 +6,7 @@ Blueprint: payroll_bp at /api/payroll/*
 import csv
 import io
 import os
+import re
 import json
 import logging
 import zipfile
@@ -110,6 +111,25 @@ def init_payroll_tables():
             conn.execute(f"ALTER TABLE payroll_checks ADD COLUMN {col} {defn}")
         except Exception:
             pass
+    # Employee home addresses (sourced from the 7shifts checks/earnings PDF).
+    # Keyed by location + normalized name so a check can render the payee
+    # address in the envelope window. The journal CSV has no address; this
+    # table is populated by parsing the source PDF uploaded with a run.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS employee_addresses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location TEXT NOT NULL,
+            employee_name TEXT,
+            name_norm TEXT NOT NULL,
+            address_1 TEXT,
+            address_2 TEXT,
+            city TEXT,
+            state TEXT,
+            zip TEXT,
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(location, name_norm)
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -182,6 +202,136 @@ def _ytd_for_employee(conn, location, year, employee_name, exclude_run_id, curre
          current.get("deductions"))
 
     return agg
+
+
+# ── Employee address extraction (from 7shifts checks/earnings PDF) ─────────────
+
+def _norm_name(n):
+    return " ".join((n or "").lower().split())
+
+
+# A 7shifts stub prints the masked SSN (e.g. "XXX-XX-1234") on its own line,
+# sandwiched between the employee name and their street / city-state-zip. That
+# makes the SSN line a reliable anchor for the home address block.
+_SSN_RE = re.compile(r'^X{3}-X{2}-\d{4}$')
+_CSZ_RE = re.compile(r'^(.+?),\s*([A-Za-z]{2})\.?,?\s*(\d{5}(?:-\d{4})?)\b')
+
+
+def extract_addresses_from_pdf(path):
+    """Parse a 7shifts checks/earnings PDF into {employee_name: address dict}.
+
+    Anchors on the masked-SSN line: the line above it is the employee name and
+    the lines below it (up to 'Pay period:') are street + city/state/zip.
+    Returns {} on any failure so callers can treat it as best-effort.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        logger.warning("pypdf not available — cannot extract employee addresses")
+        return {}
+
+    out = {}
+    try:
+        reader = PdfReader(path)
+    except Exception as e:
+        logger.warning(f"Could not open PDF for address extraction: {e}")
+        return {}
+
+    for page in reader.pages:
+        try:
+            txt = (page.extract_text() or "").replace("\xa0", " ")
+        except Exception:
+            continue
+        lines = [l.strip() for l in txt.split("\n")]
+        for i, line in enumerate(lines):
+            if not _SSN_RE.match(line.strip()):
+                continue
+            # name = nearest non-empty line above the SSN
+            name = ""
+            for k in range(i - 1, -1, -1):
+                if lines[k].strip():
+                    name = lines[k].strip()
+                    break
+            # street(s) + city/state/zip below, stopping at "Pay period"
+            street_parts, csz = [], None
+            for j in range(i + 1, min(i + 6, len(lines))):
+                lj = lines[j].strip()
+                if not lj:
+                    continue
+                if lj.lower().startswith("pay"):
+                    break
+                m = _CSZ_RE.match(lj)
+                if m:
+                    csz = (m.group(1).strip(), m.group(2).strip(), m.group(3).strip())
+                    break
+                street_parts.append(lj)
+            if name and csz:
+                out[name] = {
+                    "address_1": " ".join(street_parts),
+                    "address_2": "",
+                    "city": csz[0], "state": csz[1], "zip": csz[2],
+                }
+    return out
+
+
+def _upsert_employee_addresses(conn, location, addr_map):
+    """Insert/update parsed addresses for a location (best-effort)."""
+    if not addr_map:
+        return 0
+    n = 0
+    for name, a in addr_map.items():
+        try:
+            conn.execute("""
+                INSERT INTO employee_addresses
+                  (location, employee_name, name_norm,
+                   address_1, address_2, city, state, zip, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,datetime('now'))
+                ON CONFLICT(location, name_norm) DO UPDATE SET
+                  employee_name = excluded.employee_name,
+                  address_1 = excluded.address_1,
+                  address_2 = excluded.address_2,
+                  city = excluded.city,
+                  state = excluded.state,
+                  zip = excluded.zip,
+                  updated_at = datetime('now')
+            """, (location, name, _norm_name(name),
+                  a.get("address_1", ""), a.get("address_2", ""),
+                  a.get("city", ""), a.get("state", ""), a.get("zip", "")))
+            n += 1
+        except Exception as e:
+            logger.warning(f"Address upsert failed for {name}: {e}")
+    return n
+
+
+def _get_employee_address(conn, location, name):
+    """Return employee_address_* fields for the check, or {} if unknown.
+
+    Tries an exact normalized-name match first, then a last-name fallback.
+    """
+    try:
+        row = conn.execute(
+            "SELECT * FROM employee_addresses WHERE location=? AND name_norm=?",
+            (location, _norm_name(name))
+        ).fetchone()
+        if not row:
+            parts = _norm_name(name).split()
+            last = parts[-1] if parts else ""
+            if last:
+                row = conn.execute(
+                    "SELECT * FROM employee_addresses WHERE location=? AND name_norm LIKE ?",
+                    (location, f"% {last}")
+                ).fetchone()
+    except Exception:
+        return {}
+    if not row:
+        return {}
+    return {
+        "employee_address_1": row["address_1"] or "",
+        "employee_address_2": row["address_2"] or "",
+        "employee_city":      row["city"] or "",
+        "employee_state":     row["state"] or "",
+        "employee_zip":       row["zip"] or "",
+    }
 
 
 # Location aliasing. The payroll UI historically sent 'dennisport' while the
@@ -391,6 +541,15 @@ def create_payroll_run():
 
     conn = get_connection()
 
+    # Pull employee home addresses out of the uploaded 7shifts checks PDF so the
+    # printed checks can show the payee address in the envelope window.
+    if source_pdf_path:
+        try:
+            _addr_map = extract_addresses_from_pdf(source_pdf_path)
+            _upsert_employee_addresses(conn, location, _addr_map)
+        except Exception as _e:
+            logger.warning(f"Address extraction skipped: {_e}")
+
     cur = conn.execute("""
         INSERT INTO payroll_runs
         (location, pay_period_start, pay_period_end, pay_date, memo,
@@ -453,24 +612,26 @@ def create_payroll_run():
                 "net":           emp["net"],
                 "deductions":    emp["deductions"],
             })
+            _payroll = {
+                "id":               check_id,
+                "employee_name":    emp["name"],
+                "gross_pay":        emp["gross"],
+                "net_pay":          emp["net"],
+                "wages":            emp["wages"],
+                "paycheck_tips":    emp["paycheck_tips"],
+                "cash_tips":        emp["cash_tips"],
+                "ee_taxes":         emp["ee_taxes"],
+                "deductions":       emp["deductions"],
+                "total_hours":      emp["total_hours"],
+                "pay_period_start": pay_period_start,
+                "pay_period_end":   pay_period_end,
+                "printed_at":       pay_date,
+                "location":         location,
+                "ytd":              _ytd,
+            }
+            _payroll.update(_get_employee_address(conn, location, emp["name"]))
             payroll_list.append({
-                "payroll": {
-                    "id":               check_id,
-                    "employee_name":    emp["name"],
-                    "gross_pay":        emp["gross"],
-                    "net_pay":          emp["net"],
-                    "wages":            emp["wages"],
-                    "paycheck_tips":    emp["paycheck_tips"],
-                    "cash_tips":        emp["cash_tips"],
-                    "ee_taxes":         emp["ee_taxes"],
-                    "deductions":       emp["deductions"],
-                    "total_hours":      emp["total_hours"],
-                    "pay_period_start": pay_period_start,
-                    "pay_period_end":   pay_period_end,
-                    "printed_at":       pay_date,
-                    "location":         location,
-                    "ytd":              _ytd,
-                },
+                "payroll": _payroll,
                 "check_number": check_num,
             })
             inserted_checks.append({
@@ -927,6 +1088,15 @@ def print_run_checks(run_id):
     run = dict(run)
     location = _norm_loc(run["location"])
 
+    # Backfill addresses from the run's stored 7shifts PDF (best-effort) so a
+    # reprint can fill the envelope window even if this run predates the feature.
+    if run.get("source_pdf_path") and os.path.exists(run["source_pdf_path"]):
+        try:
+            _upsert_employee_addresses(
+                conn, location, extract_addresses_from_pdf(run["source_pdf_path"]))
+        except Exception as _e:
+            logger.warning(f"Address backfill skipped: {_e}")
+
     checks = conn.execute("""
         SELECT * FROM payroll_checks
         WHERE payroll_run_id=?
@@ -972,24 +1142,26 @@ def print_run_checks(run_id):
             "net":           float(c["net_pay"] or 0),
             "deductions":    ded,
         })
+        _payroll = {
+            "id":               c["id"],
+            "employee_name":    c["employee_name"],
+            "gross_pay":        c["gross_pay"],
+            "net_pay":          c["net_pay"],
+            "wages":            float(c["wages"] or 0),
+            "paycheck_tips":    float(c["paycheck_tips"] or 0),
+            "cash_tips":        float(c["cash_tips"] or 0),
+            "ee_taxes":         float(c["ee_taxes"] or 0),
+            "deductions":       ded,
+            "total_hours":      float(c["total_hours"] or 0),
+            "pay_period_start": run["pay_period_start"],
+            "pay_period_end":   run["pay_period_end"],
+            "printed_at":       run["pay_date"],
+            "location":         location,
+            "ytd":              _ytd,
+        }
+        _payroll.update(_get_employee_address(conn, location, c["employee_name"]))
         payroll_list.append({
-            "payroll": {
-                "id":               c["id"],
-                "employee_name":    c["employee_name"],
-                "gross_pay":        c["gross_pay"],
-                "net_pay":          c["net_pay"],
-                "wages":            float(c["wages"] or 0),
-                "paycheck_tips":    float(c["paycheck_tips"] or 0),
-                "cash_tips":        float(c["cash_tips"] or 0),
-                "ee_taxes":         float(c["ee_taxes"] or 0),
-                "deductions":       ded,
-                "total_hours":      float(c["total_hours"] or 0),
-                "pay_period_start": run["pay_period_start"],
-                "pay_period_end":   run["pay_period_end"],
-                "printed_at":       run["pay_date"],
-                "location":         location,
-                "ytd":              _ytd,
-            },
+            "payroll": _payroll,
             "check_number": check_num,
         })
 
@@ -1154,24 +1326,32 @@ def reprint_single_check(check_id):
         "net":           float(target_check.get("net_pay") or 0),
         "deductions":    target_check.get("deductions") or "{}",
     })
+    _payroll = {
+        "id":               target_check["id"],
+        "employee_name":    target_check["employee_name"],
+        "gross_pay":        target_check["gross_pay"],
+        "net_pay":          target_check["net_pay"],
+        "wages":            float(target_check.get("wages") or 0),
+        "paycheck_tips":    float(target_check.get("paycheck_tips") or 0),
+        "cash_tips":        float(target_check.get("cash_tips") or 0),
+        "ee_taxes":         float(target_check.get("ee_taxes") or 0),
+        "deductions":       target_check.get("deductions") or "{}",
+        "total_hours":      float(target_check.get("total_hours") or 0),
+        "pay_period_start": run["pay_period_start"],
+        "pay_period_end":   run["pay_period_end"],
+        "printed_at":       run["pay_date"],
+        "location":         location,
+        "ytd":              _ytd,
+    }
+    if run.get("source_pdf_path") and os.path.exists(run["source_pdf_path"]):
+        try:
+            _upsert_employee_addresses(
+                conn, location, extract_addresses_from_pdf(run["source_pdf_path"]))
+        except Exception:
+            pass
+    _payroll.update(_get_employee_address(conn, location, target_check["employee_name"]))
     payroll_list = [{
-        "payroll": {
-            "id":               target_check["id"],
-            "employee_name":    target_check["employee_name"],
-            "gross_pay":        target_check["gross_pay"],
-            "net_pay":          target_check["net_pay"],
-            "wages":            float(target_check.get("wages") or 0),
-            "paycheck_tips":    float(target_check.get("paycheck_tips") or 0),
-            "cash_tips":        float(target_check.get("cash_tips") or 0),
-            "ee_taxes":         float(target_check.get("ee_taxes") or 0),
-            "deductions":       target_check.get("deductions") or "{}",
-            "total_hours":      float(target_check.get("total_hours") or 0),
-            "pay_period_start": run["pay_period_start"],
-            "pay_period_end":   run["pay_period_end"],
-            "printed_at":       run["pay_date"],
-            "location":         location,
-            "ytd":              _ytd,
-        },
+        "payroll": _payroll,
         "check_number": target_check["check_number"],
     }]
 
@@ -1234,4 +1414,121 @@ def download_reprint_pdf(check_id):
 
 # ─────────────────────────────────────────────
 #  BACKFILL RUN FROM CSV
-# ────────�
+# ─────────────────────────────────────────────
+
+@payroll_bp.route("/api/payroll/runs/<int:run_id>/backfill", methods=["POST"])
+@admin_required
+def backfill_run_from_csv(run_id):
+    """
+    Upload a 7shifts payroll-journal CSV for an existing run.
+    Matches employees by name (case-insensitive), fills in wages / tips /
+    EE taxes / ER taxes / deductions on each payroll_check, updates run
+    totals, and regenerates the QBO journal entry CSV.
+    Check numbers and net/gross pay are NOT overwritten.
+    """
+    conn = get_connection()
+    run = conn.execute("SELECT * FROM payroll_runs WHERE id=?", (run_id,)).fetchone()
+    if not run:
+        conn.close()
+        return jsonify({"error": "Run not found"}), 404
+    run = dict(run)
+
+    journal_file = request.files.get("journal_csv")
+    if not journal_file:
+        conn.close()
+        return jsonify({"error": "journal_csv file required"}), 400
+
+    try:
+        csv_text  = journal_file.read().decode("utf-8-sig")
+        employees = parse_journal_csv(csv_text)
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": f"CSV parse error: {e}"}), 400
+
+    # Build lookup: normalised name → employee dict
+    def norm(name):
+        return " ".join(name.lower().split())
+
+    emp_map = {norm(e["name"]): e for e in employees}
+
+    checks = conn.execute(
+        "SELECT * FROM payroll_checks WHERE payroll_run_id=?", (run_id,)
+    ).fetchall()
+
+    matched = 0
+    unmatched = []
+    for c in checks:
+        key = norm(c["employee_name"] or "")
+        emp = emp_map.get(key)
+        if not emp:
+            # Try last-name-only match as fallback
+            last = key.split()[-1] if key else ""
+            emp = next((v for k, v in emp_map.items() if k.split()[-1] == last), None)
+        if not emp:
+            unmatched.append(c["employee_name"])
+            continue
+
+        conn.execute("""
+            UPDATE payroll_checks SET
+                wages           = ?,
+                paycheck_tips   = ?,
+                cash_tips       = ?,
+                ee_taxes        = ?,
+                er_taxes        = ?,
+                deductions      = ?,
+                total_hours     = ?,
+                payment_method  = ?,
+                updated_at      = datetime('now')
+            WHERE id = ?
+        """, (emp["wages"], emp["paycheck_tips"], emp["cash_tips"],
+              emp["ee_taxes"], emp["er_taxes"],
+              json.dumps(emp["deductions"]), emp["total_hours"],
+              emp["payment_method"], c["id"]))
+        matched += 1
+
+    # Recompute run totals from CSV
+    total_wages = sum(e["wages"]         for e in employees)
+    total_pt    = sum(e["paycheck_tips"] for e in employees)
+    total_ct    = sum(e["cash_tips"]     for e in employees)
+    total_ee    = sum(e["ee_taxes"]      for e in employees)
+    total_er    = sum(e["er_taxes"]      for e in employees)
+
+    conn.execute("""
+        UPDATE payroll_runs SET
+            total_wages=?, total_paycheck_tips=?, total_cash_tips=?,
+            total_ee_taxes=?, total_er_taxes=?, updated_at=datetime('now')
+        WHERE id=?
+    """, (total_wages, total_pt, total_ct, total_ee, total_er, run_id))
+
+    # Regen QBO CSV
+    pay_date   = run["pay_date"] or date.today().isoformat()
+    def fmt(d):
+        try:
+            return datetime.strptime(d, "%Y-%m-%d").strftime("%m/%d/%y")
+        except Exception:
+            return d or ""
+    period_str = f"{fmt(run['pay_period_start'])}-{fmt(run['pay_period_end'])}"
+
+    qbo_text, balanced, total_d, total_c = build_qbo_csv(
+        employees, pay_date, period_str, run["location"]
+    )
+
+    os.makedirs(PAYROLL_DIR, exist_ok=True)
+    ts       = datetime.now().strftime("%Y%m%d%H%M%S")
+    qbo_path = os.path.join(PAYROLL_DIR, f"qbo_{run['location']}_{ts}.csv")
+    with open(qbo_path, "w", encoding="utf-8") as f:
+        f.write(qbo_text)
+
+    conn.execute("UPDATE payroll_runs SET qbo_csv_path=? WHERE id=?", (qbo_path, run_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "status":    "ok",
+        "matched":   matched,
+        "unmatched": unmatched,
+        "balanced":  balanced,
+        "total_debits":  round(total_d, 2),
+        "total_credits": round(total_c, 2),
+        "qbo_csv":   f"/api/payroll/runs/{run_id}/qbo-csv",
+    })

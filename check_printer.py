@@ -965,3 +965,48 @@ def generate_calibration_page(config, output_path):
 
     # Section dividers
     c.setStrokeColor(red)
+    c.setLineWidth(1)
+    c.setDashArray([4, 4])
+    c.line(0, 528, 612, 528)  # check / middle stub
+    c.line(0, 264, 612, 264)  # middle stub / bottom stub
+
+    # Label sections
+    c.setFillColor(red)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(306, 660 + oy, "CHECK")
+    c.drawCentredString(306, 396 + oy, "MIDDLE STUB")
+    c.drawCentredString(306, 132 + oy, "BOTTOM STUB")
+
+    # Mark key field positions with offset applied
+    c.setDashArray([])
+    markers = [
+        (50, 745, "Company Name"),
+        (310, 763, "Bank Name"),
+        (586, 763, "Check #"),
+        (480, 712, "Date"),
+        (84, 700, "Pay To"),
+        (500, 691, "Amount"),
+        (20, 680, "Written Amount"),
+        (50, 635, "Payee Name"),
+        (50, 622, "Payee Addr 1"),
+        (50, 609, "Payee Addr 2"),
+        (50, 590, "Memo"),
+        (340, 575, "Signature Line Start"),
+        (0, 553, "MICR Line"),
+    ]
+
+    c.setFont("Helvetica", 6)
+    for x, y, label in markers:
+        c.setFillColor(red)
+        c.circle(x + ox, y + oy, 2, fill=1)
+        c.drawString(x + ox + 4, y + oy + 1, label)
+
+    # Offset info
+    c.setFillColor(Color(0, 0, 0))
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(20, 20, f"Offset X: {ox}pt  |  Offset Y: {oy}pt")
+    c.drawString(20, 8, "Print on plain paper. Hold against check stock. Adjust offsets in Check Setup if needed.")
+
+    c.save()
+    logger.info(f"Calibration page generated: {output_path}")
+    return output_path
