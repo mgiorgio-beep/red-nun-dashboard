@@ -130,6 +130,60 @@ def _fmt_date(d):
         return d or ""
 
 
+def _ytd_for_employee(conn, location, year, employee_name, exclude_run_id, current):
+    """Year-to-date totals for one employee, for the payroll-check stub.
+
+    Sums this employee's COMPLETED, non-voided payroll for the given year
+    (excluding `exclude_run_id` so we never double-count the run being printed),
+    then layers the current period's values on top. Returns a dict the check
+    printer reads: per-bucket totals plus a per-tax breakdown keyed by the same
+    raw 7shifts column names used in `deductions`.
+    """
+    agg = {"wages": 0.0, "paycheck_tips": 0.0, "cash_tips": 0.0,
+           "gross": 0.0, "net": 0.0, "ee_taxes": 0.0, "taxes": {}}
+
+    def _add(g, w, pt, ct, ee, net, ded):
+        agg["gross"] += g or 0
+        agg["wages"] += w or 0
+        agg["paycheck_tips"] += pt or 0
+        agg["cash_tips"] += ct or 0
+        agg["ee_taxes"] += ee or 0
+        agg["net"] += net or 0
+        if isinstance(ded, str):
+            try:
+                ded = json.loads(ded)
+            except (json.JSONDecodeError, TypeError):
+                ded = {}
+        for k, v in (ded or {}).items():
+            try:
+                agg["taxes"][k] = agg["taxes"].get(k, 0.0) + float(v)
+            except (ValueError, TypeError):
+                pass
+
+    rows = conn.execute("""
+        SELECT pc.gross_pay, pc.wages, pc.paycheck_tips, pc.cash_tips,
+               pc.ee_taxes, pc.net_pay, pc.deductions
+        FROM payroll_checks pc
+        JOIN payroll_runs pr ON pc.payroll_run_id = pr.id
+        WHERE pr.location = ? AND substr(pr.pay_date, 1, 4) = ?
+          AND pr.status = 'complete'
+          AND (pc.voided IS NULL OR pc.voided = 0)
+          AND LOWER(TRIM(pc.employee_name)) = LOWER(TRIM(?))
+          AND pc.payroll_run_id != ?
+    """, (location, year, employee_name, exclude_run_id if exclude_run_id is not None else -1)).fetchall()
+
+    for r in rows:
+        _add(r["gross_pay"], r["wages"], r["paycheck_tips"], r["cash_tips"],
+             r["ee_taxes"], r["net_pay"], r["deductions"])
+
+    # Layer the current period on top
+    _add(current.get("gross"), current.get("wages"), current.get("paycheck_tips"),
+         current.get("cash_tips"), current.get("ee_taxes"), current.get("net"),
+         current.get("deductions"))
+
+    return agg
+
+
 # Location aliasing. The payroll UI historically sent 'dennisport' while the
 # rest of the app (and the check_config table) keys on 'dennis'. That mismatch
 # made the check_config lookup miss and silently fall back to the first row
@@ -389,18 +443,33 @@ def create_payroll_run():
         check_id = cur2.lastrowid
 
         if is_paper:
+            _year = (pay_date or "")[:4] or str(date.today().year)
+            _ytd = _ytd_for_employee(conn, location, _year, emp["name"], run_id, {
+                "gross":         emp["gross"],
+                "wages":         emp["wages"],
+                "paycheck_tips": emp["paycheck_tips"],
+                "cash_tips":     emp["cash_tips"],
+                "ee_taxes":      emp["ee_taxes"],
+                "net":           emp["net"],
+                "deductions":    emp["deductions"],
+            })
             payroll_list.append({
                 "payroll": {
                     "id":               check_id,
                     "employee_name":    emp["name"],
                     "gross_pay":        emp["gross"],
                     "net_pay":          emp["net"],
+                    "wages":            emp["wages"],
+                    "paycheck_tips":    emp["paycheck_tips"],
+                    "cash_tips":        emp["cash_tips"],
+                    "ee_taxes":         emp["ee_taxes"],
                     "deductions":       emp["deductions"],
                     "total_hours":      emp["total_hours"],
                     "pay_period_start": pay_period_start,
                     "pay_period_end":   pay_period_end,
                     "printed_at":       pay_date,
                     "location":         location,
+                    "ytd":              _ytd,
                 },
                 "check_number": check_num,
             })
@@ -893,6 +962,16 @@ def print_run_checks(run_id):
                          (check_num, c["id"]))
 
         ded = c["deductions"] or "{}"
+        _year = (run["pay_date"] or "")[:4] or str(date.today().year)
+        _ytd = _ytd_for_employee(conn, location, _year, c["employee_name"], run_id, {
+            "gross":         float(c["gross_pay"] or 0),
+            "wages":         float(c["wages"] or 0),
+            "paycheck_tips": float(c["paycheck_tips"] or 0),
+            "cash_tips":     float(c["cash_tips"] or 0),
+            "ee_taxes":      float(c["ee_taxes"] or 0),
+            "net":           float(c["net_pay"] or 0),
+            "deductions":    ded,
+        })
         payroll_list.append({
             "payroll": {
                 "id":               c["id"],
@@ -909,6 +988,7 @@ def print_run_checks(run_id):
                 "pay_period_end":   run["pay_period_end"],
                 "printed_at":       run["pay_date"],
                 "location":         location,
+                "ytd":              _ytd,
             },
             "check_number": check_num,
         })
@@ -1063,6 +1143,17 @@ def reprint_single_check(check_id):
         target_check = check
 
     # Build the one-item payroll_list the PDF generator expects
+    _year = (run["pay_date"] or "")[:4] or str(date.today().year)
+    _ytd = _ytd_for_employee(conn, location, _year, target_check["employee_name"],
+                             run["id"], {
+        "gross":         float(target_check.get("gross_pay") or 0),
+        "wages":         float(target_check.get("wages") or 0),
+        "paycheck_tips": float(target_check.get("paycheck_tips") or 0),
+        "cash_tips":     float(target_check.get("cash_tips") or 0),
+        "ee_taxes":      float(target_check.get("ee_taxes") or 0),
+        "net":           float(target_check.get("net_pay") or 0),
+        "deductions":    target_check.get("deductions") or "{}",
+    })
     payroll_list = [{
         "payroll": {
             "id":               target_check["id"],
@@ -1079,6 +1170,7 @@ def reprint_single_check(check_id):
             "pay_period_end":   run["pay_period_end"],
             "printed_at":       run["pay_date"],
             "location":         location,
+            "ytd":              _ytd,
         },
         "check_number": target_check["check_number"],
     }]
@@ -1142,121 +1234,4 @@ def download_reprint_pdf(check_id):
 
 # ─────────────────────────────────────────────
 #  BACKFILL RUN FROM CSV
-# ─────────────────────────────────────────────
-
-@payroll_bp.route("/api/payroll/runs/<int:run_id>/backfill", methods=["POST"])
-@admin_required
-def backfill_run_from_csv(run_id):
-    """
-    Upload a 7shifts payroll-journal CSV for an existing run.
-    Matches employees by name (case-insensitive), fills in wages / tips /
-    EE taxes / ER taxes / deductions on each payroll_check, updates run
-    totals, and regenerates the QBO journal entry CSV.
-    Check numbers and net/gross pay are NOT overwritten.
-    """
-    conn = get_connection()
-    run = conn.execute("SELECT * FROM payroll_runs WHERE id=?", (run_id,)).fetchone()
-    if not run:
-        conn.close()
-        return jsonify({"error": "Run not found"}), 404
-    run = dict(run)
-
-    journal_file = request.files.get("journal_csv")
-    if not journal_file:
-        conn.close()
-        return jsonify({"error": "journal_csv file required"}), 400
-
-    try:
-        csv_text  = journal_file.read().decode("utf-8-sig")
-        employees = parse_journal_csv(csv_text)
-    except Exception as e:
-        conn.close()
-        return jsonify({"error": f"CSV parse error: {e}"}), 400
-
-    # Build lookup: normalised name → employee dict
-    def norm(name):
-        return " ".join(name.lower().split())
-
-    emp_map = {norm(e["name"]): e for e in employees}
-
-    checks = conn.execute(
-        "SELECT * FROM payroll_checks WHERE payroll_run_id=?", (run_id,)
-    ).fetchall()
-
-    matched = 0
-    unmatched = []
-    for c in checks:
-        key = norm(c["employee_name"] or "")
-        emp = emp_map.get(key)
-        if not emp:
-            # Try last-name-only match as fallback
-            last = key.split()[-1] if key else ""
-            emp = next((v for k, v in emp_map.items() if k.split()[-1] == last), None)
-        if not emp:
-            unmatched.append(c["employee_name"])
-            continue
-
-        conn.execute("""
-            UPDATE payroll_checks SET
-                wages           = ?,
-                paycheck_tips   = ?,
-                cash_tips       = ?,
-                ee_taxes        = ?,
-                er_taxes        = ?,
-                deductions      = ?,
-                total_hours     = ?,
-                payment_method  = ?,
-                updated_at      = datetime('now')
-            WHERE id = ?
-        """, (emp["wages"], emp["paycheck_tips"], emp["cash_tips"],
-              emp["ee_taxes"], emp["er_taxes"],
-              json.dumps(emp["deductions"]), emp["total_hours"],
-              emp["payment_method"], c["id"]))
-        matched += 1
-
-    # Recompute run totals from CSV
-    total_wages = sum(e["wages"]         for e in employees)
-    total_pt    = sum(e["paycheck_tips"] for e in employees)
-    total_ct    = sum(e["cash_tips"]     for e in employees)
-    total_ee    = sum(e["ee_taxes"]      for e in employees)
-    total_er    = sum(e["er_taxes"]      for e in employees)
-
-    conn.execute("""
-        UPDATE payroll_runs SET
-            total_wages=?, total_paycheck_tips=?, total_cash_tips=?,
-            total_ee_taxes=?, total_er_taxes=?, updated_at=datetime('now')
-        WHERE id=?
-    """, (total_wages, total_pt, total_ct, total_ee, total_er, run_id))
-
-    # Regen QBO CSV
-    pay_date   = run["pay_date"] or date.today().isoformat()
-    def fmt(d):
-        try:
-            return datetime.strptime(d, "%Y-%m-%d").strftime("%m/%d/%y")
-        except Exception:
-            return d or ""
-    period_str = f"{fmt(run['pay_period_start'])}-{fmt(run['pay_period_end'])}"
-
-    qbo_text, balanced, total_d, total_c = build_qbo_csv(
-        employees, pay_date, period_str, run["location"]
-    )
-
-    os.makedirs(PAYROLL_DIR, exist_ok=True)
-    ts       = datetime.now().strftime("%Y%m%d%H%M%S")
-    qbo_path = os.path.join(PAYROLL_DIR, f"qbo_{run['location']}_{ts}.csv")
-    with open(qbo_path, "w", encoding="utf-8") as f:
-        f.write(qbo_text)
-
-    conn.execute("UPDATE payroll_runs SET qbo_csv_path=? WHERE id=?", (qbo_path, run_id))
-    conn.commit()
-    conn.close()
-
-    return jsonify({
-        "status":    "ok",
-        "matched":   matched,
-        "unmatched": unmatched,
-        "balanced":  balanced,
-        "total_debits":  round(total_d, 2),
-        "total_credits": round(total_c, 2),
-        "qbo_csv":   f"/api/payroll/runs/{run_id}/qbo-csv",
-    })
+# ────────�
