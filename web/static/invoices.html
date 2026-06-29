@@ -841,7 +841,7 @@ input[type="file"] { display: none; }
     </div>
 
     <input type="file" id="fileInput" accept="image/*,application/pdf,.heic,.heif" capture="environment" onchange="handleFile(this)">
-    <input type="file" id="batchInput" accept="image/*,application/pdf,.heic,.heif" multiple onchange="handleBatchFiles(this)">
+    <input type="file" id="batchInput" accept="image/*,application/pdf,.heic,.heif,.csv,.tsv,text/csv" multiple onchange="handleBatchFiles(this)">
 
     <div class="scan-actions">
       <button class="action-btn btn-camera" onclick="openDocScanner()">
@@ -1339,6 +1339,7 @@ async function processBatchFile(file) {
     let mime = 'image/jpeg';
     if (file.name.toLowerCase().endsWith('.pdf')) mime = 'application/pdf';
     else if (file.name.toLowerCase().endsWith('.png')) mime = 'image/png';
+    else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv')) mime = 'text/csv';
 
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -1352,7 +1353,10 @@ async function processBatchFile(file) {
         for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
 
         const ext = mime === 'application/pdf' ? 'pdf' : mime === 'image/png' ? 'png' : (mime === 'image/heic' || mime === 'image/heif') ? 'heic' : 'jpg';
-        body.append('file', new Blob([byteArr], {type: mime}), `invoice.${ext}`);
+        // Preserve the real filename for CSVs — the server reads vendor/location/
+        // invoice# from it (e.g. ...L__KNIFE__SON__LLC_AR034.554304.csv).
+        const uploadName = mime === 'text/csv' ? file.name : `invoice.${ext}`;
+        body.append('file', new Blob([byteArr], {type: mime}), uploadName);
         body.append('location', currentLoc);
 
         const resp = await fetch('/api/invoices/scan', {method: 'POST', body});
