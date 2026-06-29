@@ -805,20 +805,36 @@ def _dispatch_csv_invoice(csv_text, vendor_hint, location, orig_filename):
                 }), 409
 
             invoice_id = result
+
+            # Auto-confirm only when the line items reconcile to the invoice
+            # total (within 2¢). Otherwise hold it in Pending Review so the
+            # numbers can be checked by hand (e.g. keg-deposit mismatches).
+            _items_sum = round(sum(float(it.get('total_price', 0) or 0)
+                                   for it in extracted.get('line_items', [])), 2)
+            _inv_total = round(float(extracted.get('total', 0) or 0), 2)
+            _inv_tax = round(float(extracted.get('tax', 0) or 0), 2)
+            _reconciles = _inv_total > 0 and abs((_items_sum + _inv_tax) - _inv_total) <= 0.02
+
             confirmed = False
-            try:
-                confirm_invoice(invoice_id)
-                confirmed = True
+            if _reconciles:
                 try:
-                    conn = get_connection()
-                    process_invoice_items(invoice_id, conn)
-                    analyze_invoice_for_anomalies(invoice_id, conn)
-                    conn.close()
-                except Exception as me:
-                    logger.error(f"Post-VTInfo-confirm processing error: {me}", exc_info=True)
-                threading.Thread(target=_run_cost_all, daemon=True).start()
-            except Exception as e:
-                logger.error(f"VTInfo CSV auto-confirm failed for #{invoice_id}: {e}")
+                    confirm_invoice(invoice_id)
+                    confirmed = True
+                    try:
+                        conn = get_connection()
+                        process_invoice_items(invoice_id, conn)
+                        analyze_invoice_for_anomalies(invoice_id, conn)
+                        conn.close()
+                    except Exception as me:
+                        logger.error(f"Post-VTInfo-confirm processing error: {me}", exc_info=True)
+                    threading.Thread(target=_run_cost_all, daemon=True).start()
+                except Exception as e:
+                    logger.error(f"VTInfo CSV auto-confirm failed for #{invoice_id}: {e}")
+            else:
+                logger.info(
+                    f"VTInfo CSV #{invoice_id} held for review — line items "
+                    f"${_items_sum} + tax ${_inv_tax} != invoice total ${_inv_total}"
+                )
 
             # Generate CSV invoice image
             generate_csv_thumbnail(
