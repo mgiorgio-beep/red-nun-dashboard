@@ -1530,7 +1530,11 @@ function showReview(data) {
   // Auto-select location if OCR detected it from ship-to address
   var rvLoc = $('rvLocation');
   var rvBadge = $('rvLocationBadge');
-  if (data.detected_location) {
+  if (data.status === 'confirmed') {
+    // Already-saved invoice: always show its stored location, never the OCR guess
+    rvLoc.value = data.location || currentLoc;
+    rvBadge.style.display = 'none';
+  } else if (data.detected_location) {
     rvLoc.value = data.detected_location;
     rvBadge.style.display = 'inline';
   } else {
@@ -1610,17 +1614,21 @@ function showReview(data) {
   const markPaidBtn = $('rvMarkPaidBtn');
   const paidStatus = $('rvPaidStatus');
   if (data.status === 'confirmed') {
-    confirmBtn.style.display = 'none';
     if (data.payment_status === 'paid') {
+      confirmBtn.style.display = 'none';
       markPaidBtn.style.display = 'none';
       paidStatus.style.display = 'block';
       paidStatus.textContent = '✓ Paid' + (data.paid_date ? ' on ' + data.paid_date : '') + (data.payment_method ? ' via ' + data.payment_method : '');
     } else {
+      // Confirmed but unpaid: allow saving edits (e.g. a location fix) without paying
+      confirmBtn.style.display = 'flex';
+      confirmBtn.textContent = 'Save Changes';
       markPaidBtn.style.display = 'flex';
       paidStatus.style.display = 'none';
     }
   } else {
     confirmBtn.style.display = 'flex';
+    confirmBtn.textContent = 'Confirm & Save';
     markPaidBtn.style.display = 'none';
     paidStatus.style.display = 'none';
   }
