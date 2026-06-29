@@ -1406,13 +1406,14 @@ function showBatchResults() {
   });
 
   const hasReview = needsReview.length > 0;
-  overlay.innerHTML = `<div style="background:var(--card-bg);border-radius:16px;padding:28px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+  overlay.innerHTML = `<div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+    <style>.batch-res-tbl tr+tr{border-top:1px solid var(--border)}</style>
     <h3 style="margin:0 0 6px;font-size:18px;color:var(--text)">Batch Complete</h3>
     <p style="margin:0 0 20px;color:var(--text2);font-size:13px">${success.length} processed · ${autoConfirmed.length} confirmed · ${needsReview.length} need review${duplicates.length ? ' · ' + duplicates.length + ' duplicates' : ''}${(failed.length + unreadable.length) ? ' · ' + (failed.length + unreadable.length) + ' errors' : ''}</p>
-    <table style="width:100%;border-collapse:collapse">${rows}</table>
+    <table class="batch-res-tbl" style="width:100%;border-collapse:collapse">${rows}</table>
     <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
-      ${hasReview ? `<button onclick="this.closest('[style*=fixed]').remove();showView('pending');" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">Review Pending</button>` : ''}
-      <button onclick="this.closest('[style*=fixed]').remove();loadHistory();" style="padding:10px 20px;background:var(--card-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-weight:600;cursor:pointer">Done</button>
+      ${hasReview ? `<button onclick="this.closest('[style*=fixed]').remove();showView('pending');" style="padding:10px 20px;background:var(--accent,#e5484d);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">Review Pending</button>` : ''}
+      <button onclick="this.closest('[style*=fixed]').remove();loadHistory();" style="padding:10px 20px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:8px;font-weight:600;cursor:pointer">Done</button>
     </div>
   </div>`;
   document.body.appendChild(overlay);
