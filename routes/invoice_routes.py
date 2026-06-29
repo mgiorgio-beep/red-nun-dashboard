@@ -182,6 +182,22 @@ def api_scan_invoice():
                 mime_type = "image/heic"
             elif fname.lower().endswith(".pdf"):
                 mime_type = "application/pdf"
+            elif fname.lower().endswith((".csv", ".tsv")):
+                # CSV uploaded through the image scanner — structured data, not a
+                # photo. Sending it to Claude Vision as a JPEG returns a 400, so
+                # route it to the CSV importer instead. Vendor/location/invoice#
+                # are recovered from the filename (raw portal names normalized).
+                csv_text = image_data.decode("utf-8", errors="replace")
+                v_hint, norm_name = _normalize_csv_filename(fname)
+                vendor_hint = (request.args.get("vendor") or v_hint).lower()
+                # For VTInfo, let the (normalized) filename drive the location
+                # so AR034/AR035 wins over whatever location the UI is showing.
+                csv_location = None if vendor_hint.startswith("vtinfo") else location
+                logger.info(
+                    f"CSV detected in scan upload '{fname}' → CSV import "
+                    f"(vendor='{vendor_hint or 'usfoods'}', norm='{norm_name}')"
+                )
+                return _dispatch_csv_invoice(csv_text, vendor_hint, csv_location, norm_name)
 
             image_data = auto_rotate_image(image_data, mime_type)
             image_b64 = base64.b64encode(image_data).decode("utf-8")
@@ -708,26 +724,62 @@ def api_import_csv():
         vendor: 'pfg' | 'vtinfo_lknife' | 'vtinfo_colonial' (default: US Foods)
         filename: original filename (needed for VTInfo to extract invoice metadata)
     """
+    location = request.args.get("location")
+    vendor_hint = request.args.get("vendor", "").lower()
+    orig_filename = request.args.get("filename", "")
+    csv_text = None
+
+    if request.content_type and "multipart" in request.content_type:
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"error": "No CSV file provided"}), 400
+        if not orig_filename and file.filename:
+            orig_filename = file.filename
+        csv_text = file.read().decode('utf-8', errors='replace')
+    else:
+        data = request.get_json(silent=True) or {}
+        csv_text = data.get("csv_data")
+        location = data.get("location") or location
+        vendor_hint = data.get("vendor", vendor_hint).lower()
+        orig_filename = data.get("filename", orig_filename)
+
+    return _dispatch_csv_invoice(csv_text, vendor_hint, location, orig_filename)
+
+
+def _normalize_csv_filename(filename):
+    """Map an uploaded CSV filename to a (vendor_hint, canonical_filename) pair.
+
+    The scraper renames downloads to the canonical
+    'vtinfo_{vendor}_{location}_{invoicenum}_{YYYYMMDD}.csv' form before import.
+    Manual uploads arrive with raw portal names like
+    '06482_L__KNIFE__SON__LLC_AR034.554304.csv', which the VTInfo parser can't
+    read metadata from. Rebuild the canonical name so vendor/location/invoice#
+    extract correctly. AR034 = Chatham, AR035 = Dennis Port.
+    """
+    import re as _re
+    f = filename or ""
+    low = f.lower()
+    if low.startswith("vtinfo_"):
+        return ("vtinfo_colonial" if "colonial" in low else "vtinfo_lknife"), f
+    if "knife" in low:
+        loc = "chatham" if "ar034" in low else ("dennis" if "ar035" in low else "")
+        m = _re.search(r"[._](\d{4,})\.csv$", f, _re.I)
+        inv = m.group(1) if m else ""
+        if loc and inv:
+            return "vtinfo_lknife", f"vtinfo_lknife_{loc}_{inv}_NODATE.csv"
+        return "vtinfo_lknife", f
+    if "colonial" in low:
+        return "vtinfo_colonial", f
+    if "pfg" in low or "performance" in low:
+        return "pfg", f
+    return "", f  # default → US Foods parser
+
+
+def _dispatch_csv_invoice(csv_text, vendor_hint, location, orig_filename):
+    """Parse already-read CSV text and import it. Shared by the import-csv
+    endpoint and the .csv branch of /api/invoices/scan. Returns a Flask response."""
+    vendor_hint = (vendor_hint or "").lower()
     try:
-        location = request.args.get("location")
-        vendor_hint = request.args.get("vendor", "").lower()
-        orig_filename = request.args.get("filename", "")
-        csv_text = None
-
-        if request.content_type and "multipart" in request.content_type:
-            file = request.files.get("file")
-            if not file:
-                return jsonify({"error": "No CSV file provided"}), 400
-            if not orig_filename and file.filename:
-                orig_filename = file.filename
-            csv_text = file.read().decode('utf-8', errors='replace')
-        else:
-            data = request.get_json(silent=True) or {}
-            csv_text = data.get("csv_data")
-            location = data.get("location") or location
-            vendor_hint = data.get("vendor", vendor_hint).lower()
-            orig_filename = data.get("filename", orig_filename)
-
         if not csv_text:
             return jsonify({"error": "No CSV data provided"}), 400
 
