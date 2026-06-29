@@ -415,6 +415,12 @@ UNIFIRST INVOICE RULES:
     * UL (4x6H) — mat rental
     * GMP / GSP / GLP — garment protection charges
     * BOWL CLIP / AIRCLIP — dispenser items
+- CRITICAL — UniFirst OCR commonly DROPS billed rows, leaving the subtotal short. Capture EVERY row:
+    * "Automatic Replacement" rows are SEPARATE line items even though they repeat the item code and description of the row directly above them. Each carries its own AMOUNT (e.g., a second "TERRY CLOTHS-U1ST BAGGED - Automatic Replacement" line at 15.87, a "WET MOP ... - Automatic Replacement" at 6.16). Capture each as its own line item — never merge it into the row above or skip it.
+    * The charge rows near the bottom of the table — "DEFE Charge Fixed" (item code EEFX) and "Energy Surcharge" (item code ENER) — are REAL billable line items, not summary rows, even though they sit just above the "Invoice Total" line and use letter codes instead of numbers. Always include them as NON_COGS line items.
+- Use the AMOUNT column (not RATE) as total_price; RATE is the per-unit price → unit_price.
+- Rows with AMOUNT = 0.00 are not billed this period — you may include them at 0.00 or omit them; they do not affect the subtotal.
+- COMPLETENESS CHECK: the sum of all line-item AMOUNTs MUST equal the "Invoice Total" amount in the footer (the pre-tax subtotal). If your sum is short, you have missed one or more rows — most often an "Automatic Replacement", "DEFE Charge Fixed", or "Energy Surcharge" line. Re-scan and include them before returning.
 
 CINTAS INVOICE RULES:
 - Cintas is a SERVICE invoice (uniform/linen rental, mats, restroom supplies). Set category = "NON_COGS" for ALL line items.
