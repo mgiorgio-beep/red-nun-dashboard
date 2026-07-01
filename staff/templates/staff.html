@@ -513,6 +513,20 @@ tr.game-final td{opacity:0.4}
 .roku-help-txt li{margin-bottom:4px}
 .roku-help-retry{margin-top:8px;background:#FF9500;border:none;color:#fff;font-weight:700;font-size:13px;padding:8px 16px;border-radius:8px;cursor:pointer}
 
+.dtv-brand{color:#e8eaed;font-weight:600;font-size:16px;letter-spacing:2px;margin-bottom:14px;padding-left:2px}
+.dtv-dpad{grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:0;background:#0e6fb8;border:1px solid #1583d6;border-radius:50%;width:162px;height:162px;overflow:hidden}
+.dtv-dpad .dk{border:none;border-radius:0;background:transparent;color:#dbeeff;font-size:19px}
+.dtv-dpad .dk:active{background:rgba(0,0,0,.18);transform:none}
+.dtv-dpad .dk.sel{border-radius:50%;background:#12141a;border:2px solid #2b93de;margin:7px;color:#fff;font-size:16px}
+.dtv-dpad .dk.sel:active{background:#000;transform:none}
+.dtv-color-row{display:flex;justify-content:center;gap:12px;margin:0 auto 16px}
+.dtv-color{width:52px;height:24px;border:none;border-radius:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.dtv-color:active{transform:scale(.9)}
+.dtv-c-red{background:#e0392b}
+.dtv-c-green{background:#2fb24d}
+.dtv-c-yellow{background:#f2c200}
+.dtv-c-blue{background:#1583d6}
+
 /* Auto-tune button in drawer */
 .at-btn{flex:0 0 44px!important;font-size:16px;background:#FF9500!important;color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .at-btn.at-cancel{background:#FF3B30!important}
@@ -773,6 +787,8 @@ tr.game-final td{opacity:0.4}
         <!-- DIRECTV PANEL -->
         <div id="remote-dtv" class="remote-panel">
 
+        <div class="dtv-brand">DIRECTV</div>
+
         <!-- Channel display + TUNE -->
         <div class="dtv-ch-bar">
             <div class="dtv-ch-num" id="dtv-ch-display"><span class="dtv-ch-cursor"></span></div>
@@ -799,6 +815,14 @@ tr.game-final td{opacity:0.4}
             <div class="dk blank"></div>
             <div class="dk" onclick="dtvKey('down')">&#9660;</div>
             <div class="dk blank"></div>
+        </div>
+
+        <!-- DIRECTV color buttons -->
+        <div class="dtv-color-row">
+            <button class="dtv-color dtv-c-red" onclick="dtvKey('red')" aria-label="Red"></button>
+            <button class="dtv-color dtv-c-green" onclick="dtvKey('green')" aria-label="Green"></button>
+            <button class="dtv-color dtv-c-yellow" onclick="dtvKey('yellow')" aria-label="Yellow"></button>
+            <button class="dtv-color dtv-c-blue" onclick="dtvKey('blue')" aria-label="Blue"></button>
         </div>
 
         <!-- CH rocker + Transport + Replay/Advance -->
