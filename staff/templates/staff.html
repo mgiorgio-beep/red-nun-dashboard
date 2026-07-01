@@ -477,6 +477,42 @@ tr.game-final td{opacity:0.4}
 .dtv-pwr-off{background:#FF3B30}
 .dtv-pwr-btn:active{opacity:.7}
 
+.rmt-switch{display:flex;gap:4px;background:rgba(0,0,0,.35);border-radius:12px;padding:4px;margin-bottom:16px}
+.rmt-seg{flex:1;height:38px;border:none;border-radius:9px;background:transparent;color:#8E8E93;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.rmt-seg.active{background:#007AFF;color:#fff}
+.rmt-seg.active.roku-active{background:#6f2da8}
+.roku-body{background:linear-gradient(180deg,#2c2c30,#1c1c1f);border-radius:26px;padding:18px 16px 20px;max-width:250px;margin:0 auto;border:1px solid #3a3a40;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 6px 24px rgba(0,0,0,.5)}
+.roku-power-row{display:flex;justify-content:center;margin-bottom:14px}
+.roku-btn{border:none;background:#3a3a40;color:#e5e5ea;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.roku-btn:active{background:#4a4a52;transform:scale(.92)}
+.roku-round{width:46px;height:46px;border-radius:50%;font-size:18px}
+.roku-power{width:48px;height:48px;border-radius:50%;background:#6f2da8;color:#fff;font-size:20px;box-shadow:0 0 0 3px rgba(111,45,168,.25)}
+.roku-power:active{background:#7e34bd}
+.roku-toprow{display:flex;justify-content:space-between;padding:0 26px;margin-bottom:14px}
+.roku-dpad{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);justify-content:center;margin:0 auto 14px;background:#6f2da8;border-radius:50%;width:162px;height:162px;overflow:hidden}
+.rk-d{display:flex;align-items:center;justify-content:center;color:#fff;font-size:19px;cursor:pointer;-webkit-user-select:none}
+.rk-d:active{background:rgba(0,0,0,.18)}
+.rk-d.blank{visibility:hidden}
+.rk-ok{background:#1c1c1f;border-radius:50%;margin:7px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:1px}
+.rk-ok:active{background:#000}
+.roku-row3{display:flex;justify-content:center;gap:14px;margin-bottom:12px}
+.roku-vol{width:auto;padding:0 14px;height:44px;border-radius:22px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:.5px}
+.roku-input-btn{display:block;width:100%;height:42px;border:1px solid #3a3a40;border-radius:10px;background:#26262a;color:#38bdf8;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.5px;cursor:pointer;margin-bottom:12px}
+.roku-input-btn:active{background:#333}
+.roku-apps{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.roku-app{height:40px;border:none;border-radius:8px;color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.5px;cursor:pointer}
+.roku-app:active{opacity:.75}
+.rk-netflix{background:#E50914}
+.rk-disney{background:#0c2340}
+.rk-appletv{background:#111}
+.rk-roku{background:#6f2da8}
+.roku-help{background:rgba(255,149,0,.12);border:1px solid rgba(255,149,0,.4);border-radius:12px;padding:14px;margin-bottom:14px}
+.roku-help-title{color:#FF9500;font-weight:700;font-size:14px;margin-bottom:8px}
+.roku-help-txt{color:#c7c7cc;font-size:12px;line-height:1.5}
+.roku-help-txt ol{margin:8px 0;padding-left:18px}
+.roku-help-txt li{margin-bottom:4px}
+.roku-help-retry{margin-top:8px;background:#FF9500;border:none;color:#fff;font-weight:700;font-size:13px;padding:8px 16px;border-radius:8px;cursor:pointer}
+
 /* Auto-tune button in drawer */
 .at-btn{flex:0 0 44px!important;font-size:16px;background:#FF9500!important;color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .at-btn.at-cancel{background:#FF3B30!important}
@@ -728,6 +764,15 @@ tr.game-final td{opacity:0.4}
             <button class="dtv-remote-done" onclick="closeDtvRemote()">✕ Close</button>
         </div>
 
+        <!-- Source switcher (shown only when a TV has both a DirecTV box and a Roku) -->
+        <div class="rmt-switch" id="rmt-switch" style="display:none">
+            <button class="rmt-seg" id="rmt-seg-dtv" onclick="switchRemote('dtv')">DIRECTV</button>
+            <button class="rmt-seg" id="rmt-seg-roku" onclick="switchRemote('roku')">ROKU</button>
+        </div>
+
+        <!-- DIRECTV PANEL -->
+        <div id="remote-dtv" class="remote-panel">
+
         <!-- Channel display + TUNE -->
         <div class="dtv-ch-bar">
             <div class="dtv-ch-num" id="dtv-ch-display"><span class="dtv-ch-cursor"></span></div>
@@ -804,6 +849,67 @@ tr.game-final td{opacity:0.4}
             <button class="dtv-pwr-btn dtv-pwr-on" onclick="dtvPowerOn()">TV ON</button>
             <button class="dtv-pwr-btn dtv-pwr-off" onclick="dtvPowerOff()">TV OFF</button>
         </div>
+        </div><!-- /remote-dtv -->
+
+        <!-- ROKU PANEL -->
+        <div id="remote-roku" class="remote-panel" style="display:none">
+
+            <div id="roku-help" class="roku-help" style="display:none">
+                <div class="roku-help-title">&#9888; Roku not responding</div>
+                <div class="roku-help-txt">
+                    This TV pings but its Roku link is down, so the remote and input tiles won't work. Fix it on the TV in about a minute:
+                    <ol>
+                        <li>Settings &rsaquo; Network &rsaquo; Set up connection &rsaquo; Wireless</li>
+                        <li>Rejoin <b>CBCI-6AB6</b> &amp; re-enter the password (forces a clean lease + DNS)</li>
+                        <li>Settings &rsaquo; System &rsaquo; System update &rsaquo; Check now</li>
+                        <li>Confirm Settings &rsaquo; System &rsaquo; Advanced &rsaquo; <b>Control by mobile apps = Enabled</b></li>
+                    </ol>
+                    <button class="roku-help-retry" onclick="rokuHealthCheck()">Re-check</button>
+                </div>
+            </div>
+
+            <div class="roku-body">
+                <div class="roku-power-row">
+                    <button class="roku-btn roku-power" onclick="rokuKey('power')" title="Power">&#x23FB;</button>
+                </div>
+                <div class="roku-toprow">
+                    <button class="roku-btn roku-round" onclick="rokuKey('back')" title="Back">&#8592;</button>
+                    <button class="roku-btn roku-round" onclick="rokuKey('home')" title="Home">&#8962;</button>
+                </div>
+                <div class="roku-dpad">
+                    <div class="rk-d blank"></div>
+                    <div class="rk-d" onclick="rokuKey('up')">&#9650;</div>
+                    <div class="rk-d blank"></div>
+                    <div class="rk-d" onclick="rokuKey('left')">&#9664;</div>
+                    <div class="rk-d rk-ok" onclick="rokuKey('select')">OK</div>
+                    <div class="rk-d" onclick="rokuKey('right')">&#9654;</div>
+                    <div class="rk-d blank"></div>
+                    <div class="rk-d" onclick="rokuKey('down')">&#9660;</div>
+                    <div class="rk-d blank"></div>
+                </div>
+                <div class="roku-row3">
+                    <button class="roku-btn roku-round" onclick="rokuKey('replay')" title="Instant replay">&#8634;</button>
+                    <button class="roku-btn roku-round" onclick="rokuKey('info')" title="Options">&#42;</button>
+                </div>
+                <div class="roku-row3">
+                    <button class="roku-btn roku-round" onclick="rokuKey('rewind')" title="Rewind">&#9194;</button>
+                    <button class="roku-btn roku-round" onclick="rokuKey('play')" title="Play/Pause">&#9199;</button>
+                    <button class="roku-btn roku-round" onclick="rokuKey('forward')" title="Fast forward">&#9193;</button>
+                </div>
+                <div class="roku-row3">
+                    <button class="roku-btn roku-vol" onclick="rokuKey('voldown')">VOL &#8722;</button>
+                    <button class="roku-btn roku-round" onclick="rokuKey('volmute')" title="Mute">&#128263;</button>
+                    <button class="roku-btn roku-vol" onclick="rokuKey('volup')">VOL &#43;</button>
+                </div>
+                <button class="roku-input-btn" onclick="rokuKey('hdmi1')">&#9654; SWITCH TO DIRECTV (HDMI 1)</button>
+                <div class="roku-apps">
+                    <button class="roku-app rk-netflix" onclick="rokuApp('12')">NETFLIX</button>
+                    <button class="roku-app rk-disney" onclick="rokuApp('291097')">Disney+</button>
+                    <button class="roku-app rk-appletv" onclick="rokuApp('551012')">Apple TV+</button>
+                    <button class="roku-app rk-roku" onclick="rokuApp('837')">Roku</button>
+                </div>
+            </div>
+        </div><!-- /remote-roku -->
 
         <div class="dtv-close-hint">Tap outside to close</div>
     </div>
@@ -1259,15 +1365,16 @@ function showWhatsOn() {
     tvList.forEach(function(tv){
         var card = document.createElement('div');
         var hasDtv = !!tv.dtv_ip;
-        card.className = 'wo-card' + (hasDtv ? '' : ' wo-no-dtv');
+        var hasRemote = hasDtv || !!tv.roku_ip;
+        card.className = 'wo-card' + (hasRemote ? '' : ' wo-no-dtv');
         var ch = tv.channel || '';
         var gameName = ch ? findGameForChannel(ch) : '';
         card.innerHTML =
             '<div class="wo-tv-name">'+tv.name+'</div>' +
             '<div class="wo-channel '+(ch ? '' : 'wo-off')+'">'+(ch || 'OFF')+'</div>' +
             (gameName ? '<div class="wo-game">'+gameName+'</div>' : '') +
-            (hasDtv ? '<div style="color:#007AFF;font-size:10px;margin-top:6px;font-weight:600">TAP FOR REMOTE</div>' : '');
-        if(hasDtv) {
+            (hasRemote ? '<div style="color:#007AFF;font-size:10px;margin-top:6px;font-weight:600">TAP FOR REMOTE</div>' : '');
+        if(hasRemote) {
             (function(t){ card.onclick = function(){ openDtvRemote(t); }; })(tv);
         }
         // YouTube button for Roku TVs
@@ -1408,8 +1515,51 @@ function openDtvRemote(tv) {
     dtvChBuffer = '';
     document.getElementById('dtv-remote-name').textContent = tv.name;
     updateDtvDisplay();
+    var hasDtv = !!tv.dtv_ip, hasRoku = !!tv.roku_ip;
+    document.getElementById('rmt-switch').style.display = (hasDtv && hasRoku) ? 'flex' : 'none';
+    switchRemote(hasDtv ? 'dtv' : 'roku');
     document.getElementById('dtv-remote').classList.add('visible');
 }
+function switchRemote(which) {
+    var isRoku = (which === 'roku');
+    document.getElementById('remote-dtv').style.display = isRoku ? 'none' : 'block';
+    document.getElementById('remote-roku').style.display = isRoku ? 'block' : 'none';
+    document.getElementById('rmt-seg-dtv').className = 'rmt-seg' + (isRoku ? '' : ' active');
+    document.getElementById('rmt-seg-roku').className = 'rmt-seg' + (isRoku ? ' active roku-active' : '');
+    if(isRoku) {
+        document.getElementById('roku-help').style.display = 'none';
+        rokuHealthCheck();
+    }
+}
+function rokuKey(cmd) {
+    if(!dtvRemoteTv || !dtvRemoteTv.roku_ip) return;
+    fetch('/staff/api/roku/command', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({roku_ip: dtvRemoteTv.roku_ip, command: cmd})
+    }).then(function(r){ return r.json(); })
+    .then(function(d){ if(!d || d.status !== 'ok') rokuHealthCheck(); })
+    .catch(function(){ rokuHealthCheck(); });
+}
+function rokuApp(appId) {
+    if(!dtvRemoteTv || !dtvRemoteTv.roku_ip) return;
+    fetch('/staff/api/roku/command', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({roku_ip: dtvRemoteTv.roku_ip, command: 'launch_app', app_id: appId})
+    }).catch(function(){});
+}
+function rokuHealthCheck() {
+    if(!dtvRemoteTv || !dtvRemoteTv.roku_ip) return;
+    fetch('/staff/api/roku/info', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({roku_ip: dtvRemoteTv.roku_ip})
+    }).then(function(r){ return r.json(); })
+    .then(function(d){ document.getElementById('roku-help').style.display = (d && d.reachable) ? 'none' : 'block'; })
+    .catch(function(){ document.getElementById('roku-help').style.display = 'block'; });
+}
+window.switchRemote = switchRemote;
+window.rokuKey = rokuKey;
+window.rokuApp = rokuApp;
+window.rokuHealthCheck = rokuHealthCheck;
 function closeDtvRemote() {
     document.getElementById('dtv-remote').classList.remove('visible');
     dtvRemoteTv = null;

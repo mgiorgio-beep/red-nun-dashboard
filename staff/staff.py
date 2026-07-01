@@ -43,6 +43,23 @@ ROKU_APP_IDS = {
     'Apple TV+': '551012', 'Apple TV App': '551012',
     'Prime Video': '13', 'Prime App': '13',
     'YouTube TV': '195316',
+    'Netflix': '12',
+    'Disney+': '291097',
+    'Roku Channel': '837',
+    'Max': '61322', 'HBO Max': '61322',
+}
+
+# Roku ECP keypress map -- frontend command name -> case-sensitive ECP key.
+ROKU_KEY_MAP = {
+    'up': 'Up', 'down': 'Down', 'left': 'Left', 'right': 'Right',
+    'select': 'Select', 'ok': 'Select',
+    'back': 'Back', 'home': 'Home', 'info': 'Info', 'options': 'Info',
+    'replay': 'InstantReplay',
+    'rewind': 'Rev', 'forward': 'Fwd', 'play': 'Play', 'pause': 'Play',
+    'volup': 'VolumeUp', 'voldown': 'VolumeDown', 'volmute': 'VolumeMute',
+    'channelup': 'ChannelUp', 'channeldown': 'ChannelDown',
+    'enter': 'Enter', 'backspace': 'Backspace',
+    'power_on': 'PowerOn', 'power_off': 'PowerOff', 'power': 'Power',
 }
 
 DEFAULT_TVS_CHATHAM = [
@@ -428,8 +445,8 @@ def roku_command():
                 params.append('mediaType=' + data['media_type'])
             if params:
                 url += '?' + '&'.join(params)
-        elif command == 'home':
-            url = base + '/keypress/Home'
+        elif command in ROKU_KEY_MAP:
+            url = base + '/keypress/' + ROKU_KEY_MAP[command]
         else:
             return jsonify({"status": "error", "message": "Unknown command: " + command}), 400
 
@@ -454,6 +471,33 @@ def roku_command():
 def roku_apps():
     """Returns Roku app ID mapping for streaming services."""
     return jsonify(ROKU_APP_IDS)
+
+
+@staff_bp.route('/staff/api/roku/info', methods=['POST'])
+def roku_info():
+    """ECP health check. Confirms the Roku is awake AND has a working server
+    link (port 8060 only answers when both are true). Used by the remote UI to
+    surface the WiFi-rejoin fix when a TV is in the bad DNS/lease state."""
+    data = request.json or {}
+    roku_ip = data.get('roku_ip', '').strip()
+    if not roku_ip:
+        return jsonify({"status": "error", "message": "Missing roku_ip"}), 400
+    try:
+        r = http_requests.get(
+            'http://{}:8060/query/device-info'.format(roku_ip), timeout=4
+        )
+        if r.status_code == 200:
+            return jsonify({"status": "ok", "reachable": True})
+        return jsonify({"status": "error", "reachable": False,
+                        "reason": "ecp", "message": "ECP HTTP {}".format(r.status_code)})
+    except (http_requests.exceptions.ConnectionError,
+            http_requests.exceptions.Timeout):
+        return jsonify({"status": "error", "reachable": False,
+                        "reason": "unreachable",
+                        "message": "Roku not answering at " + roku_ip})
+    except Exception as e:
+        return jsonify({"status": "error", "reachable": False,
+                        "reason": "error", "message": str(e)})
 
 
 # ── YouTube TV Channel Mapping ──
