@@ -45,7 +45,7 @@ ROKU_APP_IDS = {
     'YouTube TV': '195316',
     'Netflix': '12',
     'Disney+': '291097',
-    'Roku Channel': '837',
+    'YouTube': '837',
     'Max': '61322', 'HBO Max': '61322',
 }
 
