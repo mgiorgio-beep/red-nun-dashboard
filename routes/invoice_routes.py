@@ -9,7 +9,7 @@ import io
 import json
 import base64
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, send_from_directory, session, redirect
 from PIL import Image
 from routes.auth_routes import admin_required
@@ -1640,5 +1640,246 @@ def api_get_scraper_log(key):
         with open(log_path) as f:
             content = f.read()
         return jsonify({"key": key, "log": content, "size": len(content)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ──────────────────────────────────────────────────────────────────────
+# COMPLETENESS LEDGER — portal manifests vs dashboard reconciliation
+#
+# Each vendor scraper records every invoice it SEES on the portal
+# (vendor-scrapers/common/manifest.py), pre-dedup. run_all.sh POSTs the
+# manifests here nightly (common/reconcile_manifests.py, localhost → auth
+# gate passes). We compare against scanned_invoices, run per-vendor
+# cadence checks, persist a verdict for a future dashboard badge, and
+# send ONE Telegram summary via the existing bot token.
+# ──────────────────────────────────────────────────────────────────────
+
+_MANIFEST_VENDOR_PATTERNS = {
+    "usfoods":     ["US Foods%"],
+    "pfg":         ["Performance%", "PFG%"],
+    "lknife":      ["L%Knife%"],
+    "colonial":    ["Colonial%"],
+    "sg":          ["Southern Glazer%"],
+    "martignetti": ["%artignetti%"],
+    "craft":       ["Craft Collective%"],
+    "cintas":      ["Cintas%"],
+    "unifirst":    ["UniFirst%"],
+    "caron":       ["Caron%"],
+}
+
+# Expected max days between invoices (cadence alarms). A vendor going
+# quiet longer than this gets flagged even when no scrape "failed" —
+# this is how a silently-dead scraper (or lapsed autopay) surfaces.
+_VENDOR_CADENCE_DAYS = {
+    "usfoods": 5, "pfg": 6, "lknife": 12, "colonial": 16, "sg": 16,
+    "martignetti": 16, "craft": 21, "cintas": 10, "unifirst": 10, "caron": 10,
+}
+
+
+def _norm_invnum(s):
+    import re as _re
+    return _re.sub(r"[^A-Za-z0-9]", "", str(s or "")).lstrip("0").upper()
+
+
+def _parse_manifest_date(s):
+    s = str(s or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%b %d, %Y", "%B %d, %Y",
+                "%m-%d-%Y", "%Y%m%d", "%d-%b-%Y"):
+        try:
+            return datetime.strptime(s[:10] if fmt in ("%Y-%m-%d",) else s, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_manifest_amount(s):
+    try:
+        v = str(s).replace("$", "").replace(",", "").strip()
+        if v.startswith("(") and v.endswith(")"):
+            v = "-" + v[1:-1]
+        return float(v)
+    except (ValueError, TypeError):
+        return None
+
+
+def _send_telegram_summary(text):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    users = [u.strip() for u in os.environ.get("ALLOWED_USERS", "").split(",") if u.strip()]
+    if not token or not users:
+        logger.warning("reconcile-manifest: TELEGRAM_BOT_TOKEN/ALLOWED_USERS not set — skipping Telegram")
+        return False
+    import requests as _requests
+    sent = False
+    for uid in users:
+        try:
+            _requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": uid, "text": text},
+                timeout=15,
+            )
+            sent = True
+        except Exception as e:
+            logger.warning(f"reconcile-manifest: Telegram send failed for {uid}: {e}")
+    return sent
+
+
+@invoice_bp.route("/api/invoices/reconcile-manifest", methods=["POST"])
+def reconcile_manifest():
+    """Compare portal manifests against scanned_invoices; alert on gaps."""
+    body = request.get_json(force=True, silent=True) or {}
+    manifests = body.get("manifests", [])
+    stale_feeds = body.get("stale", [])
+    lookback_days = int(body.get("lookback_days", 60))
+    cutoff = datetime.now() - timedelta(days=lookback_days)
+
+    conn = get_connection()
+    missing, mismatched, vendors_reported = [], [], []
+    total_seen = total_checked = total_matched = 0
+
+    try:
+        for m in manifests:
+            vkey = str(m.get("vendor_key") or "").lower()
+            loc = str(m.get("location") or "")
+            invs = m.get("invoices") or []
+            total_seen += len(invs)
+            vendors_reported.append(f"{vkey}/{loc}" if loc else vkey)
+            patterns = _MANIFEST_VENDOR_PATTERNS.get(vkey)
+            if not patterns:
+                logger.warning(f"reconcile-manifest: unknown vendor_key {vkey!r} — skipped")
+                continue
+
+            where = " OR ".join(["vendor_name LIKE ?"] * len(patterns))
+            rows = conn.execute(
+                f"SELECT invoice_number, total FROM scanned_invoices WHERE {where}",
+                patterns,
+            ).fetchall()
+            db_index = {}
+            for r in rows:
+                k = _norm_invnum(r["invoice_number"])
+                if k:
+                    db_index.setdefault(k, []).append(r["total"])
+
+            for inv in invs:
+                n = _norm_invnum(inv.get("invoice_number"))
+                if not n:
+                    continue
+                d = _parse_manifest_date(inv.get("date"))
+                if d is not None and d < cutoff:
+                    continue  # old portal history (backfills) — out of scope
+                total_checked += 1
+                if n not in db_index:
+                    missing.append({
+                        "vendor": vkey, "location": loc,
+                        "invoice_number": str(inv.get("invoice_number")),
+                        "date": str(inv.get("date") or "?"),
+                        "amount": str(inv.get("amount") or "?"),
+                    })
+                    continue
+                total_matched += 1
+                amt = _parse_manifest_amount(inv.get("amount"))
+                if amt is not None and abs(amt) > 0.01:
+                    tol = max(1.0, abs(amt) * 0.01)
+                    ok = any(
+                        t is not None and abs(abs(float(t)) - abs(amt)) <= tol
+                        for t in db_index[n]
+                    )
+                    if not ok:
+                        mismatched.append({
+                            "vendor": vkey, "location": loc,
+                            "invoice_number": str(inv.get("invoice_number")),
+                            "portal_amount": str(inv.get("amount")),
+                            "db_totals": [t for t in db_index[n]],
+                        })
+
+        # Cadence alarms — independent of manifests, from scanned_invoices
+        cadence_alerts = []
+        today = datetime.now()
+        for vkey, max_days in _VENDOR_CADENCE_DAYS.items():
+            patterns = _MANIFEST_VENDOR_PATTERNS[vkey]
+            where = " OR ".join(["vendor_name LIKE ?"] * len(patterns))
+            row = conn.execute(
+                f"SELECT MAX(invoice_date) AS last_date FROM scanned_invoices "
+                f"WHERE ({where}) AND invoice_date IS NOT NULL AND invoice_date != ''",
+                patterns,
+            ).fetchone()
+            last = row["last_date"] if row else None
+            if not last:
+                continue
+            d = _parse_manifest_date(last)
+            if d is None:
+                continue
+            gap = (today - d).days
+            if gap > max_days:
+                cadence_alerts.append(
+                    f"{vkey}: last invoice {last} ({gap}d ago, expect \u2264{max_days}d)"
+                )
+    finally:
+        conn.close()
+
+    # Build the one-line-per-issue verdict
+    lines = [f"\U0001F9FE Invoice completeness \u2014 {datetime.now().strftime('%b %d')}"]
+    if total_checked and not missing:
+        lines.append(
+            f"\u2705 {total_matched}/{total_checked} recent portal invoices are in the dashboard "
+            f"({len(manifests)} scraper feeds reporting)"
+        )
+    elif total_checked:
+        lines.append(f"\u26A0\uFE0F MISSING from dashboard ({len(missing)} of {total_checked} recent portal invoices):")
+        for x in missing[:10]:
+            lines.append(f"  \u2022 {x['vendor']}/{x['location']} #{x['invoice_number']} {x['amount']} ({x['date']})")
+        if len(missing) > 10:
+            lines.append(f"  \u2026and {len(missing) - 10} more")
+    else:
+        lines.append("\u26A0\uFE0F No portal invoices to check \u2014 no manifests reported (scrapers not wired or all failed)")
+    if mismatched:
+        lines.append(f"\u26A0\uFE0F Amount mismatches ({len(mismatched)}):")
+        for x in mismatched[:5]:
+            lines.append(f"  \u2022 {x['vendor']} #{x['invoice_number']}: portal {x['portal_amount']} vs dashboard {x['db_totals']}")
+    if cadence_alerts:
+        lines.append("\u23F0 Vendor cadence:")
+        for c in cadence_alerts:
+            lines.append(f"  \u2022 {c}")
+    if stale_feeds:
+        lines.append("\U0001F578 Stale manifest feeds: " + ", ".join(stale_feeds))
+    verdict_text = "\n".join(lines)
+
+    result = {
+        "verdict_text": verdict_text,
+        "total_seen": total_seen,
+        "total_checked": total_checked,
+        "total_matched": total_matched,
+        "missing": missing,
+        "mismatched": mismatched,
+        "cadence_alerts": cadence_alerts,
+        "stale_feeds": stale_feeds,
+        "vendors_reported": vendors_reported,
+        "run_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+    # Persist for a future dashboard badge (data/ is gitignored runtime state)
+    try:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        os.makedirs(os.path.join(repo_root, "data"), exist_ok=True)
+        with open(os.path.join(repo_root, "data", "manifest_verdict.json"), "w") as f:
+            json.dump(result, f, indent=1)
+    except Exception as e:
+        logger.warning(f"reconcile-manifest: could not persist verdict: {e}")
+
+    result["telegram_sent"] = _send_telegram_summary(verdict_text)
+    return jsonify(result)
+
+
+@invoice_bp.route("/api/invoices/reconcile-verdict", methods=["GET"])
+def reconcile_verdict():
+    """Latest completeness verdict (for a dashboard badge)."""
+    try:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(repo_root, "data", "manifest_verdict.json")) as f:
+            return jsonify(json.load(f))
+    except FileNotFoundError:
+        return jsonify({"verdict_text": None, "message": "No reconciliation has run yet"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
