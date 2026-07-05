@@ -1547,7 +1547,7 @@ def create_payroll_check():
 
         client = anthropic.Anthropic()
         resp = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
             max_tokens=8192,
             messages=[{
                 "role": "user",

@@ -51,7 +51,7 @@ if not logger.handlers:
 MAX_FRAMES       = 40          # Hard cap — prevents runaway API costs
 DEFAULT_INTERVAL = 5           # Seconds between frames by default
 FRAME_QUALITY    = 3           # ffmpeg -q:v (2=best, 5=acceptable, lower=larger file)
-VISION_MODEL     = "claude-sonnet-4-6"   # same model as invoice_processor.py
+VISION_MODEL     = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")   # same model as invoice_processor.py
 
 MIME_TYPES = {
     ".jpg":  "image/jpeg",

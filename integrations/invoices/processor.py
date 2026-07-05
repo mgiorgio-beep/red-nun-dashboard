@@ -20,6 +20,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# Central model ID — override via CLAUDE_MODEL in .env when Anthropic retires a model
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 DB_PATH = os.getenv("DB_PATH", "toast_data.db")
 
 
@@ -467,7 +469,7 @@ VENDOR ITEM CODE:
             "content-type": "application/json",
         },
         json={
-            "model": "claude-sonnet-4-6",
+            "model": CLAUDE_MODEL,
             "max_tokens": 16384,
             "messages": [
                 {
@@ -732,7 +734,7 @@ Rules:
                 "content-type": "application/json",
             },
             json={
-                "model": "claude-sonnet-4-6",
+                "model": CLAUDE_MODEL,
                 "max_tokens": 16384,
                 "messages": [{"role": "user", "content": image_content}],
             },
@@ -920,6 +922,18 @@ def validate_invoice_extraction(data):
             if total_pages > 1:
                 result["auto_confirm"] = False
                 result["issues"].append(f"Multi-page invoice ({page_info}) — scan all pages before confirming")
+
+    # CHECK 4: Statement guard — account statements (e.g. emailed US Foods statements)
+    # OCR with a blank invoice number and a "total" that is the full AR balance.
+    # Never auto-confirm those; force manual review so they can't double-count AP.
+    inv_num = str(data.get("invoice_number") or "").strip()
+    if not inv_num:
+        result["auto_confirm"] = False
+        result["valid"] = False
+        result["issues"].append(
+            "No invoice number extracted — possible account STATEMENT, not an invoice. "
+            "Review before confirming (statements double-count AP)."
+        )
 
     return result
 
@@ -1832,7 +1846,7 @@ def parse_vtinfo_csv_invoice(csv_data, filename=None, location=None):
         if not row or len(row) < 5:
             continue
 
-        product_id = get(row, 'ProductId')
+        product_id = get(row, 'ProductId') or get(row, 'ItemCode')  # Connect-portal CSVs use ItemCode
         description = get(row, 'ItemDescription')
         uom = get(row, 'UnitOfMeasure', 'case')
         units_per_case = get(row, 'UnitsPerCase', '1')

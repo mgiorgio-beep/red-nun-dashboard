@@ -1594,7 +1594,7 @@ Return ONLY valid JSON array. No markdown, no backticks, no explanation:
                         "anthropic-version": "2023-06-01"
                     },
                     json={
-                        "model": "claude-sonnet-4-6",
+                        "model": os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
                         "max_tokens": 1000,
                         "messages": [{"role": "user", "content": prompt}]
                     },
