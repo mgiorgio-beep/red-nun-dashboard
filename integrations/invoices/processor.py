@@ -2078,7 +2078,8 @@ def save_invoice(location, data, image_path=None, raw_json=None, validation_data
     # Check for duplicate invoice
     if vendor and inv_num and inv_date:
         dup_check = cursor.execute("""
-            SELECT id, vendor_name, invoice_number, invoice_date, total, status
+            SELECT id, vendor_name, invoice_number, invoice_date, total, status,
+                   location, payment_status
             FROM scanned_invoices
             WHERE vendor_name = ? AND invoice_number = ? AND invoice_date = ?
             LIMIT 1

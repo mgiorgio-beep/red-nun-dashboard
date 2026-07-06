@@ -524,10 +524,23 @@ def api_scan_invoice():
 
         # Check for duplicate
         if isinstance(result, dict) and result.get("duplicate"):
+            _ex = result["existing_invoice"]
+            _ex_status = _ex.get("status") or "?"
+            _ex_loc = _ex.get("location") or "no location"
+            _ex_pay = _ex.get("payment_status") or "unpaid"
+            _hint = ""
+            if _ex_status != "confirmed":
+                _hint = (" NOTE: the existing copy is NOT confirmed"
+                         f" (status={_ex_status}) — it will not appear in Bill Pay"
+                         " until it is confirmed in the invoice review queue.")
             return jsonify({
                 "status": "duplicate",
-                "message": f"Duplicate invoice detected: {result['existing_invoice']['vendor_name']} #{result['existing_invoice']['invoice_number']} already exists.",
-                "existing_invoice": result["existing_invoice"],
+                "message": (f"Duplicate invoice detected: {_ex['vendor_name']} "
+                            f"#{_ex['invoice_number']} already exists "
+                            f"(status={_ex_status}, location={_ex_loc}, "
+                            f"payment={_ex_pay}, id={result['existing_id']})."
+                            + _hint),
+                "existing_invoice": _ex,
                 "existing_id": result["existing_id"]
             }), 409
 
