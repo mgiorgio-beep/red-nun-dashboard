@@ -159,6 +159,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .pill-processing { background: rgba(168,85,247,0.12); color: #a855f7; }
 .pill-void { background: rgba(71,85,105,0.2); color: var(--text3); }
 .pill-failed { background: var(--red-soft); color: var(--red); }
+.pill-review { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber); }
 
 @keyframes pulse-purple {
   0%, 100% { opacity: 1; }
@@ -254,6 +255,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
         <select class="filter-select" id="filterStatus" onchange="loadData()">
           <option value="">All Statuses</option>
           <option value="cleared">Cleared</option>
+          <option value="needs_review">Needs Review</option>
           <option value="pending">Pending</option>
           <option value="printed">Printed</option>
           <option value="processing">Processing</option>
@@ -455,10 +457,12 @@ function sourceBadge(src, method) {
 function statusPill(st) {
   var map = {
     cleared: 'pill-cleared', pending: 'pill-pending', printed: 'pill-printed',
-    processing: 'pill-processing', void: 'pill-void', failed: 'pill-failed'
+    processing: 'pill-processing', void: 'pill-void', failed: 'pill-failed',
+    needs_review: 'pill-review'
   };
   var cls = map[st] || 'pill-pending';
   var label = st ? st.charAt(0).toUpperCase() + st.slice(1) : 'Cleared';
+  if (st === 'needs_review') label = 'Needs Review';
   return '<span class="pill-status ' + cls + '">' + label + '</span>';
 }
 
@@ -525,7 +529,7 @@ function renderTable(payments) {
     if (p.status === 'failed' || p.status === 'processing') {
       actions += '<button class="btn-void" onclick="event.stopPropagation();deletePayment(' + p.id + ')">Delete</button>';
     }
-    if (p.status === 'pending' || p.status === 'printed') {
+    if (p.status === 'pending' || p.status === 'printed' || p.status === 'needs_review') {
       actions += '<button class="btn-markpaid" onclick="event.stopPropagation();markPaid(' + p.id + ')">Mark Paid</button>';
     }
     if ((p.source === 'check' || p.source === 'portal') && p.status !== 'void' && p.status !== 'failed') {

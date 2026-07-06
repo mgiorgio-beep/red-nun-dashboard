@@ -782,11 +782,26 @@ def api_mark_payment_paid(payment_id):
         conn.close()
         return jsonify({"status": "ok", "already": True})
 
+    was_needs_review = vp["status"] == "needs_review"
+
     now = datetime.now().isoformat()
     conn.execute(
         "UPDATE vendor_payments SET status = 'cleared', updated_at = ? WHERE id = ?",
         (now, payment_id),
     )
+
+    # needs_review portal payments never had their invoices marked paid
+    # (that only happens on a verified confirmation). User has confirmed on
+    # the vendor portal, so cross-link the invoices now.
+    if was_needs_review:
+        inv_rows = conn.execute(
+            "SELECT invoice_number FROM vendor_payment_invoices WHERE payment_id = ?",
+            (payment_id,),
+        ).fetchall()
+        for inv in inv_rows:
+            _cross_link_invoice(conn, inv["invoice_number"],
+                                vp["payment_ref"] or f"PORTAL-{payment_id}",
+                                datetime.now().strftime("%Y-%m-%d"))
 
     ap_id = vp["ap_payment_id"]
     if ap_id:
@@ -1027,10 +1042,9 @@ def api_export_payments():
 # ─── PAYMENT FAILURE NOTIFICATION ────────────────────────────────────────────
 # Uses an existing Telegram bot. Configure TELEGRAM_BOT_TOKEN and
 # TELEGRAM_ALERT_CHAT_ID in /opt/red-nun-dashboard/.env to enable.
-def _notify_payment_failure(scraper_key, display_name, vp_id, exit_code, error_tail):
-    """Send a Telegram alert when a vendor payment scraper fails.
-
-    Silent no-op if env vars aren't set. Best-effort — never raises."""
+def _send_payment_telegram(text):
+    """Post an alert to Telegram. Silent no-op if env vars aren't set.
+    Best-effort — never raises."""
     import os as _os
     try:
         import requests as _requests
@@ -1040,15 +1054,6 @@ def _notify_payment_failure(scraper_key, display_name, vp_id, exit_code, error_t
     chat_id = _os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
     if not token or not chat_id:
         return
-    body_max = 3500
-    tail = error_tail if len(error_tail) <= body_max else \
-        "...(truncated)...\n" + error_tail[-body_max:]
-    text = (
-        f"⚠️ Payment portal failure\n"
-        f"Vendor: {display_name} (key={scraper_key})\n"
-        f"vp#{vp_id} — exit {exit_code}\n"
-        f"\n--- last lines ---\n{tail}"
-    )
     try:
         _requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
@@ -1057,6 +1062,36 @@ def _notify_payment_failure(scraper_key, display_name, vp_id, exit_code, error_t
         )
     except Exception:
         pass
+
+
+def _notify_payment_failure(scraper_key, display_name, vp_id, exit_code, error_tail):
+    """Telegram alert for a payment scraper that failed BEFORE submitting."""
+    body_max = 3500
+    tail = error_tail if len(error_tail) <= body_max else \
+        "...(truncated)...\n" + error_tail[-body_max:]
+    _send_payment_telegram(
+        f"⚠️ Payment portal failure\n"
+        f"Vendor: {display_name} (key={scraper_key})\n"
+        f"vp#{vp_id} — exit {exit_code}\n"
+        f"\n--- last lines ---\n{tail}"
+    )
+
+
+def _notify_payment_needs_review(scraper_key, display_name, vp_id, reason, tail):
+    """Telegram alert for a payment that MAY have been submitted but could not
+    be verified. The payment must NOT be retried until checked on the portal —
+    retrying is how double-payments happen."""
+    body_max = 3000
+    t = tail if len(tail) <= body_max else "...(truncated)...\n" + tail[-body_max:]
+    _send_payment_telegram(
+        f"🟡 Payment NEEDS REVIEW — do NOT retry\n"
+        f"Vendor: {display_name} (key={scraper_key})\n"
+        f"vp#{vp_id}\n"
+        f"Reason: {reason}\n"
+        f"Check the vendor portal: if the payment went through, Mark Paid on "
+        f"the dashboard; if not, Void it. Retrying blind risks a double payment.\n"
+        f"\n--- last lines ---\n{t}"
+    )
 
 _PAYMENT_SCRAPER_REGISTRY = {
     "usfoods": {
@@ -1177,7 +1212,8 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
     # a successful L. Knife run 40s later overwrote the Colonial failure
     # log and the state-file results entry, losing the failure detail.
     log_path = os.path.join(_PAYMENT_LOG_DIR, f"payment_{key}.log")
-    vp_log_path = os.path.join(_PAYMENT_LOG_DIR, f"payment_{key}_vp{vendor_payment_id}.log")
+    _vp_tag = "dryrun" if vendor_payment_id is None else f"vp{vendor_payment_id}"
+    vp_log_path = os.path.join(_PAYMENT_LOG_DIR, f"payment_{key}_{_vp_tag}.log")
     display_name = scraper_info["display_name"]
     _set_payment_running(key, display_name)
 
@@ -1208,17 +1244,33 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
         tail = "\n".join(all_output.strip().splitlines()[-20:])
         _set_payment_result(key, result.returncode, tail)
 
+        # Dry runs never touch the DB — log + state only.
+        if vendor_payment_id is None:
+            logger.info(f"Payment scraper DRY RUN {key} finished: exit {result.returncode}")
+            return
+
         conn = get_connection()
         now = datetime.now().isoformat()
-        if result.returncode == 0:
-            # Parse CONFIRMATION_REF from output
-            conf_ref = None
-            for line in (result.stdout or "").splitlines():
-                if line.startswith("CONFIRMATION_REF="):
-                    conf_ref = line.split("=", 1)[1].strip()
-            # Make generic refs unique to avoid UNIQUE constraint violations
-            if conf_ref and conf_ref.lower() in ("scheduled", "success", "ok", "transaction", "confirmed", "submitted"):
-                conf_ref = f"{conf_ref}-{display_name}-{vendor_payment_id}"
+
+        # Parse CONFIRMATION_REF from output (real portal ref required for
+        # a payment to be considered cleared)
+        conf_ref = None
+        for line in (result.stdout or "").splitlines():
+            if line.startswith("CONFIRMATION_REF="):
+                conf_ref = line.split("=", 1)[1].strip()
+        # Generic refs are NOT proof of payment — the 2026-05-25 ghost
+        # payments were "confirmed" by exactly this kind of page-text guess.
+        _GENERIC_REFS = ("scheduled", "success", "ok", "transaction",
+                         "confirmed", "submitted", "processing")
+        generic_ref = bool(conf_ref) and (
+            conf_ref.lower() in _GENERIC_REFS
+            or conf_ref.upper().startswith(("USF-", "PFG-", "CINTAS-", "SG-", "MART-"))
+            # Real portal confirmation numbers always contain digits; refs
+            # like "Scheduled" or "toast-success" are scraper guesses.
+            or not any(c.isdigit() for c in conf_ref)
+        )
+
+        if result.returncode == 0 and conf_ref and not generic_ref:
             conn.execute(
                 """UPDATE vendor_payments SET status = 'cleared', updated_at = ?,
                    payment_ref = COALESCE(?, payment_ref) WHERE id = ?""",
@@ -1234,6 +1286,32 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
                                     conf_ref or f"PORTAL-{vendor_payment_id}",
                                     datetime.now().strftime("%Y-%m-%d"))
             logger.info(f"Payment scraper {key} succeeded for vp#{vendor_payment_id}")
+        elif result.returncode == 3 or (result.returncode == 0):
+            # Exit 3 = scraper clicked Submit but could not verify the result
+            # against the portal. Exit 0 without a real confirmation ref is
+            # treated the same way. Either way the money MAY have moved:
+            # do NOT mark invoices paid, do NOT mark the payment failed
+            # (failed invites a retry = double payment). Human checks the
+            # portal, then Mark Paid or Void on the dashboard.
+            if result.returncode == 3:
+                reason = "Scraper submitted but could not verify against the portal (exit 3)"
+            elif generic_ref:
+                reason = f"Scraper reported success but only a generic/fabricated ref ({conf_ref})"
+            else:
+                reason = "Scraper exited 0 without a CONFIRMATION_REF"
+            _tail_lines = (all_output or "").strip().splitlines()[-30:]
+            _review_tail = "\n".join(_tail_lines)
+            conn.execute(
+                """UPDATE vendor_payments SET status = 'needs_review',
+                   error_detail = ?, updated_at = ? WHERE id = ?""",
+                (f"{reason}\n\n{_review_tail}", now, vendor_payment_id),
+            )
+            logger.warning(f"Payment scraper {key} NEEDS REVIEW for vp#{vendor_payment_id}: {reason}")
+            try:
+                _notify_payment_needs_review(key, display_name, vendor_payment_id,
+                                             reason, _review_tail)
+            except Exception as _e:
+                logger.warning(f"Could not send needs-review notification: {_e}")
         else:
             # Capture last 30 lines of combined stdout+stderr so the error is
             # visible in the DB row, the UI/API, and the Telegram alert.
@@ -1284,13 +1362,64 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
 # Disabled 2026-05-27 after the vendor payment scraper produced ghost payments
 # (clicked Submit but the bank never moved on US Foods, twice on 2026-05-25:
 # vp326 Dennis $6,802.39 and vp332 Chatham $6,001.27) and paid a Martignetti
-# Dennis bill ($1,768.14) from the Chatham bank account.
+# Dennis bill ($1,768.14) from the Chatham bank account. PFG also paid Dennis
+# invoices from the Chatham account.
 #
-# Do NOT flip this back to False unless the scrapers verify each submit
-# against the actual vendor confirmation (not the scraper's own timestamp) and
-# the bank-account selector is location-aware. Until then, users pay manually
-# on the vendor portal and mark invoices paid on the dashboard.
+# Lockdown added 2026-07-06 (this file + each scraper):
+#   - cleared requires a REAL portal confirmation ref; generic/fabricated refs
+#     and exit-0-without-ref land in status 'needs_review' (never auto-retry)
+#   - exit 3 = "submitted but unverified" → 'needs_review' + Telegram alert
+#   - all invoices in a payment must share ONE location (chatham|dennis)
+#   - scrapers must verify the funding bank account last-4 for the location
+#     (5975 Chatham / 2757 Dennis) on the review screen or abort pre-submit
+#   - DRY_RUN=1 walks the portal to the final submit button and stops
+#
+# Re-enable path, per vendor: run /api/payments/pay-portal-dryrun, eyeball the
+# screenshots, then add the vendor key to PORTAL_PAY_LIVE_ALLOWLIST and flip
+# PORTAL_PAY_DISABLED to False. A vendor NOT in the allowlist can never pay
+# live even with the master switch off.
 PORTAL_PAY_DISABLED = True
+
+# Vendors re-certified for live portal pay after the 2026-07 lockdown.
+# Add keys ("usfoods", "pfg", ...) only after a clean dry run.
+PORTAL_PAY_LIVE_ALLOWLIST = set()
+
+# Locations allowed for portal pay, and their expected funding account last-4.
+# Must match the scrapers' own EXPECTED_ACCOUNT config.
+PORTAL_PAY_LOCATIONS = {"chatham": "5975", "dennis": "2757"}
+
+
+def _portal_pay_validate(conn, vendor_name, invoice_ids):
+    """Shared validation for live and dry-run portal pay.
+    Returns (scraper_key, location, error_response_or_None)."""
+    vbp = conn.execute(
+        "SELECT portal_pay_enabled FROM vendor_bill_pay WHERE vendor_name = ?",
+        (vendor_name,),
+    ).fetchone()
+    if not vbp or not vbp["portal_pay_enabled"]:
+        return None, None, (jsonify({"error": "Portal pay not enabled for this vendor"}), 400)
+
+    scraper_key = _VENDOR_KEY_MAP.get(vendor_name)
+    if not scraper_key or scraper_key not in _PAYMENT_SCRAPER_REGISTRY:
+        return None, None, (jsonify({"error": f"No payment scraper registered for {vendor_name}"}), 400)
+
+    # HARD GUARD: every invoice in the batch must belong to exactly one
+    # known location. Mixed/unknown location is how bills got paid from
+    # the wrong entity's bank account.
+    locs = set()
+    for inv_id in invoice_ids:
+        row = conn.execute(
+            "SELECT location FROM scanned_invoices WHERE id = ?", (inv_id,)
+        ).fetchone()
+        locs.add(((row["location"] if row else "") or "").strip().lower())
+    if len(locs) != 1 or next(iter(locs)) not in PORTAL_PAY_LOCATIONS:
+        return None, None, (jsonify({
+            "error": "Portal pay requires all invoices to share one location "
+                     f"(chatham or dennis); got {sorted(l or '(blank)' for l in locs)}. "
+                     "Fix the invoice location(s) first.",
+        }), 400)
+
+    return scraper_key, next(iter(locs)), None
 
 
 @payment_bp.route("/api/payments/pay-portal", methods=["POST"])
@@ -1311,21 +1440,22 @@ def api_pay_portal():
     if not vendor_name or not invoice_ids:
         return jsonify({"error": "vendor_name and invoice_ids required"}), 400
 
-    # Validate vendor has portal enabled
     conn = get_connection()
-    vbp = conn.execute(
-        "SELECT portal_pay_enabled FROM vendor_bill_pay WHERE vendor_name = ?",
-        (vendor_name,),
-    ).fetchone()
-    if not vbp or not vbp["portal_pay_enabled"]:
+    scraper_key, invoice_location, err = _portal_pay_validate(conn, vendor_name, invoice_ids)
+    if err:
         conn.close()
-        return jsonify({"error": "Portal pay not enabled for this vendor"}), 400
+        return err
 
-    # Resolve scraper key
-    scraper_key = _VENDOR_KEY_MAP.get(vendor_name)
-    if not scraper_key or scraper_key not in _PAYMENT_SCRAPER_REGISTRY:
+    # Per-vendor allowlist: a scraper must be re-certified (clean dry run)
+    # after the 2026-07 lockdown before it can pay live.
+    if scraper_key not in PORTAL_PAY_LIVE_ALLOWLIST:
         conn.close()
-        return jsonify({"error": f"No payment scraper registered for {vendor_name}"}), 400
+        return jsonify({
+            "error": f"Portal pay for {vendor_name} has not been re-certified "
+                     "after the lockdown. Run a dry run first "
+                     "(/api/payments/pay-portal-dryrun), then add "
+                     f"'{scraper_key}' to PORTAL_PAY_LIVE_ALLOWLIST.",
+        }), 503
 
     scraper_info = _PAYMENT_SCRAPER_REGISTRY[scraper_key]
 
@@ -1337,16 +1467,6 @@ def api_pay_portal():
 
     # Calculate total
     total = sum(float(a) for a in amounts) if amounts else 0
-
-    # Detect location from first invoice
-    invoice_location = ""
-    if invoice_ids:
-        loc_row = conn.execute(
-            "SELECT location FROM scanned_invoices WHERE id = ?",
-            (invoice_ids[0],),
-        ).fetchone()
-        if loc_row:
-            invoice_location = loc_row["location"] or ""
 
     # Create vendor_payment with status=processing
     ref = f"PORTAL-{vendor_name}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -1399,24 +1519,13 @@ def api_pay_portal():
             })
     conn.close()
 
-    # Detect location from invoices (for scrapers that need it, e.g. VTInfo)
-    invoice_location = ""
-    if inv_details:
-        loc_conn = get_connection()
-        loc_row = loc_conn.execute(
-            "SELECT location FROM scanned_invoices WHERE invoice_number = ? COLLATE NOCASE LIMIT 1",
-            (inv_details[0]["invoice_number"],),
-        ).fetchone()
-        if loc_row:
-            invoice_location = loc_row["location"] or ""
-        loc_conn.close()
-
     request_file = os.path.join(request_dir, "payment_request.json")
     with open(request_file, "w") as f:
         json.dump({
             "vendor_payment_id": vp_id,
             "vendor_name": vendor_name,
             "location": invoice_location,
+            "expected_account_last4": PORTAL_PAY_LOCATIONS[invoice_location],
             "total": total,
             "invoices": inv_details,
             "requested_at": datetime.now().isoformat(),
@@ -1441,6 +1550,90 @@ def api_pay_portal():
 
     logger.info(f"Portal payment initiated: {vendor_name} ${total:.2f}, vp#{vp_id}")
     return jsonify({"status": "ok", "vendor_payment_id": vp_id, "payment_ref": ref})
+
+
+@payment_bp.route("/api/payments/pay-portal-dryrun", methods=["POST"])
+def api_pay_portal_dryrun():
+    """DRY RUN: walk the vendor portal all the way to the final submit button,
+    verify location + bank account + totals, screenshot, and STOP. Never
+    clicks the final submit, creates no payment records, moves no money.
+    Allowed while PORTAL_PAY_DISABLED — this is how a scraper gets
+    re-certified for the live allowlist."""
+    data = request.get_json(silent=True) or {}
+    vendor_name = data.get("vendor_name")
+    invoice_ids = data.get("invoice_ids", [])
+    amounts = data.get("amounts_per_invoice", [])
+
+    if not vendor_name or not invoice_ids:
+        return jsonify({"error": "vendor_name and invoice_ids required"}), 400
+
+    conn = get_connection()
+    scraper_key, invoice_location, err = _portal_pay_validate(conn, vendor_name, invoice_ids)
+    if err:
+        conn.close()
+        return err
+
+    scraper_info = _PAYMENT_SCRAPER_REGISTRY[scraper_key]
+
+    state = _read_payment_scraper_state()
+    if scraper_key in state.get("running", {}):
+        conn.close()
+        return jsonify({"error": f"Payment scraper for {vendor_name} is already running"}), 409
+
+    total = sum(float(a) for a in amounts) if amounts else 0
+
+    inv_details = []
+    for i, inv_id in enumerate(invoice_ids):
+        inv_row = conn.execute(
+            "SELECT invoice_number, total, due_date FROM scanned_invoices WHERE id = ?",
+            (inv_id,),
+        ).fetchone()
+        if inv_row:
+            inv_details.append({
+                "invoice_number": inv_row["invoice_number"],
+                "amount": float(amounts[i]) if i < len(amounts) else float(inv_row["total"] or 0),
+                "due_date": inv_row["due_date"],
+            })
+    conn.close()
+
+    request_dir = scraper_info["script_dir"]
+    os.makedirs(request_dir, exist_ok=True)
+    request_file = os.path.join(request_dir, "payment_request.json")
+    with open(request_file, "w") as f:
+        json.dump({
+            "vendor_payment_id": None,
+            "dry_run": True,
+            "vendor_name": vendor_name,
+            "location": invoice_location,
+            "expected_account_last4": PORTAL_PAY_LOCATIONS[invoice_location],
+            "total": total,
+            "invoices": inv_details,
+            "requested_at": datetime.now().isoformat(),
+        }, f, indent=2)
+
+    run_info = dict(scraper_info)
+    run_info["env_extra"] = dict(scraper_info.get("env_extra", {}))
+    run_info["env_extra"]["DRY_RUN"] = "1"
+    if scraper_key == "usfoods" and invoice_location:
+        usf_company = _USFOODS_COMPANY_MAP.get(invoice_location.title())
+        if usf_company:
+            run_info["env_extra"]["USFOODS_PAY_COMPANY"] = usf_company
+
+    t = threading.Thread(
+        target=_run_payment_scraper_bg,
+        args=(scraper_key, None, run_info),
+        daemon=True,
+    )
+    t.start()
+
+    logger.info(f"Portal payment DRY RUN initiated: {vendor_name} ${total:.2f} ({invoice_location})")
+    return jsonify({
+        "status": "dry_run_started",
+        "vendor": vendor_name,
+        "location": invoice_location,
+        "note": "No money will move. Watch /api/payments/scraper-status and the "
+                "scraper log; screenshots land in the scraper's screenshots/ dir.",
+    })
 
 
 @payment_bp.route("/api/payments/scraper-status", methods=["GET"])

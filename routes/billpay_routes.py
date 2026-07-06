@@ -144,6 +144,12 @@ def get_billpay_invoices():
                 pass
 
         bal = r["balance"] if r["balance"] is not None else (r["total"] or 0)
+        # Credit guard: a credit (negative total) must never carry a POSITIVE
+        # balance — that sign flip inflated a 4-invoice Colonial selection by
+        # 2x the credit ($1,986 instead of $1,676 on 2026-07-06). Use the
+        # credit's own total until the underlying row is repaired.
+        if (r["total"] or 0) < 0 and bal > 0:
+            bal = r["total"]
         paid_amt = r["amount_paid"] or 0
         ps = r["payment_status"] or "unpaid"
         if bal <= 0 and (r["total"] or 0) > 0:
@@ -252,6 +258,10 @@ def aging_summary():
 
     for r in rows:
         bal = r["balance"] if r["balance"] is not None else (r["total"] or 0)
+        # Credit guard — see api_billpay_invoices: a negative-total credit
+        # must never count as positive outstanding.
+        if (r["total"] or 0) < 0 and bal > 0:
+            bal = r["total"]
         if bal <= 0:
             continue
         total_outstanding += bal
