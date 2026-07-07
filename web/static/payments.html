@@ -302,8 +302,13 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
       <label style="grid-column:1/-1;font-size:12px;color:var(--text2)">
         Pay to the order of
-        <input type="text" id="qcPayee" placeholder="Vendor or person name" autocomplete="off"
+        <select id="qcPayee"
                style="margin-top:4px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
+          <option value="">Select vendor…</option>
+          <option value="__add__">＋ Add new vendor / person…</option>
+        </select>
+        <input type="text" id="qcPayeeNew" placeholder="New vendor or person name" autocomplete="off"
+               style="display:none;margin-top:6px;width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-family:var(--font)">
       </label>
       <label style="font-size:12px;color:var(--text2)">
         Amount
@@ -619,6 +624,7 @@ window.openQuickCheck = function() {
   }
   // Load the GL account dropdown for the chosen location.
   loadQcGlAccounts(document.getElementById('qcLocation').value);
+  loadQcVendors();
   document.getElementById('quickCheckModal').classList.add('open');
   setTimeout(function(){ document.getElementById('qcPayee').focus(); }, 50);
 };
@@ -627,6 +633,44 @@ window.openQuickCheck = function() {
 // have a different chart of accounts in play.
 document.getElementById('qcLocation').addEventListener('change', function() {
   loadQcGlAccounts(this.value);
+});
+
+// Fill the payee dropdown with every vendor (once per page load).
+var _qcVendorsLoaded = false;
+function loadQcVendors() {
+  if (_qcVendorsLoaded) return;
+  fetch('/api/billpay/vendors').then(function(r){ return r.json(); }).then(function(d){
+    var sel = document.getElementById('qcPayee');
+    var names = (d.vendors || []).map(function(v){ return v.vendor_name; }).filter(Boolean);
+    names.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase()); });
+    names.forEach(function(n){
+      var o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      sel.appendChild(o);
+    });
+    _qcVendorsLoaded = true;
+  }).catch(function(){});
+}
+
+// "+ Add new vendor" reveals a free-text name field. Picking a known vendor
+// hides it; if that vendor has a remit address on file, the server stamps it
+// on the check automatically when the address fields are left blank.
+document.getElementById('qcPayee').addEventListener('change', function() {
+  var newInput = document.getElementById('qcPayeeNew');
+  var status = document.getElementById('qcStatus');
+  if (this.value === '__add__') {
+    newInput.style.display = '';
+    setTimeout(function(){ newInput.focus(); }, 30);
+    return;
+  }
+  newInput.style.display = 'none';
+  newInput.value = '';
+  if (!this.value) return;
+  fetch('/api/billpay/vendors/' + encodeURIComponent(this.value)).then(function(r){ return r.json(); }).then(function(v){
+    if (v && v.remit_address_1) {
+      status.innerHTML = '<span style="color:var(--text3)">Remit address on file — leave the address fields blank to use it</span>';
+    }
+  }).catch(function(){});
 });
 
 function loadQcGlAccounts(location) {
@@ -668,19 +712,23 @@ function loadQcGlAccounts(location) {
 
 window.closeQuickCheck = function() {
   document.getElementById('quickCheckModal').classList.remove('open');
-  ['qcPayee','qcAmount','qcCheckNum','qcMemo','qcAddr1','qcAddr2'].forEach(function(id){
+  ['qcPayee','qcPayeeNew','qcAmount','qcCheckNum','qcMemo','qcAddr1','qcAddr2'].forEach(function(id){
     document.getElementById(id).value = '';
   });
+  document.getElementById('qcPayeeNew').style.display = 'none';
   document.getElementById('qcGlAccount').value = '';
   document.getElementById('qcStatus').textContent = '';
 };
 
 window.submitQuickCheck = function() {
-  var payee = document.getElementById('qcPayee').value.trim();
+  var payeeSel = document.getElementById('qcPayee');
+  var payee = payeeSel.value === '__add__'
+    ? document.getElementById('qcPayeeNew').value.trim()
+    : payeeSel.value.trim();
   var amount = parseFloat(document.getElementById('qcAmount').value);
   var glAccount = document.getElementById('qcGlAccount').value;
   var status = document.getElementById('qcStatus');
-  if (!payee) { status.innerHTML = '<span style="color:var(--red)">Payee name required</span>'; return; }
+  if (!payee) { status.innerHTML = '<span style="color:var(--red)">Select a vendor — or choose “Add new vendor” and type a name</span>'; return; }
   if (!amount || amount <= 0) { status.innerHTML = '<span style="color:var(--red)">Amount must be greater than zero</span>'; return; }
   if (!glAccount) {
     // Soft warning — let them proceed but flag it so they know it's uncoded.
