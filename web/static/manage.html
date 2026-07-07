@@ -7070,7 +7070,7 @@ async function rcLoadQueue() {
     var cnEl = document.getElementById('rc-stat-checknum');
     if (countEl) countEl.textContent = bills.length;
     if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
-    if (cnEl) cnEl.textContent = rcGetNextCheckNum(loc || 'dennis');
+    if (cnEl) { cnEl.textContent = '…'; rcFetchNextCheckNum(loc || 'dennis').then(function(n){ cnEl.textContent = n || '—'; }); }
     // Group by due date for visual separation
     var currentDue = null;
     if (tbody) tbody.innerHTML = bills.map(function(b) {
@@ -7173,24 +7173,40 @@ async function rcLoadHistory() {
   } catch(e) { console.error('rcLoadHistory error:', e); }
 }
 
-function rcGetNextCheckNum(loc) {
-  return localStorage.getItem('rc_next_check_' + (loc||'dennis')) || '1001';
+// Check numbers come from the REAL check sequence (check_config), shared with
+// AP / payroll / manual checks — never from localStorage.
+var _rcNextCheck = {};
+async function rcFetchNextCheckNum(loc) {
+  loc = loc || 'dennis';
+  try {
+    var r = await fetch('/api/billpay/check-config?location=' + loc);
+    var cfg = await r.json();
+    _rcNextCheck[loc] = cfg.check_number_next || '';
+    return _rcNextCheck[loc];
+  } catch(e) { return ''; }
 }
 
-function rcSetNextCheckNum(loc, num) {
-  localStorage.setItem('rc_next_check_' + (loc||'dennis'), String(num));
-}
-
-function rcEditCheckNum() {
+async function rcEditCheckNum() {
   var loc = (document.getElementById('rc-queue-loc') || {}).value || 'dennis';
-  var cur = rcGetNextCheckNum(loc);
-  var val = prompt('Set next check number for ' + (loc==='chatham'?'Chatham':'Dennis Port') + ':', cur);
-  if (val && !isNaN(val)) {
-    rcSetNextCheckNum(loc, val.trim());
+  var cur = _rcNextCheck[loc] || await rcFetchNextCheckNum(loc) || '1001';
+  var val = prompt('Set next check number for ' + (loc==='chatham'?'Chatham':'Dennis Port') + ' (saved to Check Settings — shared with all check printing):', cur);
+  if (!val || isNaN(val)) return;
+  try {
+    var r = await fetch('/api/billpay/check-config?location=' + loc);
+    var cfg = await r.json();
+    cfg.location = loc;
+    cfg.check_number_next = parseInt(val.trim());
+    var pr = await fetch('/api/billpay/check-config', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
+    if (!pr.ok) { alert('Failed to save check number'); return; }
+    _rcNextCheck[loc] = parseInt(val.trim());
     var el = document.getElementById('rc-stat-checknum');
     if (el) el.textContent = val.trim();
-  }
+  } catch(e) { alert('Error: ' + e.message); }
 }
+
+var _rcPayDueDate = '';
+var _rcPayLoc = 'dennis';
+var _rcPayBillAmount = 0;
 
 async function rcPayBill(billId, date) {
   var bill = null;
@@ -7198,8 +7214,11 @@ async function rcPayBill(billId, date) {
     var r = await fetch('/api/billpay/recurring/' + billId);
     bill = await r.json();
   } catch(e) {}
-  var loc = bill ? (bill.location || 'dennis') : 'dennis';
-  var nextCheck = rcGetNextCheckNum(loc);
+  var loc = (bill && bill.location && bill.location !== 'both') ? bill.location : ((document.getElementById('rc-queue-loc')||{}).value || 'dennis');
+  _rcPayDueDate = date || '';
+  _rcPayLoc = loc;
+  _rcPayBillAmount = bill ? (bill.amount || 0) : 0;
+  var nextCheck = await rcFetchNextCheckNum(loc);
   document.getElementById('rc-pay-bill-id').value = billId;
   document.getElementById('rc-pay-date').value = date || new Date().toISOString().slice(0,10);
   document.getElementById('rc-pay-amount').value = bill ? (bill.amount||'').toString() : '';
@@ -7219,25 +7238,37 @@ async function rcSubmitPay() {
   var memo = document.getElementById('rc-pay-memo').value;
   if (!date || !amount) { alert('Date and amount are required'); return; }
   try {
-    var r = await fetch('/api/billpay/recurring/' + billId + '/pay', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({paid_date:date,amount_paid:amount,check_number:checkNum,payment_method:method,memo:memo})
-    });
-    var d = await r.json();
-    if (!r.ok) { alert(d.error||'Failed to record payment'); return; }
-    // Auto-increment check number
-    if (method === 'check' && checkNum && !isNaN(checkNum)) {
-      var loc = (document.getElementById('rc-queue-loc')||{}).value||'dennis';
-      rcSetNextCheckNum(loc, parseInt(checkNum) + 1);
+    if (method === 'check') {
+      // Real check: routed through the unified print queue — bank stock,
+      // MICR line, conflict-checked numbering. Same as AP/payroll checks.
+      if (!checkNum || isNaN(checkNum)) checkNum = String(await rcFetchNextCheckNum(_rcPayLoc) || '');
+      if (!checkNum) { alert('No check number available — set one in Check Settings first'); return; }
+      if (_rcPayBillAmount && Math.abs(amount - _rcPayBillAmount) > 0.005) {
+        if (!confirm('The printed check uses the bill\'s saved amount ($' + _rcPayBillAmount.toFixed(2) + '), not $' + amount.toFixed(2) + '. To change the amount, edit the bill first. Print at $' + _rcPayBillAmount.toFixed(2) + '?')) return;
+      }
+      var dueDate = _rcPayDueDate || date;
+      var r = await fetch('/api/print-queue/print', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({location:_rcPayLoc, items:[{source:'recurring', id: billId + ':' + dueDate, check_number: parseInt(checkNum)}]})
+      });
+      if (!r.ok) {
+        var d = await r.json().catch(function(){ return {}; });
+        alert(d.error || 'Failed to print check'); return;
+      }
+      var blob = await r.blob();
+      window.open(URL.createObjectURL(blob), '_blank');
+    } else {
+      var r2 = await fetch('/api/billpay/recurring/' + billId + '/pay', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({paid_date:date,amount_paid:amount,check_number:checkNum,payment_method:method,memo:memo})
+      });
+      var d2 = await r2.json();
+      if (!r2.ok) { alert(d2.error||'Failed to record payment'); return; }
     }
     document.getElementById('rc-pay-modal').style.display = 'none';
     rcLoadQueue();
-    if (method === 'check') {
-      if (confirm('Payment recorded! Print check for $' + amount.toFixed(2) + ' check #' + checkNum + '?')) {
-        rcPrintSingleCheck({vendor_name: document.getElementById('rc-pay-vendor').textContent, amount:amount, check_number:checkNum, memo:memo, date:date});
-      }
-    }
   } catch(e) { alert('Error: ' + e.message); }
 }
 
@@ -7315,6 +7346,7 @@ async function rcOpenModal(billId) {
   document.getElementById('rc-bill-method').value = 'check';
   document.getElementById('rc-bill-loc').value = 'dennis';
   document.getElementById('rc-bill-active').checked = true;
+  document.getElementById('rc-bill-autoprint').checked = false;
   rcRenderLines();
   // Load vendor suggestions
   try {
@@ -7338,6 +7370,7 @@ async function rcOpenModal(billId) {
       document.getElementById('rc-bill-method').value = b.payment_method || 'check';
       document.getElementById('rc-bill-loc').value = b.location || 'dennis';
       document.getElementById('rc-bill-active').checked = !!b.active;
+      document.getElementById('rc-bill-autoprint').checked = !!b.auto_print;
       _rcLines = (b.lines || []).map(function(l){ return {description:l.description||'',amount:l.amount||0,account:l.account||''}; });
       if (!_rcLines.length && b.description) _rcLines.push({description:b.description,amount:b.amount||0,account:''});
       rcRenderLines();
@@ -7366,6 +7399,7 @@ async function rcSaveBill() {
     payment_method: document.getElementById('rc-bill-method').value,
     location: document.getElementById('rc-bill-loc').value,
     active: document.getElementById('rc-bill-active').checked ? 1 : 0,
+    auto_print: document.getElementById('rc-bill-autoprint').checked ? 1 : 0,
     lines: validLines
   };
   try {
@@ -7379,78 +7413,11 @@ async function rcSaveBill() {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
-async function rcPrintChecks() {
-  var dateEl = document.getElementById('rc-queue-date');
-  var loc = (document.getElementById('rc-queue-loc')||{}).value || 'dennis';
-  var date = dateEl ? dateEl.value : new Date().toISOString().slice(0,10);
-  try {
-    var params = 'date=' + date;
-    if (loc) params += '&location=' + loc;
-    var r = await fetch('/api/billpay/recurring/due?' + params);
-    var bills = await r.json();
-    if (!bills.length) { alert('No bills due on this date'); return; }
-    var checkNum = parseInt(rcGetNextCheckNum(loc)) || 1001;
-    var checksHTML = bills.map(function(b) {
-      var cn = checkNum++;
-      return rcCheckHTML(b.payable_to||b.vendor_name, b.amount, cn, date, b.description||'', b.lines||[]);
-    }).join('<div style="page-break-after:always"></div>');
-    rcSetNextCheckNum(loc, checkNum);
-    var el = document.getElementById('rc-stat-checknum');
-    if (el) el.textContent = checkNum;
-    var win = window.open('', '_blank');
-    win.document.write('<html><head><title>Checks</title><style>body{font-family:Arial,sans-serif}@media print{body{margin:0}}</style></head><body>' + checksHTML + '</body></html>');
-    win.document.close();
-    win.print();
-  } catch(e) { alert('Error: ' + e.message); }
-}
-
-function rcPrintSingleCheck(b) {
-  var win = window.open('', '_blank');
-  var html = rcCheckHTML(b.vendor_name, b.amount, b.check_number, b.date, b.memo||'', b.lines||[]);
-  win.document.write('<html><head><title>Check</title><style>body{font-family:Arial,sans-serif}@media print{body{margin:0}}</style></head><body>' + html + '</body></html>');
-  win.document.close();
-  win.print();
-}
-
-function rcCheckHTML(payTo, amount, checkNum, date, memo, lines) {
-  var dollars = Math.floor(amount);
-  var cents = Math.round((amount - dollars) * 100);
-  var ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-  var tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-  function numToWords(n) {
-    if (n === 0) return 'Zero';
-    if (n < 20) return ones[n];
-    if (n < 100) return tens[Math.floor(n/10)] + (n%10 ? '-'+ones[n%10] : '');
-    return ones[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' ' + numToWords(n%100) : '');
-  }
-  var amountWords = numToWords(dollars) + ' and ' + String(cents).padStart(2,'0') + '/100 Dollars';
-  var linesHTML = '';
-  if (lines && lines.length > 1) {
-    linesHTML = '<div style="margin-top:16px;border-top:1px solid #ccc;padding-top:12px">' +
-      '<div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-transform:uppercase">Account Distribution</div>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
-      '<tr style="border-bottom:1px solid #eee"><th style="text-align:left;padding:3px 4px;color:#888">Description</th><th style="text-align:left;padding:3px 4px;color:#888">Account</th><th style="text-align:right;padding:3px 4px;color:#888">Amount</th></tr>' +
-      lines.map(function(l){ return '<tr style="border-bottom:1px solid #f5f5f5"><td style="padding:3px 4px">' + (l.description||'') + '</td><td style="padding:3px 4px;color:#555">' + (l.account||'—') + '</td><td style="padding:3px 4px;text-align:right">$' + parseFloat(l.amount||0).toFixed(2) + '</td></tr>'; }).join('') +
-      '<tr style="border-top:2px solid #000"><td colspan="2" style="padding:4px;font-weight:600">Total</td><td style="padding:4px;text-align:right;font-weight:700">$' + amount.toFixed(2) + '</td></tr>' +
-      '</table></div>';
-  }
-  return '<div style="border:2px solid #000;padding:24px;max-width:680px;margin:20px auto;font-size:14px">' +
-    '<div style="display:flex;justify-content:space-between;margin-bottom:16px">' +
-      '<div><strong style="font-size:16px">Red Nun Restaurant</strong><br><span style="font-size:12px;color:#555">Check #' + checkNum + '</span></div>' +
-      '<div style="text-align:right"><strong>Date:</strong> ' + date + '</div>' +
-    '</div>' +
-    '<div style="margin-bottom:12px"><strong>Pay to the order of:</strong> <span style="border-bottom:1px solid #000;display:inline-block;min-width:300px;padding-bottom:2px">' + (payTo||'') + '</span></div>' +
-    '<div style="display:flex;justify-content:space-between;margin-bottom:12px">' +
-      '<div style="flex:1;border-bottom:1px solid #000;padding-bottom:2px">' + amountWords + '</div>' +
-      '<div style="margin-left:16px;border:1px solid #000;padding:4px 12px;font-weight:700;font-size:16px">$' + amount.toFixed(2) + '</div>' +
-    '</div>' +
-    '<div style="margin-bottom:16px;display:flex;justify-content:space-between">' +
-      '<div><strong>Memo:</strong> <span style="border-bottom:1px solid #000;display:inline-block;min-width:200px">' + (memo||'') + '</span></div>' +
-      '<div><strong>Authorized Signature:</strong> <span style="border-bottom:1px solid #000;display:inline-block;min-width:180px">&nbsp;</span></div>' +
-    '</div>' +
-    linesHTML +
-    '<div style="border-top:1px dashed #999;margin-top:8px;padding-top:8px;font-size:11px;color:#999;text-align:center">Red Nun Restaurant — ' + date + ' — Check #' + checkNum + '</div>' +
-  '</div>';
+function rcPrintChecks() {
+  // All check printing now goes through the unified Print Checks queue —
+  // real check stock, MICR line, conflict-checked numbering. The old
+  // in-browser HTML mock check is gone.
+  window.location.href = '/print-checks';
 }
 
 </script>
@@ -8887,6 +8854,9 @@ async function maRecalcCosts() {
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#111827;cursor:pointer">
         <input type="checkbox" id="rc-bill-active" checked> Active
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#111827;cursor:pointer" title="When the bill comes due (including the days-before look-ahead above), the check prints itself automatically through the print agent — no clicks needed. Daily 6 PM run.">
+        <input type="checkbox" id="rc-bill-autoprint"> Auto-print check when due
       </label>
     </div>
     <div style="display:flex;gap:10px">

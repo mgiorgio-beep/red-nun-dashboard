@@ -2308,6 +2308,13 @@ def init_recurring_tables():
         conn.commit()
     except Exception:
         pass
+    # Add auto_print column — flagged bills print themselves through the
+    # print agent when due (daily 6 PM run in daily_auto_pay_summary.py)
+    try:
+        conn.execute("ALTER TABLE recurring_bills ADD COLUMN auto_print INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass
     conn.execute("""
         CREATE TABLE IF NOT EXISTS recurring_bill_lines (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2539,13 +2546,14 @@ def create_recurring_bill():
     conn = get_connection()
     cur = conn.execute("""
         INSERT INTO recurring_bills (vendor_name, description, amount, frequency,
-            start_date, due_day, days_before_due, payment_method, payable_to, location, active)
-        VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+            start_date, due_day, days_before_due, payment_method, payable_to, location, active, auto_print)
+        VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (vendor_name, data.get("description",""),
           data.get("frequency","monthly"), data.get("start_date"),
           int(data.get("due_day") or 1), int(data.get("days_before_due") or 0),
           data.get("payment_method","check"), data.get("payable_to",""),
-          data.get("location","dennis"), int(data.get("active", 1))))
+          data.get("location","dennis"), int(data.get("active", 1)),
+          int(data.get("auto_print") or 0)))
     new_id = cur.lastrowid
     total = _save_lines(conn, new_id, lines)
     if total > 0:
@@ -2564,13 +2572,14 @@ def update_recurring_bill(bill_id):
     conn.execute("""
         UPDATE recurring_bills SET vendor_name=?, description=?, frequency=?,
             start_date=?, due_day=?, days_before_due=?, payment_method=?, payable_to=?,
-            location=?, active=?, updated_at=datetime('now')
+            location=?, active=?, auto_print=?, updated_at=datetime('now')
         WHERE id=?
     """, (data.get("vendor_name",""), data.get("description",""),
           data.get("frequency","monthly"), data.get("start_date"),
           int(data.get("due_day") or 1), int(data.get("days_before_due") or 0),
           data.get("payment_method","check"), data.get("payable_to",""),
-          data.get("location","dennis"), int(data.get("active",1)), bill_id))
+          data.get("location","dennis"), int(data.get("active",1)),
+          int(data.get("auto_print") or 0), bill_id))
     total = _save_lines(conn, bill_id, lines)
     if total > 0:
         conn.execute("UPDATE recurring_bills SET amount=? WHERE id=?", (total, bill_id))

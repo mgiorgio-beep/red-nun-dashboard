@@ -465,3 +465,133 @@ def process_invoice_for_auto_pay(invoice_id):
                 conn.close()
             except Exception:
                 pass
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Recurring-bill auto-print — bills flagged auto_print=1 print themselves
+# ──────────────────────────────────────────────────────────────────────────────
+
+def process_recurring_auto_print():
+    """Print checks for due recurring bills flagged auto_print=1.
+
+    Uses the same due logic as the Print Checks queue (days_before_due is the
+    early look-ahead — e.g. 7 = the check prints a week before the due date),
+    the real check_config number sequence, and the same print_jobs pipeline
+    the home print agent polls. Each print records a recurring_bill_payments
+    row, so a bill can never double-print for the same period. Never raises.
+
+    Called from scripts/daily_auto_pay_summary.py (daily 6 PM cron) so the
+    evening email includes what was auto-printed. Returns a list of dicts
+    describing the checks queued.
+    """
+    printed = []
+    conn = None
+    try:
+        from routes.print_queue_routes import _due_recurring_for_queue
+        from check_printer import generate_check_pdf
+
+        conn = get_connection()
+        pairs = _due_recurring_for_queue(conn, None)  # all locations, check-method, unpaid
+        due_flagged = [(b, d) for (b, d) in pairs if int(b.get("auto_print") or 0) == 1]
+        if not due_flagged:
+            return printed
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        os.makedirs(CHECK_PDF_DIR, exist_ok=True)
+
+        for bill, due_date in due_flagged:
+            try:
+                location = (bill.get("location") or "chatham").strip().lower()
+                if location == "both":
+                    location = "chatham"
+                config = conn.execute(
+                    "SELECT * FROM check_config WHERE location = ?", (location,)
+                ).fetchone()
+                if not config:
+                    config = conn.execute(
+                        "SELECT * FROM check_config ORDER BY id LIMIT 1"
+                    ).fetchone()
+                if not config:
+                    logger.error("auto_print_recurring: no check_config row; skipping all")
+                    break
+
+                lines = conn.execute(
+                    "SELECT description, amount FROM recurring_bill_lines "
+                    "WHERE bill_id = ? ORDER BY sort_order, id",
+                    (bill["id"],),
+                ).fetchall()
+                amount = sum(float(l["amount"] or 0) for l in lines)
+                if amount <= 0:
+                    amount = float(bill.get("amount") or 0)
+                if amount <= 0:
+                    logger.warning(
+                        f"auto_print_recurring: bill #{bill['id']} "
+                        f"({bill['vendor_name']}) has no amount; skipping")
+                    continue
+
+                check_number = _next_check_number(conn, location)
+                payee = (bill.get("payable_to") or "").strip() or bill["vendor_name"]
+                memo = f"{bill.get('description') or 'Recurring bill'} — due {due_date}"
+
+                conn.execute(
+                    """INSERT INTO recurring_bill_payments
+                       (bill_id, due_date, status, paid_date, amount_paid,
+                        check_number, payment_method, memo)
+                       VALUES (?, ?, 'paid', ?, ?, ?, 'check', ?)""",
+                    (bill["id"], due_date, today, amount, check_number, memo),
+                )
+
+                vendor_bp = conn.execute(
+                    "SELECT * FROM vendor_bill_pay WHERE vendor_name = ?",
+                    (bill["vendor_name"],),
+                ).fetchone()
+
+                pdf_path = os.path.join(
+                    CHECK_PDF_DIR,
+                    f"recurring_check_{bill['id']}_{check_number}.pdf")
+                generate_check_pdf(
+                    payment={"vendor_name": payee, "amount": amount,
+                             "payment_date": today, "memo": memo,
+                             "check_number": check_number},
+                    invoices=[{"invoice_number": (l["description"] or memo),
+                               "invoice_date": due_date,
+                               "total": float(l["amount"] or 0),
+                               "amount_applied": float(l["amount"] or 0)}
+                              for l in lines],
+                    config=dict(config),
+                    vendor_info=dict(vendor_bp) if vendor_bp else None,
+                    check_number=check_number,
+                    output_path=pdf_path,
+                )
+
+                conn.execute(
+                    """INSERT INTO print_jobs
+                       (kind, check_number, location, pdf_path, status)
+                       VALUES ('check', ?, ?, ?, 'pending')""",
+                    (check_number, location, pdf_path),
+                )
+                conn.commit()
+                printed.append({
+                    "bill_id": bill["id"], "vendor": bill["vendor_name"],
+                    "amount": amount, "check_number": check_number,
+                    "due_date": due_date, "location": location,
+                })
+                logger.info(
+                    f"auto_print_recurring: queued check #{check_number} "
+                    f"${amount:,.2f} to {payee} for {due_date} ({location})")
+            except Exception as e:
+                logger.error(
+                    f"auto_print_recurring: bill #{bill.get('id')} failed: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.error(f"auto_print_recurring failed: {e}")
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return printed

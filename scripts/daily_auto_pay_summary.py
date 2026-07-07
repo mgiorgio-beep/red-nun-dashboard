@@ -91,8 +91,27 @@ def _fmt_money(v):
         return "—"
 
 
-def _build_html(paid, skipped, errors, stuck_prints, today_iso):
+def _build_html(paid, skipped, errors, stuck_prints, today_iso, recurring_printed=None):
     paid_total = sum((r["invoice_total"] or 0) for r in paid)
+
+    recurring_printed = recurring_printed or []
+    rec_total = sum((r.get("amount") or 0) for r in recurring_printed)
+    rows_recurring = "".join(
+        f"<tr><td>{r['vendor']}</td>"
+        f"<td style='text-align:right'>{_fmt_money(r['amount'])}</td>"
+        f"<td style='text-align:center'>#{r['check_number']}</td>"
+        f"<td>due {r['due_date']} ({r['location']})</td></tr>"
+        for r in recurring_printed
+    )
+    recurring_section = ""
+    if recurring_printed:
+        recurring_section = f"""
+  <h3 style="margin:24px 0 6px 0;color:#16a34a">Recurring bills auto-printed — {len(recurring_printed)} check{'s' if len(recurring_printed)!=1 else ''}, {_fmt_money(rec_total)}</h3>
+  <table style="border-collapse:collapse;width:100%;font-size:13px">
+    <tr style="background:#f3f4f6"><th style='text-align:left;padding:4px 8px'>Vendor</th><th style='text-align:right;padding:4px 8px'>Amount</th><th style='padding:4px 8px'>Check #</th><th style='text-align:left;padding:4px 8px'>Due</th></tr>
+    {rows_recurring}
+  </table>
+"""
 
     rows_paid = "".join(
         f"<tr><td>{r['vendor_name']}</td>"
@@ -135,6 +154,7 @@ def _build_html(paid, skipped, errors, stuck_prints, today_iso):
     <tr style="background:#f3f4f6"><th style='text-align:left;padding:4px 8px'>Vendor</th><th style='text-align:right;padding:4px 8px'>Amount</th><th style='padding:4px 8px'>Check #</th><th style='text-align:left;padding:4px 8px'>Invoice</th></tr>
     {rows_paid}
   </table>
+{recurring_section}
 
   <h3 style="margin:24px 0 6px 0;color:#d97706">Skipped today — {len(skipped)}</h3>
   <div style="font-size:12px;color:#6b7280;margin-bottom:6px">
@@ -198,6 +218,16 @@ def _send(html, today_iso, paid_count, skipped_count, error_count):
 
 def main():
     today = date.today().isoformat()
+
+    # Auto-print any due recurring bills flagged auto_print=1 (rent etc.)
+    # BEFORE building the summary so tonight's email includes them.
+    try:
+        from integrations.billpay.auto_pay import process_recurring_auto_print
+        recurring_printed = process_recurring_auto_print()
+    except Exception as e:
+        logger.error(f"recurring auto-print failed: {e}")
+        recurring_printed = []
+
     conn = get_connection()
     try:
         paid, skipped, errors, stuck_prints = _fetch_today(conn, today)
@@ -206,12 +236,13 @@ def main():
 
     # If literally nothing happened and nothing's stuck, skip the email
     # so we don't spam an empty digest every day.
-    if not paid and not skipped and not errors and not stuck_prints:
+    if not paid and not skipped and not errors and not stuck_prints and not recurring_printed:
         logger.info("No auto-pay activity and no stuck jobs — skipping email.")
         return 0
 
-    html = _build_html(paid, skipped, errors, stuck_prints, today)
-    _send(html, today, len(paid), len(skipped), len(errors))
+    html = _build_html(paid, skipped, errors, stuck_prints, today,
+                       recurring_printed=recurring_printed)
+    _send(html, today, len(paid) + len(recurring_printed), len(skipped), len(errors))
     return 0
 
 
