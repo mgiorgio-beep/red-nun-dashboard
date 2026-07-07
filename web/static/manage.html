@@ -2154,6 +2154,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
                   <th style="padding:10px 8px;text-align:right;color:var(--text3);font-weight:600;font-size:11px">Amount</th>
                   <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Check #</th>
                   <th style="padding:10px 8px;text-align:left;color:var(--text3);font-weight:600;font-size:11px">Method</th>
+                  <th style="padding:10px 8px"></th>
                 </tr></thead>
                 <tbody id="rc-history-tbody"></tbody>
               </table>
@@ -7160,17 +7161,33 @@ async function rcLoadHistory() {
     }
     if (empty) empty.style.display = 'none';
     if (tbody) tbody.innerHTML = rows.map(function(p) {
-      return '<tr style="border-bottom:1px solid var(--border)">' +
+      var isVoided = p.status === 'voided';
+      var amtCell = p.status==='skipped' ? '<span style="color:var(--text3)">Skipped</span>'
+                  : isVoided ? '<span style="color:#ef4444;text-decoration:line-through">$'+(p.amount_paid||0).toFixed(2)+'</span> <span style="color:#ef4444;font-size:11px">VOID</span>'
+                  : '$'+(p.amount_paid||0).toFixed(2);
+      var actions = (p.status==='paid') ? '<button onclick="rcVoidPayment(' + p.id + ')" style="padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:#ef4444;font-size:11px;cursor:pointer">Void</button>' : '';
+      return '<tr style="border-bottom:1px solid var(--border)' + (isVoided ? ';opacity:0.55' : '') + '">' +
         '<td style="padding:8px 12px;font-weight:500;color:#111827">' + (p.vendor_name||'—') + '</td>' +
         '<td style="padding:8px;color:var(--text3)">' + (p.description||'—') + '</td>' +
         '<td style="padding:8px;color:var(--text3)">' + (p.due_date||'—') + '</td>' +
         '<td style="padding:8px;color:var(--text3)">' + (p.paid_date||p.skipped_date||'—') + '</td>' +
-        '<td style="padding:8px;text-align:right;font-weight:600;color:#111827">' + (p.status==='skipped'?'<span style="color:var(--text3)">Skipped</span>':'$'+(p.amount_paid||0).toFixed(2)) + '</td>' +
+        '<td style="padding:8px;text-align:right;font-weight:600;color:#111827">' + amtCell + '</td>' +
         '<td style="padding:8px;color:var(--text3)">' + (p.check_number||'—') + '</td>' +
         '<td style="padding:8px;color:var(--text3)">' + (p.payment_method||'—') + '</td>' +
+        '<td style="padding:8px">' + actions + '</td>' +
       '</tr>';
     }).join('');
   } catch(e) { console.error('rcLoadHistory error:', e); }
+}
+
+async function rcVoidPayment(rbpId) {
+  if (!confirm('Void this payment? The bill will reappear in the queue for that period so you can print a real check.')) return;
+  try {
+    var r = await fetch('/api/payments/recurring/' + rbpId + '/void', {method:'PUT'});
+    var d = await r.json();
+    if (!r.ok) { alert(d.error||'Failed to void'); return; }
+    rcLoadHistory();
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 // Check numbers come from the REAL check sequence (check_config), shared with
