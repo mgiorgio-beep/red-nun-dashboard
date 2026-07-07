@@ -194,9 +194,21 @@ def _get_summary(conn, where_clause="", params=()):
     }
 
 
-def _cross_link_invoice(conn, invoice_number, payment_ref, paid_date):
-    """Try to update scanned_invoices payment_status when a payment references an invoice."""
+def _cross_link_invoice(conn, invoice_number, payment_ref, paid_date, vendor=None):
+    """Mark a scanned invoice paid when a payment references it.
+
+    vendor is REQUIRED for safe matching: invoice numbers collide across
+    vendors (Colonial #558652 was falsely marked paid on 2026-06-29 by a
+    same-numbered invoice on another vendor's payment). Prefix matching
+    tolerates name variants ("Colonial" vs "Colonial Wholesale Beverage").
+    Calls without a vendor mark nothing and log a warning.
+    """
     if not invoice_number:
+        return
+    if not vendor:
+        logger.warning(
+            f"_cross_link_invoice called without vendor for #{invoice_number} — "
+            "refusing to mark paid (cross-vendor collision guard)")
         return
     conn.execute(
         """UPDATE scanned_invoices
@@ -207,8 +219,12 @@ def _cross_link_invoice(conn, invoice_number, payment_ref, paid_date):
                amount_paid = COALESCE(total, 0)
            WHERE invoice_number = ? COLLATE NOCASE
              AND status = 'confirmed'
-             AND (payment_status IS NULL OR payment_status = 'unpaid')""",
-        (payment_ref, paid_date, str(invoice_number)),
+             AND (payment_status IS NULL OR payment_status = 'unpaid')
+             AND ( vendor_name = ? COLLATE NOCASE
+                   OR vendor_name LIKE ?
+                   OR ? LIKE vendor_name || '%' )""",
+        (payment_ref, paid_date, str(invoice_number),
+         vendor, vendor + "%", vendor),
     )
 
 
@@ -261,6 +277,7 @@ def _import_payments(payments_list):
                     inv.get("invoice_number"),
                     payment_ref,
                     payment_date,
+                    vendor=vendor,
                 )
 
             imported += 1
@@ -801,7 +818,8 @@ def api_mark_payment_paid(payment_id):
         for inv in inv_rows:
             _cross_link_invoice(conn, inv["invoice_number"],
                                 vp["payment_ref"] or f"PORTAL-{payment_id}",
-                                datetime.now().strftime("%Y-%m-%d"))
+                                datetime.now().strftime("%Y-%m-%d"),
+                                vendor=vp["vendor"])
 
     ap_id = vp["ap_payment_id"]
     if ap_id:
@@ -1276,7 +1294,13 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
                    payment_ref = COALESCE(?, payment_ref) WHERE id = ?""",
                 (now, conf_ref, vendor_payment_id),
             )
-            # Mark linked invoices as paid
+            # Mark linked invoices as paid (vendor-scoped — invoice numbers
+            # collide across vendors)
+            vp_vendor_row = conn.execute(
+                "SELECT vendor FROM vendor_payments WHERE id = ?",
+                (vendor_payment_id,),
+            ).fetchone()
+            vp_vendor = vp_vendor_row["vendor"] if vp_vendor_row else None
             inv_rows = conn.execute(
                 "SELECT invoice_number FROM vendor_payment_invoices WHERE payment_id = ?",
                 (vendor_payment_id,),
@@ -1284,7 +1308,8 @@ def _run_payment_scraper_bg(key, vendor_payment_id, scraper_info):
             for inv in inv_rows:
                 _cross_link_invoice(conn, inv["invoice_number"],
                                     conf_ref or f"PORTAL-{vendor_payment_id}",
-                                    datetime.now().strftime("%Y-%m-%d"))
+                                    datetime.now().strftime("%Y-%m-%d"),
+                                    vendor=vp_vendor)
             logger.info(f"Payment scraper {key} succeeded for vp#{vendor_payment_id}")
         elif result.returncode == 3 or (result.returncode == 0):
             # Exit 3 = scraper clicked Submit but could not verify the result
