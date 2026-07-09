@@ -739,6 +739,19 @@ def generate_payroll_check_pdf(payroll, config, check_number=None, output_path=N
     paycheck_tips = payroll.get("paycheck_tips", 0) or 0
     cash_tips     = payroll.get("cash_tips", 0) or 0
 
+    # Per-role earning lines parsed from the 7shifts checks PDF
+    # ([{label, rate, hours, current}, …]). When present, the stub itemizes
+    # each role at its real rate (Server @ $6.75, Manager @ $18.00) instead of
+    # printing a single blended rate (wages / total_hours) that looks wrong.
+    el_raw = payroll.get("earning_lines")
+    if isinstance(el_raw, str):
+        try:
+            el_raw = json.loads(el_raw)
+        except (json.JSONDecodeError, TypeError):
+            el_raw = []
+    earning_lines = [l for l in (el_raw or [])
+                     if isinstance(l, dict) and l.get("current") is not None]
+
     # Map 7shifts column names → short labels for the stub
     _DED_LABELS = {
         "Federal Income Tax (EE)":                                    "Federal Income Tax",
@@ -808,14 +821,29 @@ def generate_payroll_check_pdf(payroll, config, check_number=None, output_path=N
                 c.drawRightString(YTD_RX + ox, y + oy, f"${ytdv:,.2f}")
             y -= 10
 
-        if wages:
+        if earning_lines:
+            # Itemize each role at its actual rate, like the 7shifts stub.
+            lines_sum = 0.0
+            for ln in earning_lines:
+                cur_amt = float(ln.get("current") or 0)
+                lines_sum += cur_amt
+                earn_row(str(ln.get("label") or "Wages")[:34],
+                         ln.get("rate"), ln.get("hours"), cur_amt, None)
+            # Wages not covered by the itemized rows (salary, sick pay,
+            # tip credit adjustment, …) so the section still sums to `wages`.
+            if wages and abs(wages - lines_sum) > 0.02:
+                earn_row("Other Wages", None, None, wages - lines_sum, None)
+            # Subtotal row carries total hours + YTD wages.
+            earn_row("Total Wages", None, (total_hours or None),
+                     (wages or lines_sum), yt.get("wages"))
+        elif wages:
             rate = (wages / total_hours) if total_hours else None
             earn_row("Wages", rate, (total_hours or None), wages, yt.get("wages"))
         if paycheck_tips:
             earn_row("Paycheck Tips", None, None, paycheck_tips, yt.get("paycheck_tips"))
         if cash_tips:
             earn_row("Cash Tips", None, None, cash_tips, yt.get("cash_tips"))
-        if not (wages or paycheck_tips or cash_tips):
+        if not (wages or paycheck_tips or cash_tips or earning_lines):
             earn_row("Gross Pay", None, None, gross_pay, yt.get("gross"))
 
         # Gross total line

@@ -106,6 +106,11 @@ def init_payroll_tables():
         ("payment_method",  "TEXT DEFAULT 'Manual'"),
         ("voided",          "INTEGER DEFAULT 0"),
         ("voided_reason",   "TEXT"),
+        # Per-role earning lines (JSON list of {label, rate, hours, current})
+        # parsed from the 7shifts checks/earnings PDF, so the printed stub can
+        # itemize e.g. Server @ $6.75 + Manager @ $18.00 instead of showing a
+        # single blended rate (wages / total_hours) that looks wrong to staff.
+        ("earning_lines",   "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE payroll_checks ADD COLUMN {col} {defn}")
@@ -272,6 +277,136 @@ def extract_addresses_from_pdf(path):
                     "city": csz[0], "state": csz[1], "zip": csz[2],
                 }
     return out
+
+
+# A per-role earning row in the 7shifts "Gross earnings" table extracts as e.g.
+#   "Hourly (Regular) Server $6.75 31.2500 $210.94"
+#   "Hourly (Regular) Line Cook $25.00 26.7700 $669.25 393.5300 $9,838.25"
+# i.e. label, $rate, hours, $current, then optional YTD hours/earnings. The
+# section's "... Total" rows have no rate so they never match this pattern.
+_EARN_LINE_RE = re.compile(
+    r'^(?P<label>.+?)\s+\$(?P<rate>[\d,]+(?:\.\d+)?)\s+'
+    r'(?P<hours>[\d,]+\.\d+)\s+\$(?P<cur>[\d,]+\.\d{2})'
+)
+_HOURLY_PREFIX_RE = re.compile(r'^Hourly\s*\((?:Regular|OT|Overtime)\)\s*', re.IGNORECASE)
+
+
+def _earn_flt(s):
+    try:
+        return float(str(s).replace(",", ""))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def extract_earning_lines_from_pdf(path):
+    """Parse a 7shifts checks/earnings PDF into {name_norm: [earning line dicts]}.
+
+    Each earning line is {label, rate, hours, current}. One employee per page;
+    the employee name is anchored the same way as address extraction (the
+    non-empty line above the masked-SSN line). Only rows inside the
+    'Gross earnings' → 'Taxes withheld' span are considered, and '... Total'
+    rows are skipped. Returns {} on any failure so callers treat it as
+    best-effort.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        logger.warning("pypdf not available — cannot extract earning lines")
+        return {}
+
+    try:
+        reader = PdfReader(path)
+    except Exception as e:
+        logger.warning(f"Could not open PDF for earning-line extraction: {e}")
+        return {}
+
+    out = {}
+    for page in reader.pages:
+        try:
+            txt = (page.extract_text() or "").replace("\xa0", " ")
+        except Exception:
+            continue
+        lines = [l.strip() for l in txt.split("\n")]
+
+        # employee name via the masked-SSN anchor (same trick as addresses)
+        name = ""
+        for i, line in enumerate(lines):
+            if _SSN_RE.match(line):
+                for k in range(i - 1, -1, -1):
+                    if lines[k].strip():
+                        name = lines[k].strip()
+                        break
+                break
+        if not name:
+            continue
+
+        # bound the scan to the Gross earnings table
+        try:
+            start = next(i for i, l in enumerate(lines) if l.lower().startswith("gross earnings"))
+        except StopIteration:
+            continue
+        end = len(lines)
+        for i in range(start + 1, len(lines)):
+            if lines[i].lower().startswith("taxes withheld"):
+                end = i
+                break
+
+        earned = []
+        for l in lines[start + 1:end]:
+            m = _EARN_LINE_RE.match(l)
+            if not m:
+                continue
+            label = m.group("label").strip()
+            # Skip subtotal rows ("Hourly (Regular) Total 40.1300 $370.78 …",
+            # "Tip credit adjustment Total 0.0000 …") — the lazy label group
+            # can absorb the hours figure, so match the word anywhere.
+            if re.search(r'\btotal\b', label, re.IGNORECASE):
+                continue
+            role = _HOURLY_PREFIX_RE.sub("", label).strip() or "Wages"
+            earned.append({
+                "label":   role[:40],
+                "rate":    round(_earn_flt(m.group("rate")), 4),
+                "hours":   round(_earn_flt(m.group("hours")), 4),
+                "current": round(_earn_flt(m.group("cur")), 2),
+            })
+        if earned:
+            out[_norm_name(name)] = earned
+    return out
+
+
+def _backfill_earning_lines(conn, run_id, source_pdf_path):
+    """Store parsed earning lines on any of this run's checks missing them.
+
+    Lets runs uploaded before this feature existed pick up itemized stub
+    lines on their next print/reprint, without re-uploading. Best-effort;
+    returns how many rows were updated.
+    """
+    if not source_pdf_path or not os.path.exists(source_pdf_path):
+        return 0
+    try:
+        rows = conn.execute(
+            "SELECT id, employee_name, earning_lines FROM payroll_checks WHERE payroll_run_id=?",
+            (run_id,)).fetchall()
+    except Exception:
+        return 0
+    if not any(not r["earning_lines"] for r in rows):
+        return 0
+    emap = extract_earning_lines_from_pdf(source_pdf_path)
+    if not emap:
+        return 0
+    n = 0
+    for r in rows:
+        if r["earning_lines"]:
+            continue
+        el = emap.get(_norm_name(r["employee_name"] or ""))
+        if el:
+            conn.execute(
+                "UPDATE payroll_checks SET earning_lines=?, updated_at=datetime('now') WHERE id=?",
+                (json.dumps(el), r["id"]))
+            n += 1
+    if n:
+        logger.info(f"Backfilled earning lines on {n} check(s) for run {run_id}")
+    return n
 
 
 def _upsert_employee_addresses(conn, location, addr_map):
@@ -543,12 +678,19 @@ def create_payroll_run():
 
     # Pull employee home addresses out of the uploaded 7shifts checks PDF so the
     # printed checks can show the payee address in the envelope window.
+    _earn_map = {}
     if source_pdf_path:
         try:
             _addr_map = extract_addresses_from_pdf(source_pdf_path)
             _upsert_employee_addresses(conn, location, _addr_map)
         except Exception as _e:
             logger.warning(f"Address extraction skipped: {_e}")
+        # Per-role earning lines (Server @ $6.75, Manager @ $18.00, …) so the
+        # stub can itemize instead of printing a blended wages/hours rate.
+        try:
+            _earn_map = extract_earning_lines_from_pdf(source_pdf_path)
+        except Exception as _e:
+            logger.warning(f"Earning-line extraction skipped: {_e}")
 
     cur = conn.execute("""
         INSERT INTO payroll_runs
@@ -584,21 +726,23 @@ def create_payroll_run():
         if is_paper and assign_checks:
             next_check += 1
 
+        _el = _earn_map.get(_norm_name(emp["name"]))
         cur2 = conn.execute("""
             INSERT INTO payroll_checks
             (payroll_run_id, employee_name, check_number,
              gross_pay, net_pay, wages, paycheck_tips, cash_tips,
              ee_taxes, er_taxes, deductions, total_hours,
              pay_period_start, pay_period_end, payment_method,
-             location, status, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',datetime('now'),datetime('now'))
+             location, earning_lines, status, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',datetime('now'),datetime('now'))
         """, (run_id, emp["name"], check_num,
               emp["gross"], emp["net"], emp["wages"],
               emp["paycheck_tips"], emp["cash_tips"],
               emp["ee_taxes"], emp["er_taxes"],
               json.dumps(emp["deductions"]), emp["total_hours"],
               pay_period_start, pay_period_end,
-              emp["payment_method"], location))
+              emp["payment_method"], location,
+              json.dumps(_el) if _el else None))
         check_id = cur2.lastrowid
 
         if is_paper:
@@ -623,6 +767,7 @@ def create_payroll_run():
                 "ee_taxes":         emp["ee_taxes"],
                 "deductions":       emp["deductions"],
                 "total_hours":      emp["total_hours"],
+                "earning_lines":    _el,
                 "pay_period_start": pay_period_start,
                 "pay_period_end":   pay_period_end,
                 "printed_at":       pay_date,
@@ -1097,6 +1242,13 @@ def print_run_checks(run_id):
         except Exception as _e:
             logger.warning(f"Address backfill skipped: {_e}")
 
+    # Backfill per-role earning lines the same way, so runs uploaded before
+    # this feature print itemized rates instead of a blended wages/hours rate.
+    try:
+        _backfill_earning_lines(conn, run_id, run.get("source_pdf_path"))
+    except Exception as _e:
+        logger.warning(f"Earning-line backfill skipped: {_e}")
+
     checks = conn.execute("""
         SELECT * FROM payroll_checks
         WHERE payroll_run_id=?
@@ -1153,6 +1305,7 @@ def print_run_checks(run_id):
             "ee_taxes":         float(c["ee_taxes"] or 0),
             "deductions":       ded,
             "total_hours":      float(c["total_hours"] or 0),
+            "earning_lines":    dict(c).get("earning_lines"),
             "pay_period_start": run["pay_period_start"],
             "pay_period_end":   run["pay_period_end"],
             "printed_at":       run["pay_date"],
@@ -1251,6 +1404,16 @@ def reprint_single_check(check_id):
     run = dict(run)
     location = _norm_loc(check["location"] or run["location"])
 
+    # Backfill per-role earning lines (best-effort) so old runs reprint with
+    # itemized rates, then re-read this check to pick them up.
+    try:
+        if _backfill_earning_lines(conn, run["id"], run.get("source_pdf_path")):
+            _re = conn.execute("SELECT * FROM payroll_checks WHERE id=?", (check_id,)).fetchone()
+            if _re:
+                check = dict(_re)
+    except Exception as _e:
+        logger.warning(f"Earning-line backfill skipped: {_e}")
+
     # Exact match only — never fall back to another location's bank config.
     config = conn.execute("SELECT * FROM check_config WHERE location=?", (location,)).fetchone()
     if not config:
@@ -1287,15 +1450,16 @@ def reprint_single_check(check_id):
                  gross_pay, net_pay, wages, paycheck_tips, cash_tips,
                  ee_taxes, er_taxes, deductions, total_hours,
                  pay_period_start, pay_period_end, payment_method,
-                 location, status, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'printed',datetime('now'),datetime('now'))
+                 location, earning_lines, status, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'printed',datetime('now'),datetime('now'))
             """, (check["payroll_run_id"], check["employee_name"], check_num,
                   check["gross_pay"], check["net_pay"], check.get("wages") or 0,
                   check.get("paycheck_tips") or 0, check.get("cash_tips") or 0,
                   check.get("ee_taxes") or 0, check.get("er_taxes") or 0,
                   check.get("deductions") or "{}", check.get("total_hours") or 0,
                   check.get("pay_period_start"), check.get("pay_period_end"),
-                  check.get("payment_method") or "Manual", location))
+                  check.get("payment_method") or "Manual", location,
+                  check.get("earning_lines")))
             new_check_id = cur.lastrowid
         else:
             # No old number — just stamp this row with the new one
@@ -1337,6 +1501,7 @@ def reprint_single_check(check_id):
         "ee_taxes":         float(target_check.get("ee_taxes") or 0),
         "deductions":       target_check.get("deductions") or "{}",
         "total_hours":      float(target_check.get("total_hours") or 0),
+        "earning_lines":    target_check.get("earning_lines"),
         "pay_period_start": run["pay_period_start"],
         "pay_period_end":   run["pay_period_end"],
         "printed_at":       run["pay_date"],
