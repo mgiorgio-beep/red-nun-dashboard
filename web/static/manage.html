@@ -7658,6 +7658,104 @@ async function loadDashboard() {
       trow.innerHTML = thtml;
     }
   } catch(e) { console.error('Thermo error:', e); }
+
+  // ── Walk-in Freezer (Temp Stick) ──
+  try {
+    var fzResp = await fetch('/api/freezer?hours=24&_=' + Date.now());
+    var fz = await fzResp.json();
+    var frow = document.getElementById('dash-thermo-row');
+    if (frow) {
+      var fhtml = '';
+      if (!fz.configured) {
+        fhtml += '<div class="card" style="flex:1;min-width:280px;padding:16px">';
+        fhtml += '<div style="font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">&#10052; Walk-in Freezer</div>';
+        fhtml += '<div style="font-size:13px;color:var(--text3);margin-bottom:10px">Paste your Temp Stick API key to start tracking (tempstick.com &rarr; Account &rarr; Developers &rarr; Show Key)</div>';
+        fhtml += '<div style="display:flex;gap:8px">';
+        fhtml += '<input id="fz-api-key" type="password" placeholder="Temp Stick API key" style="flex:1;background:var(--card-bg);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:8px;font-size:13px">';
+        fhtml += '<button onclick="freezerSaveKey()" style="background:var(--blue, #4da3ff);border:none;color:#fff;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Save</button>';
+        fhtml += '</div><div id="fz-key-msg" style="font-size:12px;color:var(--red);margin-top:6px"></div>';
+        fhtml += '</div>';
+      } else {
+        var sensors = fz.sensors || [];
+        for (var fi = 0; fi < sensors.length; fi++) {
+          var fs = sensors[fi];
+          var tempColor = fs.warm ? 'var(--red)' : 'var(--text)';
+          var dotColor = fs.stale ? 'var(--red)' : 'var(--green)';
+          var battColor = (fs.battery_pct !== null && fs.battery_pct < 20) ? 'var(--orange)' : 'var(--text3)';
+          fhtml += '<div class="card" style="flex:1;min-width:280px;padding:16px">';
+          fhtml += '<div style="font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">&#10052; ' + (fs.name || 'Freezer') + ' <span style="color:' + dotColor + ';font-size:8px">&#9679;</span></div>';
+          fhtml += '<div style="display:flex;justify-content:space-between;align-items:center">';
+          fhtml += '<div>';
+          fhtml += '<div style="font-size:32px;font-weight:700;color:' + tempColor + '">' + (fs.temp_f !== null ? Math.round(fs.temp_f) + '&deg;' : '--') + '</div>';
+          fhtml += '<div style="font-size:11px;color:var(--text3)">' + (fs.minutes_ago !== null ? (fs.minutes_ago < 60 ? fs.minutes_ago + ' min ago' : Math.round(fs.minutes_ago/60) + ' hr ago') : '') + '</div>';
+          fhtml += '</div>';
+          fhtml += '<div style="text-align:right">';
+          if (fs.humidity !== null) fhtml += '<div style="font-size:11px;color:var(--text3)">&#128167; ' + Math.round(fs.humidity) + '%</div>';
+          if (fs.battery_pct !== null) fhtml += '<div style="font-size:11px;color:' + battColor + '">&#128267; ' + Math.round(fs.battery_pct) + '%</div>';
+          fhtml += '<div style="font-size:11px;color:var(--text3)">alert &gt; ' + Math.round(fz.threshold_f) + '&deg;</div>';
+          fhtml += '</div></div>';
+          fhtml += freezerSparkline(fs.history || [], fz.threshold_f);
+          fhtml += '</div>';
+        }
+        if (!sensors.length) {
+          fhtml += '<div class="card" style="flex:1;min-width:280px;padding:16px">';
+          fhtml += '<div style="font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">&#10052; Walk-in Freezer</div>';
+          fhtml += '<div style="font-size:13px;color:var(--text3)">API key saved &mdash; waiting for the first reading (checks every 10 min).</div>';
+          fhtml += '</div>';
+        }
+      }
+      frow.innerHTML += fhtml;
+    }
+  } catch(e) { console.error('Freezer error:', e); }
+}
+
+function freezerSparkline(history, threshold) {
+  if (!history || history.length < 2) return '';
+  var W = 260, H = 48, PAD = 2;
+  var temps = history.map(function(h){ return h.f; });
+  var min = Math.min.apply(null, temps.concat([threshold])) - 2;
+  var max = Math.max.apply(null, temps.concat([threshold])) + 2;
+  var range = (max - min) || 1;
+  var pts = [];
+  for (var i = 0; i < history.length; i++) {
+    var x = PAD + (W - 2*PAD) * i / (history.length - 1);
+    var y = H - PAD - (H - 2*PAD) * (temps[i] - min) / range;
+    pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+  }
+  var ty = H - PAD - (H - 2*PAD) * (threshold - min) / range;
+  var svg = '<svg width="100%" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="margin-top:10px;display:block">';
+  svg += '<line x1="0" y1="' + ty.toFixed(1) + '" x2="' + W + '" y2="' + ty.toFixed(1) + '" stroke="var(--red)" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>';
+  svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--blue, #4da3ff)" stroke-width="1.5"/>';
+  svg += '</svg>';
+  svg += '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)"><span>24 hr</span><span>now</span></div>';
+  return svg;
+}
+
+async function freezerSaveKey() {
+  var input = document.getElementById('fz-api-key');
+  var msg = document.getElementById('fz-key-msg');
+  if (!input || !input.value.trim()) return;
+  msg.textContent = 'Checking key with Temp Stick…';
+  msg.style.color = 'var(--text3)';
+  try {
+    var resp = await fetch('/api/freezer/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({api_key: input.value.trim()})
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      msg.style.color = 'var(--green)';
+      msg.textContent = 'Key saved — pulling first readings…';
+      setTimeout(function(){ location.reload(); }, 4000);
+    } else {
+      msg.style.color = 'var(--red)';
+      msg.textContent = data.error || 'Failed to save key';
+    }
+  } catch(e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Request failed';
+  }
 }
 
 function thermoToggle(deviceId) {
