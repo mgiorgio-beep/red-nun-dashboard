@@ -9,6 +9,12 @@ import os
 import logging
 from datetime import datetime, timedelta
 from integrations.thermostat.thermostat import get_thermostats, set_setpoint
+from integrations.tempstick.tempstick import (
+    poll_tempstick,
+    get_freezer_data,
+    get_tempstick_settings,
+    save_tempstick_settings,
+)
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -593,6 +599,8 @@ def setup_scheduler():
     scheduler.add_job(func=run_daily_journal, trigger='cron', hour=5, minute=0, timezone='America/New_York', id='daily_sales_journal', replace_existing=True)
     # Sales Journal: weekly unresolved summary Monday 7:00 AM ET
     scheduler.add_job(func=send_weekly_unresolved_summary, trigger='cron', day_of_week='mon', hour=7, minute=5, timezone='America/New_York', id='weekly_journal_summary', replace_existing=True)
+    # Temp Stick walk-in freezer poll: every 10 min (no-op until API key is set)
+    scheduler.add_job(func=poll_tempstick, trigger='cron', minute='*/10', id='tempstick_poll', replace_existing=True)
     scheduler.start()
     logger.info("Scheduler started — Toast intraday sync, fanzo scrape, odds fetch")
 
@@ -607,6 +615,29 @@ def setup_scheduler():
 def api_thermostats():
     data = get_thermostats()
     return jsonify(data)
+
+@app.route("/api/freezer")
+@login_required
+def api_freezer():
+    """Temp Stick walk-in freezer/cooler — latest reading + history."""
+    try:
+        hours = min(int(request.args.get("hours", 24)), 24 * 30)
+    except ValueError:
+        hours = 24
+    return jsonify(get_freezer_data(hours=hours))
+
+@app.route("/api/freezer/settings", methods=["GET", "POST"])
+@login_required
+def api_freezer_settings():
+    """Temp Stick API key + alert threshold."""
+    if request.method == "POST":
+        result = save_tempstick_settings(request.get_json() or {})
+        if result.get("ok"):
+            # Pull readings right away so the card populates immediately
+            import threading
+            threading.Thread(target=poll_tempstick, daemon=True).start()
+        return jsonify(result)
+    return jsonify(get_tempstick_settings())
 
 @app.route("/api/thermostats/set", methods=["POST"])
 def api_thermostat_set():
