@@ -7,18 +7,43 @@ import csv
 import io
 import os
 import re
+import hmac
 import json
 import logging
 import zipfile
 import tempfile
 from datetime import datetime, date
+from functools import wraps
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, send_file, session, redirect
 from integrations.toast.data_store import get_connection
 from routes.auth_routes import login_required, admin_required, admin_or_accountant_required
 
 logger = logging.getLogger(__name__)
 payroll_bp = Blueprint("payroll_bp", __name__)
+
+
+def admin_or_internal_required(f):
+    """Like admin_required, but ALSO accepts a localhost request presenting
+    the print-agent API key in X-Internal-Key. Used by the 7shifts payroll
+    auto-importer (integrations/sevenshifts/payroll_autoimport.py), which
+    runs on this box under cron and books runs through the same code path
+    as the UI. Deliberately scoped to this module — do NOT loosen the
+    decorators in auth_routes."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        expected = os.environ.get("PRINT_AGENT_API_KEY", "")
+        provided = request.headers.get("X-Internal-Key", "")
+        if (request.remote_addr in ("127.0.0.1", "::1")
+                and expected and provided
+                and hmac.compare_digest(provided, expected)):
+            return f(*args, **kwargs)
+        if 'user_id' not in session:
+            return redirect('/login')
+        if session.get('role') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        return f(*args, **kwargs)
+    return decorated
 
 PAYROLL_DIR = "/opt/red-nun-dashboard/payroll_runs"
 
@@ -604,7 +629,7 @@ def build_qbo_csv(employees, pay_date_str, period_str, location):
 # ─────────────────────────────────────────────
 
 @payroll_bp.route("/api/payroll/runs", methods=["POST"])
-@admin_required
+@admin_or_internal_required
 def create_payroll_run():
     """
     Upload a 7shifts payroll-journal CSV + optional source checks PDF.
