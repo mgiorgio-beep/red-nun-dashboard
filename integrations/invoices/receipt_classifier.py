@@ -510,7 +510,7 @@ RECEIPT_SIGNATURES = [
         "from_regex": re.compile(r"support@cintas\.com", re.I),
         "subject_regex": re.compile(r"myCintas Autopay Confirmation", re.I),
         "vendor_canonical": "Cintas",
-        "tier": "needs_review",  # lump total only, no invoice # — fuzzy, hold for review
+        "tier": "auto_apply",   # 2026-07-22 per Mike: auto-mark Cintas autopay — fuzzy match still requires a UNIQUE open Cintas invoice at the payer’s location within ±1% of the amount; anything ambiguous stays needs_review
         "payment_method": "ach_autopay",
         "parser": "cintas_autopay",
         "location_extractor": _loc_cintas,
