@@ -123,6 +123,31 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
 .pill-amber:hover { border-color: var(--amber); }
 .pill-muted { background: rgba(148,163,184,0.08); color: var(--text3); }
 .pill-green { background: var(--green-soft); color: var(--green); }
+.pill-blue { background: rgba(56,189,248,0.12); color: var(--blue); }
+
+.ing-ai {
+  background: rgba(56,189,248,0.12) !important; color: var(--blue) !important;
+  border-color: rgba(56,189,248,0.35) !important;
+}
+
+.del-btn {
+  background: none; border: none; color: var(--text3); cursor: pointer;
+  font-size: 14px; padding: 4px 6px; border-radius: 6px; line-height: 1;
+}
+.del-btn:hover { color: var(--red); background: var(--red-soft); }
+
+.ai-panel {
+  text-align: center; padding: 36px 24px; border: 1px dashed var(--border-focus);
+  border-radius: 12px; margin: 8px 0 4px 0;
+}
+.ai-panel h3 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
+.ai-panel p { font-size: 13px; color: var(--text3); max-width: 520px; margin: 0 auto 16px auto; line-height: 1.5; }
+.ai-panel-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+.add-ing-bar { padding: 12px 8px 0 8px; }
+.add-ing-link { color: var(--green); font-size: 13px; font-weight: 600; text-decoration: none; }
+.add-ing-link:hover { text-decoration: underline; }
+.add-ing-bar .search-wrap { max-width: 420px; margin-top: 8px; }
 
 .ing-warn {
   display: inline-block; margin-left: 6px; padding: 1px 6px;
@@ -363,7 +388,11 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
       leftStats +
       '<div class="spacer"></div>' +
       (state.queue.length
-        ? '<div class="stat">Recipe <b>' + (state.idx + 1) + '</b> of <b>' + state.queue.length + '</b></div>'
+        ? '<div class="stat">Recipe <b>' + (state.idx + 1) + '</b> of <b>' + state.queue.length + '</b>' +
+          ((state.queue[state.idx] && state.queue[state.idx].total_ings === 0)
+            ? ' <span class="pill pill-blue" title="No ingredient lines yet — use AI draft or add manually">empty shell</span>'
+            : '') +
+          '</div>'
         : '') +
       rightLink;
     const hc = $('#review-high-cost');
@@ -419,6 +448,7 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     if (r.yield_qty) meta.push('<span><b>Yield:</b> ' + r.yield_qty + ' ' + esc(r.yield_unit || '') + '</span>');
     if (r.needs_research) meta.push('<span class="pill pill-amber">Needs research</span>');
 
+    const isEmptyShell = state.ingredients.length === 0;
     const rows = state.ingredients.map(renderIngredientRow).join('');
     const totals = computeTotals();
 
@@ -434,28 +464,69 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
       revLine = '<div class="recipe-revenue"><span class="none">No matching sales in the last 90 days.</span></div>';
     }
 
-    const html =
-      '<div class="recipe-card">' +
-        '<div class="recipe-title">' + esc(r.name) + '</div>' +
-        revLine +
-        '<div class="recipe-meta">' + meta.join('') + '</div>' +
-        '<table class="ingredients">' +
+    const tableBlock = isEmptyShell
+      ? renderEmptyShellPanel()
+      : ('<table class="ingredients">' +
           '<thead><tr>' +
             '<th>Ingredient</th>' +
             '<th>Linked product</th>' +
             '<th>Quantity</th>' +
             '<th>Unit</th>' +
             '<th style="text-align:right">Line cost</th>' +
+            '<th style="width:36px"></th>' +
           '</tr></thead>' +
           '<tbody>' + rows + '</tbody>' +
-        '</table>' +
-        renderTotals(totals) +
+        '</table>');
+
+    const html =
+      '<div class="recipe-card">' +
+        '<div class="recipe-title">' + esc(r.name) + '</div>' +
+        revLine +
+        '<div class="recipe-meta">' + meta.join('') + '</div>' +
+        tableBlock +
+        renderAddBar() +
+        (isEmptyShell ? '' : renderTotals(totals)) +
         renderActions() +
       '</div>';
 
     $('#recipe-container').innerHTML = html;
     bindIngredientEvents();
     bindActionEvents();
+
+    // Jump the cursor to the first empty quantity so typing can start
+    // immediately — but never steal focus from an open conversion dialog.
+    if (!isEmptyShell && state.openConversionFor == null){
+      const firstEmpty = Array.from(document.querySelectorAll('input.q-input'))
+        .find(i => !parseFloat(i.value));
+      if (firstEmpty) firstEmpty.focus();
+    }
+  }
+
+  function renderEmptyShellPanel(){
+    return (
+      '<div class="ai-panel">' +
+        '<h3>No ingredients yet</h3>' +
+        '<p>This recipe is an empty shell — there’s nothing to cost. ' +
+          'Let AI draft the ingredient list from the menu item (every line is ' +
+          'flagged as a guess for you to review), or add ingredients yourself.</p>' +
+        '<div class="ai-panel-buttons">' +
+          '<button class="btn btn-primary" data-action="ai-draft">Draft ingredients with AI</button>' +
+          '<button class="btn" data-action="add-ing">+ Add ingredient manually</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderAddBar(){
+    return (
+      '<div class="add-ing-bar" id="add-ing-bar">' +
+        '<a href="javascript:void(0)" class="add-ing-link" data-action="add-ing">+ Add ingredient</a>' +
+        '<div class="search-wrap" id="add-ing-search" style="display:none">' +
+          '<input class="p-input" id="add-ing-input" placeholder="Type an ingredient, then pick a product…" autocomplete="off">' +
+          '<div class="search-dropdown" id="add-ing-dd" style="display:none"></div>' +
+        '</div>' +
+      '</div>'
+    );
   }
 
   function renderIngredientRow(ing){
@@ -492,10 +563,13 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     } else if (ing.cost_source === 'no_conversion' || ing.needs_conversion){
       warnBadge = '<span class="ing-warn" title="Recipe unit does not match the product\'s purchase unit — set a conversion">Needs conversion</span>';
     }
+    const aiBadge = ing.ai_draft
+      ? '<span class="ing-warn ing-ai" title="AI-guessed — editing any field confirms the row">AI guess</span>'
+      : '';
 
     return (
       '<tr data-ing="'+ing.id+'">' +
-        '<td class="ing-name">' + esc(ing.product_name_text || '—') + warnBadge + '</td>' +
+        '<td class="ing-name">' + esc(ing.product_name_text || '—') + aiBadge + warnBadge + '</td>' +
         '<td class="ing-product">' + productCell + '</td>' +
         '<td class="ing-qty">' +
           '<input class="q-input" type="number" step="0.01" min="0" ' +
@@ -505,9 +579,12 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
           '<select class="u-input" data-ing="'+ing.id+'" data-field="unit">' + unitOpts + '</select>' +
         '</td>' +
         '<td class="ing-cost" data-ing="'+ing.id+'" data-cell="cost">' + costCell + '</td>' +
+        '<td class="ing-del" style="text-align:center">' +
+          '<button class="del-btn" data-action="del-ing" data-ing="'+ing.id+'" title="Remove this ingredient">&#10005;</button>' +
+        '</td>' +
       '</tr>' +
       (convDialog ?
-        '<tr data-conv-row="'+ing.id+'"><td colspan="5" style="padding:0 8px 12px 8px;">' + convDialog + '</td></tr>'
+        '<tr data-conv-row="'+ing.id+'"><td colspan="6" style="padding:0 8px 12px 8px;">' + convDialog + '</td></tr>'
         : '')
     );
   }
@@ -612,9 +689,15 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     document.querySelectorAll('[data-action="cancel-conversion"]').forEach(el => {
       el.addEventListener('click', () => { state.openConversionFor = null; renderRecipe(); });
     });
+    // Per-row delete
+    document.querySelectorAll('[data-action="del-ing"]').forEach(el => {
+      el.addEventListener('click', () => deleteIngredient(Number(el.dataset.ing)));
+    });
   }
 
   function bindActionEvents(){
+    document.querySelectorAll('[data-action="ai-draft"]').forEach(el => el.addEventListener('click', aiDraft));
+    document.querySelectorAll('[data-action="add-ing"]').forEach(el => el.addEventListener('click', openAddIngredient));
     document.querySelectorAll('[data-action="prev"]').forEach(el => el.addEventListener('click', prevRecipe));
     document.querySelectorAll('[data-action="save-next"]').forEach(el => el.addEventListener('click', () => saveAndAdvance(true)));
     document.querySelectorAll('[data-action="save"]').forEach(el => el.addEventListener('click', () => saveAndAdvance(false)));
@@ -687,7 +770,10 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
       } else if (ing.cost_source === 'no_conversion' || ing.needs_conversion){
         badge = '<span class="ing-warn" title="Recipe unit does not match the product\'s purchase unit — set a conversion">Needs conversion</span>';
       }
-      nameCell.innerHTML = base + badge;
+      const ai = ing.ai_draft
+        ? '<span class="ing-warn ing-ai" title="AI-guessed — editing any field confirms the row">AI guess</span>'
+        : '';
+      nameCell.innerHTML = base + ai + badge;
     }
   }
 
@@ -928,6 +1014,101 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
       renderRecipe();
     } catch(e){
       toast('Save failed: ' + e.message, 'err');
+    }
+  }
+
+  // --- AI draft / add / delete ingredients --------------------------
+
+  async function aiDraft(){
+    if (!state.recipe) return;
+    const btn = document.querySelector('[data-action="ai-draft"]');
+    if (btn){ btn.disabled = true; btn.textContent = 'Drafting… (takes a few seconds)'; }
+    try {
+      const d = await api('/api/recipe-fixer/recipe/' + state.recipe.id + '/ai-draft',
+                          { method: 'POST' });
+      if (!d.ingredients || !d.ingredients.length){
+        toast(d.message || 'AI returned no ingredients for this item', 'err');
+        renderRecipe();
+        return;
+      }
+      state.ingredients = d.ingredients;
+      renderRecipe();
+      toast('Drafted ' + d.ingredients.length + ' ingredients — ' + d.matched +
+            ' linked to products. Review the guesses, fix, then Save.', 'ok');
+    } catch(e){
+      toast('AI draft failed: ' + e.message, 'err');
+      renderRecipe();
+    }
+  }
+
+  function openAddIngredient(){
+    const wrap = document.getElementById('add-ing-search');
+    if (!wrap) return;
+    wrap.style.display = 'block';
+    const input = document.getElementById('add-ing-input');
+    const dd = document.getElementById('add-ing-dd');
+    input.value = '';
+    input.focus();
+    if (input._bound) return;
+    input._bound = true;
+    let t;
+    input.addEventListener('input', () => {
+      clearTimeout(t);
+      t = setTimeout(async () => {
+        const q = input.value.trim();
+        if (q.length < 2){ dd.style.display = 'none'; return; }
+        let results = [];
+        try {
+          results = await api('/api/recipe-fixer/product-search?q=' + encodeURIComponent(q));
+        } catch(e){ /* search failure — still allow free-text below */ }
+        dd.innerHTML =
+          results.map(p =>
+            '<div class="search-result" data-pid="'+p.id+'">' +
+              '<b>' + esc(p.display_name || p.name) + '</b>' +
+              (p.current_price ? ' · ' + fmt$(p.current_price) : '') +
+              (p.pack_unit ? ' · ' + esc(p.pack_unit) : '') +
+            '</div>'
+          ).join('') +
+          '<div class="search-result" data-freetext="1">Add &ldquo;<b>' + esc(q) +
+            '</b>&rdquo; without a product link</div>';
+        dd.style.display = 'block';
+        dd.querySelectorAll('.search-result[data-pid]').forEach(r => {
+          r.addEventListener('click', () => addIngredient({ product_id: Number(r.dataset.pid) }));
+        });
+        const ft = dd.querySelector('[data-freetext]');
+        if (ft) ft.addEventListener('click', () => addIngredient({ product_name: input.value.trim() }));
+      }, 250);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape'){ wrap.style.display = 'none'; dd.style.display = 'none'; }
+    });
+  }
+
+  async function addIngredient(body){
+    if (!state.recipe) return;
+    try {
+      const payload = await api('/api/recipe-fixer/recipe/' + state.recipe.id + '/ingredient',
+                                { method: 'POST', body: JSON.stringify(body) });
+      state.ingredients.push(payload);
+      renderRecipe();
+      const q = document.querySelector('input.q-input[data-ing="'+payload.id+'"]');
+      if (q) q.focus();
+      toast('Ingredient added', 'ok');
+    } catch(e){
+      toast('Add failed: ' + e.message, 'err');
+    }
+  }
+
+  async function deleteIngredient(ingId){
+    try {
+      await api('/api/recipe-fixer/ingredient/' + ingId, { method: 'DELETE' });
+      state.ingredients = state.ingredients.filter(x => x.id !== ingId);
+      if (state.openConversionFor === ingId) state.openConversionFor = null;
+      renderRecipe();
+      updateTotalsInPlace();
+      toast('Removed', 'ok');
+    } catch(e){
+      toast('Delete failed: ' + e.message, 'err');
     }
   }
 

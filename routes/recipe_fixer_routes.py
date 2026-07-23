@@ -10,7 +10,9 @@ Page:      GET /recipes/fixer
 API:       /api/recipe-fixer/*
 """
 
+import json
 import logging
+import os
 import re
 import time
 from datetime import date, timedelta
@@ -232,7 +234,7 @@ def _load_ingredient_row(conn, ingredient_id):
     ready to feed into cost_ingredient()."""
     return conn.execute("""
         SELECT ri.id, ri.recipe_id, ri.product_id, ri.product_name,
-               ri.quantity, ri.unit, ri.yield_pct,
+               ri.quantity, ri.unit, ri.yield_pct, ri.notes,
                p.name          AS p_name,
                p.display_name  AS p_display_name,
                p.current_price AS p_current_price,
@@ -297,6 +299,7 @@ def _ingredient_payload(conn, row):
         "cost_source": cost_info["source"],
         "needs_conversion": cost_info["source"] == "no_conversion",
         "needs_unit": cost_info["source"] == "no_unit",
+        "ai_draft": (d.get("notes") or "") == "ai_draft",
     }
 
 
@@ -507,9 +510,252 @@ def api_update_ingredient(ingredient_id):
         )
         if cur.rowcount == 0:
             return jsonify({"error": "ingredient not found"}), 404
+        # Any manual edit means the row has been reviewed — clear the AI flag.
+        conn.execute(
+            "UPDATE recipe_ingredients SET notes = '' WHERE id = ? AND notes = 'ai_draft'",
+            (ingredient_id,),
+        )
         conn.commit()
         row = _load_ingredient_row(conn, ingredient_id)
         return jsonify(_ingredient_payload(conn, row))
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------
+# API — add / delete ingredient rows (empty-shell support)
+# ------------------------------------------------------------------
+
+@recipe_fixer_bp.route("/api/recipe-fixer/recipe/<int:recipe_id>/ingredient",
+                      methods=["POST"])
+@login_required
+def api_add_ingredient(recipe_id):
+    """Create a new ingredient row on a recipe, right from the fixer.
+    Body: {product_id?, product_name?, quantity?, unit?}. Either a linked
+    product or a free-text name is required."""
+    data = request.get_json(silent=True) or {}
+    try:
+        product_id = int(data.get("product_id") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "product_id must be an integer"}), 400
+    product_name = (data.get("product_name") or "").strip()
+    try:
+        quantity = float(data.get("quantity") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "quantity must be numeric"}), 400
+    unit = (data.get("unit") or "").strip()
+
+    conn = get_connection()
+    try:
+        recipe = conn.execute(
+            "SELECT id FROM recipes WHERE id = ?", (recipe_id,)
+        ).fetchone()
+        if not recipe:
+            return jsonify({"error": "Recipe not found"}), 404
+
+        if product_id:
+            prod = conn.execute(
+                "SELECT name, display_name, recipe_unit FROM products WHERE id = ?",
+                (product_id,),
+            ).fetchone()
+            if not prod:
+                return jsonify({"error": "product not found"}), 404
+            if not product_name:
+                product_name = prod["display_name"] or prod["name"]
+            # Sensible default: the product's own recipe unit, when set.
+            if not unit and prod["recipe_unit"]:
+                ru = str(prod["recipe_unit"]).strip().lower()
+                if ru in CANONICAL_UNITS:
+                    unit = ru
+        if not product_id and not product_name:
+            return jsonify({"error": "product_id or product_name required"}), 400
+
+        cur = conn.execute("""
+            INSERT INTO recipe_ingredients
+                (recipe_id, product_id, product_name, quantity, unit, notes, yield_pct)
+            VALUES (?, ?, ?, ?, ?, '', 100)
+        """, (recipe_id, product_id, product_name, quantity, unit))
+        conn.commit()
+        row = _load_ingredient_row(conn, cur.lastrowid)
+        return jsonify(_ingredient_payload(conn, row)), 201
+    finally:
+        conn.close()
+
+
+@recipe_fixer_bp.route("/api/recipe-fixer/ingredient/<int:ingredient_id>",
+                      methods=["DELETE"])
+@login_required
+def api_delete_ingredient(ingredient_id):
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "DELETE FROM recipe_ingredients WHERE id = ?", (ingredient_id,)
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            return jsonify({"error": "ingredient not found"}), 404
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------
+# API — AI draft for empty recipes
+# ------------------------------------------------------------------
+#
+# Explicit user action only (button in the fixer) — never called
+# automatically, per the no-silent-API-spend rule.
+
+AI_DRAFT_TIMEOUT = 60
+
+
+def _ai_draft_prompt(recipe, product_list):
+    desc = (recipe["description"] or "").strip()
+    desc_part = f"\nDESCRIPTION: {desc}" if desc else ""
+    price = recipe["menu_price"] or 0
+    return f"""You are drafting a plated-portion recipe for Red Nun, a Cape Cod bar & grill, so the kitchen can cost it. Given the menu item below, list the ingredients for ONE serving with realistic restaurant portion quantities.
+
+MENU ITEM: {recipe['name']}{desc_part}
+CATEGORY: {recipe['category'] or 'FOOD'}
+MENU PRICE: ${price:.2f}
+
+CANONICAL PRODUCT LIST (match to these when possible):
+{product_list}
+
+RULES:
+1. Match each ingredient to a product from the list above when possible, using the EXACT name. If nothing matches, set canonical_product_name to null and give a clean suggested_name.
+2. quantity is your best realistic guess for one serving (e.g. 6 oz chicken tenders, 5 oz fries, 1 each brioche bun, 2 fl_oz dipping sauce). Never 0.
+3. unit MUST be one of: {', '.join(CANONICAL_UNITS)}
+4. Include ALL components: proteins, bread/buns, cheese, vegetables, fries/sides listed in the item, sauces, dressings, garnishes.
+5. For single-pour beverages (a beer, a glass of wine, soda) return [].
+6. For merchandise or non-food items return [].
+
+Return ONLY a valid JSON array, no markdown, no explanation:
+[{{"canonical_product_name": "Exact Name or null", "suggested_name": "Clean Name or null", "quantity": 6, "unit": "oz"}}]"""
+
+
+@recipe_fixer_bp.route("/api/recipe-fixer/recipe/<int:recipe_id>/ai-draft",
+                      methods=["POST"])
+@login_required
+def api_ai_draft(recipe_id):
+    """Draft ingredient lines (with guessed quantities) for an EMPTY recipe
+    using the Claude API. Rows are flagged notes='ai_draft' so the UI can
+    mark them as guesses; the flag clears when the user edits the row."""
+    import requests as _requests
+    from dotenv import load_dotenv
+    load_dotenv()
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY not configured on server"}), 500
+
+    conn = get_connection()
+    try:
+        recipe = conn.execute("""
+            SELECT id, name, description, category, menu_price
+            FROM recipes WHERE id = ?
+        """, (recipe_id,)).fetchone()
+        if not recipe:
+            return jsonify({"error": "Recipe not found"}), 404
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM recipe_ingredients WHERE recipe_id = ?",
+            (recipe_id,),
+        ).fetchone()[0]
+        if existing:
+            return jsonify({"error": "Recipe already has ingredients — "
+                                     "AI draft only fills empty recipes"}), 409
+
+        products = conn.execute("""
+            SELECT id, name FROM products WHERE active = 1 ORDER BY name
+        """).fetchall()
+        lookup = {p["name"].lower().strip(): p["id"] for p in products}
+        product_list = "\n".join(f"- {p['name']}" for p in products)
+
+        try:
+            resp = _requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+                json={
+                    "model": os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
+                    "max_tokens": 1500,
+                    "messages": [{
+                        "role": "user",
+                        "content": _ai_draft_prompt(dict(recipe), product_list),
+                    }],
+                },
+                timeout=AI_DRAFT_TIMEOUT,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error("ai-draft API call failed for recipe %s: %s", recipe_id, e)
+            return jsonify({"error": f"Claude API call failed: {e}"}), 502
+
+        text = ""
+        for block in resp.json().get("content", []):
+            if block.get("type") == "text":
+                text += block["text"]
+        text = text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        try:
+            drafted = json.loads(text.strip())
+            assert isinstance(drafted, list)
+        except Exception:
+            logger.error("ai-draft unparseable response for recipe %s: %.200s",
+                         recipe_id, text)
+            return jsonify({"error": "Could not parse the AI response — try again"}), 502
+
+        if not drafted:
+            return jsonify({"ingredients": [], "matched": 0, "unmatched": 0,
+                            "message": "AI returned no ingredients for this item "
+                                       "(single-pour beverage or non-food?)"})
+
+        matched = unmatched = 0
+        new_ids = []
+        for ing in drafted:
+            if not isinstance(ing, dict):
+                continue
+            canon = (ing.get("canonical_product_name") or "").strip() or None
+            suggested = (ing.get("suggested_name") or "").strip() or None
+            name = canon or suggested
+            if not name:
+                continue
+            pid = lookup.get(canon.lower()) if canon else None
+            if pid:
+                matched += 1
+            else:
+                pid = 0
+                unmatched += 1
+            try:
+                qty = float(ing.get("quantity") or 0)
+            except (TypeError, ValueError):
+                qty = 0
+            unit = str(ing.get("unit") or "").strip().lower()
+            if unit not in CANONICAL_UNITS:
+                unit = ""
+            cur = conn.execute("""
+                INSERT INTO recipe_ingredients
+                    (recipe_id, product_id, product_name, quantity, unit,
+                     notes, yield_pct)
+                VALUES (?, ?, ?, ?, ?, 'ai_draft', 100)
+            """, (recipe_id, pid, name, qty, unit))
+            new_ids.append(cur.lastrowid)
+        conn.commit()
+
+        payloads = []
+        for iid in new_ids:
+            row = _load_ingredient_row(conn, iid)
+            if row:
+                payloads.append(_ingredient_payload(conn, row))
+        logger.info("ai-draft recipe %s (%s): %d rows (%d matched, %d unmatched)",
+                    recipe_id, recipe["name"], len(payloads), matched, unmatched)
+        return jsonify({"ingredients": payloads, "matched": matched,
+                        "unmatched": unmatched})
     finally:
         conn.close()
 
