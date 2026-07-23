@@ -46,6 +46,7 @@ Cron (add to the rednun user's crontab):
 import os
 import sys
 import json
+import time
 import logging
 import smtplib
 from datetime import datetime, date, timedelta
@@ -248,6 +249,35 @@ def fetch_journal_csv(sess, cid, pcu, payroll_uuid):
                          "payroll_uuid": payroll_uuid,
                          "group_by_location": "false"},
                  timeout=120)
+    if r.status_code == 202:
+        # Async report generation (larger runs): 202 returns a report-task
+        # uuid; poll /report_task/{uuid} until completed, then fetch file_url.
+        # Discovered 2026-07-23 — small runs still return the CSV directly.
+        try:
+            task = r.json()["data"]["uuid"]
+        except Exception as e:
+            logger.warning(f"journal 202 for {payroll_uuid}: no task uuid ({e})")
+            return None
+        for _ in range(20):
+            time.sleep(3)
+            tr = sess.get(f"{APP_BASE}/company/{cid}/report_task/{task}",
+                          timeout=30)
+            if tr.status_code != 200:
+                continue
+            data = (tr.json() or {}).get("data") or {}
+            status = data.get("status")
+            if status == "completed" and data.get("file_url"):
+                fr = sess.get(data["file_url"], timeout=120)
+                if fr.status_code == 200 and "Last Name" in fr.text[:500]:
+                    return fr.text
+                logger.warning(f"journal file for {payroll_uuid}: HTTP "
+                               f"{fr.status_code} / unexpected content")
+                return None
+            if status in ("failed", "error", "cancelled"):
+                logger.warning(f"journal task for {payroll_uuid}: {status}")
+                return None
+        logger.warning(f"journal task for {payroll_uuid}: timed out polling")
+        return None
     if r.status_code != 200 or not r.text.strip():
         return None
     if "Last Name" not in r.text[:500]:
