@@ -17,9 +17,11 @@ Env vars:
 """
 
 import os
+import re
 import json
 import logging
 import asyncio
+import sqlite3
 import subprocess
 import requests
 from datetime import datetime, timedelta
@@ -46,6 +48,89 @@ ALLOWED_USERS = [
     for uid in os.environ.get("ALLOWED_USERS", "").split(",")
     if uid.strip()
 ]
+
+# Red Nun dashboard SQLite (read-only). Lives on this box.
+DASHBOARD_DB = os.environ.get("DASHBOARD_DB", "/opt/red-nun-dashboard/data/dashboard.db")
+# Cost-tracking brief synced from Google Drive (open-items ledger)
+BRIEF_PATH = os.environ.get(
+    "BRIEF_PATH",
+    os.path.expanduser("~/cowork/red-nun-dashboard/RED_NUN_COST_TRACKING_BRIEF.md"),
+)
+# Burden + salaried assumptions (keep in sync with toast_labor_tracker.py)
+BURDEN_PCT = json.loads(os.environ.get("BURDEN_PCT_JSON", '{"chatham": 0.205, "dennis": 0.205}'))
+SALARIED_DAILY = json.loads(os.environ.get("SALARIED_DAILY_JSON", '{"chatham": 196.43, "dennis": 125.71}'))
+
+
+def _dash_db():
+    """Read-only connection to the dashboard DB (never locks the app)."""
+    conn = sqlite3.connect(f"file:{DASHBOARD_DB}?mode=ro", uri=True, timeout=5)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _bd(day):
+    """business_date is stored Toast-style (YYYYMMDD int) in some tables and
+    ISO ('YYYY-MM-DD') in others — return both forms for IN/BETWEEN queries."""
+    return day, int(str(day).replace("-", ""))
+
+# ---- Recipe costing helpers (schema per recipe_fixer_routes.py) ----
+
+_RECIPE_VARIANT_RE = re.compile(r"\s*\(([^)]+)\)\s*$")
+
+
+def _recipe_search_key(name):
+    """'Burger - Nun (Turkey)' -> 'turkey nun burger' (same logic as the
+    Recipe Cost Fixer's revenue matcher)."""
+    if not name:
+        return ""
+    s = name.strip()
+    variant = ""
+    m = _RECIPE_VARIANT_RE.search(s)
+    if m:
+        variant = m.group(1).strip()
+        s = s[: m.start()].strip()
+    if " - " in s:
+        prefix, core = [p.strip() for p in s.split(" - ", 1)]
+        target = f"{variant} {core} {prefix}".strip() if variant else f"{core} {prefix}"
+    else:
+        target = f"{s} {variant}".strip() if variant else s
+    return target.lower()
+
+
+def _recipe_revenue_map(conn, days=90):
+    """recipe_id -> {revenue, qty} over the last N days of order_items."""
+    cutoff = int((datetime.now() - timedelta(days=days)).strftime("%Y%m%d"))
+    item_rows = conn.execute(
+        """SELECT LOWER(item_name) AS item_name,
+                  SUM(COALESCE(quantity,0)) AS qty,
+                  SUM(COALESCE(price,0)) AS rev
+           FROM order_items
+           WHERE COALESCE(voided,0)=0 AND business_date >= ?
+             AND item_name IS NOT NULL
+           GROUP BY LOWER(item_name)""",
+        (cutoff,),
+    ).fetchall()
+    keyed = [(r["id"], _recipe_search_key(r["name"])) for r in conn.execute(
+        "SELECT id, name FROM recipes WHERE active = 1").fetchall()]
+    keyed = [(rid, k) for rid, k in keyed if k]
+    keyed.sort(key=lambda x: len(x[1]), reverse=True)  # longest key wins
+    out = {}
+    for row in item_rows:
+        for rid, key in keyed:
+            if key in row["item_name"]:
+                agg = out.setdefault(rid, {"revenue": 0.0, "qty": 0.0})
+                agg["revenue"] += float(row["rev"] or 0)
+                agg["qty"] += float(row["qty"] or 0)
+                break
+    return out
+
+
+
+# Jarvis HTTP endpoint (for Siri Shortcuts etc.)
+# POST /ask  {"question": "..."}  with header  Authorization: Bearer $JARVIS_HTTP_TOKEN
+JARVIS_HTTP_TOKEN = os.environ.get("JARVIS_HTTP_TOKEN", "")
+JARVIS_HTTP_HOST = os.environ.get("JARVIS_HTTP_HOST", "0.0.0.0")
+JARVIS_HTTP_PORT = int(os.environ.get("JARVIS_HTTP_PORT", "8765"))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("rednun-agent")
@@ -374,12 +459,29 @@ def get_temp_trends(sensor_id):
 # ===========================================================================
 # SYSTEM PROMPT
 # ===========================================================================
-SYSTEM_PROMPT = """You are the Red Nun Operations Agent. You help Mike Giorgio
-manage his restaurant and business operations on Cape Cod.
+SYSTEM_PROMPT = """You are Jarvis, Mike Giorgio's controller for the Red Nun
+restaurant group on Cape Cod. Your sole job: deliver Mike the pertinent numbers
+and chase down whatever is missing to make them accurate. Mike runs the
+restaurants; you run the numbers.
+
+Controller rules (from CONTROLLER.md):
+- Lead with the numbers, not the process. Dollars first.
+- Every number cites its source and as-of date; label estimates as estimates.
+- Flag anything trending wrong at the top with the dollar impact.
+- If you need info only Mike has, ask a numbered one-line question.
 
 You have access to tools. When the user asks a question, decide which tool(s)
 to call, interpret the results, and respond conversationally. Keep it concise —
 this goes to Telegram on a phone screen.
+
+Sales/labor numbers come from the local dashboard DB (Toast sync, ~10 min
+stale during business hours). Labor % = (hourly wages + prorated salaried) x
+(1 + burden) / net sales; burden covers employer taxes + workers comp.
+
+Recipe costing ALSO lives in the dashboard DB (recipes / recipe_ingredients
+tables, maintained via the Recipe Cost Fixer at /recipes/fixer). Use
+get_recipe_costing_status for costing progress and what to cost next —
+never say recipe data isn't connected.
 
 Current date: {date}
 
@@ -409,27 +511,45 @@ TOOLS = [
     # ---- Restaurant Ops ----
     {
         "name": "get_daily_sales",
-        "description": "Get sales summary for a location and date.",
+        "description": "Get net sales (Toast Net Sales definition) and order count for a location and date, from the local dashboard DB. Today's data is at most ~10 min stale.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "location": {"type": "string", "enum": ["dennis", "chatham"]},
-                "date": {"type": "string", "description": "YYYY-MM-DD. Defaults to yesterday."},
+                "location": {"type": "string", "enum": ["dennis", "chatham", "both"]},
+                "date": {"type": "string", "description": "YYYY-MM-DD. Defaults to today."},
             },
             "required": ["location"],
         },
     },
     {
         "name": "get_labor_summary",
-        "description": "Get labor hours and cost for a location.",
+        "description": "Get labor for a location/date range from the local dashboard DB: hours, hourly wages (incl. open shifts estimated at hours-so-far x wage), prorated salaried, burden-loaded total, net sales, and labor %.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "location": {"type": "string", "enum": ["dennis", "chatham"]},
-                "start_date": {"type": "string"},
-                "end_date": {"type": "string"},
+                "location": {"type": "string", "enum": ["dennis", "chatham", "both"]},
+                "start_date": {"type": "string", "description": "YYYY-MM-DD, defaults to today"},
+                "end_date": {"type": "string", "description": "YYYY-MM-DD, defaults to start_date"},
             },
             "required": ["location"],
+        },
+    },
+    {
+        "name": "get_open_items",
+        "description": "Read the cost-tracking project ledger (RED_NUN_COST_TRACKING_BRIEF.md) — open action steps, blockers, what's waiting on Mike. Use when Mike asks what's open/stalled/next.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "search_purchases",
+        "description": "Search confirmed vendor invoice line items for a product over the last N days — answers 'what did I pay for Titos this week', 'haddock price lately'. Returns each matching line (vendor, date, qty, unit price, line total) plus total spent. Search with a short keyword (e.g. 'tito', not 'Tito's Vodka 1.75L').",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "product keyword, e.g. 'tito'"},
+                "days": {"type": "integer", "description": "lookback days, default 7"},
+                "location": {"type": "string", "enum": ["dennis", "chatham"], "description": "optional filter"},
+            },
+            "required": ["query"],
         },
     },
     {
@@ -442,6 +562,16 @@ TOOLS = [
                 "period": {"type": "string", "enum": ["yesterday", "wtd", "mtd", "last_week"]},
             },
             "required": ["location"],
+        },
+    },
+    {
+        "name": "get_recipe_costing_status",
+        "description": "Recipe costing progress from the dashboard DB: active recipes fully costed vs zero-cost (split into empty shells with no ingredients vs recipes missing quantities), needs_research count, suspect high-cost recipes (>70% — usually unit bugs), and the top uncosted recipes by 90-day revenue. Use for 'how many recipes are costed', 'recipe costing status', 'what should I cost next'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top": {"type": "integer", "description": "How many top uncosted-by-revenue recipes to list (default 5)"},
+            },
         },
     },
     {
@@ -600,22 +730,230 @@ def execute_tool(name: str, args: dict) -> str:
     elif name == "check_endpoints":
         return json.dumps(check_all_endpoints())
 
-    # ---- STUBS (wire up later) ----
+    # ---- DASHBOARD DB (LIVE) ----
     elif name == "get_daily_sales":
-        return json.dumps({
-            "location": args.get("location", "dennis"),
-            "date": args.get("date", "2026-04-08"),
-            "net_sales": 8432.50, "covers": 142, "avg_check": 59.38,
-            "labor_pct": 28.3, "comps": 125.00,
-            "note": "⚠️ STUB — wire up Toast API",
-        })
+        try:
+            day = args.get("date") or datetime.now().strftime("%Y-%m-%d")
+            locs = ["chatham", "dennis"] if args.get("location") == "both" else [args["location"]]
+            conn = _dash_db()
+            out = {"date": day, "source": "dashboard DB (Toast sync)", "locations": {}}
+            for loc in locs:
+                d1, d2 = _bd(day)
+                row = conn.execute(
+                    """SELECT COALESCE(SUM(net_amount),0) AS net, COUNT(*) AS orders
+                       FROM orders
+                       WHERE location=? AND business_date IN (?, ?)
+                         AND COALESCE(json_extract(raw_json,'$.deleted'), 0) != 1
+                         AND COALESCE(json_extract(raw_json,'$.voided'), 0) != 1""",
+                    (loc, d1, d2),
+                ).fetchone()
+                out["locations"][loc] = {
+                    "net_sales": round(row["net"], 2),
+                    "orders": row["orders"],
+                    "avg_check": round(row["net"] / row["orders"], 2) if row["orders"] else 0,
+                }
+            conn.close()
+            return json.dumps(out)
+        except Exception as e:
+            return json.dumps({"error": f"dashboard DB: {e}"})
 
     elif name == "get_labor_summary":
-        return json.dumps({
-            "location": args.get("location"),
-            "total_hours": 312.5, "labor_cost": 5842.00, "overtime_hours": 4.5,
-            "note": "⚠️ STUB — wire up 7shifts API",
-        })
+        try:
+            start = args.get("start_date") or datetime.now().strftime("%Y-%m-%d")
+            end = args.get("end_date") or start
+            locs = ["chatham", "dennis"] if args.get("location") == "both" else [args["location"]]
+            conn = _dash_db()
+            out = {"start": start, "end": end,
+                   "source": "dashboard DB time_entries/orders; burden+salaried per config",
+                   "locations": {}}
+            s1, s2 = _bd(start)
+            e1, e2 = _bd(end)
+            for loc in locs:
+                lab = conn.execute(
+                    """SELECT COALESCE(SUM(regular_hours),0) AS reg_h,
+                              COALESCE(SUM(overtime_hours),0) AS ot_h,
+                              COALESCE(SUM(CASE WHEN clock_out IS NOT NULL THEN total_pay END),0) AS closed_pay,
+                              COUNT(DISTINCT employee_guid) AS employees
+                       FROM time_entries
+                       WHERE location=? AND (business_date BETWEEN ? AND ? OR business_date BETWEEN ? AND ?)""",
+                    (loc, s1, e1, s2, e2),
+                ).fetchone()
+                open_rows = conn.execute(
+                    """SELECT clock_in, COALESCE(hourly_wage,0) AS wage
+                       FROM time_entries
+                       WHERE location=? AND (business_date BETWEEN ? AND ? OR business_date BETWEEN ? AND ?)
+                         AND clock_out IS NULL""",
+                    (loc, s1, e1, s2, e2),
+                ).fetchall()
+                open_pay, on_clock = 0.0, 0
+                now = datetime.now()
+                for r in open_rows:
+                    try:
+                        ci = datetime.fromisoformat(str(r["clock_in"]).replace("Z", "+00:00"))
+                        ci = ci.replace(tzinfo=None)
+                        hrs = min(max((now - ci).total_seconds() / 3600.0, 0), 16)
+                        open_pay += hrs * float(r["wage"])
+                        on_clock += 1
+                    except Exception:
+                        continue
+                days = conn.execute(
+                    """SELECT COUNT(DISTINCT business_date) AS d FROM orders
+                       WHERE location=? AND (business_date BETWEEN ? AND ? OR business_date BETWEEN ? AND ?)
+                         AND COALESCE(json_extract(raw_json,'$.deleted'), 0) != 1
+                         AND COALESCE(json_extract(raw_json,'$.voided'), 0) != 1""",
+                    (loc, s1, e1, s2, e2),
+                ).fetchone()["d"] or (1 if start == end else 0)
+                rev = conn.execute(
+                    """SELECT COALESCE(SUM(net_amount),0) AS net FROM orders
+                       WHERE location=? AND (business_date BETWEEN ? AND ? OR business_date BETWEEN ? AND ?)
+                         AND COALESCE(json_extract(raw_json,'$.deleted'), 0) != 1
+                         AND COALESCE(json_extract(raw_json,'$.voided'), 0) != 1""",
+                    (loc, s1, e1, s2, e2),
+                ).fetchone()["net"]
+                wages = lab["closed_pay"] + open_pay
+                sal = SALARIED_DAILY.get(loc, 0) * days
+                burden = BURDEN_PCT.get(loc, 0)
+                loaded = (wages + sal) * (1 + burden)
+                out["locations"][loc] = {
+                    "hours": round(lab["reg_h"] + lab["ot_h"], 1),
+                    "overtime_hours": round(lab["ot_h"], 1),
+                    "employees": lab["employees"],
+                    "on_clock_now": on_clock,
+                    "hourly_wages": round(wages, 2),
+                    "salaried": round(sal, 2),
+                    "burden_pct": burden,
+                    "loaded_labor": round(loaded, 2),
+                    "net_sales": round(rev, 2),
+                    "labor_pct": round(loaded / rev * 100, 1) if rev else None,
+                }
+            conn.close()
+            return json.dumps(out)
+        except Exception as e:
+            return json.dumps({"error": f"dashboard DB: {e}"})
+
+    elif name == "get_open_items":
+        try:
+            with open(BRIEF_PATH) as f:
+                text = f.read()
+            return json.dumps({"source": BRIEF_PATH, "brief": text[:6000]})
+        except Exception as e:
+            return json.dumps({"error": f"brief not found: {e}"})
+
+    elif name == "search_purchases":
+        try:
+            kw = f"%{args['query'].strip()}%"
+            days = int(args.get("days", 7))
+            conn = _dash_db()
+
+            def _cols(table):
+                return [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+
+            def _pick(cands, avail):
+                for c in cands:
+                    if c in avail:
+                        return c
+                return None
+
+            item_cols = _cols("scanned_invoice_items")
+            inv_cols = _cols("scanned_invoices")
+            desc = _pick(["description", "item_name", "product_name", "item_description", "name"], item_cols)
+            total = _pick(["line_total", "total", "extended_price", "total_price", "amount"], item_cols)
+            qty = _pick(["quantity", "qty"], item_cols)
+            unit = _pick(["unit_price", "price", "price_per_unit"], item_cols)
+            inv_fk = _pick(["invoice_id", "scanned_invoice_id"], item_cols)
+            inv_date = _pick(["invoice_date", "date"], inv_cols)
+            vendor = _pick(["vendor_name", "vendor"], inv_cols)
+            loc_col = _pick(["location"], inv_cols)
+            if not (desc and inv_fk and inv_date):
+                return json.dumps({"error": "schema mismatch", "item_cols": item_cols, "inv_cols": inv_cols})
+
+            since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            sel = [f"i.{desc} AS item", f"v.{inv_date} AS invoice_date"]
+            if vendor:
+                sel.append(f"v.{vendor} AS vendor")
+            if loc_col:
+                sel.append(f"v.{loc_col} AS location")
+            if qty:
+                sel.append(f"i.{qty} AS qty")
+            if unit:
+                sel.append(f"i.{unit} AS unit_price")
+            if total:
+                sel.append(f"i.{total} AS line_total")
+
+            where = [f"v.status = 'confirmed'", f"v.{inv_date} >= ?", f"lower(i.{desc}) LIKE lower(?)"]
+            params = [since, kw]
+            if args.get("location") and loc_col:
+                where.append(f"v.{loc_col} = ?")
+                params.append(args["location"])
+
+            rows = conn.execute(
+                f"""SELECT {', '.join(sel)}
+                    FROM scanned_invoice_items i
+                    JOIN scanned_invoices v ON i.{inv_fk} = v.id
+                    WHERE {' AND '.join(where)}
+                    ORDER BY v.{inv_date} DESC LIMIT 50""",
+                params,
+            ).fetchall()
+            lines = [dict(r) for r in rows]
+            summary = {"matches": len(lines), "since": since, "query": args["query"]}
+            if total:
+                summary["total_spent"] = round(sum((r["line_total"] or 0) for r in lines), 2)
+            conn.close()
+            return json.dumps({"summary": summary, "lines": lines}, default=str)
+        except Exception as e:
+            return json.dumps({"error": f"dashboard DB: {e}"})
+
+    elif name == "get_recipe_costing_status":
+        try:
+            top_n = int(args.get("top") or 5)
+            conn = _dash_db()
+            counts = conn.execute("""
+                SELECT
+                  SUM(CASE WHEN COALESCE(total_cost,0) > 0 THEN 1 ELSE 0 END) AS costed,
+                  SUM(CASE WHEN COALESCE(total_cost,0) = 0 THEN 1 ELSE 0 END) AS zero_cost,
+                  SUM(CASE WHEN COALESCE(total_cost,0) = 0
+                            AND COALESCE(needs_research,0) = 1 THEN 1 ELSE 0 END) AS needs_research,
+                  SUM(CASE WHEN COALESCE(food_cost_pct,0) > 70 THEN 1 ELSE 0 END) AS high_cost_suspect,
+                  COUNT(*) AS total
+                FROM recipes WHERE active = 1
+            """).fetchone()
+            shells = conn.execute("""
+                SELECT COUNT(*) FROM recipes r
+                WHERE r.active = 1 AND COALESCE(r.total_cost,0) = 0
+                  AND NOT EXISTS (SELECT 1 FROM recipe_ingredients ri
+                                  WHERE ri.recipe_id = r.id)
+            """).fetchone()[0]
+            revmap = _recipe_revenue_map(conn)
+            uncosted = conn.execute("""
+                SELECT id, name FROM recipes
+                WHERE active = 1 AND COALESCE(total_cost,0) = 0
+            """).fetchall()
+            ranked = sorted(
+                uncosted,
+                key=lambda r: -revmap.get(r["id"], {}).get("revenue", 0.0),
+            )[:top_n]
+            conn.close()
+            zero = counts["zero_cost"] or 0
+            return json.dumps({
+                "source": "dashboard DB recipes/recipe_ingredients + 90-day order_items revenue",
+                "active_recipes": counts["total"],
+                "fully_costed": counts["costed"],
+                "pct_costed": round(100.0 * (counts["costed"] or 0) / counts["total"], 1) if counts["total"] else 0,
+                "zero_cost": zero,
+                "empty_shells": shells,
+                "missing_quantities": zero - shells,
+                "needs_research": counts["needs_research"],
+                "high_cost_suspect_over_70pct": counts["high_cost_suspect"],
+                "top_uncosted_by_90d_revenue": [
+                    {"name": r["name"],
+                     "revenue_90d": round(revmap.get(r["id"], {}).get("revenue", 0.0), 2),
+                     "qty_sold_90d": int(revmap.get(r["id"], {}).get("qty", 0) or 0)}
+                    for r in ranked
+                ],
+                "note": "Fill these in via the Recipe Cost Fixer (/recipes/fixer) or the printed gap worksheet.",
+            })
+        except Exception as e:
+            return json.dumps({"error": f"dashboard DB: {e}"})
 
     elif name == "get_food_cost":
         return json.dumps({
@@ -626,12 +964,28 @@ def execute_tool(name: str, args: dict) -> str:
         })
 
     elif name == "check_sync_status":
-        return json.dumps({
-            "toast": {"last_sync": "2026-04-08T23:45:00", "status": "ok"},
-            "7shifts": {"last_sync": "2026-04-08T22:00:00", "status": "ok"},
-            "quickbooks": {"last_sync": "2026-04-07T08:00:00", "status": "⚠️ 36hrs stale"},
-            "note": "⚠️ STUB — wire up sync monitoring",
-        })
+        try:
+            conn = _dash_db()
+            out = {}
+            for loc in ("chatham", "dennis"):
+                o = conn.execute(
+                    "SELECT MAX(opened_at) FROM orders WHERE location=?", (loc,)
+                ).fetchone()[0]
+                t = conn.execute(
+                    "SELECT MAX(clock_in) FROM time_entries WHERE location=?", (loc,)
+                ).fetchone()[0]
+                out[loc] = {"latest_order": o, "latest_time_entry": t}
+            try:
+                rows = conn.execute(
+                    "SELECT vendor_name, status, last_successful_scrape FROM vendor_session_status"
+                ).fetchall()
+                out["vendor_scrapers"] = [dict(r) for r in rows]
+            except Exception:
+                pass
+            conn.close()
+            return json.dumps(out, default=str)
+        except Exception as e:
+            return json.dumps({"error": f"dashboard DB: {e}"})
 
     elif name == "get_thermostat":
         return json.dumps({
@@ -704,6 +1058,51 @@ async def run_agent(user_message: str) -> str:
 
 
 # ===========================================================================
+# JARVIS HTTP ENDPOINT (Siri Shortcuts)
+# ===========================================================================
+async def _http_ask(request):
+    from aiohttp import web
+    if not JARVIS_HTTP_TOKEN:
+        return web.json_response({"error": "JARVIS_HTTP_TOKEN not set"}, status=503)
+    if request.headers.get("Authorization", "") != f"Bearer {JARVIS_HTTP_TOKEN}":
+        return web.json_response({"error": "unauthorized"}, status=401)
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    question = (data.get("question") or "").strip()
+    if not question:
+        return web.json_response({"error": "empty question"}, status=400)
+    logger.info(f"HTTP /ask: {question}")
+    try:
+        answer = await run_agent(question)
+    except Exception as e:
+        logger.exception("HTTP /ask failed")
+        return web.json_response({"error": str(e)}, status=500)
+    return web.json_response({"answer": answer})
+
+
+async def start_http_server(app):
+    """Started via post_init on the same event loop as the Telegram bot."""
+    try:
+        from aiohttp import web
+    except ImportError:
+        logger.warning("aiohttp not installed — Jarvis HTTP /ask disabled. "
+                       "pip install aiohttp --break-system-packages")
+        return
+    if not JARVIS_HTTP_TOKEN:
+        logger.warning("JARVIS_HTTP_TOKEN not set — Jarvis HTTP /ask disabled.")
+        return
+    web_app = web.Application()
+    web_app.router.add_post("/ask", _http_ask)
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, JARVIS_HTTP_HOST, JARVIS_HTTP_PORT)
+    await site.start()
+    logger.info(f"Jarvis HTTP /ask listening on {JARVIS_HTTP_HOST}:{JARVIS_HTTP_PORT}")
+
+
+# ===========================================================================
 # TELEGRAM HANDLERS
 # ===========================================================================
 def is_authorized(user_id: int) -> bool:
@@ -717,8 +1116,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
         return
     await update.message.reply_text(
-        "🔴 Red Nun Agent online.\n\n"
-        "Ask me anything — sales, labor, food cost, walk-in temps, "
+        "🔴 Jarvis online — Red Nun controller.\n\n"
+        "Ask me anything — sales, labor %, open items, walk-in temps, "
         "server status, sync issues, weather, payroll.\n\n"
         "Examples:\n"
         "• How'd Dennis do last night?\n"
@@ -910,7 +1309,7 @@ async def scheduled_briefing(context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # ===========================================================================
 def main():
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(start_http_server).build()
 
     # Commands
     app.add_handler(CommandHandler("start", cmd_start))
