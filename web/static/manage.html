@@ -8241,6 +8241,7 @@ async function rvShowRecipe(id) {
       '<div style="display:flex;justify-content:space-between;padding:6px 0;margin-top:4px;border-top:1px solid var(--border);padding-top:10px"><span style="font-weight:700">Food Cost %</span><span style="font-weight:800;font-size:18px;color:' + fcColor + '">' + fcPctDisplay + '</span></div>';
 
     document.getElementById('rv-detail').style.display = 'block';
+    document.getElementById('rv-detail').scrollIntoView({behavior: 'smooth', block: 'start'});
   } catch(e) {
     alert('Error loading recipe: ' + e.message);
   }
