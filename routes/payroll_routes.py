@@ -78,6 +78,7 @@ ER_TAX_COLS = [
 ]
 WAGE_COLS = [
     "Hourly (Regular) Amt",
+    "Overtime Amt",
     "Salaried Amt",
     "Paid Sick Time Amt",
     "Tip Credit Adjustment Amt",
@@ -525,6 +526,17 @@ def parse_journal_csv(csv_text):
         name = f"{first} {last}".strip() if first else last
 
         wages    = sum(_flt(row.get(c)) for c in WAGE_COLS)
+        # 7shifts journals grow new wage columns over time ("Overtime Amt"
+        # appeared 2026-07-23 and threw the QBO journal off by exactly its
+        # total). Gross Total = all wage categories + all tips, so whenever
+        # the itemized wage columns fall short of that identity, trust the
+        # derived figure over the hardcoded column list.
+        _gross_chk = _flt(row.get("Gross Total"))
+        _tips_chk  = (_flt(row.get("Paycheck Tips Amt"))
+                      + _flt(row.get("Cash Tips Amt")))
+        _derived   = round(_gross_chk - _tips_chk, 2)
+        if abs(_derived - wages) > 0.005:
+            wages = _derived
         ee_taxes = sum(_flt(row.get(c)) for c in EE_TAX_COLS)
         er_taxes = sum(_flt(row.get(c)) for c in ER_TAX_COLS)
 
