@@ -337,21 +337,36 @@ def book_run(location, run, csv_text, pdf_bytes):
 
 
 def queue_paper_checks(run_id, location):
-    """Assign check numbers, render PDFs, and queue print_jobs for the home
-    agent — mirrors /api/print-queue/print + auto_pay's print_jobs pattern."""
+    """Queue the run's batch check PDF for the home print agent.
+
+    The booking route (create_payroll_run, assign_checks default on) already
+    assigns sequential check numbers, renders the full batch PDF to
+    payroll_runs.checks_pdf_path, and marks the payroll_checks printed.
+    The ONLY missing step is telling the agent to physically print it —
+    so queue that exact PDF as a single print_job. (v1 of this function
+    looked for check_number IS NULL rows and found nothing — 7/23 bug.)"""
     from integrations.toast.data_store import get_connection
-    from check_printer import generate_payroll_check_pdf
 
     conn = get_connection()
-    queued = []
     try:
+        run = conn.execute(
+            "SELECT * FROM payroll_runs WHERE id = ?", (run_id,)).fetchone()
+        if not run:
+            raise RuntimeError(f"run {run_id} not found")
+        run = dict(run)
+        pdf_path = run.get("checks_pdf_path")
+        if not pdf_path or not os.path.exists(pdf_path):
+            raise RuntimeError(
+                f"run {run_id}: batch checks PDF missing ({pdf_path}) — "
+                f"print manually from the dashboard")
+
         checks = conn.execute(
-            """SELECT * FROM payroll_checks
+            """SELECT employee_name, net_pay, check_number
+               FROM payroll_checks
                WHERE payroll_run_id = ?
                  AND (payment_method IS NULL OR LOWER(payment_method) != 'direct deposit')
                  AND COALESCE(net_pay, 0) > 0
                  AND COALESCE(voided, 0) = 0
-                 AND check_number IS NULL
                ORDER BY employee_name""", (run_id,)).fetchall()
         if not checks:
             return []
@@ -360,44 +375,16 @@ def queue_paper_checks(run_id, location):
                 f"run {run_id}: {len(checks)} checks exceeds cap "
                 f"{MAX_CHECKS_PER_RUN} — refusing to auto-print")
 
-        # Exact location match only — never fall back to another location's
-        # bank account (that's how Dennis checks once printed on Chatham).
-        config = conn.execute(
-            "SELECT * FROM check_config WHERE location = ?",
-            (location,)).fetchone()
-        if not config:
-            raise RuntimeError(f"no check_config for '{location}' — not printing")
-        config_d = dict(config)
-        next_num = int(config_d.get("check_number_next") or 2001)
-
-        os.makedirs(CHECK_PDF_DIR, exist_ok=True)
-        for c in checks:
-            c = dict(c)
-            num = str(next_num)
-            pdf_path = os.path.join(
-                CHECK_PDF_DIR, f"payroll_check_{c['id']}_{num}.pdf")
-            generate_payroll_check_pdf(
-                payroll={**c, "check_number": num},
-                config=config_d,
-                check_number=num,
-                output_path=pdf_path)
-            conn.execute(
-                "UPDATE payroll_checks SET check_number = ?, "
-                "printed_at = datetime('now') WHERE id = ?", (num, c["id"]))
-            conn.execute(
-                """INSERT INTO print_jobs
-                   (kind, check_number, location, pdf_path, status)
-                   VALUES ('check', ?, ?, ?, 'pending')""",
-                (num, location, pdf_path))
-            queued.append({"employee": c.get("employee_name"),
-                           "net": c.get("net_pay"), "check_number": num})
-            next_num += 1
-
+        nums = [c["check_number"] for c in checks if c["check_number"]]
+        label = f"{nums[0]}-{nums[-1]}" if nums else f"run{run_id}"
         conn.execute(
-            "UPDATE check_config SET check_number_next = ? WHERE location = ?",
-            (next_num, location))
+            """INSERT INTO print_jobs
+               (kind, check_number, location, pdf_path, status)
+               VALUES ('check', ?, ?, ?, 'pending')""",
+            (label, location, pdf_path))
         conn.commit()
-        return queued
+        return [{"employee": c["employee_name"], "net": c["net_pay"],
+                 "check_number": c["check_number"]} for c in checks]
     except Exception:
         conn.rollback()
         raise
