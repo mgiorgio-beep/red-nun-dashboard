@@ -687,6 +687,9 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     document.querySelectorAll('[data-action="save-conversion"]').forEach(el => {
       el.addEventListener('click', () => saveConversion(Number(el.dataset.ing)));
     });
+    document.querySelectorAll('[data-action="add-conv-layer"]').forEach(el => {
+      el.addEventListener('click', () => addConvLayer(Number(el.dataset.ing)));
+    });
     document.querySelectorAll('[data-action="cancel-conversion"]').forEach(el => {
       el.addEventListener('click', () => { state.openConversionFor = null; renderRecipe(); });
     });
@@ -969,12 +972,16 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
       '<div class="conv-dialog" data-conv="'+ing.id+'">' +
         '<h4>' + (existing ? 'Edit' : 'Set') + ' unit conversion</h4>' +
         ctxBlock +
-        '<div class="conv-form">' +
-          '<span class="label">1 <b style="color:var(--text); text-transform:none; font-weight:700">' + esc(fromUnit) + '</b> of this product =</span>' +
-          '<input class="qty" type="number" step="0.0001" min="0" value="'+defQty+'" data-conv-qty="'+ing.id+'" autofocus>' +
-          '<select class="unit" data-conv-unit="'+ing.id+'">' + unitOpts + '</select>' +
+        '<div class="conv-layers" data-conv-layers="'+ing.id+'">' +
+          '<div class="conv-form conv-layer">' +
+            '<span class="label">1 <b class="conv-layer-from" style="color:var(--text); text-transform:none; font-weight:700">' + esc(fromUnit) + '</b> =</span>' +
+            '<input class="qty" type="number" step="0.0001" min="0" value="'+defQty+'" data-layer-qty autofocus>' +
+            '<input class="qty" type="text" style="width:130px" placeholder="bottle / ' + esc(recipeUnit) + '" value="'+esc(existing ? defUnit : '')+'" list="conv-units-'+ing.id+'" data-layer-unit>' +
+          '</div>' +
         '</div>' +
-        '<div class="conv-helper">' + helperHint + '</div>' +
+        '<div style="margin-top:8px"><a href="javascript:void(0)" class="add-ing-link" data-action="add-conv-layer" data-ing="'+ing.id+'">+ add another layer</a></div>' +
+        '<datalist id="conv-units-'+ing.id+'">' + allUnits.map(u => '<option value="'+esc(u)+'">').join('') + '</datalist>' +
+        '<div class="conv-helper">Stack layers the way the case breaks down &mdash; e.g. 1 cs = <b>4</b> <b>bottle</b>, + add another layer, 1 bottle = <b>25.4</b> <b>fl_oz</b>. The math is multiplied for you; the last layer must end in a measurable unit.</div>' +
         warning +
         '<div class="conv-buttons">' +
           '<button class="btn btn-primary" data-action="save-conversion" data-ing="'+ing.id+'">Save conversion</button>' +
@@ -984,32 +991,82 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     );
   }
 
+  function addConvLayer(ingId){
+    const box = document.querySelector('[data-conv-layers="'+ingId+'"]');
+    if (!box) return;
+    const rows = box.querySelectorAll('.conv-layer');
+    const last = rows[rows.length - 1];
+    const prevUnit = String((last.querySelector('[data-layer-unit]') || {}).value || '').trim() || '?';
+    box.insertAdjacentHTML('beforeend',
+      '<div class="conv-form conv-layer" style="margin-top:6px">' +
+        '<span class="label">1 <b class="conv-layer-from" style="color:var(--text); text-transform:none; font-weight:700">' + esc(prevUnit) + '</b> =</span>' +
+        '<input class="qty" type="number" step="0.0001" min="0" data-layer-qty>' +
+        '<input class="qty" type="text" style="width:130px" placeholder="fl_oz / oz / each" list="conv-units-'+ingId+'" data-layer-unit>' +
+      '</div>');
+    const added = box.querySelectorAll('.conv-layer');
+    added[added.length - 1].querySelector('[data-layer-qty]').focus();
+  }
+
   async function saveConversion(ingId){
     const ing = state.ingredients.find(x => x.id === ingId);
     if (!ing) return;
-    const qEl = document.querySelector('[data-conv-qty="'+ingId+'"]');
-    const uEl = document.querySelector('[data-conv-unit="'+ingId+'"]');
-    const to_qty = parseFloat(qEl.value);
-    const to_unit = uEl.value;
-    if (!to_qty || to_qty <= 0 || !to_unit){
-      toast('Enter a positive quantity and pick a unit', 'err');
+    const box = document.querySelector('[data-conv-layers="'+ingId+'"]');
+    if (!box) return;
+    const layers = Array.from(box.querySelectorAll('.conv-layer')).map(r => ({
+      qty: parseFloat((r.querySelector('[data-layer-qty]') || {}).value),
+      unit: String((r.querySelector('[data-layer-unit]') || {}).value || '').trim().toLowerCase()
+    }));
+    for (const l of layers){
+      if (!l.qty || l.qty <= 0 || !l.unit){
+        toast('Every layer needs a positive quantity and a unit', 'err');
+        return;
+      }
+    }
+    const canonical = (state.units || []).map(u => u.toLowerCase());
+    const finalUnit = layers[layers.length - 1].unit;
+    if (canonical.indexOf(finalUnit) < 0){
+      toast('The last layer ends in "' + finalUnit + '" \u2014 add another layer that converts it to a measurable unit (fl_oz, oz, each\u2026)', 'err');
       return;
     }
     // from_unit = product's purchase unit (bottle, each, case, etc.)
     // Fall back to recipe unit only when the product has no purchase unit.
     const from_unit = resolvePurchaseUnit(ing) || (ing.unit || 'each').toLowerCase();
+    const total = layers.reduce((a, l) => a * l.qty, 1);
+    const mathStr = layers.map(l => l.qty + ' ' + l.unit).join(' \u00d7 ') +
+      (layers.length > 1 ? ' = ' + (Math.round(total * 10000) / 10000) + ' ' + finalUnit : '');
     try {
+      // Main row the costing engine uses: purchase unit straight to the final unit
       await api('/api/recipe-fixer/conversion', {
         method: 'POST',
         body: JSON.stringify({
           product_id: ing.product_id,
           from_qty: 1,
           from_unit: from_unit,
-          to_qty: to_qty,
-          to_unit: to_unit
+          to_qty: total,
+          to_unit: finalUnit
         })
       });
-      toast('Conversion saved', 'ok');
+      // Also save each intermediate hop straight to the final unit (reusable
+      // if a recipe ever measures in bottles/bags/etc.)
+      for (let i = 1; i < layers.length; i++){
+        let sub = 1;
+        for (let j = i; j < layers.length; j++) sub *= layers[j].qty;
+        const hopFrom = layers[i - 1].unit;
+        if (hopFrom === from_unit || canonical.indexOf(hopFrom) >= 0) continue;
+        try {
+          await api('/api/recipe-fixer/conversion', {
+            method: 'POST',
+            body: JSON.stringify({
+              product_id: ing.product_id,
+              from_qty: 1,
+              from_unit: hopFrom,
+              to_qty: sub,
+              to_unit: finalUnit
+            })
+          });
+        } catch(e){ /* helper rows are best-effort */ }
+      }
+      toast('Saved: 1 ' + from_unit + ' = ' + mathStr, 'ok');
       state.openConversionFor = null;
       // Re-query ingredient to get updated cost
       await sendIngredientUpdate(ingId);
