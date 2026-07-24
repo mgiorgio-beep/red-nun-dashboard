@@ -8166,7 +8166,7 @@ let _rvCurrentRecipeId = null;
 
 async function rvLoadRecipes() {
   try {
-    const resp = await fetch('/recipes');
+    const resp = await fetch('/api/inventory/recipes');
     const recipes = await resp.json();
     const list = document.getElementById('rv-recipe-list');
     if (!recipes.length) {
@@ -8199,7 +8199,7 @@ function rvFcColor(pct) {
 async function rvShowRecipe(id) {
   _rvCurrentRecipeId = id;
   try {
-    const resp = await fetch('/recipes/' + id + '/cost-breakdown');
+    const resp = await fetch('/api/inventory/recipes/' + id + '/cost-breakdown');
     const data = await resp.json();
     if (data.error) { alert(data.error); return; }
 
@@ -8251,7 +8251,7 @@ async function rvSavePrice() {
   var menuPrice = parseFloat(document.getElementById('rv-menu-price').value) || 0;
   var servings = parseFloat(document.getElementById('rv-servings').value) || 1;
   try {
-    const resp = await fetch('/recipes/' + _rvCurrentRecipeId + '/menu-price', {
+    const resp = await fetch('/api/inventory/recipes/' + _rvCurrentRecipeId + '/menu-price', {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({menu_price: menuPrice, servings: servings})
