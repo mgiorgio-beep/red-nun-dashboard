@@ -141,48 +141,18 @@ def cost_ingredient(ri, conn):
         if pack_unit in ('oz', 'ounce', 'ounces') and product_is_volume:
             pack_unit = 'fl oz'
 
-        # Use price_per_unit from vendor item if available (pre-calculated)
-        vi_price_per_unit = product.get('price_per_unit')
-        if vi_price_per_unit and vi_price_per_unit > 0:
-            # price_per_unit is cost per the corrected pack_unit (e.g. per fl oz
-            # for a liquor bottle, per oz for a weight item). Compare against
-            # the recipe_unit after the same normalization.
-            if pack_unit == recipe_unit:
-                cost = quantity * vi_price_per_unit
-                return {'cost': round(cost, 4), 'unit_price': round(vi_price_per_unit, 4), 'source': 'vendor_item'}
-
-        # PATH 1: recipe_unit matches the product's own unit or the
-        # pack_unit (possibly rewritten by the vi contains override above).
-        # Divide price by pack_size to get per-pack_unit cost. When
-        # pack_size == 1 this is a no-op; when the vendor_item override
-        # inflated pack_size (e.g. 25.36 fl oz in a 1L liquor bottle) it
-        # correctly splits the bottle price across units.
-        if recipe_unit and (recipe_unit == prod_unit or recipe_unit == pack_unit):
-            per_unit = price / pack_size if pack_size and pack_size > 0 else price
-            cost = quantity * per_unit
-            return {'cost': round(cost, 4), 'unit_price': round(per_unit, 4), 'source': 'vendor_item'}
-
-        # PATH 2a: both weight units -> standard conversion
+        # Precompute unit factors (used by explicit conversions and PATHs 2a/2b)
         ru_wt = WEIGHT_TO_OZ.get(recipe_unit)
         pu_wt = WEIGHT_TO_OZ.get(pack_unit) or WEIGHT_TO_OZ.get(prod_unit)
-        if ru_wt and pu_wt and pack_size > 0:
-            cost_per_oz = price / (pack_size * pu_wt)
-            cost_per_ru = cost_per_oz * ru_wt
-            line_cost = quantity * cost_per_ru
-            return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
-                    'source': 'standard_conversion'}
-
-        # PATH 2b: both volume units -> standard conversion
         ru_vol = VOLUME_TO_FLOZ.get(recipe_unit)
         pu_vol = VOLUME_TO_FLOZ.get(pack_unit) or VOLUME_TO_FLOZ.get(prod_unit)
-        if ru_vol and pu_vol and pack_size > 0:
-            cost_per_floz = price / (pack_size * pu_vol)
-            cost_per_ru = cost_per_floz * ru_vol
-            line_cost = quantity * cost_per_ru
-            return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
-                    'source': 'standard_conversion'}
 
-        # PATH 3: check product_unit_conversions table.
+        # PATH 0 (2026-07-23): EXPLICIT per-product conversions beat inferred
+        # pack math. A human typed these in the fixer ("1 case = 12 bottle,
+        # 1 bottle = 750 ml") — they must override vendor pack_contains data,
+        # which is frequently wrong (750ML-per-case class of bugs). Formerly
+        # PATH 3, which standard conversions short-circuited.
+        # (moved conversion logic — see PATH 0 note above)
         # Two semantics are supported:
         #   (A) from_unit == recipe_unit — "1 shot = 1.5 fl oz"  (legacy)
         #   (B) from_unit == a purchase unit — "1 case = 288 slice",
@@ -260,6 +230,43 @@ def cost_ingredient(ri, conn):
                 line_cost = quantity * cost_per_ru
                 return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
                         'source': 'standard_conversion'}
+
+        # Use price_per_unit from vendor item if available (pre-calculated)
+        vi_price_per_unit = product.get('price_per_unit')
+        if vi_price_per_unit and vi_price_per_unit > 0:
+            # price_per_unit is cost per the corrected pack_unit (e.g. per fl oz
+            # for a liquor bottle, per oz for a weight item). Compare against
+            # the recipe_unit after the same normalization.
+            if pack_unit == recipe_unit:
+                cost = quantity * vi_price_per_unit
+                return {'cost': round(cost, 4), 'unit_price': round(vi_price_per_unit, 4), 'source': 'vendor_item'}
+
+        # PATH 1: recipe_unit matches the product's own unit or the
+        # pack_unit (possibly rewritten by the vi contains override above).
+        # Divide price by pack_size to get per-pack_unit cost. When
+        # pack_size == 1 this is a no-op; when the vendor_item override
+        # inflated pack_size (e.g. 25.36 fl oz in a 1L liquor bottle) it
+        # correctly splits the bottle price across units.
+        if recipe_unit and (recipe_unit == prod_unit or recipe_unit == pack_unit):
+            per_unit = price / pack_size if pack_size and pack_size > 0 else price
+            cost = quantity * per_unit
+            return {'cost': round(cost, 4), 'unit_price': round(per_unit, 4), 'source': 'vendor_item'}
+
+        # PATH 2a: both weight units -> standard conversion
+        if ru_wt and pu_wt and pack_size > 0:
+            cost_per_oz = price / (pack_size * pu_wt)
+            cost_per_ru = cost_per_oz * ru_wt
+            line_cost = quantity * cost_per_ru
+            return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
+                    'source': 'standard_conversion'}
+
+        # PATH 2b: both volume units -> standard conversion
+        if ru_vol and pu_vol and pack_size > 0:
+            cost_per_floz = price / (pack_size * pu_vol)
+            cost_per_ru = cost_per_floz * ru_vol
+            line_cost = quantity * cost_per_ru
+            return {'cost': round(line_cost, 4), 'unit_price': round(cost_per_ru, 4),
+                    'source': 'standard_conversion'}
 
         # PATH 4: no resolution — flag it, don't guess
         return {'cost': 0.0, 'unit_price': price, 'source': 'no_conversion'}

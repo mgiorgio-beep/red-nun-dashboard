@@ -8296,7 +8296,6 @@ async function pmixLoadItems() {
     ]);
     _pmixItems = itemsResp;
     _pmixRecipes = Array.isArray(recipesResp) ? recipesResp : (recipesResp.recipes || []);
-    _pmixPage = 0;
     pmixRender();
   } catch(e) {
     document.getElementById('pmix-table-body').innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--red)">Error loading: ' + e.message + '</td></tr>';
@@ -8342,6 +8341,8 @@ function pmixGetFiltered() {
 
 function pmixRender() {
   var items = pmixGetFiltered();
+  var _pmMax = Math.max(0, Math.ceil(items.length / _pmixPerPage) - 1);
+  if (_pmixPage > _pmMax) _pmixPage = _pmMax;
   var start = _pmixPage * _pmixPerPage;
   var page = items.slice(start, start + _pmixPerPage);
   var tbody = document.getElementById('pmix-table-body');
@@ -8606,7 +8607,6 @@ async function maGenerate() {
     });
 
     maRenderSummary();
-    _maPage = 0;
     maRender();
     maRenderActions();
   } catch(err) { alert('Error: ' + err.message); }
@@ -8670,6 +8670,8 @@ function maRender() {
     return 0;
   });
 
+  var _maMax = Math.max(0, Math.ceil(filtered.length / _maPerPage) - 1);
+  if (_maPage > _maMax) _maPage = _maMax;
   var start = _maPage * _maPerPage;
   var page = filtered.slice(start, start + _maPerPage);
 

@@ -85,6 +85,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .recipe-card {
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: 14px; padding: 24px; margin-bottom: 24px;
+  display: flex; flex-direction: column;
+  min-height: calc(100vh - 250px);
 }
 .recipe-title { font-size: 24px; font-weight: 700; color: var(--text); }
 .recipe-meta { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--text3);
@@ -199,6 +201,7 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
 
 .action-row {
   display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; align-items: center;
+  margin-top: auto; padding-top: 16px;
 }
 .action-row .spacer { flex: 1; }
 
@@ -689,6 +692,20 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     });
     document.querySelectorAll('[data-action="add-conv-layer"]').forEach(el => {
       el.addEventListener('click', () => addConvLayer(Number(el.dataset.ing)));
+    });
+    // Live-update the next layer's "1 <unit> =" label as you type
+    document.querySelectorAll('[data-conv-layers]').forEach(box => {
+      if (box._labelBound) return;
+      box._labelBound = true;
+      box.addEventListener('input', e => {
+        if (!e.target.matches || !e.target.matches('[data-layer-unit]')) return;
+        const rows = Array.from(box.querySelectorAll('.conv-layer'));
+        const i = rows.findIndex(r => r.contains(e.target));
+        if (i >= 0 && rows[i + 1]){
+          const lbl = rows[i + 1].querySelector('.conv-layer-from');
+          if (lbl) lbl.textContent = String(e.target.value || '').trim() || '?';
+        }
+      });
     });
     document.querySelectorAll('[data-action="cancel-conversion"]').forEach(el => {
       el.addEventListener('click', () => { state.openConversionFor = null; renderRecipe(); });
