@@ -198,6 +198,21 @@ def parse_filters():
 # Dashboard HTML
 # ------------------------------------------------------------------
 
+@app.after_request
+def _no_store_api(resp):
+    """Never let the browser (or an intermediary) cache API responses — stale
+    recipe costs were surviving hard-refreshes because GET /api/... had no
+    cache headers."""
+    try:
+        from flask import request
+        if request.path.startswith("/api/"):
+            resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+    except Exception:
+        pass
+    return resp
+
+
 @app.route("/")
 @login_required
 def index():

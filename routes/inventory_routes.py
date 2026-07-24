@@ -817,52 +817,48 @@ def calculate_recipe_cost(recipe_id):
     recipe = dict(recipe)
 
     ingredients = conn.execute("""
-        SELECT ri.id as ingredient_id, ri.quantity, ri.unit, ri.yield_pct,
-               p.id as id, p.name as product_name,
-               p.current_price, p.unit as purchase_unit,
-               p.pack_size, p.pack_unit
+        SELECT ri.id as ingredient_id, ri.product_id, ri.quantity, ri.unit, ri.yield_pct,
+               p.name as product_name
         FROM recipe_ingredients ri
         JOIN products p ON ri.product_id = p.id
         WHERE ri.recipe_id = ?
     """, (recipe_id,)).fetchall()
 
-    # Load all conversions for products in this recipe in one query
-    product_ids = [dict(i)['id'] for i in ingredients]
-    conversions_by_product = {}
-    if product_ids:
-        placeholders = ','.join('?' * len(product_ids))
-        conv_rows = conn.execute(
-            f"SELECT product_id, from_qty, from_unit, to_qty, to_unit "
-            f"FROM product_unit_conversions WHERE product_id IN ({placeholders})",
-            product_ids
-        ).fetchall()
-        for row in [dict(r) for r in conv_rows]:
-            pid = row['product_id']
-            if pid not in conversions_by_product:
-                conversions_by_product[pid] = {}
-            conversions_by_product[pid][row['from_unit'].strip().lower()] = row
+    # Cost through the shared engine (integrations.recipes.recipe_costing) so this
+    # endpoint agrees with the viewer and the recipes table. The old inline
+    # resolve_ingredient_cost() used product.pack_size and ignored the vendor
+    # pack_contains, double-counting (Fish & Chips read $22.83 instead of $6.49)
+    # and then overwriting the recipes row below with that wrong number.
+    from integrations.recipes.recipe_costing import cost_ingredient
 
     total_cost          = 0
     missing_conversions = []
     ingredient_costs    = []
 
     for ing in [dict(i) for i in ingredients]:
-        result = resolve_ingredient_cost(
-            ing, ing['quantity'] or 0, ing['unit'], conversions_by_product
+        qty = ing['quantity'] or 0
+        result = cost_ingredient(
+            {'product_id': ing['product_id'], 'quantity': qty, 'unit': ing['unit']}, conn
         )
-        if result['needs_conversion']:
-            missing_conversions.append(result['missing'])
+        needs = result['source'] in ('no_conversion', 'no_price', 'no_unit')
+        if needs:
+            missing_conversions.append({
+                'product_id':   ing['product_id'],
+                'product_name': ing['product_name'],
+                'recipe_unit':  ing['unit'],
+                'reason':       result['source'],
+            })
         else:
-            total_cost += result['line_cost'] or 0
+            total_cost += result['cost'] or 0
         ingredient_costs.append({
             'ingredient_id':        ing['ingredient_id'],
-            'product_id':           ing['id'],
+            'product_id':           ing['product_id'],
             'product_name':         ing['product_name'],
             'quantity':             ing['quantity'],
             'unit':                 ing['unit'],
-            'line_cost':            result['line_cost'],
-            'cost_per_recipe_unit': result.get('cost_per_recipe_unit'),
-            'needs_conversion':     result['needs_conversion']
+            'line_cost':            result['cost'],
+            'cost_per_recipe_unit': round(result['cost'] / qty, 4) if qty else 0,
+            'needs_conversion':     needs
         })
 
     menu_price       = recipe.get('menu_price') or 0
