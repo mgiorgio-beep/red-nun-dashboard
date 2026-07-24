@@ -3496,7 +3496,7 @@ async function loadPageIngredients(recipeId, menuPrice) {
       const yldStyle = yld === 100 ? 'color:var(--text3);' : '';
       const prodName = (ing.product_display_name || ing.product_name || 'Unknown').replace(/"/g, '&quot;');
       return `
-      <tr class="rp-ing-row" data-id="${ing.id}" data-product-id="${ing.product_id}">
+      <tr class="rp-ing-row" data-id="${ing.id}" data-product-id="${ing.product_id}" data-eng-cost="${ing.cost_per_recipe_unit||''}" data-eng-unit="${ing.unit||''}">
         <td style="padding:6px 8px;position:relative">
           <input type="text" class="rp-ir-product-search form-input" value="${prodName}" placeholder="Search product..." autocomplete="off" style="font-size:13px;padding:6px 8px;background:var(--bg);border-color:var(--border);width:100%">
           <input type="hidden" class="rp-ir-product-id" value="${ing.product_id||''}">
@@ -3813,21 +3813,31 @@ function recalcIngCosts() {
     // Look up cost by product_id first (reliable), fall back to name match
     const pidInput = tr.querySelector('.rp-ir-product-id');
     const pid = pidInput ? parseInt(pidInput.value) : 0;
-    let costPerUnit = 0;
-    let containsUnit = '';
-    if (pid && allProducts.length) {
-      const prod = allProducts.find(p => p.id === pid);
-      if (prod) {
-        costPerUnit = prod.active_price_per_unit || (prod.active_price && prod.active_pack_contains ? prod.active_price / prod.active_pack_contains : 0);
-        containsUnit = prod.active_contains_unit || '';
-      }
-    }
-    if (!costPerUnit) costPerUnit = _rpIngCostLookup(prodName);
-    // Get recipe unit from the dropdown and convert
     const unitSel = tr.querySelector('.rp-ir-unit');
     const recipeUnit = unitSel ? unitSel.value : '';
-    if (containsUnit && recipeUnit) {
-      costPerUnit = _convertCost(costPerUnit, containsUnit, recipeUnit);
+    let costPerUnit = 0;
+    // Prefer the backend engine's per-unit cost (data-eng-cost): it already
+    // handles pack_contains, unit conversions, count units, and sub-recipe
+    // (prepared-item) roll-ups that the client-side math below cannot. Trust it
+    // while the row's product and unit are unchanged; only estimate on live edits.
+    const engCost = parseFloat(tr.getAttribute('data-eng-cost'));
+    const engUnit = tr.getAttribute('data-eng-unit') || '';
+    const origPid = parseInt(tr.getAttribute('data-product-id')) || 0;
+    if (!isNaN(engCost) && engCost > 0 && recipeUnit === engUnit && pid === origPid) {
+      costPerUnit = engCost;
+    } else {
+      let containsUnit = '';
+      if (pid && allProducts.length) {
+        const prod = allProducts.find(p => p.id === pid);
+        if (prod) {
+          costPerUnit = prod.active_price_per_unit || (prod.active_price && prod.active_pack_contains ? prod.active_price / prod.active_pack_contains : 0);
+          containsUnit = prod.active_contains_unit || '';
+        }
+      }
+      if (!costPerUnit) costPerUnit = _rpIngCostLookup(prodName);
+      if (containsUnit && recipeUnit) {
+        costPerUnit = _convertCost(costPerUnit, containsUnit, recipeUnit);
+      }
     }
     const qty = parseFloat(tr.querySelector('.rp-ir-qty')?.value) || 0;
     const yld = parseFloat(tr.querySelector('.rp-ir-yield')?.value) || 100;
