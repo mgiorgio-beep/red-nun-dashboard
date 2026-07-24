@@ -652,6 +652,7 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     return (
       '<div class="action-row">' +
         '<button class="btn-ghost btn" data-action="prev" '+(state.idx===0?'disabled':'')+'>← Previous</button>' +
+        '<button class="btn-ghost btn" data-action="next" '+(state.idx >= state.queue.length-1?'disabled':'')+'>Next →</button>' +
         '<div class="spacer"></div>' +
         '<button class="btn btn-warn" data-action="'+skipAction+'">' + skipLabel + '</button>' +
         '<button class="btn" data-action="save">Save</button>' +
@@ -699,6 +700,7 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
     document.querySelectorAll('[data-action="ai-draft"]').forEach(el => el.addEventListener('click', aiDraft));
     document.querySelectorAll('[data-action="add-ing"]').forEach(el => el.addEventListener('click', openAddIngredient));
     document.querySelectorAll('[data-action="prev"]').forEach(el => el.addEventListener('click', prevRecipe));
+    document.querySelectorAll('[data-action="next"]').forEach(el => el.addEventListener('click', nextRecipe));
     document.querySelectorAll('[data-action="save-next"]').forEach(el => el.addEventListener('click', () => saveAndAdvance(true)));
     document.querySelectorAll('[data-action="save"]').forEach(el => el.addEventListener('click', () => saveAndAdvance(false)));
     document.querySelectorAll('[data-action="skip"]').forEach(el => el.addEventListener('click', skipRecipe));
@@ -1153,6 +1155,14 @@ input.q-input:focus, select.u-input:focus, input.p-input:focus {
   async function prevRecipe(){
     if (state.idx <= 0) return;
     state.idx -= 1;
+    renderProgress();
+    await loadRecipe(state.queue[state.idx].id);
+  }
+
+  async function nextRecipe(){
+    // Move to the next recipe WITHOUT saving or re-sorting the queue.
+    if (state.idx >= state.queue.length - 1) return;
+    state.idx += 1;
     renderProgress();
     await loadRecipe(state.queue[state.idx].id);
   }

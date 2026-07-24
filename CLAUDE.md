@@ -5,7 +5,8 @@
 ### The one repo that matters
 ```
 GitHub:  https://github.com/mgiorgio-beep/red-nun-dashboard
-Local:   G:\My Drive\Red NUn Dashboard           (Windows working copy, in Google Drive)
+Local:   C:\Users\giorg\code\red-nun-dashboard    (Windows working copy — plain NTFS, NOT in Google Drive)
+Docs:    G:\My Drive\Red NUn Dashboard           (documents/data ONLY — NO git operations here, see below)
 Server:  /opt/red-nun-dashboard                   (BOTH Beelinks — Chatham SER5 + Dennis ME Mini)
 Live at: https://dashboard.rednun.com             (Chatham, full dashboard)
          https://dennis.rednun.com/staff          (Dennis, staff/TV app only)
@@ -19,10 +20,24 @@ Dennis:   ssh -p 2222 rednun@10.1.10.84            # on-site
           ssh -p 2222 rednun@ssh-dennis.rednun.com # remote (Cloudflare tunnel, IP-proof)
 ```
 
+### ⚠️ Git moved OUT of Google Drive (2026-07-23)
+The Windows working copy used to live at `G:\My Drive\Red NUn Dashboard`. That caused two days of
+constant failures: Google Drive holds file locks while git works (hanging `git status`/`commit`/`stash`,
+stale `index.lock`), and the Beelink `rclone bisync` silently REVERTED working-tree files to stale copies
+after a rebase. Rules now:
+- **ALL git work happens in `C:\Users\giorg\code\red-nun-dashboard`.** Never run git inside the Drive folder.
+- The Drive folder keeps documents, ledgers, and data (MASTER_PLAN.md, briefs, email_ledger, exports).
+  Its leftover `.git` is retired — do not commit or push from it.
+- **Never trust a file in the Drive folder to match GitHub** — bisync can serve stale copies. Base all
+  code edits on the C: working copy (or a fresh GitHub read), not on Drive contents.
+- If git ever must touch a Drive-synced folder (e.g. vendor-scrapers, still at
+  `G:\My Drive\Red NUn Dashboard\vendor-scrapers` pending the same migration): PAUSE Google Drive
+  syncing first (tray icon → gear → Pause), resume after.
+
 ### Deploy workflow
 ```
-1. Edit locally in G:\My Drive\Red NUn Dashboard
-2. git add / git commit / git push
+1. Edit locally in C:\Users\giorg\code\red-nun-dashboard
+2. git add <exact paths> / git commit / git push
 3. Chatham: cd /opt/red-nun-dashboard && git pull && sudo systemctl restart rednun
 4. Dennis:  cd /opt/red-nun-dashboard && git pull && sudo systemctl restart rednun-staff
 ```
