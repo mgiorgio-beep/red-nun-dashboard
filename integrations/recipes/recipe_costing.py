@@ -78,18 +78,80 @@ def _normalize_unit(u):
     return _UNIT_ALIASES.get(n, n)
 
 
-def cost_ingredient(ri, conn):
+def _recipe_batch_cost(recipe_id, conn, _depth=0):
+    """Total ingredient cost of one recipe (no DB writes), for use as a
+    sub-recipe. Mirrors cost_recipe's yield handling but does not commit."""
+    ings = conn.execute("""
+        SELECT ri.product_id, ri.quantity, ri.unit, ri.yield_pct,
+               p.yield_pct as product_yield_pct
+        FROM recipe_ingredients ri
+        LEFT JOIN products p ON ri.product_id = p.id
+        WHERE ri.recipe_id = ?
+    """, (recipe_id,)).fetchall()
+    total = 0.0
+    for ing in ings:
+        d = dict(ing)
+        res = cost_ingredient({'product_id': d['product_id'], 'quantity': d['quantity'],
+                               'unit': d['unit']}, conn, _depth + 1)
+        c = res['cost']
+        yp = d.get('yield_pct') or 100
+        pyp = d.get('product_yield_pct') or 1.0
+        if yp > 0 and yp != 100:
+            c = c * (100 / yp)
+        elif pyp > 0 and pyp < 1.0:
+            c = c / pyp
+        total += c
+    return round(total, 4)
+
+
+def _cost_from_sub_recipe(recipe_id, quantity, recipe_unit, conn, _depth=0):
+    """Cost `quantity recipe_unit` of a prepared item whose contents are the
+    recipe `recipe_id`. Cost = batch cost / yield, converted to the recipe unit.
+    Guards against runaway recursion (a prep referencing itself)."""
+    if _depth > 6:
+        return {'cost': 0.0, 'unit_price': 0.0, 'source': 'no_conversion'}
+    rec = conn.execute("SELECT yield_qty, yield_unit FROM recipes WHERE id = ?",
+                       (recipe_id,)).fetchone()
+    if not rec:
+        return {'cost': 0.0, 'unit_price': 0.0, 'source': 'no_price'}
+    rec = dict(rec)
+    yield_qty = rec.get('yield_qty') or 1
+    yield_unit = _normalize_unit(rec.get('yield_unit'))
+    batch = _recipe_batch_cost(recipe_id, conn, _depth)
+    if yield_qty <= 0:
+        return {'cost': 0.0, 'unit_price': 0.0, 'source': 'no_conversion'}
+    cost_per_yield_unit = batch / yield_qty
+
+    # Convert the recipe's unit to the yield unit (same dimension), else require
+    # an exact match so we never silently mis-scale a batch.
+    factor = None
+    if recipe_unit == yield_unit:
+        factor = 1.0
+    elif recipe_unit in WEIGHT_UNITS and yield_unit in WEIGHT_UNITS:
+        factor = WEIGHT_TO_OZ[recipe_unit] / WEIGHT_TO_OZ[yield_unit]
+    elif recipe_unit in VOLUME_UNITS and yield_unit in VOLUME_UNITS:
+        factor = VOLUME_TO_FLOZ[recipe_unit] / VOLUME_TO_FLOZ[yield_unit]
+    if factor is None:
+        return {'cost': 0.0, 'unit_price': round(cost_per_yield_unit, 4),
+                'source': 'no_conversion'}
+    cost_per_ru = cost_per_yield_unit * factor
+    return {'cost': round(quantity * cost_per_ru, 4),
+            'unit_price': round(cost_per_ru, 4), 'source': 'sub_recipe'}
+
+
+def cost_ingredient(ri, conn, _depth=0):
     """
     Cost a single recipe ingredient using its active vendor item price.
 
     Args:
         ri: dict with keys from recipe_ingredients JOIN products
         conn: SQLite connection
+        _depth: internal recursion guard for sub-recipe (prepared-item) products
 
     Returns:
         {'cost': float, 'unit_price': float, 'source': str}
-        source: 'vendor_item' | 'standard_conversion' | 'no_conversion'
-                | 'no_unit' | 'no_price'
+        source: 'vendor_item' | 'standard_conversion' | 'sub_recipe'
+                | 'no_conversion' | 'no_unit' | 'no_price'
     """
     try:
         product_id = ri.get('product_id')
@@ -102,7 +164,7 @@ def cost_ingredient(ri, conn):
         # Get product with active vendor item
         product = conn.execute("""
             SELECT p.id, p.name, p.unit as purchase_unit, p.pack_size, p.pack_unit,
-                   p.inventory_unit,
+                   p.inventory_unit, p.source_recipe_id,
                    p.active_vendor_item_id, p.yield_pct as product_yield_pct,
                    vi.purchase_price, vi.price_per_unit, vi.pack_contains, vi.contains_unit,
                    vi.pack_size as vi_pack_size, vi.pack_unit as vi_pack_unit
@@ -115,6 +177,13 @@ def cost_ingredient(ri, conn):
             return {'cost': 0.0, 'unit_price': 0.0, 'source': 'no_price'}
 
         product = dict(product)
+
+        # Prepared-item / sub-recipe product: cost rolls up from its source
+        # recipe (per yield unit), not a vendor price.
+        if product.get('source_recipe_id') and recipe_unit:
+            return _cost_from_sub_recipe(product['source_recipe_id'], quantity,
+                                         recipe_unit, conn, _depth)
+
         price = product.get('purchase_price') or 0
         if not price or price <= 0:
             return {'cost': 0.0, 'unit_price': 0.0, 'source': 'no_price'}
