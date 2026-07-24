@@ -39,13 +39,30 @@ WEIGHT_UNITS = set(WEIGHT_TO_OZ.keys())
 VOLUME_UNITS = set(VOLUME_TO_FLOZ.keys())
 
 
+# Spelling variants that mean the same canonical unit. Collapsed after the
+# base normalization below so 'EA' (vendor pack) and 'each' (recipe) match,
+# 'GA' (US Foods gallon) resolves as a volume, and 'GR' (grams) as a weight.
+# NOTE: 'ct'/'cnt' are deliberately NOT aliased to 'each'. On US Foods packs
+# they denote the inner-pack count ("4/12 Cnt"), so collapsing them to 'each'
+# makes PATH 1 divide the case price by the wrong number.
+_UNIT_ALIASES = {
+    'ea': 'each',
+    'ga': 'gal',
+    'gr': 'g',
+    'grm': 'g',
+}
+
+
 def _normalize_unit(u):
     """Lowercase, strip, and collapse 'fl_oz' → 'fl oz' so unit strings
-    match the keys in WEIGHT_TO_OZ / VOLUME_TO_FLOZ. Does NOT resolve
-    ambiguous 'oz' — that's handled contextually in cost_ingredient."""
+    match the keys in WEIGHT_TO_OZ / VOLUME_TO_FLOZ. Also collapses common
+    spelling variants ('ea' → 'each', 'ga' → 'gal', 'gr' → 'g') so vendor
+    pack units line up with recipe units. Does NOT resolve ambiguous 'oz' —
+    that's handled contextually in cost_ingredient."""
     if not u:
         return ''
-    return u.strip().lower().replace('.', '').replace('_', ' ')
+    n = u.strip().lower().replace('.', '').replace('_', ' ')
+    return _UNIT_ALIASES.get(n, n)
 
 
 def cost_ingredient(ri, conn):
