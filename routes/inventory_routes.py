@@ -466,17 +466,20 @@ def get_recipe(recipe_id):
         WHERE ri.recipe_id = ?
     """, (recipe_id,)).fetchall()
 
+    from integrations.recipes.recipe_costing import cost_ingredient
     enriched = []
     for i in ingredients:
         d = dict(i)
-        # Calculate cost_per_recipe_unit from active vendor item
-        vi_ppu = d.get("vi_price_per_unit") or 0
-        vi_price = d.get("vi_price") or 0
-        vi_pack = d.get("vi_pack_contains") or 0
-        if vi_ppu and vi_ppu > 0:
-            d["cost_per_recipe_unit"] = vi_ppu
-        elif vi_price and vi_pack and vi_pack > 0:
-            d["cost_per_recipe_unit"] = round(vi_price / vi_pack, 4)
+        # Cost via the shared costing engine so the viewer's
+        # (quantity x cost_per_recipe_unit) matches the real line cost. The raw
+        # vendor price_per_unit is per pack/contains unit (e.g. $/lb), NOT per
+        # recipe unit — using it directly showed 1 oz mushroom as $2.35.
+        qty = d.get("quantity") or 0
+        res = cost_ingredient({'product_id': d.get('product_id'),
+                               'quantity': qty, 'unit': d.get('unit')}, conn)
+        d["line_cost"] = res["cost"]
+        d["cost_source"] = res["source"]
+        d["cost_per_recipe_unit"] = round(res["cost"] / qty, 4) if qty else 0
         d["recipe_unit"] = d.get("product_recipe_unit")
         enriched.append(d)
 

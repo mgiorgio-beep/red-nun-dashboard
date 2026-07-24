@@ -38,6 +38,19 @@ VOLUME_TO_FLOZ = {
 WEIGHT_UNITS = set(WEIGHT_TO_OZ.keys())
 VOLUME_UNITS = set(VOLUME_TO_FLOZ.keys())
 
+# Container / purchase-unit words. A product_unit_conversions row whose
+# from_unit is one of these (or the product's own pack/purchase unit) is a
+# "purchase-unit" conversion (branch B): price covers one from_unit. Anything
+# else (tsp, tbsp, pinch, each, oz…) is a recipe-measure conversion (branch A).
+_PURCHASE_UNITS = {
+    'cs', 'case', 'cn', 'can', 'bag', 'bottle', 'btl', 'jug', 'box', 'jar',
+    'tub', 'pk', 'pack', 'package', 'carton', 'ct', 'cnt',
+}
+
+# Recipe-side measures — never treated as a purchase unit in branch B even when
+# they happen to equal a product's pack/purchase unit.
+_RECIPE_MEASURES = WEIGHT_UNITS | VOLUME_UNITS | {'each', 'slice', 'pinch'}
+
 
 # Spelling variants that mean the same canonical unit. Collapsed after the
 # base normalization below so 'EA' (vendor pack) and 'each' (recipe) match,
@@ -210,6 +223,24 @@ def cost_ingredient(ri, conn):
             # covers one from_unit and it contains (to_qty / from_qty)
             # base units. Works for cases like "1 case = 288 slice" where
             # the user has explicitly told us how the pack is split.
+            #
+            # GUARD: only reinterpret from_unit as a PURCHASE unit (case/bottle/
+            # …). A conversion whose from_unit is a recipe-side measure
+            # ("1 tbsp = 0.5 oz", "1 each = 0.18 oz") is a branch-(A) row; if
+            # branch A didn't match the recipe unit, branch B must NOT reread it
+            # as "one case holds 0.5 oz" — that produced $88 butter / $9 garlic.
+            fu_base = from_unit.rstrip('0123456789')
+            # A from_unit that merely equals the pack/prod unit still is NOT a
+            # purchase unit if it is itself a recipe measure — e.g. garlic sold
+            # as an "each" (5-lb bag): "1 each = 0.18 oz" is a per-clove branch-A
+            # row, not "one bag holds 0.18 oz".
+            matches_pack = (from_unit in (pack_unit, prod_unit, original_pack_unit)
+                            and from_unit not in _RECIPE_MEASURES)
+            is_purchase_unit = (
+                matches_pack or fu_base in _PURCHASE_UNITS or from_unit in _PURCHASE_UNITS
+            )
+            if not is_purchase_unit:
+                continue
             per_purchase_to = to_qty / from_qty
             if per_purchase_to <= 0:
                 continue
