@@ -126,19 +126,24 @@ def request_new_fanzo_link():
     except Exception as e:
         logger.error("Request link failed: %s", e); return False
 
+# FANZO's personalized, self-authenticating guide link. Hardcoded as the default so
+# the scraper works with ZERO server config — it survives a wiped/rebuilt .env, a
+# fresh server, or the Dennis box, and any future fix is a one-line code edit that
+# autodeploys within ~2 min (no SSH needed — editable straight from the Claude app).
+# Override via FANZO_GUIDE_URL / FANZO_GUIDE_APIKEY in .env if the key ever rotates
+# and you'd rather change it without a commit.
+DEFAULT_FANZO_GUIDE_APIKEY = 'w625RK0000000b1b2e5b1fe810c175b8a528677625'
+
 def _direct_guide_url():
-    """Personalized, self-authenticating guide URL. FANZO retired the old
-    /guide/display/<id> + PHPSESSID-cookie flow in favor of an apikey link, so the
-    supported path is now a plain GET of this URL — no cookie, no Gmail. Set either
-    FANZO_GUIDE_URL (full URL) or FANZO_GUIDE_APIKEY (just the key) in .env; a
-    rotated key then needs no code change."""
+    """Resolve the direct guide URL: an explicit .env override wins, otherwise the
+    hardcoded default apikey. FANZO retired the old /guide/display/<id> +
+    PHPSESSID-cookie flow for this apikey link, so a plain GET of this URL — no
+    cookie, no Gmail — is the supported path now."""
     url = os.getenv('FANZO_GUIDE_URL', '').strip()
     if url:
         return url
-    apikey = os.getenv('FANZO_GUIDE_APIKEY', '').strip()
-    if apikey:
-        return 'https://guide.thedailyrail.com/guide/?apikey=%s' % apikey
-    return ''
+    apikey = os.getenv('FANZO_GUIDE_APIKEY', '').strip() or DEFAULT_FANZO_GUIDE_APIKEY
+    return 'https://guide.thedailyrail.com/guide/?apikey=%s' % apikey
 
 def fetch_guide_html():
     from dotenv import load_dotenv; load_dotenv()
