@@ -132,7 +132,7 @@ def request_new_fanzo_link():
 # autodeploys within ~2 min (no SSH needed — editable straight from the Claude app).
 # Override via FANZO_GUIDE_URL / FANZO_GUIDE_APIKEY in .env if the key ever rotates
 # and you'd rather change it without a commit.
-DEFAULT_FANZO_GUIDE_APIKEY = 'w625RK0000000b1b2e5b1fe810c175b8a528677625'
+DEFAULT_FANZO_GUIDE_APIKEY = '77625RK0000000b1b2e5b1fe810c175b8a528677625'
 
 def _direct_guide_url():
     """Resolve the direct guide URL: an explicit .env override wins, otherwise the
@@ -157,7 +157,14 @@ def fetch_guide_html():
             if r.status_code == 200 and 'section-to-print' in r.text:
                 logger.info("Fetched guide via direct apikey URL")
                 return r.text
-            logger.warning("Direct guide URL returned %d / no guide content; falling back to legacy auth", r.status_code)
+            # The apikey link may only establish the session cookie; the printable
+            # guide then comes from FANZO_GUIDE_URL on the same session.
+            if r.status_code == 200:
+                r2 = s.get(FANZO_GUIDE_URL, timeout=30)
+                if r2.status_code == 200 and 'section-to-print' in r2.text:
+                    logger.info("Fetched guide via apikey session + guide URL")
+                    return r2.text
+            logger.warning("Direct guide URL gave no guide content (%d); falling back to legacy auth", r.status_code)
         except Exception as e:
             logger.warning("Direct guide URL error (%s); falling back to legacy auth", e)
     return _fetch_guide_html_legacy()
