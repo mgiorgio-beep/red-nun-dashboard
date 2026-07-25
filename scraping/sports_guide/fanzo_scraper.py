@@ -63,7 +63,12 @@ def get_guide_link_from_gmail():
     try:
         mail = imaplib.IMAP4_SSL('imap.gmail.com', 993)
         mail.login(addr, pw)
-        mail.select('INBOX')
+        # Search All Mail, not just INBOX: a Gmail filter can archive the FANZO
+        # email straight to a label (skipping the inbox), which is exactly what
+        # silently starved this scraper. Fall back to INBOX if the localized All
+        # Mail folder name doesn't resolve.
+        if mail.select('"[Gmail]/All Mail"')[0] != 'OK':
+            mail.select('INBOX')
         since = (datetime.now() - timedelta(days=3)).strftime('%d-%b-%Y')
         link = None
         for src in ['thedailyrail.com','fanzo','sportstv']:
@@ -121,7 +126,42 @@ def request_new_fanzo_link():
     except Exception as e:
         logger.error("Request link failed: %s", e); return False
 
+def _direct_guide_url():
+    """Personalized, self-authenticating guide URL. FANZO retired the old
+    /guide/display/<id> + PHPSESSID-cookie flow in favor of an apikey link, so the
+    supported path is now a plain GET of this URL — no cookie, no Gmail. Set either
+    FANZO_GUIDE_URL (full URL) or FANZO_GUIDE_APIKEY (just the key) in .env; a
+    rotated key then needs no code change."""
+    url = os.getenv('FANZO_GUIDE_URL', '').strip()
+    if url:
+        return url
+    apikey = os.getenv('FANZO_GUIDE_APIKEY', '').strip()
+    if apikey:
+        return 'https://guide.thedailyrail.com/guide/?apikey=%s' % apikey
+    return ''
+
 def fetch_guide_html():
+    from dotenv import load_dotenv; load_dotenv()
+    # Primary path: fetch the direct apikey guide URL. No cookie, no IMAP — this is
+    # what FANZO supports now, and it restores the guide the moment it's configured.
+    direct = _direct_guide_url()
+    if direct:
+        try:
+            s = requests.Session(); s.headers.update(HEADERS)
+            r = s.get(direct, timeout=30)
+            if r.status_code == 200 and 'section-to-print' in r.text:
+                logger.info("Fetched guide via direct apikey URL")
+                return r.text
+            logger.warning("Direct guide URL returned %d / no guide content; falling back to legacy auth", r.status_code)
+        except Exception as e:
+            logger.warning("Direct guide URL error (%s); falling back to legacy auth", e)
+    return _fetch_guide_html_legacy()
+
+def _fetch_guide_html_legacy():
+    """Legacy cookie + Gmail auto-auth fallback. Kept as a self-healing safety net:
+    if the direct apikey URL ever 404s (key rotated), the daily FANZO email carries
+    a fresh apikey link that this path discovers (now searching All Mail, not just
+    the inbox — a Gmail filter had been archiving the email out of view)."""
     from dotenv import load_dotenv; load_dotenv()
     s = requests.Session(); s.headers.update(HEADERS)
     cookie = os.getenv('FANZO_SESSION_COOKIE','')
