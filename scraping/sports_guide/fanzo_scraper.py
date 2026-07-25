@@ -158,6 +158,13 @@ def fetch_guide_html():
     raise Exception("FANZO fetch failed (%d)" % r.status_code)
 
 def _save_cookie(nc):
+    # Keep the RUNNING process in sync, not just the .env file. gunicorn/APScheduler
+    # is long-lived and load_dotenv() defaults to override=False, so once the process
+    # has read FANZO_SESSION_COOKIE it never picks up a rewritten .env value. Without
+    # this line a freshly-minted cookie is written to disk but never used until the
+    # next restart, so every daily scrape falls through to Gmail — the day Gmail
+    # auth hiccups, the guide goes stale with no cookie to fall back on.
+    os.environ['FANZO_SESSION_COOKIE'] = nc
     ep = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env')
     try:
         with open(ep,'r') as f: lines = f.readlines()
@@ -353,6 +360,27 @@ def _merge_streaming(data):
     data['sections'] = [s for s in data['sections'] if 'streaming' not in s['name'].lower()]
     return data
 
+def _alert_failure(reason):
+    """Best-effort Telegram ping when the daily scrape fails, so a stale guide is
+    noticed the morning it breaks instead of days later. Uses the same env vars as
+    monitoring/vendor_scraper_alert.py. Runs at most once per daily scrape, never
+    raises."""
+    token = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    chat_id = os.getenv('TELEGRAM_ALERT_CHAT_ID', '').strip()
+    if not token or not chat_id:
+        logger.warning("FANZO scrape failed and no TELEGRAM_* configured — cannot alert: %s", reason)
+        return
+    try:
+        requests.post(
+            'https://api.telegram.org/bot%s/sendMessage' % token,
+            json={'chat_id': chat_id,
+                  'text': '⚠️ FANZO sports guide scrape failed: %s\nThe TV guide will go stale until this is fixed.' % reason,
+                  'disable_web_page_preview': True},
+            timeout=15,
+        )
+    except Exception as e:
+        logger.warning("Failure alert send failed: %s", e)
+
 def scrape_fanzo_guide():
     try:
         html = fetch_guide_html()
@@ -362,9 +390,13 @@ def scrape_fanzo_guide():
             save_sports_data(data)
             logger.info("Scraped: %s, %d games", data.get('date','?'), sum(len(s['games']) for s in data['sections']))
             return True
-        logger.error("No sections"); return False
+        logger.error("No sections")
+        _alert_failure("scrape produced no sections (FANZO site layout may have changed)")
+        return False
     except Exception as e:
-        logger.error("Scrape failed: %s", e); return False
+        logger.error("Scrape failed: %s", e)
+        _alert_failure(str(e))
+        return False
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
