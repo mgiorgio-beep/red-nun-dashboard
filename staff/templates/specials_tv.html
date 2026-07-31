@@ -196,10 +196,18 @@ function loadFont(name) {
   if (p.get('size')) document.body.classList.add('size-' + p.get('size'));
 })();
 
+// _rv is the board revision (specials.json mtime). The editor's Save and the
+// TV-power RELOAD buttons both bump it; when it changes we full-page reload so
+// the TV picks up new board HTML/CSS/JS (a data-only re-render can't do that).
+var _lastJson = '';
+var _lastRv = null;
+
 // Always fetch fresh data on load — never fall back to stale baked-in data
 function fetchBoard() {
   fetch('/staff/api/board?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d) {
     data = d;
+    _lastRv = d._rv || 0;            // seed baseline so we only reload on a real change
+    _lastJson = JSON.stringify(d);
     render();
   }).catch(function(){
     // Retry in 3 seconds instead of showing stale data
@@ -330,11 +338,12 @@ function chalkScratch() {
   return '<svg class="chalk-scratch" viewBox="0 0 200 40" preserveAspectRatio="none"><path d="M2,20 Q30,8 55,22 T110,18 T165,22 T198,20"/></svg>';
 }
 
-var _lastJson = '';
-var _lastRv = 0;
 setInterval(function() {
   fetch('/staff/api/board?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d) {
-    _lastRv = d._rv || 0;
+    var rv = d._rv || 0;
+    // Revision bumped (Save or RELOAD pressed) → hard reload to pull fresh code.
+    if (_lastRv !== null && rv !== _lastRv) { location.reload(); return; }
+    _lastRv = rv;
     var json = JSON.stringify(d);
     if (json !== _lastJson) {
       _lastJson = json;
