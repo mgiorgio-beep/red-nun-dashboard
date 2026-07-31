@@ -24,7 +24,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a2a1a;--fs:1;}
     radial-gradient(ellipse at 75% 85%, rgba(45,55,45,.3) 0%, transparent 50%),
     linear-gradient(180deg, #1a2a1a 0%, #162016 30%, #1a241a 60%, #141e14 100%);
   display:flex;flex-direction:column;
-  padding:3vh 2vw 3vh;
+  /* ~5% overscan-safe inset on every physical edge. The board is drawn
+     portrait then rotated -90deg, so top/bottom padding lands on the screen's
+     left/right (the 1920px axis → 5vw≈96px) and left/right padding lands on
+     top/bottom (the 1080px axis → 5vh≈54px). Keeps the title/edges off the
+     part of the picture a TV crops. fitBoard() fits content inside this box. */
+  padding:5vw 5vh;
   position:relative;overflow:hidden;
 }
 
@@ -93,7 +98,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a2a1a;--fs:1;}
 body.size-bar .title{font-size:calc(7vh * var(--fs))}
 body.size-bar .items{justify-content:space-evenly;gap:0}
 body.size-bar .title{margin-bottom:0}
-body.size-bar .board{padding:1vh 2vw 1vh}
+body.size-bar .board{padding:4vw 4vh}
 body.size-bar .item{padding:0}
 body.size-bar .item-name{font-size:calc(5.8vh * var(--fs));line-height:1.05}
 body.size-bar .item-name .label{font-size:calc(4.5vh * var(--fs))}
@@ -297,15 +302,26 @@ function render() {
 }
 
 // Snap the board to the screen: shrink every text element (via the --fs
-// multiplier baked into each font-size) until the content stops overflowing.
+// multiplier baked into each font-size) until the content stops overflowing —
+// vertically (too many/long items) OR horizontally (a long title or an
+// unbreakable long word running off the sides).
 // Runs after each render, on resize, and once the chalk web font loads.
 function fitBoard() {
   var items = document.getElementById('items');
-  if (!items) return;
+  var content = document.querySelector('.content');
+  if (!items || !content) return;
+
+  function overflows() {
+    // +2px tolerance for sub-pixel rounding.
+    if (items.scrollHeight > items.clientHeight + 2) return true;      // vertical
+    if (content.scrollWidth > content.clientWidth + 2) return true;    // horizontal
+    return false;
+  }
+
   var fs = 1;
   document.body.style.setProperty('--fs', '1');
   // Guard against runaway loops; floor keeps text legible even when crammed.
-  for (var i = 0; i < 60 && fs > 0.35 && items.scrollHeight > items.clientHeight + 1; i++) {
+  for (var i = 0; i < 60 && fs > 0.35 && overflows(); i++) {
     fs -= 0.025;
     document.body.style.setProperty('--fs', fs.toFixed(3));
   }
