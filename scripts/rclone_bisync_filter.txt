@@ -1,0 +1,19 @@
+# rclone bisync filter — what to EXCLUDE from sync.
+# Big files stay Beelink-local; small/important files sync.
+
+# Exclude actual backup archives (kept local-only, ~600 MB/week)
+- _backups/daily/**
+- _backups/weekly/**
+
+# Exclude logs that are just operational noise
+- _backups/backup.log
+- _apply_log/bisync.log
+
+# Exclude any temporary files from rclone itself
+- .rclone-bisync.*
+- *.tmp
+- *.partial
+
+# Include everything else
+- vendor-scrapers/**
++ **
