@@ -67,3 +67,23 @@ data/yt_channels.json
 data/yttv_channels.json
 monitoring/receipt_poller_audit.jsonl
 monitoring/receipt_reviews.jsonl
+.payroll_autoimport_state.json
+monitoring/nightly_reconcile_state.json
+monitoring/payroll_autoimport_audit.jsonl
+data/cleanup_report.md
+data/draft_all_results.json
+data/manifest_verdict.json
+
+# Timestamped editor backups (foo.py.bak.<tag>.<stamp>). The existing *.bak /
+# *.bak_* rules do NOT match this dotted form, so they piled up untracked.
+# Git history supersedes them — never commit one.
+*.bak.*
+
+# Scanned CHECK IMAGES — pictures of signed checks, carrying account and
+# routing numbers. Permanent once committed and cloned to every machine that
+# pulls. Serve from outside the repo if these ever need to persist.
+web/static/check_images/
+
+# Gmail sample dumps from one-off investigations: real vendor addresses, real
+# payment amounts, real correspondence snippets. Keep them local.
+scripts/archive/*.json
