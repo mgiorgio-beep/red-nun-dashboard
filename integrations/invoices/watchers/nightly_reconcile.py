@@ -13,14 +13,14 @@ Policy (user-chosen 2026-08-10): AUTO-APPLY only EXACT payment matches
 Everything ambiguous — duplicates, partials, missed invoices — is EMAILED
 for manual review, never auto-changed.
 
-Model: uses Claude Haiku only to write the summary email (cheap). All
-reconciliation decisions are deterministic.
+No LLM. Every reconciliation decision AND the summary email are deterministic
+(CLAUDE.md Critical Rule #11 — no scheduled Anthropic calls).
 
 Usage:
     python3 nightly_reconcile.py            # live: apply safe matches + email
     python3 nightly_reconcile.py --dry-run  # print only, no writes, no email
 """
-import os, sys, json, re, base64, datetime, urllib.request
+import os, sys, json, re, datetime
 sys.path.insert(0, "/opt/red-nun-dashboard")
 sys.path.insert(0, "/opt/red-nun-dashboard/integrations/invoices/watchers")
 from dotenv import load_dotenv
@@ -32,7 +32,6 @@ import email_receipt_poller as rp   # reuse Gmail auth, apply_payment, send_aler
 DRY = "--dry-run" in sys.argv
 AUDIT = "/opt/red-nun-dashboard/monitoring/receipt_poller_audit.jsonl"
 STATE = "/opt/red-nun-dashboard/monitoring/nightly_reconcile_state.json"
-HAIKU = "claude-haiku-4-5-20251001"
 TODAY = datetime.date.today().isoformat()
 
 def norm_vendor(n):
@@ -178,37 +177,19 @@ def missed_invoices():
         notes.append(f"(missed-invoice sweep error: {ex})")
     return notes
 
-# ── Step 4: Haiku-written summary email ───────────────────────────────────────
+# ── Step 4: summary email ─────────────────────────────────────────────────────
 def compose_and_send(applied, flagged, dups, missed):
-    structured = {
-        "date": TODAY,
-        "auto_applied_payments": applied,
-        "flagged_for_review": flagged,
-        "suspected_duplicates": dups,
-        "missed_invoice_check": missed,
-    }
-    body = None
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        try:
-            prompt = ("Write a concise plain-text nightly finance reconciliation email for a restaurant "
-                      "owner (Mike). Use short sections and bullet lists. Lead with what was auto-applied, "
-                      "then what needs his review. Be factual, no fluff. Data:\n" + json.dumps(structured, indent=2))
-            req = urllib.request.Request("https://api.anthropic.com/v1/messages",
-                data=json.dumps({"model": HAIKU, "max_tokens": 1200,
-                                 "messages": [{"role": "user", "content": prompt}]}).encode(),
-                headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
-            r = json.load(urllib.request.urlopen(req, timeout=60))
-            body = "".join(b.get("text", "") for b in r.get("content", []))
-        except Exception as ex:
-            body = None
-    if not body:
-        lines = [f"Nightly reconciliation — {TODAY}", "",
-                 f"AUTO-APPLIED payments ({len(applied)}):"] + [f"  • {a}" for a in applied] + \
-                ["", f"NEEDS REVIEW ({len(flagged)}):"] + [f"  • {f}" for f in flagged] + \
-                ["", f"SUSPECTED DUPLICATES ({len(dups)}):"] + [f"  • {d}" for d in dups] + \
-                ["", "MISSED-INVOICE CHECK:"] + [f"  • {m}" for m in missed]
-        body = "\n".join(lines)
+    # Deterministic plain text, no LLM. This used to make one Haiku call per
+    # night purely to prose-format the same data, which is a scheduled API call
+    # — CLAUDE.md Critical Rule #11 forbids those without qualification. The
+    # fallback below was always the real output whenever the key was missing or
+    # the call failed; it is now the only path.
+    lines = [f"Nightly reconciliation — {TODAY}", "",
+             f"AUTO-APPLIED payments ({len(applied)}):"] + [f"  • {a}" for a in applied] + \
+            ["", f"NEEDS REVIEW ({len(flagged)}):"] + [f"  • {f}" for f in flagged] + \
+            ["", f"SUSPECTED DUPLICATES ({len(dups)}):"] + [f"  • {d}" for d in dups] + \
+            ["", "MISSED-INVOICE CHECK:"] + [f"  • {m}" for m in missed]
+    body = "\n".join(lines)
     subject = f"[Red Nun] Nightly reconcile {TODAY} — {len(applied)} applied, {len(flagged)+len(dups)} to review"
     if DRY:
         print("==== EMAIL (dry-run, not sent) ====\nSubject:", subject, "\n\n" + body)
