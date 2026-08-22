@@ -281,6 +281,37 @@ All AI calls use the Anthropic Claude API. See `integrations/invoices/processor.
 
 ---
 
+## Telegram Bot (`bot/bot.py`, `rednun-agent.service`)
+
+Claude-powered ops bot. Single process (NOT gunicorn), so in-process state is
+safe here — unlike the main app, where Critical Rule #9 applies.
+
+- **Conversation memory:** `_CONVOS`, an in-process dict keyed by Telegram user
+  id, 30-min idle TTL, 24-message rolling window. Trimming always cuts to a
+  clean user-text turn so a `tool_result` is never orphaned (the Anthropic API
+  rejects a leading tool_result). Briefings and the HTTP `/ask` path pass no
+  history and stay one-shot.
+- **Bill inbox (live since 2026-07-31, documented 2026-08-22):** the bot can
+  reach into **Mike's own mailbox over IMAP** and pull a one-off bill (insurance,
+  etc.) into the invoice OCR pipeline.
+  - Creds: `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` from `.env`. Read-only usage —
+    it fetches, it never deletes or moves mail.
+  - `find_bill_in_inbox(sender, days)` — searches for recent mail from a sender
+    carrying a PDF/image attachment. Returns candidates with UIDs. Read-only.
+  - `ingest_bill(uid, location)` — POSTs the attachment to
+    `/api/invoices/scan` on `127.0.0.1:8080`, which the invoice blueprint's
+    `before_request` trusts as on-box automation. Lands in the review queue.
+  - **`location` is REQUIRED and the tool refuses to guess.** Read it off the
+    bill-to entity: Red Buoy Inc / Red Nun Chatham = `chatham`; Red Nun Public
+    House / Red Nun Dennis = `dennis`. It previously defaulted to Dennis
+    silently, which mis-files bills with nothing downstream to correct it.
+  - **It only gets bills IN.** Creating or printing a check is a separate step
+    that is not wired up. The system prompt forbids claiming otherwise.
+  - This is an Anthropic-spend path (OCR), but user-initiated per Rule #11 —
+    Mike asks for a specific bill. Do not make it autonomous or scheduled.
+
+---
+
 ## Service Management
 ```bash
 sudo systemctl restart rednun         # main app

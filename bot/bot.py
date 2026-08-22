@@ -60,6 +60,14 @@ BRIEF_PATH = os.environ.get(
 BURDEN_PCT = json.loads(os.environ.get("BURDEN_PCT_JSON", '{"chatham": 0.205, "dennis": 0.205}'))
 SALARIED_DAILY = json.loads(os.environ.get("SALARIED_DAILY_JSON", '{"chatham": 196.43, "dennis": 125.71}'))
 
+# Bill inbox — Mike's personal inbox where one-off bills (insurance, etc.) land.
+# Same creds the dashboard uses for alert email (already in this process's env
+# via the /opt/red-nun-dashboard/.env EnvironmentFile).
+BILL_INBOX_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
+BILL_INBOX_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
+# On-box dashboard base (invoice scan API trusts localhost, no session needed).
+DASHBOARD_BASE = os.environ.get("DASHBOARD_BASE", "http://127.0.0.1:8080")
+
 
 def _dash_db():
     """Read-only connection to the dashboard DB (never locks the app)."""
@@ -457,6 +465,183 @@ def get_temp_trends(sensor_id):
 
 
 # ===========================================================================
+# BILL INBOX (mgiorgio@) — pull a one-off bill and get it into the dashboard
+# ===========================================================================
+# Attachment types we can OCR / import.
+_BILL_EXTS = {
+    ".pdf": ("application/pdf", "pdf"),
+    ".jpg": ("image/jpeg", "jpg"), ".jpeg": ("image/jpeg", "jpg"),
+    ".png": ("image/png", "png"), ".webp": ("image/webp", "webp"),
+}
+
+
+def _imap_open():
+    import imaplib
+    if not (BILL_INBOX_ADDRESS and BILL_INBOX_PASSWORD):
+        raise RuntimeError("GMAIL_ADDRESS / GMAIL_APP_PASSWORD not set in env")
+    m = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+    m.login(BILL_INBOX_ADDRESS, BILL_INBOX_PASSWORD)
+    return m
+
+
+def _decode_hdr(value):
+    from email.header import decode_header
+    if not value:
+        return ""
+    out = []
+    for part, enc in decode_header(value):
+        out.append(part.decode(enc or "utf-8", errors="replace") if isinstance(part, bytes) else str(part))
+    return " ".join(out)
+
+
+def _msg_attachments(msg):
+    """Return [(filename, mime_type, bytes)] for PDF/image attachments."""
+    found = []
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        filename = part.get_filename()
+        if not filename:
+            continue
+        ext = os.path.splitext(_decode_hdr(filename).lower())[1]
+        if ext not in _BILL_EXTS:
+            continue
+        try:
+            data = part.get_payload(decode=True)
+        except Exception:
+            continue
+        if not data or len(data) < 1000:
+            continue
+        found.append((_decode_hdr(filename), _BILL_EXTS[ext][0], data))
+    return found
+
+
+def find_bill_in_inbox(sender, days=21):
+    """Search Mike's inbox for recent mail from `sender` that carries a
+    PDF/image attachment. Returns candidate messages (newest first) with a
+    stable UID for ingest_bill. Does not modify anything."""
+    import email as _email
+    try:
+        m = _imap_open()
+    except Exception as e:
+        return {"error": f"inbox login failed: {e}"}
+    try:
+        m.select("INBOX")
+        since = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
+        typ, data = m.uid("SEARCH", None, "SINCE", since, "FROM", f'"{sender}"')
+        uids = (data[0].split() if data and data[0] else [])
+        matches = []
+        for uid in uids[-12:][::-1]:  # newest first, cap
+            t, d = m.uid("FETCH", uid, "(RFC822)")
+            if not d or not d[0]:
+                continue
+            msg = _email.message_from_bytes(d[0][1])
+            atts = _msg_attachments(msg)
+            if not atts:
+                continue
+            matches.append({
+                "uid": uid.decode() if isinstance(uid, bytes) else str(uid),
+                "from": _decode_hdr(msg.get("From", "")),
+                "subject": _decode_hdr(msg.get("Subject", "")),
+                "date": msg.get("Date", ""),
+                "attachments": [a[0] for a in atts],
+            })
+        m.logout()
+        return {"sender_query": sender, "since": since,
+                "match_count": len(matches), "matches": matches}
+    except Exception as e:
+        try:
+            m.logout()
+        except Exception:
+            pass
+        return {"error": str(e)}
+
+
+def ingest_bill(uid, location=None):
+    """Fetch the message by UID, pull its first PDF/image attachment, and push
+    it through the dashboard OCR scan pipeline (localhost API — no auth needed
+    on-box). Returns the parsed invoice (vendor, total, status). This only puts
+    the bill into the review queue; it does NOT create or print a check."""
+    import email as _email
+    try:
+        m = _imap_open()
+    except Exception as e:
+        return {"error": f"inbox login failed: {e}"}
+    try:
+        m.select("INBOX")
+        t, d = m.uid("FETCH", str(uid).encode() if not isinstance(uid, bytes) else uid, "(RFC822)")
+        if not d or not d[0]:
+            m.logout()
+            return {"error": f"message uid {uid} not found"}
+        msg = _email.message_from_bytes(d[0][1])
+        sender = _decode_hdr(msg.get("From", ""))
+        subject = _decode_hdr(msg.get("Subject", ""))
+        atts = _msg_attachments(msg)
+        m.logout()
+    except Exception as e:
+        try:
+            m.logout()
+        except Exception:
+            pass
+        return {"error": str(e)}
+
+    if not atts:
+        return {"error": "no PDF/image attachment on that message — bill may be "
+                         "in the email body or behind a portal link; can't OCR it"}
+
+    # Prefer a PDF (the real invoice) over inline images (email-signature logos
+    # like image001.png that ride along on forwarded mail).
+    pdfs = [a for a in atts if a[0].lower().endswith(".pdf")]
+    filename, mime, blob = (pdfs[0] if pdfs else atts[0])
+
+    # Never silently default the location — filing a bill under the wrong
+    # restaurant is a real accounting error and nothing downstream corrects it.
+    # (Same reasoning as detect_location() in email_invoice_poller.py, which
+    # returns None rather than assuming Dennis.) Make the caller resolve it.
+    loc = (location or "").strip().lower()
+    if loc not in ("dennis", "chatham"):
+        return {"status": "needs_location",
+                "from": sender, "subject": subject, "attachment": filename,
+                "error": "Location required — refusing to guess. Read the bill-to "
+                         "entity off the invoice: Red Buoy Inc / Red Nun Chatham = "
+                         "chatham; Red Nun Public House / Red Nun Dennis = dennis. "
+                         "Ask Mike if the invoice doesn't say. Then call ingest_bill "
+                         "again with location set."}
+    try:
+        resp = requests.post(
+            f"{DASHBOARD_BASE}/api/invoices/scan",
+            files={"file": (filename, blob, mime)},
+            data={"location": loc},
+            timeout=180,
+        )
+    except Exception as e:
+        return {"error": f"OCR scan call failed: {e}"}
+
+    if resp.status_code == 409:
+        return {"status": "duplicate", "from": sender, "subject": subject,
+                "note": "already in the system — not re-imported"}
+    if resp.status_code not in (200, 201):
+        return {"error": f"OCR scan HTTP {resp.status_code}: {resp.text[:200]}"}
+
+    result = resp.json()
+    data_obj = result.get("data") or {}
+    return {
+        "status": result.get("status", "imported"),
+        "from": sender,
+        "subject": subject,
+        "attachment": filename,
+        "location_used": loc,
+        "vendor_name": data_obj.get("vendor_name"),
+        "invoice_number": data_obj.get("invoice_number"),
+        "invoice_date": data_obj.get("invoice_date"),
+        "total": data_obj.get("total") or data_obj.get("invoice_total"),
+        "item_count": len(data_obj.get("items", []) or []),
+        "note": "In the dashboard review queue. Staging/printing a check is a "
+                "separate confirmed step (not yet wired).",
+    }
+
+
+# ===========================================================================
 # SYSTEM PROMPT
 # ===========================================================================
 SYSTEM_PROMPT = """You are Jarvis, Mike Giorgio's controller for the Red Nun
@@ -501,6 +686,18 @@ If you can't fix it, tell him exactly what needs to happen.
 
 For refrigeration: flag anything drifting or out of range. Walk-in cooler: 34-38°F.
 Walk-in freezer: -5 to 5°F.
+
+Bills in Mike's inbox: when Mike says a bill/invoice from some vendor is in his
+inbox (e.g. "there's a bill from Acrisure, get it in the system"), use
+find_bill_in_inbox with the vendor name. If exactly one match, ingest_bill it;
+if several, list them briefly and ask which. After ingesting, report the parsed
+vendor, invoice #, date, and total, and say it's in the review queue. Read
+location off the invoice's bill-to entity — Red Buoy Inc / Red Nun Chatham =
+chatham; Red Nun Public House / Red Nun Dennis = dennis; if unclear, ask.
+IMPORTANT: you can currently only get bills INTO the system. Creating and
+printing a check is a separate step that is NOT wired up yet — never claim a
+check was staged or printed. If Mike asks to cut/print the check, tell him the
+bill is captured and the check step is coming next.
 """
 
 
@@ -687,6 +884,32 @@ TOOLS = [
             "properties": {},
         },
     },
+
+    # ---- Bill inbox → dashboard (one-off bills to mgiorgio@) ----
+    {
+        "name": "find_bill_in_inbox",
+        "description": "Search Mike's email inbox for a recent bill/invoice from a given sender that has a PDF or image attachment. Use when Mike says something like 'there's a bill from Acrisure in my inbox' or 'grab the insurance bill'. Returns candidate emails (newest first) each with a UID, sender, subject, date, and attachment names. If more than one matches, ask Mike which one before ingesting.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sender": {"type": "string", "description": "Sender name or email to match, e.g. 'Acrisure' or 'gallagher'. Matched as a substring of the From header."},
+                "days": {"type": "integer", "description": "How many days back to search (default 21)."},
+            },
+            "required": ["sender"],
+        },
+    },
+    {
+        "name": "ingest_bill",
+        "description": "Pull a specific bill (by UID from find_bill_in_inbox) out of the inbox and run it through the dashboard OCR pipeline, landing it in the review queue. Returns the parsed vendor, invoice number, date, and total. This ONLY gets the bill into the system — it does NOT create or print a check (that is a separate, explicitly-confirmed step). After ingesting, report the parsed figures to Mike and confirm what he read off the invoice for location (Red Buoy Inc / Red Nun Chatham = chatham; Red Nun Public House / Red Nun Dennis = dennis).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "uid": {"type": "string", "description": "The message UID returned by find_bill_in_inbox."},
+                "location": {"type": "string", "enum": ["dennis", "chatham"], "description": "REQUIRED. Location the invoice bills to, read off the bill-to entity: Red Buoy Inc / Red Nun Chatham = chatham; Red Nun Public House / Red Nun Dennis = dennis. If the invoice doesn't say, ASK Mike — do not guess. The tool refuses to run without it."},
+            },
+            "required": ["uid", "location"],
+        },
+    },
 ]
 
 
@@ -729,6 +952,19 @@ def execute_tool(name: str, args: dict) -> str:
 
     elif name == "check_endpoints":
         return json.dumps(check_all_endpoints())
+
+    # ---- BILL INBOX (LIVE) ----
+    elif name == "find_bill_in_inbox":
+        try:
+            return json.dumps(find_bill_in_inbox(args["sender"], int(args.get("days", 21))))
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    elif name == "ingest_bill":
+        try:
+            return json.dumps(ingest_bill(args["uid"], args.get("location")))
+        except Exception as e:
+            return json.dumps({"error": str(e)})
 
     # ---- DASHBOARD DB (LIVE) ----
     elif name == "get_daily_sales":
@@ -1013,10 +1249,52 @@ def execute_tool(name: str, args: dict) -> str:
 
 
 # ===========================================================================
+# CONVERSATION MEMORY (per Telegram user, so multi-turn back-and-forth works)
+# ===========================================================================
+# Without this the bot is stateless: each message starts a blank agent run, so
+# "which one, 1 or 2?" → "2" loses all context. We keep a short rolling history
+# per user, expiring after idle time so stale threads don't linger.
+_CONVOS = {}  # user_id -> {"messages": [...], "ts": datetime}
+CONVO_TTL_MIN = 30      # start fresh if the user's been quiet this long
+CONVO_MAX_MSGS = 24     # rolling window cap (keeps cost + latency bounded)
+
+
+def _get_history(user_id):
+    now = datetime.now()
+    entry = _CONVOS.get(user_id)
+    if entry and (now - entry["ts"]).total_seconds() > CONVO_TTL_MIN * 60:
+        entry = None  # idle timeout — drop stale thread
+    if not entry:
+        entry = {"messages": [], "ts": now}
+        _CONVOS[user_id] = entry
+    entry["ts"] = now
+    return entry["messages"]
+
+
+def _trim_history(messages, max_msgs=CONVO_MAX_MSGS):
+    """Drop oldest turns but never orphan a tool_result — always cut so the
+    history begins on a clean user-text turn (Anthropic requires the first
+    message to be a user turn, and a leading tool_result is invalid)."""
+    if len(messages) <= max_msgs:
+        return
+    starts = [i for i, m in enumerate(messages)
+              if m["role"] == "user" and isinstance(m["content"], str)]
+    keep_from = starts[-1] if starts else 0
+    for i in starts:
+        if len(messages) - i <= max_msgs:
+            keep_from = i
+            break
+    del messages[:keep_from]
+
+
+# ===========================================================================
 # CLAUDE AGENT LOOP
 # ===========================================================================
-async def run_agent(user_message: str) -> str:
-    messages = [{"role": "user", "content": user_message}]
+async def run_agent(user_message: str, history: list = None) -> str:
+    # history is a mutable list owned by the caller (persisted per user); when
+    # omitted (briefings, HTTP /ask) the run is one-shot with no memory.
+    messages = history if history is not None else []
+    messages.append({"role": "user", "content": user_message})
     system = SYSTEM_PROMPT.format(date=datetime.now().strftime("%Y-%m-%d %A"))
 
     for _ in range(10):
@@ -1030,7 +1308,10 @@ async def run_agent(user_message: str) -> str:
 
         if response.stop_reason == "end_turn":
             parts = [b.text for b in response.content if b.type == "text"]
-            return "\n".join(parts) or "Done."
+            reply = "\n".join(parts) or "Done."
+            # record the assistant's final turn so the next message has context
+            messages.append({"role": "assistant", "content": [{"type": "text", "text": reply}]})
+            return reply
 
         assistant_content = []
         tool_results = []
@@ -1189,6 +1470,14 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 
+async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Clear the running conversation and start fresh."""
+    if not is_authorized(update.effective_user.id):
+        return
+    _CONVOS.pop(update.effective_user.id, None)
+    await update.message.reply_text("🧹 Fresh start — I've cleared our conversation.")
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
         return
@@ -1196,7 +1485,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Message from {update.effective_user.id}: {user_msg}")
     await update.message.chat.send_action("typing")
     try:
-        result = await run_agent(user_msg)
+        history = _get_history(update.effective_user.id)
+        result = await run_agent(user_msg, history=history)
+        _trim_history(history)
         if len(result) > 4000:
             for i in range(0, len(result), 4000):
                 await update.message.reply_text(result[i : i + 4000])
@@ -1316,6 +1607,7 @@ def main():
     app.add_handler(CommandHandler("briefing", cmd_briefing))
     app.add_handler(CommandHandler("temps", cmd_temps))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("reset", cmd_reset))
 
     # All text → agent
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
