@@ -118,6 +118,19 @@ def init_register_tables():
         "ALTER TABLE payroll_checks ADD COLUMN gl_account_id INTEGER",
         "ALTER TABLE bank_deposits ADD COLUMN gl_account_id INTEGER",
         "ALTER TABLE manual_bank_entries ADD COLUMN gl_account_id INTEGER",
+        # GL coding PROVENANCE. gl_account_id alone cannot distinguish a coding
+        # Mike made by hand from one the auto-coder guessed, so a bulk rule
+        # rebuild trains on its own output and launders guesses into
+        # authoritative rules. That already happened: job 030 emitted 147 of
+        # 200 rules, 88 of them per-transaction junk. See GL_PROVENANCE below.
+        "ALTER TABLE vendor_payments ADD COLUMN gl_source TEXT",
+        "ALTER TABLE vendor_payments ADD COLUMN gl_status TEXT",
+        "ALTER TABLE payroll_checks ADD COLUMN gl_source TEXT",
+        "ALTER TABLE payroll_checks ADD COLUMN gl_status TEXT",
+        "ALTER TABLE bank_deposits ADD COLUMN gl_source TEXT",
+        "ALTER TABLE bank_deposits ADD COLUMN gl_status TEXT",
+        "ALTER TABLE manual_bank_entries ADD COLUMN gl_source TEXT",
+        "ALTER TABLE manual_bank_entries ADD COLUMN gl_status TEXT",
     ]
     for sql in migrations:
         try:
@@ -590,6 +603,44 @@ _RULE_SKIP_WORDS = {
 }
 
 
+# ── GL coding provenance ─────────────────────────────────────────────────────
+# gl_account_id says WHAT a row is coded to. These say WHO decided and whether
+# a human has stood behind it.
+#
+#   gl_source  human  — a person set it through the UI
+#              rule   — auto-applied by a gl_account_rules pattern
+#              ocr    — derived from a check image / document scan
+#              import — carried in from an external system (QBO, bill pay)
+#              unknown— pre-2026-08-22 rows; provenance is unrecoverable
+#   gl_status  confirmed — a human stood behind this coding
+#              suggested — a machine guessed it; nothing may learn from it
+#
+# INVARIANT (brief §2.4, "a guess must look like a guess"): a rule may only be
+# derived from a CONFIRMED row. Enforced in _may_learn_rule_from(). Every
+# pre-existing coded row was backfilled as unknown/suggested rather than
+# assumed human — we genuinely cannot tell, and guessing "human" is exactly the
+# laundering this column exists to stop.
+GL_SOURCE_HUMAN = "human"
+GL_SOURCE_RULE = "rule"
+GL_SOURCE_UNKNOWN = "unknown"
+GL_STATUS_CONFIRMED = "confirmed"
+GL_STATUS_SUGGESTED = "suggested"
+
+
+def _may_learn_rule_from(conn, table: str, row_id: int) -> bool:
+    """True only if this row's GL coding is human-confirmed.
+
+    Any bulk rule rebuild or payee-layer seeding MUST filter through this (or
+    the equivalent `gl_status = 'confirmed'` predicate). Job 030 did not, read
+    back its own auto-coded rows, and emitted 88 per-transaction rules that had
+    to be deleted by hand on 2026-08-22.
+    """
+    row = conn.execute(
+        f"SELECT gl_status FROM {table} WHERE id = ?", (row_id,)
+    ).fetchone()
+    return bool(row) and row["gl_status"] == GL_STATUS_CONFIRMED
+
+
 def _canon_desc(s: str) -> str:
     """Canonical form used for BOTH rule patterns and the descriptions they
     are matched against: drop the "[stmt #N]" tag the statement importer
@@ -820,14 +871,29 @@ def set_row_gl_account():
             conn.close()
             return jsonify({"error": "GL account not found"}), 404
 
-    # Update the row
-    cur = conn.execute(f"UPDATE {table} SET gl_account_id = ? WHERE id = ?", (gl_id, row_id))
+    # Update the row. This endpoint is only reachable from the UI, so the
+    # coding is human and confirmed by definition. Clearing the coding clears
+    # the provenance with it.
+    if gl_id is None:
+        cur = conn.execute(
+            f"UPDATE {table} SET gl_account_id = NULL, gl_source = NULL, gl_status = NULL "
+            f"WHERE id = ?", (row_id,))
+    else:
+        cur = conn.execute(
+            f"UPDATE {table} SET gl_account_id = ?, gl_source = ?, gl_status = ? WHERE id = ?",
+            (gl_id, GL_SOURCE_HUMAN, GL_STATUS_CONFIRMED, row_id))
     if cur.rowcount == 0:
         conn.close()
         return jsonify({"error": "Row not found"}), 404
 
     backfilled = 0
     rule_pattern: str | None = None
+
+    # Invariant: only a human-confirmed row may teach a rule. True by
+    # construction here; asserted so a future caller can't quietly break it.
+    if gl_id is not None and create_rule and not _may_learn_rule_from(conn, table, row_id):
+        logger.warning("Refusing to learn a rule from unconfirmed row %s:%s", table, row_id)
+        create_rule = False
 
     if gl_id is not None and create_rule:
         # Pull the description from the row to extract a rule key, and figure
@@ -927,25 +993,30 @@ def _backfill_unassigned_for_pattern(conn, pattern: str, gl_id: int, location: s
         loc_clause = f" AND bank_account_id IN ({ph})"
         loc_params = tuple(loc_acct_ids)
 
+    # Backfilled rows are MACHINE codings: rule/suggested, never confirmed.
+    # They are exactly the rows a later bulk rebuild must not learn from.
+    _prov = (GL_SOURCE_RULE, GL_STATUS_SUGGESTED)
     queries = [
         ("vendor_payments",
-         f"UPDATE vendor_payments SET gl_account_id = ? WHERE gl_account_id IS NULL "
-         f"AND UPPER(vendor) LIKE ?{loc_clause}",
-         (gl_id, upper_like) + loc_params),
+         f"UPDATE vendor_payments SET gl_account_id = ?, gl_source = ?, gl_status = ? "
+         f"WHERE gl_account_id IS NULL AND UPPER(vendor) LIKE ?{loc_clause}",
+         (gl_id,) + _prov + (upper_like,) + loc_params),
         ("payroll_checks",
-         f"UPDATE payroll_checks SET gl_account_id = ? WHERE gl_account_id IS NULL "
-         f"AND UPPER(employee_name) LIKE ?{loc_clause}",
-         (gl_id, upper_like) + loc_params),
+         f"UPDATE payroll_checks SET gl_account_id = ?, gl_source = ?, gl_status = ? "
+         f"WHERE gl_account_id IS NULL AND UPPER(employee_name) LIKE ?{loc_clause}",
+         (gl_id,) + _prov + (upper_like,) + loc_params),
         ("bank_deposits",
-         f"UPDATE bank_deposits SET gl_account_id = ? WHERE gl_account_id IS NULL "
+         f"UPDATE bank_deposits SET gl_account_id = ?, gl_source = ?, gl_status = ? "
+         f"WHERE gl_account_id IS NULL "
          f"AND (UPPER(COALESCE(description,'')) LIKE ? OR UPPER(COALESCE(memo,'')) LIKE ?)"
          f"{loc_clause}",
-         (gl_id, upper_like, upper_like) + loc_params),
+         (gl_id,) + _prov + (upper_like, upper_like) + loc_params),
         ("manual_bank_entries",
-         f"UPDATE manual_bank_entries SET gl_account_id = ? WHERE gl_account_id IS NULL "
+         f"UPDATE manual_bank_entries SET gl_account_id = ?, gl_source = ?, gl_status = ? "
+         f"WHERE gl_account_id IS NULL "
          f"AND (UPPER(COALESCE(payee,'')) LIKE ? OR UPPER(COALESCE(memo,'')) LIKE ?)"
          f"{loc_clause}",
-         (gl_id, upper_like, upper_like) + loc_params),
+         (gl_id,) + _prov + (upper_like, upper_like) + loc_params),
     ]
     total = 0
     for table, q, params in queries:
@@ -1028,6 +1099,12 @@ def _normalize_row(source, r, bank_account_id):
     except (IndexError, KeyError):
         gl_id = None
     out["gl_account_id"] = gl_id
+    # Provenance, so the UI can render a guess as a guess (brief §2.4).
+    for _col in ("gl_source", "gl_status"):
+        try:
+            out[_col] = r[_col]
+        except (IndexError, KeyError):
+            out[_col] = None
     if source == "bill_pay":
         # vendor_payments
         ref = r["payment_ref"] or (f"CHK-{r['check_number']}" if r["check_number"] else "")
@@ -1141,7 +1218,7 @@ def get_register(account_id):
     bp_query = (
         "SELECT id, vendor, location, payment_date, payment_ref, payment_method, "
         "payment_total, check_number, memo, status, ap_payment_id, "
-        "bank_account_id, cleared, cleared_date, gl_account_id "
+        "bank_account_id, cleared, cleared_date, gl_account_id, gl_source, gl_status "
         "FROM vendor_payments WHERE payment_date >= ? AND payment_date <= ? AND "
         # Exclude void AND failed: void = manually canceled before send, failed =
         # ACH/check rejected by the bank. In both cases no money left the account,
@@ -1163,7 +1240,7 @@ def get_register(account_id):
         "SELECT pc.id, pc.employee_name, pc.check_number, pc.net_pay, pc.gross_pay, "
         "       pc.location, pc.payroll_run_id, pc.pay_period_start, pc.pay_period_end, "
         "       pc.payment_method, pc.status, pc.voided, pc.bank_account_id, "
-        "       pc.cleared, pc.cleared_date, pc.gl_account_id, "
+        "       pc.cleared, pc.cleared_date, pc.gl_account_id, pc.gl_source, pc.gl_status, "
         "       COALESCE(pr.pay_date, pc.pay_period_end) AS pay_date "
         "FROM payroll_checks pc "
         "LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
@@ -1189,7 +1266,7 @@ def get_register(account_id):
     # ── deposits ──
     dep_query = (
         "SELECT id, bank_account_id, deposit_date, amount, description, memo, "
-        "source, qbo_txn_id, qbo_txn_type, cleared, cleared_date, gl_account_id "
+        "source, qbo_txn_id, qbo_txn_type, cleared, cleared_date, gl_account_id, gl_source, gl_status "
         "FROM bank_deposits WHERE bank_account_id = ? AND "
         "deposit_date >= ? AND deposit_date <= ?"
     )
@@ -1199,7 +1276,7 @@ def get_register(account_id):
     # ── manual ──
     man_query = (
         "SELECT id, bank_account_id, entry_date, entry_type, payee, memo, "
-        "ref_number, amount, cleared, cleared_date, gl_account_id "
+        "ref_number, amount, cleared, cleared_date, gl_account_id, gl_source, gl_status "
         "FROM manual_bank_entries WHERE bank_account_id = ? AND "
         "entry_date >= ? AND entry_date <= ?"
     )
