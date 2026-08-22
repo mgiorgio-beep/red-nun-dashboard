@@ -590,24 +590,53 @@ _RULE_SKIP_WORDS = {
 }
 
 
-def _extract_rule_pattern(description: str) -> str:
-    """Pick a stable, distinctive substring from a transaction description to
-    use as an auto-populate rule key.
-
-    Strategy: take alphabetic tokens of length >= 3, drop generic banking
-    prefix words and dates, keep the first 2 remaining significant tokens.
-    Falls back to the original (uppercased, trimmed) description if no
-    significant tokens remain.
-    """
-    if not description:
+def _canon_desc(s: str) -> str:
+    """Canonical form used for BOTH rule patterns and the descriptions they
+    are matched against: drop the "[stmt #N]" tag the statement importer
+    appends, collapse every run of non-alphanumeric characters to one space,
+    uppercase. So "SPI*DIRECTV SERVICE" and "SPI DIRECTV" compare equal."""
+    if not s:
         return ""
-    words = re.findall(r"[A-Za-z]{3,}", description.upper())
-    significant = [w for w in words if w not in _RULE_SKIP_WORDS]
-    if significant:
-        return " ".join(significant[:2])
-    if words:
-        return " ".join(words[:2])
-    return description.strip()[:40].upper()
+    s = re.sub(r"\[\s*stmt\s*#?\s*\d+\s*\]", " ", s, flags=re.I)
+    s = re.sub(r"[^A-Za-z0-9]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip().upper()
+
+
+def _extract_rule_pattern(description: str) -> str:
+    """Pick a stable, distinctive CONTIGUOUS substring of the canonical
+    description to use as an auto-populate rule key.
+
+    The pattern MUST be a contiguous slice of _canon_desc(description) or it
+    can never match. The previous version joined the first two significant
+    tokens regardless of what sat between them, which produced unmatchable
+    rules like "PAYMENTS FINANCE" (from "PAYMENTS P1 FINANCE HOLDI", where P1
+    was dropped for being under 3 characters) and "CLEARWAY STMT" (which ate
+    the importer's "[stmt #N]" tag).
+
+    Strategy: first significant token, extended to the second significant
+    token only when everything between them is short glue (<= 2 chars) or
+    digits. That keeps "SUBURBAN SUPPLY" and "BARROWS WASTE", repairs
+    "PAYMENTS P1 FINANCE", and stops "DEP MAR 15 TOAST CCD RED NUN" from
+    reaching across "CCD" to grab "RED".
+    """
+    canon = _canon_desc(description)
+    if not canon:
+        return ""
+    toks = canon.split(" ")
+
+    def _significant(w):
+        return len(w) >= 3 and not w.isdigit() and w not in _RULE_SKIP_WORDS
+
+    idx = [i for i, w in enumerate(toks) if _significant(w)]
+    if not idx:
+        return " ".join(toks[:2])[:60]
+    start = idx[0]
+    end = start
+    if len(idx) > 1:
+        nxt = idx[1]
+        if all(len(toks[k]) <= 2 or toks[k].isdigit() for k in range(start + 1, nxt)):
+            end = nxt
+    return " ".join(toks[start:end + 1])[:60]
 
 
 def _find_gl_account_for_description(conn, description: str, location: str | None = None) -> int | None:
@@ -619,7 +648,7 @@ def _find_gl_account_for_description(conn, description: str, location: str | Non
     """
     if not description:
         return None
-    upper = description.upper()
+    upper = _canon_desc(description)
     if location:
         rows = conn.execute(
             "SELECT pattern, gl_account_id FROM gl_account_rules "
@@ -633,7 +662,7 @@ def _find_gl_account_for_description(conn, description: str, location: str | Non
             "ORDER BY LENGTH(pattern) DESC"
         ).fetchall()
     for r in rows:
-        if r["pattern"] and r["pattern"].upper() in upper:
+        if r["pattern"] and _canon_desc(r["pattern"]) in upper:
             return r["gl_account_id"]
     return None
 

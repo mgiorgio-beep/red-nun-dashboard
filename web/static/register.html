@@ -1049,5 +1049,161 @@ document.querySelectorAll('.reg-table thead th.sortable').forEach(th => {
 </script>
 
 <script src="/static/sidebar.js"></script>
+
+<!-- GLCBX v1: type-to-search GL account dropdowns (job 024) -->
+<style>
+/* Dark theme (page bg is #020617). The original used a hardcoded light palette
+   with no `color`, so the input inherited --text: light-grey on white. */
+.glcbx-wrap{position:relative;display:inline-block}
+.glcbx-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font:inherit;font-size:13px;background:var(--bg);color:var(--text);box-sizing:border-box}
+.glcbx-input::placeholder{color:var(--text3)}
+.glcbx-input:focus{outline:2px solid var(--blue);outline-offset:0}
+.glcbx-list{position:fixed;z-index:99999;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 16px rgba(0,0,0,.5);overflow-y:auto;min-width:240px;max-width:360px}
+.glcbx-grp{padding:6px 10px 2px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em}
+.glcbx-item{padding:5px 12px;font-size:13px;color:var(--text);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.glcbx-item:hover,.glcbx-hi{background:var(--bg-elevated);color:var(--blue)}
+.glcbx-none{padding:8px 12px;font-size:12px;color:var(--text3)}
+</style>
+<script>
+(function(){
+if(window.__glcbx)return; window.__glcbx=1;
+function labelFor(opt){
+  var g = opt.parentElement && opt.parentElement.tagName==='OPTGROUP' ? opt.parentElement.label+': ' : '';
+  return g + opt.text.trim();
+}
+function enhance(sel){
+  if(sel.dataset.glcbx) return;
+  var first = sel.options[0];
+  if(!first || !/choose account/i.test(first.text)) return;
+  sel.dataset.glcbx = '1';
+  var w = sel.offsetWidth || 200;
+  var wrap = document.createElement('span'); wrap.className='glcbx-wrap';
+  sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(sel);
+  var inp = document.createElement('input');
+  inp.type='text'; inp.className='glcbx-input'; inp.placeholder='Type to search…';
+  inp.autocomplete='off'; inp.spellcheck=false;
+  inp.style.width = Math.max(w,160)+'px';
+  var list = document.createElement('div'); list.className='glcbx-list'; list.style.display='none';
+  wrap.appendChild(inp); wrap.appendChild(list);
+  sel.style.display='none';
+  function cur(){ var o=sel.options[sel.selectedIndex]; return (o && o.value) ? labelFor(o) : ''; }
+  inp.value = cur();
+  var items=[], hi=-1;
+  function place(){
+    var r = inp.getBoundingClientRect();
+    var below = window.innerHeight - r.bottom - 12;
+    list.style.left = r.left+'px';
+    if(below < 140){
+      list.style.maxHeight = Math.min(280, r.top-12)+'px';
+      list.style.top=''; list.style.bottom=(window.innerHeight-r.top+2)+'px';
+    } else {
+      list.style.maxHeight = Math.min(280, below)+'px';
+      list.style.bottom=''; list.style.top=(r.bottom+2)+'px';
+    }
+  }
+  function build(q){
+    list.innerHTML=''; items=[]; hi=-1;
+    var toks = q.toLowerCase().split(/\s+/).filter(Boolean);
+    var grp=null;
+    Array.prototype.forEach.call(sel.options, function(opt){
+      if(!opt.value) return;
+      var lab = labelFor(opt), low = lab.toLowerCase();
+      var ok = toks.every(function(t){ return low.indexOf(t) >= 0; });
+      if(!ok) return;
+      var og = (opt.parentElement && opt.parentElement.tagName==='OPTGROUP') ? opt.parentElement.label : null;
+      if(og && og !== grp){
+        grp = og;
+        var h=document.createElement('div'); h.className='glcbx-grp'; h.textContent=og; list.appendChild(h);
+      }
+      var d=document.createElement('div'); d.className='glcbx-item'; d.textContent=opt.text.trim(); d.title=lab;
+      d.addEventListener('mousedown', function(ev){ ev.preventDefault(); pick(opt); });
+      list.appendChild(d); items.push({el:d, opt:opt});
+    });
+    if(!items.length){
+      var n=document.createElement('div'); n.className='glcbx-none'; n.textContent='No matching account'; list.appendChild(n);
+    }
+    place();
+    list.style.display='block';
+    if(items.length) setHi(0);
+  }
+  function pick(opt){
+    sel.value = opt.value;
+    inp.value = labelFor(opt);
+    close();
+    sel.dispatchEvent(new Event('change', {bubbles:true}));
+  }
+  function close(){ list.style.display='none'; hi=-1; }
+  function setHi(i){
+    if(hi>=0 && items[hi]) items[hi].el.classList.remove('glcbx-hi');
+    hi=i;
+    if(items[hi]){ items[hi].el.classList.add('glcbx-hi'); items[hi].el.scrollIntoView({block:'nearest'}); }
+  }
+  inp.addEventListener('focus', function(){ inp.select(); build(''); });
+  inp.addEventListener('input', function(){ build(inp.value); });
+  inp.addEventListener('keydown', function(e){
+    if(e.key==='ArrowDown'){ e.preventDefault(); if(list.style.display==='none') build(inp.value); else setHi(Math.min(hi+1, items.length-1)); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); setHi(Math.max(hi-1, 0)); }
+    else if(e.key==='Enter'){ if(list.style.display!=='none' && items.length){ e.preventDefault(); pick(items[hi>=0?hi:0].opt); } }
+    else if(e.key==='Escape'){ close(); inp.value=cur(); inp.blur(); }
+    else if(e.key==='Tab'){ close(); inp.value=cur(); }
+  });
+  inp.addEventListener('blur', function(){ setTimeout(function(){ close(); if(document.activeElement!==inp) inp.value=cur(); }, 150); });
+  sel.addEventListener('change', function(){ inp.value=cur(); });
+  window.addEventListener('scroll', function(e){ if(e.target===list) return; if(list.style.display!=='none') close(); }, true);
+}
+function scan(){ Array.prototype.forEach.call(document.querySelectorAll('select'), enhance); }
+scan();
+new MutationObserver(function(){ scan(); }).observe(document.documentElement, {childList:true, subtree:true});
+})();
+</script>
+
+<!-- CHKIMG v1: view-check links from extracted statement images (job 026) -->
+<script>
+(function(){
+if(window.__chkimg)return; window.__chkimg=1;
+var MAN=null;
+function load(cb){
+  fetch('/static/check_images/manifest.json')
+    .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .catch(function(){ return fetch('/check_images/manifest.json').then(function(r){ if(!r.ok) throw 0; return r.json(); }); })
+    .then(function(j){ MAN=j; if(cb)cb(); })
+    .catch(function(){ MAN={}; });
+}
+function lookup(num){
+  if(!MAN) return null;
+  // Scope to the SELECTED bank account. The manifest is keyed "acct<id>" where
+  // <id> is bank_accounts.id, so use it — searching every account and taking
+  // the first hit would show Dennis's check image for a Chatham check as soon
+  // as the two accounts' number ranges overlap.
+  // STATE is declared with `let`, so it is NOT on window — reference it bare.
+  var acct = (typeof STATE !== 'undefined' && STATE.currentAcct) ? STATE.currentAcct.id : null;
+  if(!acct) return null;
+  var bucket = MAN['acct' + acct];
+  return (bucket && bucket[num]) ? bucket[num] : null;
+}
+function decorate(){
+  if(!MAN) return;
+  var tds = document.querySelectorAll('td');
+  for(var i=0;i<tds.length;i++){
+    var td = tds[i];
+    if(td.dataset.chkimg) continue;
+    var t = (td.textContent||'').trim();
+    var m = t.match(/^Check\s+(\d{3,8})$/) || t.match(/^PR-(\d{3,8})$/) || t.match(/^CHK-(\d{3,8})$/) || t.match(/^(\d{3,8})$/);
+    if(!m) continue;
+    var url = lookup(m[1]);
+    if(!url) continue;
+    td.dataset.chkimg='1';
+    var a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.title = 'View check image';
+    a.textContent = ' 🔍';
+    a.style.textDecoration = 'none';
+    a.addEventListener('click', function(e){ e.stopPropagation(); });
+    td.appendChild(a);
+  }
+}
+load(decorate);
+new MutationObserver(function(){ decorate(); }).observe(document.documentElement, {childList:true, subtree:true});
+})();
+</script>
 </body>
 </html>
