@@ -86,6 +86,21 @@ def init_bank_reconcile_tables():
         CREATE INDEX IF NOT EXISTS idx_bsu_period ON bank_statement_uploads(period_start, period_end);
     """)
 
+    # One statement per (account, period). The table was append-only, so a
+    # re-upload created a second row for the same period and re-imported every
+    # line. Created separately from the script above because it can fail if
+    # duplicates already exist — in that case leave the table alone and say so
+    # rather than half-applying a constraint.
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_bsu_account_period "
+            "ON bank_statement_uploads(bank_account_id, period_start, period_end)"
+        )
+    except Exception as e:
+        logger.warning(
+            "Could not create uq_bsu_account_period — duplicate (account, period) "
+            "rows already exist and must be resolved by hand: %s", e)
+
     # Tag manual_bank_entries with the statement upload that created them, so
     # we can avoid re-importing on a second upload of the same period.
     try:

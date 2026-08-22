@@ -45,7 +45,12 @@ def conn():
             pack_unit TEXT,
             inventory_unit TEXT,
             active_vendor_item_id INTEGER,
-            yield_pct REAL
+            yield_pct REAL,
+            -- Prepared-item / sub-recipe roll-up (added to the real schema by
+            -- commit 549544c). cost_ingredient() selects it, so omitting it
+            -- here made all 25 costing tests fail with
+            -- "no such column: p.source_recipe_id".
+            source_recipe_id INTEGER
         );
 
         CREATE TABLE product_unit_conversions (
@@ -63,17 +68,25 @@ def conn():
 def _insert_product(conn, pid, name='Test Product', purchase_unit='lb',
                      pack_size=1, pack_unit='lb', inventory_unit=None,
                      price=10.0, price_per_unit=0, vi_pack_contains=None,
-                     vi_contains_unit=None, vi_id=None):
-    """Helper: insert a product + its vendor item, return product_id."""
+                     vi_contains_unit=None, vi_id=None, source_recipe_id=None):
+    """Helper: insert a product + its vendor item, return product_id.
+
+    Columns are named explicitly rather than positional, so adding a column to
+    the fixture schema can't silently shift every value one place to the left.
+    """
     vid = vi_id or (pid * 100)
     conn.execute(
-        "INSERT INTO vendor_items VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO vendor_items (id, product_id, purchase_price, price_per_unit, "
+        "pack_size, pack_unit, pack_contains, contains_unit, description) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         (vid, pid, price, price_per_unit, None, None,
          vi_pack_contains, vi_contains_unit, name))
     conn.execute(
-        "INSERT INTO products VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO products (id, name, unit, pack_size, pack_unit, "
+        "inventory_unit, active_vendor_item_id, yield_pct, source_recipe_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         (pid, name, purchase_unit, pack_size, pack_unit,
-         inventory_unit, vid, None))
+         inventory_unit, vid, None, source_recipe_id))
     conn.commit()
     return pid
 
