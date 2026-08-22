@@ -26,6 +26,15 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "https://dashboard.rednun.com")
 
+# Largest "Summary: Other" balancing plug we will push to QBO. The plug exists
+# to absorb sub-cent rounding; anything above this means the day's sales don't
+# actually reconcile and the entry must not be posted. See push_to_qbo().
+MAX_PLUG_TO_PUSH = float(os.getenv("QB_MAX_PLUG", "1.00"))
+
+# QBO refresh tokens die after ~101 days of disuse. Treat anything near that as
+# already dead so a stale-but-present token file can't defeat the fallback.
+QB_TOKEN_MAX_AGE_DAYS = 90
+
 # Same keyword lists as analytics.py for consistent categorization
 BEER_KW = ['lager','ipa','ale','stout','pilsner','kolsch','hef','guinness',
            'blue moon','sam adams','bud light','coors','corona','stella',
@@ -599,8 +608,34 @@ def push_to_qbo(entry_id: int) -> dict:
             return {"success": False, "error": "Entry not found"}
         if row["status"] == "posted":
             return {"success": False, "error": "Already posted"}
+        if row["status"] != "ready":
+            return {"success": False,
+                    "error": f"Refusing to push entry with status '{row['status']}'"}
         if not row["balanced"]:
             return {"success": False, "error": "Entry is not balanced"}
+
+        # `balanced` is NOT a quality gate. build_journal_entry() forces every
+        # entry to balance by dumping any residual into a "Summary: Other" plug
+        # line (see the balance_gap block in build_journal_entry). A big plug
+        # means the day's sales don't reconcile against Toast — usually an
+        # incomplete sync, with tenders missing. Dennis maps that line to
+        # Cash Over/Short (an EXPENSE), so pushing one books phantom expense.
+        # Measured 2026-08-22: 82 of 176 'ready' entries carried a plug over
+        # $50, $19,002 in total, worst $893.29 on a $1,517.38 entry.
+        # See docs/SALES_JOURNAL_PLUG_2026-08-22.md.
+        plug = conn.execute("""
+            SELECT COALESCE(SUM(COALESCE(debit, 0) + COALESCE(credit, 0)), 0) AS p
+            FROM qb_journal_line_items
+            WHERE entry_id = ? AND journal_name = 'Summary: Other'
+        """, (entry_id,)).fetchone()["p"]
+        if plug > MAX_PLUG_TO_PUSH:
+            return {"success": False,
+                    "error": f"Refusing to push: 'Summary: Other' balancing plug is "
+                             f"${plug:,.2f} (limit ${MAX_PLUG_TO_PUSH:.2f}). This entry "
+                             f"balances only because the plug absorbs a ${plug:,.2f} gap "
+                             f"— the underlying sales data does not reconcile. Re-sync "
+                             f"the day and rebuild the entry before pushing.",
+                    "plug": round(plug, 2)}
 
         # Check for unmapped lines
         unmapped = conn.execute("""
@@ -642,16 +677,42 @@ def push_to_qbo(entry_id: int) -> dict:
         import json as _json, time as _time, base64 as _b64, urllib.request, urllib.parse, urllib.error
         from pathlib import Path
 
-        TOKEN_FILE = Path.home() / ".qb_tokens.json"
+        _loc = (row["location"] or "").lower()
+
+        # Pick the per-location token file, but fall back on STALENESS, not mere
+        # existence: an expired-but-present file would otherwise silently win and
+        # every refresh would fail. (As of 2026-08-22 ~/.qb_tokens_chatham.json is
+        # ~131 days old — past Intuit's ~101-day refresh-token expiry — so Chatham
+        # needs a re-auth via qb_push.py --auth before it can post.)
+        def _token_stale(p):
+            try:
+                obtained = _json.loads(p.read_text()).get("obtained_at", 0)
+            except Exception:
+                return True
+            return (_time.time() - obtained) > QB_TOKEN_MAX_AGE_DAYS * 86400
+
+        TOKEN_FILE = Path.home() / f".qb_tokens_{_loc}.json"
+        if _loc == "chatham" and (not TOKEN_FILE.exists() or _token_stale(TOKEN_FILE)):
+            _legacy = Path.home() / ".qb_tokens.json"
+            if _legacy.exists() and not _token_stale(_legacy):
+                logger.warning("%s token file stale/missing — using legacy %s",
+                               TOKEN_FILE.name, _legacy.name)
+                TOKEN_FILE = _legacy
         TOKEN_URL  = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
         BASE_URL   = "https://quickbooks.api.intuit.com"
 
         client_id     = os.getenv("QB_CLIENT_ID")
         client_secret = os.getenv("QB_CLIENT_SECRET")
-        realm_id      = os.getenv("QB_REALM_ID")
-
-        if not all([client_id, client_secret, realm_id]):
-            return {"success": False, "error": "QB_CLIENT_ID / QB_CLIENT_SECRET / QB_REALM_ID env vars missing"}
+        # Per-location realm. Chatham may fall back to legacy QB_REALM_ID;
+        # every other location REQUIRES its own explicit realm var.
+        realm_id = os.getenv(f"QB_REALM_ID_{_loc.upper()}")
+        if not realm_id and _loc == "chatham":
+            realm_id = os.getenv("QB_REALM_ID")
+        if not all([client_id, client_secret]):
+            return {"success": False, "error": "QB_CLIENT_ID / QB_CLIENT_SECRET env vars missing"}
+        if not realm_id:
+            return {"success": False,
+                    "error": f"No QBO realm configured for location '{_loc}' (set QB_REALM_ID_{_loc.upper()})"}
 
         if not TOKEN_FILE.exists():
             return {"success": False, "error": "No QB tokens file. Run qb_push.py --auth first."}
@@ -663,7 +724,8 @@ def push_to_qbo(entry_id: int) -> dict:
         age = _time.time() - tokens.get("obtained_at", 0)
         if age > 3000:
             creds = _b64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-            data = urllib.parse.urlencode({"grant_type": "refresh_token", "refresh_token": tokens["refresh_token"]}).encode()
+            _old_refresh = tokens["refresh_token"]
+            data = urllib.parse.urlencode({"grant_type": "refresh_token", "refresh_token": _old_refresh}).encode()
             req = urllib.request.Request(TOKEN_URL, data=data, method="POST")
             req.add_header("Authorization", f"Basic {creds}")
             req.add_header("Content-Type", "application/x-www-form-urlencoded")
@@ -671,11 +733,38 @@ def push_to_qbo(entry_id: int) -> dict:
             with urllib.request.urlopen(req) as resp:
                 tokens = _json.loads(resp.read())
             tokens["obtained_at"] = _time.time()
+            tokens.setdefault("refresh_token", _old_refresh)
             with open(TOKEN_FILE, "w") as tf:
                 _json.dump(tokens, tf, indent=2)
 
         access_token = tokens["access_token"]
-        url = f"{BASE_URL}/v3/company/{realm_id}/journalentry?minorversion=65"
+
+        # Idempotency: QBO does NOT reject duplicate DocNumbers. If a JE with
+        # this DocNumber already exists in the target realm, adopt it instead
+        # of posting a duplicate.
+        _q = urllib.parse.quote(
+            f"select Id, TxnDate from JournalEntry where DocNumber = '{row['je_name']}'")
+        _qreq = urllib.request.Request(
+            f"{BASE_URL}/v3/company/{realm_id}/query?query={_q}&minorversion=75")
+        _qreq.add_header("Authorization", f"Bearer {access_token}")
+        _qreq.add_header("Accept", "application/json")
+        try:
+            with urllib.request.urlopen(_qreq) as _qresp:
+                _existing = _json.loads(_qresp.read()).get(
+                    "QueryResponse", {}).get("JournalEntry", [])
+        except urllib.error.HTTPError:
+            _existing = []
+        if _existing:
+            _txn = _existing[0].get("Id")
+            conn.execute("""
+                UPDATE qb_journal_entries
+                SET status='posted', qbo_txn_id=?, qbo_error='adopted existing (idempotency pre-check)',
+                    updated_at=datetime('now') WHERE id=?
+            """, (_txn, entry_id))
+            conn.commit()
+            return {"success": True, "txn_id": _txn, "adopted_existing": True}
+
+        url = f"{BASE_URL}/v3/company/{realm_id}/journalentry?minorversion=75"
         body_bytes = _json.dumps(payload).encode()
         req = urllib.request.Request(url, data=body_bytes, method="POST")
         req.add_header("Authorization", f"Bearer {access_token}")
