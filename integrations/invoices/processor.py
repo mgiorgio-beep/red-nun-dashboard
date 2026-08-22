@@ -318,6 +318,7 @@ CRITICAL — HOW TO READ PRICES ON DOT-MATRIX INVOICES:
 - US Foods invoices have columns: ITEM # | DESCRIPTION | PACK/SIZE | ORDERED | SHIPPED | UNIT PRICE | EXTENSION
 - SHIPPED = number of cases/units delivered (usually 1-5, small number)
 - SOUTHERN GLAZER'S / HORIZON BEVERAGE invoices: Columns are LIST PRICE | POST OFF | DEPOSIT | DISCOUNT | NET PRICE PER CASE | NET PRICE PER BOTTLE | EXTENSION. Use EXTENSION as total_price and NET PRICE PER CASE as unit_price. IGNORE any "Prompt Pay Discount" box — do NOT include it as a line item.
+- SOUTHERN GLAZER'S "> " BREAKDOWN LINES: a line whose product text begins with ">" (e.g. "> Stoli 80 12/CS") is a PACK/BOTTLE BREAKDOWN sub-line of the product line DIRECTLY ABOVE it (e.g. "Stoli 80 Litr (4)BTL"). It shows the same EXTENSION as its parent. Capture the product ONLY ONCE: do NOT emit a separate line item for a ">" sub-line and do NOT add its EXTENSION again. Counting both the parent and the ">" line double-counts that amount and makes the line-item total exceed the invoice total. Keep the parent line (with the real EXTENSION); fold the ">" pack detail into the parent's description if useful.
 - Before extracting line items, read the column headers to identify which column represents the final billed amount — the amount the restaurant actually owes for that line after all discounts. It may be labeled EXTENSION, EXT, TOTAL, AMOUNT, or TOTAL W/O DEPOSITS. Use that column as total_price.
 - Use the column labeled UNIT PRICE, NET PRICE PER CASE, or similar as unit_price.
 - Read quantity, unit_price, and total_price for each line directly from the invoice.
@@ -439,7 +440,12 @@ L. KNIFE & SON (NEW CONNECT-PORTAL PDFs) INVOICE RULES:
 - All items are BEER category — the portal is beer-only. Use category = "BEER" for every product line. Use category = "NON_COGS" only for explicit non-product fees (the "WHS CHG MISC" / "MISC. BEER PICKUP INVOICE" line is NON_COGS).
 - The header on page 1 shows the account number as "Account: AR034" or "Account: AR035". AR034 = Chatham. AR035 = Dennis Port. This is more reliable than the ship-to address.
 - The line items table on page 1 has columns: ITEM# | QTY | DESCRIPTION | PRICE | DISC | NET | DEP | EXT. Descriptions often span two lines (e.g., "GUINNESS" / "DRAUGHT K-50 LITER HB") — combine them into one product_name.
-- Use the EXT column as total_price. NET is the per-unit net price after discount; DEP is the per-unit deposit (e.g., $50 keg deposit, $1.20 bottle deposit). EXT = QTY * (NET + DEP).
+- COLUMN MAPPING: NET is the per-unit contents price (after discount); DEP is the per-unit container deposit (e.g., $50 keg deposit, $1.20 bottle deposit); EXT = QTY * (NET + DEP).
+- SPLIT EACH POSITIVE-QTY SKU INTO TWO LINE ITEMS so the container deposit is captured on its own line (the printed invoice lists a deposit for every keg/bottle SKU):
+    1. CONTENTS line -> product_name = the beer name, quantity = QTY, unit = case/keg/bottle, unit_price = NET, total_price = QTY * NET, category = "BEER".
+    2. DEPOSIT line (ONLY when the DEP column is greater than 0) -> product_name = the beer name + " - Container Deposit", quantity = QTY, unit_price = DEP, total_price = QTY * DEP, category = "NON_COGS", vendor_item_code = the same ITEM# with a "-DEP" suffix.
+  After splitting, quantity * unit_price MUST equal total_price on BOTH lines. The CONTENTS total_price plus the DEPOSIT total_price for a SKU equals that SKU EXT. Do NOT fold the deposit into the contents line.
+- Keg/cooperage RETURN lines (negative qty, e.g. AB COOPERAGE / NON AB COOPERG) stay as a SINGLE negative NON_COGS line -- do not split those.
 - IMPORTANT: Negative quantities are normal — they represent keg/cooperage returns (lines like "00650 -3 AB COOPERAGE ... -150.00" or "00541 -5 NON AB COOPERG ... -250.00"). Capture them with negative quantity AND negative total_price. They are part of the net invoice total and must be included.
 - The footer on page 1 shows four summary lines:
     * "Total Sales" — sum of positive EXT values
@@ -585,6 +591,13 @@ VENDOR ITEM CODE:
         conn.close()
     except Exception as e:
         logger.warning(f"Category memory lookup failed: {e}")
+
+    # Deterministic guard: container-deposit lines are NEVER COGS, whatever the
+    # model guessed. Deposit lines are emitted as "<product> - Container Deposit".
+    for _it in data.get("line_items", []):
+        _pn = (_it.get("product_name") or "").lower()
+        if _pn.endswith("container deposit") or "- container deposit" in _pn:
+            _it["category"] = "NON_COGS"
 
     # Fallback: if AI couldn't pull invoice_date but the source is a PDF, regex it for the earliest date
     try:
@@ -817,6 +830,58 @@ def fix_subtotal_includes_tax(data):
     return data
 
 
+# -----------------------------------------------------------------------------
+# Vendor-relative blank-invoice-number rule (Jarvis 2026-08-19)
+#
+# Commit f575142 (2026-07-05) added a statement guard: a blank invoice number
+# blocks auto-confirm, because emailed US Foods ACCOUNT STATEMENTS OCR with no
+# invoice number and a "total" that is the whole AR balance. Sound rule - but
+# it is global, and some vendors simply never number their invoices. Caron
+# Group (Impeccable Clean) is 36/36 blank, so every one of their invoices has
+# waited on a manual confirm since 7/05 (avg lag 0.0 days -> 7.2, max 17.5).
+#
+# A blank number is only SUSPICIOUS for a vendor who normally supplies one.
+# If a vendor's confirmed history is overwhelmingly blank, blank is that
+# vendor's normal - allow it. Every other vendor keeps the guard unchanged.
+#
+# Fails CLOSED: any lookup error leaves the guard active.
+BLANK_INVNUM_MIN_HISTORY = 5     # need this many confirmed invoices to judge
+BLANK_INVNUM_THRESHOLD = 0.90    # >= this share blank => blank is normal
+
+
+def _vendor_omits_invoice_numbers(vendor_name):
+    """True if this vendor's confirmed history is >=90% blank invoice numbers."""
+    vendor = (vendor_name or "").strip()
+    if not vendor:
+        return False
+    try:
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n, "
+                "       SUM(CASE WHEN TRIM(COALESCE(invoice_number,'')) = '' "
+                "                THEN 1 ELSE 0 END) AS blank "
+                "FROM scanned_invoices "
+                "WHERE vendor_name = ? COLLATE NOCASE AND status = 'confirmed'",
+                (vendor,),
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("blank-invnum vendor check failed for %r (%s) - keeping "
+                       "statement guard active", vendor, e)
+        return False
+    n = (row["n"] or 0) if row else 0
+    blank = (row["blank"] or 0) if row else 0
+    if n < BLANK_INVNUM_MIN_HISTORY:
+        return False
+    omits = (blank / float(n)) >= BLANK_INVNUM_THRESHOLD
+    if omits:
+        logger.info("Vendor %r omits invoice numbers (%d/%d blank) - statement "
+                    "guard bypassed", vendor, blank, n)
+    return omits
+
+
 def validate_invoice_extraction(data):
     """
     Validate extracted invoice data for auto-confirm eligibility.
@@ -927,7 +992,7 @@ def validate_invoice_extraction(data):
     # OCR with a blank invoice number and a "total" that is the full AR balance.
     # Never auto-confirm those; force manual review so they can't double-count AP.
     inv_num = str(data.get("invoice_number") or "").strip()
-    if not inv_num:
+    if not inv_num and not _vendor_omits_invoice_numbers(data.get("vendor_name")):
         result["auto_confirm"] = False
         result["valid"] = False
         result["issues"].append(
@@ -1981,12 +2046,16 @@ _VENDOR_ALIASES = {
     'cintas': 'Cintas',
     'cintas corp': 'Cintas',
     'cintas corporation': 'Cintas',
-    # Craft Collective bills through "Atlantic Beverage Distributors" on TermSync
-    # and historically appeared as "Craft Collective Homegrown" — all one vendor.
+    # Craft Collective (DSDLink portal, Dennis Port account) and Atlantic
+    # Beverage Distributors (TermSync, account #29058) are SEPARATE vendors.
+    # Red Nun buys from both. Corrected 2026-08-20 - the previous rule folded
+    # Atlantic's invoices into Craft and made ~$7,779 of Dennis beer purchases
+    # unattributable. Do not re-merge them.
     'craft collective': 'Craft Collective',
     'craft collective homegrown': 'Craft Collective',
-    'atlantic beverage distributors': 'Craft Collective',
-    'atlantic beverage': 'Craft Collective',
+    'atlantic beverage distributors': 'Atlantic Beverage Distributors',
+    'atlantic beverage': 'Atlantic Beverage Distributors',
+    'atlantic beverage dist': 'Atlantic Beverage Distributors',
 }
 
 def _normalize_vendor_name(name):
@@ -2135,8 +2204,14 @@ def save_invoice(location, data, image_path=None, raw_json=None, validation_data
         datetime.now().isoformat(),
         data.get("confidence_score", 100),
         1 if data.get("is_low_confidence", False) else 0,
-        data.get("validation_json"),
-        1 if data.get("auto_confirmed", False) else 0,
+        # Jarvis 2026-08-19: the validation_data kwarg was accepted and then
+        # silently dropped - validation_json was NULL on all 712 invoices since
+        # April, so there was no record of WHY anything did or did not
+        # auto-confirm. Persist it.
+        (json.dumps(validation_data) if validation_data
+         else data.get("validation_json")),
+        1 if ((validation_data or {}).get("auto_confirm")
+              or data.get("auto_confirmed", False)) else 0,
         data.get("source", "scanned"),
         discrepancy_val,
         needs_reconciliation_val,

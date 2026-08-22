@@ -922,6 +922,7 @@ input[type="file"] { display: none; }
     </div>
     <div class="rv-items-title" id="rvItemsTitle">Line Items</div>
     <div id="rvItems"></div>
+    <button onclick="rvAddItem()" style="margin-top:8px;border:1px dashed var(--border);background:transparent;color:var(--text3);padding:7px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">+ Add line item</button>
 
     <button class="rv-confirm" id="rvConfirmBtn" onclick="confirmInvoice()">Confirm & Save</button>
     <button class="rv-confirm" id="rvMarkPaidBtn" style="display:none;background:linear-gradient(135deg,#f59e0b,#f97316)" onclick="openMarkPaid()">&#128179; Mark as Paid</button>
@@ -1160,6 +1161,12 @@ let histFilter = 'confirmed';
 let allInvoices = [];
 let currentReport = 'vendors';
 const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+function invNumLink(id, num, disp){
+  var t = (disp != null ? disp : ((num == null || num === '') ? '—' : num));
+  if (!id || num == null || num === '') return t;
+  return '<a href="/api/invoices/' + id + '/image" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open invoice PDF" style="color:inherit;text-decoration:underline;text-underline-offset:2px">' + t + '</a>';
+}
+
 
 // ── Helpers ──
 function $(id) { return document.getElementById(id); }
@@ -1588,7 +1595,12 @@ function showReview(data) {
         <div class="rv-item-info">
           <div class="rv-item-name">${item.product_name || 'Unknown'}</div>
           ${item.description ? `<div class="rv-item-desc">${item.description}</div>` : ''}
-          <div class="rv-item-qty">${item.quantity||0} × ${item.unit||'ea'} @ ${fmt(item.unit_price)}</div>
+          <div class="rv-item-qty" style="display:flex;gap:5px;align-items:center;margin-top:5px">
+            <input type="number" step="any" value="${item.quantity!=null?item.quantity:0}" title="Quantity" onchange="rvItemEdit(${i},'quantity',this.value)" style="width:52px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:#fff;color:#111827;font-size:12px">
+            <span style="color:var(--text3)">×</span>
+            <input type="number" step="any" value="${item.unit_price!=null?item.unit_price:''}" title="Unit price" onchange="rvItemEdit(${i},'unit_price',this.value)" style="width:74px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:#fff;color:#111827;font-size:12px">
+            <span style="color:var(--text3);font-size:11px">${item.unit||'ea'}</span>
+          </div>
         </div>
         <div class="rv-item-cat">
           <select class="cat-${cat}" onchange="updateCat(${i},this)">
@@ -1603,9 +1615,9 @@ function showReview(data) {
             <option value="KITCHEN_SUPPLIES" ${cat==='KITCHEN_SUPPLIES'?'selected':''}>Kitchen Supplies</option>
           </select>
         </div>
-        <div>
-          <div class="rv-item-price" data-idx="${i}" data-field="total_price">${fmt(item.total_price)}${mathBadge}</div>
-          <div class="rv-item-unit" data-idx="${i}" data-field="unit_price">per: ${fmt(item.unit_price)}</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+          <input id="rv-tp-${i}" type="number" step="any" value="${item.total_price!=null?Number(item.total_price).toFixed(2):''}" title="Line total" onchange="rvItemEdit(${i},'total_price',this.value)" style="width:90px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:#fff;color:#111827;font-size:13px;font-weight:700;text-align:right">${mathBadge}
+          <button onclick="rvRemoveItem(${i})" title="Remove line" style="border:none;background:transparent;color:#dc3545;cursor:pointer;font-size:11px">✕ remove</button>
         </div>
       </div>`;
   }).join('');
@@ -1677,6 +1689,54 @@ function updateCat(idx, sel) {
     currentInvoice.line_items[idx].category_type = sel.value;
   }
   sel.className = 'cat-' + sel.value;
+}
+
+// ── Line-item editing (qty / price / total / add / remove) ──
+function rvItemEdit(i, field, val){
+  var it = currentInvoice && currentInvoice.line_items && currentInvoice.line_items[i];
+  if (!it) return;
+  if (field === 'product_name'){ it.product_name = val; return; }
+  var num = parseFloat(val); if (isNaN(num)) num = 0;
+  it[field] = num;
+  if (field === 'quantity' || field === 'unit_price'){
+    var q = parseFloat(it.quantity)||0, up = parseFloat(it.unit_price)||0;
+    it.total_price = Math.round(q*up*100)/100;
+    var tp = document.getElementById('rv-tp-'+i);
+    if (tp) tp.value = it.total_price.toFixed(2);
+  }
+  rvRecomputeTotals();
+}
+function rvRemoveItem(i){
+  if (!currentInvoice || !currentInvoice.line_items) return;
+  if (!confirm('Remove this line item?')) return;
+  currentInvoice.line_items.splice(i, 1);
+  rvSyncHeader();
+  showReview(currentInvoice);
+}
+function rvAddItem(){
+  if (!currentInvoice) return;
+  currentInvoice.line_items = currentInvoice.line_items || [];
+  currentInvoice.line_items.push({product_name:'New item', quantity:1, unit:'ea', unit_price:0, total_price:0, category:'FOOD'});
+  rvSyncHeader();
+  showReview(currentInvoice);
+}
+function rvRecomputeTotals(){
+  var items = (currentInvoice && currentInvoice.line_items) || [];
+  var sum = Math.round(items.reduce(function(s,li){ return s + (parseFloat(li.total_price)||0); }, 0) * 100) / 100;
+  var tax = parseFloat($('rvTax').value) || 0;
+  currentInvoice.subtotal = sum;
+  currentInvoice.total = Math.round((sum + tax) * 100) / 100;
+  if ($('rvSubtotal')) $('rvSubtotal').value = sum.toFixed(2);
+  if ($('rvTotal')) $('rvTotal').value = currentInvoice.total.toFixed(2);
+  if ($('rvItemsTitle')) $('rvItemsTitle').innerHTML = 'Line Items (' + items.length + ')';
+}
+function rvSyncHeader(){
+  if (!currentInvoice) return;
+  if ($('rvVendor')) currentInvoice.vendor_name = $('rvVendor').value;
+  if ($('rvInvNum')) currentInvoice.invoice_number = $('rvInvNum').value;
+  if ($('rvDate')) currentInvoice.invoice_date = $('rvDate').value;
+  if ($('rvTax')) currentInvoice.tax = parseFloat($('rvTax').value) || 0;
+  if ($('rvLocation')) currentInvoice.location = $('rvLocation').value;
 }
 
 // ── Inline Editing for Line Item Prices ──
@@ -1819,8 +1879,9 @@ async function confirmInvoice() {
   currentInvoice.location = $('rvLocation').value;
 
   try {
-    const resp = await fetch(`/api/invoices/${currentInvoice.id}/confirm`, {
-      method: 'POST',
+    var _isEdit = currentInvoice.status === 'confirmed';
+    const resp = await fetch(_isEdit ? `/api/invoices/${currentInvoice.id}` : `/api/invoices/${currentInvoice.id}/confirm`, {
+      method: _isEdit ? 'PUT' : 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(currentInvoice),
     });
@@ -2133,7 +2194,7 @@ function displayFilteredInvoices() {
     return `<tr style="${rowStyle}" onclick="viewInvoice(${inv.id}, '${inv.source||'scanned'}', '${inv.order_id||''}')">
       ${thumbCell}
       <td class="td-vendor">${inv.vendor_name || 'Unknown'}</td>
-      <td class="td-num">${inv.invoice_number ? '#'+inv.invoice_number : '—'}</td>
+      <td class="td-num">${invNumLink(inv.id, inv.invoice_number, inv.invoice_number ? '#'+inv.invoice_number : '—')}</td>
       <td class="td-date">${inv.invoice_date || '—'}</td>
       <td class="td-loc">${inv.location || '—'}</td>
       <td class="td-total">${fmt(inv.total)}</td>
@@ -2394,7 +2455,7 @@ function _renderOutstandingTable() {
     html += `
         <tr onclick="viewInvoice(${r.id},'scanned','')" style="cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04)" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='none'">
           <td style="padding:10px 12px">${r.vendor}</td>
-          <td style="padding:10px 12px;font-family:monospace">${r.invoice_number || '—'}</td>
+          <td style="padding:10px 12px;font-family:monospace">${invNumLink(r.id, r.invoice_number)}</td>
           <td style="padding:10px 12px;color:#94a3b8">${r.date || '—'}</td>
           <td style="padding:10px 12px;text-align:right;font-weight:700;color:${amtColor}">${fmt(r.total)}</td>
         </tr>`;

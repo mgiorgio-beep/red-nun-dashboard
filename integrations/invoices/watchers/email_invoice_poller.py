@@ -126,12 +126,16 @@ def detect_location(headers_list):
     """Detect invoice location (dennis/chatham) from email headers."""
     headers = {h['name'].lower(): h['value'] for h in headers_list}
 
+    # Check recipient headers for the location. Covers BOTH plus-addressing
+    # (mgiorgio+chatham@rednun.com) AND the recipient DISPLAY NAME — L. Knife /
+    # Sheehan invoice emails carry it there, e.g. "RED NUN CHATHAM KNI
+    # <mgiorgio@rednun.com>", with a plain address and no +tag.
     for hdr in ['delivered-to', 'to', 'x-original-to']:
         addr = headers.get(hdr, '').lower()
-        if '+dennis' in addr:
-            return 'dennis'
-        if '+chatham' in addr:
+        if 'chatham' in addr:
             return 'chatham'
+        if 'dennis' in addr:
+            return 'dennis'
 
     subject = decode_mime_header(headers.get('subject', '')).lower()
     if 'chatham' in subject:
@@ -139,7 +143,10 @@ def detect_location(headers_list):
     if 'dennis' in subject:
         return 'dennis'
 
-    return 'dennis'
+    # Unknown — return None so the caller can fall back to the AR034/AR035
+    # account number read from the PDF (authoritative) instead of silently
+    # defaulting every unlabeled invoice to Dennis.
+    return None
 
 
 # ── Attachment extraction ─────────────────────────────────────────────────────
@@ -400,7 +407,7 @@ def main():
             headers_list = hdr_msg.get('payload', {}).get('headers', [])
             headers_dict = {h['name']: h['value'] for h in headers_list}
 
-            location = detect_location(headers_list)
+            location = detect_location(headers_list) or 'dennis'  # hint only; AR034/AR035 in the PDF is authoritative downstream
             sender   = headers_dict.get('From', 'unknown')
             subject  = decode_mime_header(headers_dict.get('Subject', ''))
 

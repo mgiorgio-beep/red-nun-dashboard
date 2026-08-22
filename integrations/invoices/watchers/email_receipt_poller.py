@@ -280,11 +280,13 @@ def apply_payment(invoice_id: int, amount: float, payment_method: str,
                    payment_status = ?,
                    paid_date = CASE WHEN ? = 'paid' THEN ? ELSE paid_date END,
                    payment_reference = COALESCE(?, payment_reference),
+                   payment_method = COALESCE(?, payment_method),
                    notes = COALESCE(notes, '') || ' | ' || ?
                WHERE id = ?""",
             (new_amount_paid, new_balance, new_status,
              new_status, payment_date,
              reference,
+             payment_method,
              f"auto-receipt {payment_date}: {memo}",
              invoice_id),
         )

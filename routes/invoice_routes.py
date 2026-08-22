@@ -501,18 +501,38 @@ def api_scan_invoice():
             validation_result["issues"].append("OCR required correction pass — please review")
         logger.info(f"Validation result: auto_confirm={validation_result['auto_confirm']}, issues={validation_result['issues']}")
 
-        # Auto-detect location from ship-to address
+        # Auto-detect location. For L. Knife / VTInfo the ACCOUNT NUMBER is
+        # authoritative: AR034 = Chatham, AR035 = Dennis Port (more reliable than
+        # the ship-to city, per the L. Knife extraction rules). Fall back to the
+        # city name in the ship-to / notes text.
         ship_to = (extracted.get("ship_to_address") or "").lower()
         vendor_name = (extracted.get("vendor_name") or "").lower()
         all_text = ship_to + " " + vendor_name + " " + (extracted.get("notes") or "").lower()
-        if "chatham" in all_text:
-            if location != "chatham":
-                logger.info(f"Auto-detected Chatham location from invoice text (was '{location}')")
-            location = "chatham"
+        try:
+            raw_extract = json.dumps(extracted).lower()
+        except Exception:
+            raw_extract = ""
+        loc_source = None
+        if "ar034" in all_text or "ar034" in raw_extract:
+            location, loc_source = "chatham", "account AR034"
+        elif "ar035" in all_text or "ar035" in raw_extract:
+            location, loc_source = "dennis", "account AR035"
+        elif "chatham" in all_text:
+            location, loc_source = "chatham", "ship-to text"
         elif "dennis" in all_text:
-            if location != "dennis":
-                logger.info(f"Auto-detected Dennis location from invoice text (was '{location}')")
-            location = "dennis"
+            location, loc_source = "dennis", "ship-to text"
+        if loc_source:
+            logger.info(f"Auto-detected {location} location (from {loc_source})")
+
+        # Safety net: an L. Knife invoice whose location could NOT be pinned from the
+        # account number or city text must not be silently filed under the email
+        # default location — flag it for manual review instead.
+        if "knife" in vendor_name and not loc_source:
+            validation_result["auto_confirm"] = False
+            validation_result.setdefault("issues", []).append(
+                f"L. Knife invoice — could not read AR034/AR035 account or city; "
+                f"location defaulted to '{location}'. Verify location before confirming.")
+            logger.warning("L. Knife location undetermined — flagged for manual review")
 
         # Save to database with validation data
         result = save_invoice(
@@ -1094,6 +1114,84 @@ def api_delete_invoice(invoice_id):
         delete_invoice(invoice_id)
         return jsonify({"status": "ok", "message": "Invoice deleted"})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@invoice_bp.route("/api/invoices/<int:invoice_id>", methods=["PUT"])
+def api_edit_invoice(invoice_id):
+    """Edit an already-confirmed invoice (header + line items) and recompute the
+    outstanding balance. Blocks edits to fully-paid invoices to protect payment
+    records. Reuses confirm_invoice() for the write, MERGING over the existing
+    invoice so unspecified header fields are never wiped, then fixes `balance` /
+    `payment_status` (confirm_invoice() updates `total` but not `balance`)."""
+    data = request.get_json(silent=True) or {}
+    current = get_invoice(invoice_id)
+    if not current:
+        return jsonify({"error": "Invoice not found"}), 404
+    if (current.get("payment_status") or "").lower() == "paid":
+        return jsonify({"error": "Invoice is fully paid — unpay it before editing."}), 409
+
+    # Merge provided fields over the current invoice so partial edits are safe.
+    merged = {
+        "vendor_name":    data.get("vendor_name",    current.get("vendor_name")),
+        "invoice_number": data.get("invoice_number", current.get("invoice_number")),
+        "invoice_date":   data.get("invoice_date",   current.get("invoice_date")),
+        "location":       data.get("location",       current.get("location")),
+        "notes":          data.get("notes",          current.get("notes")),
+        "tax":            float(data.get("tax", current.get("tax") or 0) or 0),
+    }
+    if data.get("line_items") is not None:
+        items = data["line_items"]
+        line_sum = round(sum(float(it.get("total_price", 0) or 0) for it in items), 2)
+        merged["line_items"] = items
+        merged["subtotal"] = round(float(data.get("subtotal", line_sum) or 0), 2)
+        merged["total"] = round(float(data.get("total", line_sum + merged["tax"]) or 0), 2)
+        computed = round(line_sum + merged["tax"], 2)
+        if merged["total"] and abs(computed - merged["total"]) > 0.02:
+            return jsonify({
+                "error": f"Line items + tax (${computed:.2f}) do not match total (${merged['total']:.2f})",
+                "discrepancy": round(merged["total"] - computed, 2)
+            }), 422
+    else:
+        merged["subtotal"] = round(float(data.get("subtotal", current.get("subtotal") or 0) or 0), 2)
+        merged["total"] = round(float(data.get("total", current.get("total") or 0) or 0), 2)
+
+    try:
+        confirm_invoice(invoice_id, updated_data=merged)
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT total, COALESCE(amount_paid, 0) AS ap FROM scanned_invoices WHERE id = ?",
+                (invoice_id,)
+            ).fetchone()
+            total = float(row["total"] or 0)
+            ap = float(row["ap"] or 0)
+            new_balance = round(total - ap, 2)
+            if new_balance <= 0 and total > 0:
+                new_status = "paid"
+            elif ap > 0:
+                new_status = "partial"
+            else:
+                new_status = "unpaid"
+            conn.execute(
+                "UPDATE scanned_invoices SET balance = ?, payment_status = ? WHERE id = ?",
+                (new_balance, new_status, invoice_id)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        # Re-run product linking + anomaly detection so edits stay consistent
+        # with the confirm flow (canonical names, price tracking).
+        try:
+            _c = get_connection()
+            process_invoice_items(invoice_id, _c)
+            analyze_invoice_for_anomalies(invoice_id, _c)
+            _c.close()
+        except Exception as _e:
+            logger.error(f"Post-edit processing error: {_e}", exc_info=True)
+        return jsonify({"status": "ok", "invoice": get_invoice(invoice_id)})
+    except Exception as e:
+        logger.error(f"Invoice edit error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 
