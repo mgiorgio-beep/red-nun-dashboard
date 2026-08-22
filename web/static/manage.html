@@ -2292,6 +2292,10 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
       <div id="bp-vendor-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:none;align-items:center;justify-content:center">
         <div style="background:#ffffff;border:1px solid var(--border);border-radius:12px;padding:24px;width:95%;max-width:1100px;max-height:90vh;overflow-y:auto">
           <h3 style="color:#111827;margin:0 0 16px 0;font-size:15px" id="bp-veditor-title">Vendor Setup</h3>
+          <div style="margin-bottom:14px">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Vendor Name <span style="color:#94a3b8;font-weight:normal">— editing this renames the vendor across all its invoices</span></label>
+            <input type="text" id="bp-ve-name-edit" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px;font-weight:600">
+          </div>
           <div style="display:flex;gap:20px;flex-wrap:wrap">
           <!-- Left: Invoice Image -->
           <div style="flex:1;min-width:300px;max-width:500px">
@@ -2409,6 +2413,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
           </div><!-- /flex container -->
           <div style="display:flex;gap:8px;margin-top:16px">
             <button onclick="bpSaveVendor()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Save</button>
+            <button onclick="bpDeleteVendor()" style="padding:10px 16px;border-radius:8px;border:1px solid #dc3545;background:transparent;color:#dc3545;font-weight:600;font-size:13px;cursor:pointer">Delete</button>
             <button onclick="bpCloseVendorModal()" style="padding:10px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:13px;cursor:pointer">Cancel</button>
           </div>
         </div>
@@ -4939,6 +4944,12 @@ function _fmtDate(iso) {
   return months[parseInt(parts[1]) - 1] + ' ' + parseInt(parts[2]) + ', ' + parts[0];
 }
 
+function invNumLink(id, num, disp){
+  var t = (disp != null ? disp : ((num == null || num === '') ? '—' : num));
+  if (!id || num == null || num === '') return t;
+  return '<a href="/api/invoices/' + id + '/image" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open invoice PDF" style="color:inherit;text-decoration:underline;text-underline-offset:2px">' + t + '</a>';
+}
+
 function _fmtMoney(n) {
   n = parseFloat(n) || 0;
   return '$' + n.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -5169,7 +5180,7 @@ async function fcDrillDown(type) {
       invoices.forEach(function(inv) {
         h += '<tr><td style="padding:4px 8px">' + (inv.date||'—') + '</td>' +
           '<td style="padding:4px 8px">' + (inv.vendor||'—') + '</td>' +
-          '<td style="padding:4px 8px">' + (inv.invoice_number||'—') + '</td>' +
+          '<td style="padding:4px 8px">' + invNumLink(inv.id, inv.invoice_number) + '</td>' +
           '<td style="text-align:right;padding:4px 8px;font-family:monospace">' + _fmtMoney(inv.total) + '</td></tr>';
       });
       h += '<tr style="border-top:1px solid var(--border)"><td colspan="3" style="padding:8px;font-weight:700">Total</td>' +
@@ -5822,7 +5833,7 @@ function _bpRowHtml(inv, effectiveDays) {
     '<td style="padding:8px"><input type="checkbox" data-id="' + inv.id + '" onchange="bpToggleSelect(this,' + inv.id + ')"' + (_bpSelected.has(inv.id) ? ' checked' : '') + '></td>' +
     '<td style="padding:8px;color:#111827;font-weight:500">' + (inv.vendor_name||'—') +
       (isCredit ? ' <span style="display:inline-block;padding:1px 7px;border-radius:10px;background:var(--red-soft,#ef444415);color:var(--red);font-size:10px;font-weight:700;vertical-align:middle">CREDIT</span>' : '') + '</td>' +
-    '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_number||'—') + '</td>' +
+    '<td style="padding:8px;color:var(--text3)">' + invNumLink(inv.id, inv.invoice_number) + '</td>' +
     '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_date||'—') + '</td>' +
     '<td style="padding:8px;color:' + dueColor + '">' + (inv.due_date||'—') + dueSuffix + '</td>' +
     '<td style="padding:8px;text-align:right;color:' + (isCredit ? 'var(--red)' : '#111827') + '">' + _bpMoney(inv.total||0) + '</td>' +
@@ -6359,6 +6370,7 @@ function bpFilterVendorList() { bpRenderVendorList(); }
 
 async function bpEditVendor(name) {
   document.getElementById('bp-ve-name').value = name;
+  document.getElementById('bp-ve-name-edit').value = name;
   document.getElementById('bp-veditor-title').textContent = name + ' — Bill Pay Setup';
   // Load current settings
   try {
@@ -6480,9 +6492,35 @@ async function bpSaveVendor() {
       })
     });
     if (r.ok) {
+      var newName = (document.getElementById('bp-ve-name-edit').value || '').trim();
+      if (newName && newName.toLowerCase() !== name.toLowerCase()) {
+        var rr = await fetch('/api/billpay/vendors/' + encodeURIComponent(name) + '/rename', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ new_name: newName })
+        });
+        if (!rr.ok) {
+          var rd = await rr.json().catch(function(){ return {}; });
+          alert('Settings saved, but rename failed: ' + (rd.error || 'unknown'));
+        }
+      }
       bpCloseVendorModal();
       bpLoadVendors();
     } else { alert('Error saving vendor'); }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function bpDeleteVendor() {
+  var name = document.getElementById('bp-ve-name').value;
+  if (!name) return;
+  if (!confirm('Remove "' + name + '" from Vendor Setup / Bill Pay? This un-enrolls the vendor from bill pay. Its historical invoices are kept.')) return;
+  try {
+    var r = await fetch('/api/billpay/vendors/' + encodeURIComponent(name), { method: 'DELETE' });
+    var d = await r.json().catch(function(){ return {}; });
+    if (r.ok) {
+      alert('Removed "' + name + '" from Bill Pay.' + (d.invoices_kept ? ' (' + d.invoices_kept + ' invoices kept.)' : ''));
+      bpCloseVendorModal();
+      bpLoadVendors();
+    } else { alert('Error: ' + (d.error || 'could not delete vendor')); }
   } catch(e) { alert('Error: ' + e.message); }
 }
 

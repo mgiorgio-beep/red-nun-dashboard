@@ -36,7 +36,7 @@ def get_billpay_invoices():
 
     conn = get_connection()
     where = ["si.status = 'confirmed'",
-             "si.vendor_name IN (SELECT vendor_name FROM vendor_bill_pay WHERE bill_pay_enabled = 1)"]
+             "LOWER(si.vendor_name) IN (SELECT LOWER(vendor_name) FROM vendor_bill_pay WHERE bill_pay_enabled = 1)"]
     params = []
 
     if vendor:
@@ -190,7 +190,7 @@ def export_invoices_csv():
                COALESCE(balance, total) as balance, payment_status, location
         FROM scanned_invoices
         WHERE status = 'confirmed'
-          AND vendor_name IN (SELECT vendor_name FROM vendor_bill_pay WHERE bill_pay_enabled = 1)
+          AND LOWER(vendor_name) IN (SELECT LOWER(vendor_name) FROM vendor_bill_pay WHERE bill_pay_enabled = 1)
         ORDER BY due_date ASC NULLS LAST
     """).fetchall()
     conn.close()
@@ -237,7 +237,7 @@ def aging_summary():
         WHERE status = 'confirmed'
           AND (payment_status != 'paid' OR payment_status IS NULL)
           AND (balance > 0 OR balance IS NULL)
-          AND vendor_name IN (SELECT vendor_name FROM vendor_bill_pay WHERE bill_pay_enabled = 1)
+          AND LOWER(vendor_name) IN (SELECT LOWER(vendor_name) FROM vendor_bill_pay WHERE bill_pay_enabled = 1)
     """
     params = []
     if location:
@@ -521,6 +521,73 @@ def update_billpay_vendor(vendor_name):
     conn.close()
 
     return jsonify({"status": "ok", "vendor_name": vendor_name})
+
+@billpay_bp.route("/api/billpay/vendors/<path:vendor_name>", methods=["DELETE"])
+@admin_required
+def delete_billpay_vendor(vendor_name):
+    """Un-enroll a vendor from Bill Pay / Vendor Setup: removes the vendor_bill_pay
+    config row ONLY. Historical invoices are kept intact (per product decision
+    2026-08-10)."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT id FROM vendor_bill_pay WHERE vendor_name = ? COLLATE NOCASE",
+            (vendor_name,)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": f"Vendor '{vendor_name}' not found in Bill Pay setup"}), 404
+        kept = conn.execute(
+            "SELECT COUNT(*) c FROM scanned_invoices WHERE vendor_name = ? COLLATE NOCASE",
+            (vendor_name,)
+        ).fetchone()
+        conn.execute("DELETE FROM vendor_bill_pay WHERE id = ?", (row["id"],))
+        conn.commit()
+        return jsonify({"status": "ok", "vendor_name": vendor_name,
+                        "invoices_kept": (kept["c"] if kept else 0)})
+    finally:
+        conn.close()
+
+
+@billpay_bp.route("/api/billpay/vendors/<path:vendor_name>/rename", methods=["POST"])
+@admin_required
+def rename_billpay_vendor(vendor_name):
+    """Rename a vendor everywhere it is keyed by name so invoices stay linked:
+    vendor_bill_pay, scanned_invoices, vendor_items, vendor_session_status."""
+    data = request.get_json() or {}
+    new_name = (data.get("new_name") or "").strip()
+    if not new_name:
+        return jsonify({"error": "new_name required"}), 400
+    if new_name.lower() == (vendor_name or "").lower():
+        return jsonify({"status": "ok", "unchanged": True, "new_name": new_name})
+    conn = get_connection()
+    try:
+        clash = conn.execute(
+            "SELECT 1 FROM vendor_bill_pay WHERE vendor_name = ? COLLATE NOCASE "
+            "AND vendor_name <> ? COLLATE NOCASE", (new_name, vendor_name)
+        ).fetchone()
+        if clash:
+            return jsonify({"error": f"A vendor named '{new_name}' already exists. "
+                            "Renaming would merge them, which isn't allowed here."}), 409
+        # All-or-nothing: a per-table try/except that committed anyway could
+        # leave scanned_invoices pointing at a vendor that no longer exists in
+        # vendor_bill_pay. Any failure rolls the whole rename back.
+        counts = {}
+        try:
+            for tbl in ("scanned_invoices", "vendor_bill_pay", "vendor_items", "vendor_session_status"):
+                cur = conn.execute(
+                    f"UPDATE {tbl} SET vendor_name = ? WHERE vendor_name = ? COLLATE NOCASE",
+                    (new_name, vendor_name)
+                )
+                counts[tbl] = cur.rowcount
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Vendor rename {vendor_name!r} -> {new_name!r} failed, rolled back: {e}")
+            return jsonify({"error": f"Rename failed and was rolled back: {e}"}), 500
+        return jsonify({"status": "ok", "new_name": new_name, "updated": counts})
+    finally:
+        conn.close()
+
 
 
 # ─────────────────────────────────────────────

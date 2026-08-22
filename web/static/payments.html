@@ -519,7 +519,7 @@ function renderTable(payments) {
         var inv = p.invoices[j];
         var invNeg = inv.amount_paid < 0;
         html += '<tr>';
-        html += '<td style="font-weight:500">' + esc(inv.invoice_number || '') + '</td>';
+        html += '<td style="font-weight:500">' + invNumLink(inv.id, inv.invoice_number, esc(inv.invoice_number || '')) + '</td>';
         html += '<td>' + fmtDate(inv.invoice_date) + '</td>';
         html += '<td>' + fmtDate(inv.due_date) + '</td>';
         html += '<td style="text-align:right' + (invNeg ? ';color:var(--red)' : '') + '">' + fmtMoney(inv.amount_paid) + '</td>';
@@ -582,6 +582,12 @@ window.toggleRow = function(tr, id) {
   detail.classList.toggle('open');
   tr.classList.toggle('expanded');
 };
+
+function invNumLink(id, num, disp){
+  var t = (disp != null ? disp : ((num == null || num === '') ? '—' : num));
+  if (!id || num == null || num === '') return t;
+  return '<a href="/api/invoices/' + id + '/image" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open invoice PDF" style="color:inherit;text-decoration:underline;text-underline-offset:2px">' + t + '</a>';
+}
 
 function fmtMoney(val) {
   if (val == null || val === '') return '$0.00';
