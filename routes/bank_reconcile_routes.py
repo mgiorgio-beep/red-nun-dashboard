@@ -84,6 +84,39 @@ def init_bank_reconcile_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_bsu_account ON bank_statement_uploads(bank_account_id);
         CREATE INDEX IF NOT EXISTS idx_bsu_period ON bank_statement_uploads(period_start, period_end);
+
+        -- Trail for dedupe_register(), which is the only irreversible
+        -- operation in the reconciliation path: it stamps the book row cleared
+        -- and then DELETEs the statement row. Without this there is no record
+        -- of what was removed, what it merged into, or why — and a wrong match
+        -- is undetectable afterwards. deleted_entry_json holds the full
+        -- pre-delete row so a merge can be undone by hand.
+        CREATE TABLE IF NOT EXISTS register_merge_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            merged_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            merged_by TEXT,
+            bank_account_id INTEGER,
+            -- surviving book row
+            target_source TEXT,              -- vendor_payment | payroll_check
+            target_id INTEGER,
+            target_label TEXT,
+            target_cleared_date TEXT,
+            -- deleted statement row
+            deleted_entry_id INTEGER,
+            deleted_entry_date TEXT,
+            deleted_entry_amount REAL,
+            deleted_entry_json TEXT,         -- full row, for manual restore
+            -- why they were matched
+            match_amount REAL,
+            match_date_diff_days INTEGER,
+            match_tolerance_days INTEGER,
+            match_rule TEXT,
+            reversed_at TEXT                 -- set if a human undoes the merge
+        );
+        CREATE INDEX IF NOT EXISTS idx_rma_target
+            ON register_merge_audit(target_source, target_id);
+        CREATE INDEX IF NOT EXISTS idx_rma_deleted
+            ON register_merge_audit(deleted_entry_id);
     """)
 
     # One statement per (account, period). The table was append-only, so a
@@ -996,6 +1029,33 @@ def dedupe_register():
                        WHERE id = ?""",
                     (entry_date, m["id"]),
                 )
+            # Record the merge BEFORE deleting anything. Capture the full row
+            # so this is reversible; a wrong match is otherwise invisible once
+            # the statement line is gone.
+            full = conn.execute(
+                "SELECT * FROM manual_bank_entries WHERE id = ?",
+                (c["manual_entry_id"],),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO register_merge_audit
+                   (merged_by, bank_account_id, target_source, target_id,
+                    target_label, target_cleared_date, deleted_entry_id,
+                    deleted_entry_date, deleted_entry_amount, deleted_entry_json,
+                    match_amount, match_date_diff_days, match_tolerance_days,
+                    match_rule)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    (session.get("username") or session.get("email") or "unknown"),
+                    account_id,
+                    m["source"], m["id"], m.get("label"), entry_date,
+                    c["manual_entry_id"], c["manual_entry_date"],
+                    c["manual_entry_amount"],
+                    json.dumps(dict(full)) if full else None,
+                    m.get("amount"), m.get("date_diff_days"), tol,
+                    "exact_amount+date_within_tolerance;"
+                    "closest_date_wins;payroll_preferred_on_tie",
+                ),
+            )
             # Delete the duplicate manual_bank_entry
             conn.execute(
                 "DELETE FROM manual_bank_entries WHERE id = ?",

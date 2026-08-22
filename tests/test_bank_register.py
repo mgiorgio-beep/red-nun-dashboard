@@ -254,6 +254,50 @@ class TestRegisterQueryContract:
         assert "unassigned_count" in s
 
 
+class TestMergeAudit:
+    """dedupe_register() is the only irreversible operation in this path: it
+    stamps the book row cleared and DELETEs the statement row. Every one of
+    those deletions must leave a restorable trail."""
+
+    def test_audit_table_exists(self, conn):
+        t = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name='register_merge_audit'"
+        ).fetchone()
+        assert t, "register_merge_audit is missing — do not run dedupe without it"
+
+    def test_every_audit_row_is_restorable(self, conn):
+        bad = conn.execute(
+            "SELECT id FROM register_merge_audit "
+            "WHERE deleted_entry_json IS NULL OR deleted_entry_json = ''"
+        ).fetchall()
+        assert not bad, (
+            f"{len(bad)} merges recorded without the deleted row's payload — "
+            f"those cannot be undone: ids {[b[0] for b in bad]}"
+        )
+
+    def test_every_audit_row_identifies_both_sides(self, conn):
+        bad = conn.execute(
+            "SELECT id FROM register_merge_audit "
+            "WHERE target_source IS NULL OR target_id IS NULL "
+            "OR deleted_entry_id IS NULL OR match_rule IS NULL"
+        ).fetchall()
+        assert not bad, f"incomplete audit rows: {[b[0] for b in bad]}"
+
+    def test_no_merged_statement_row_still_exists(self, conn):
+        """A deleted entry id must not reappear in manual_bank_entries — that
+        would mean a re-import recreated a row we already merged away."""
+        back = conn.execute(
+            "SELECT a.deleted_entry_id FROM register_merge_audit a "
+            "JOIN manual_bank_entries m ON m.id = a.deleted_entry_id "
+            "WHERE a.reversed_at IS NULL"
+        ).fetchall()
+        assert not back, (
+            f"statement rows {[b[0] for b in back]} were merged away but exist "
+            f"again — a re-import has recreated merged duplicates"
+        )
+
+
 class TestProvenanceInvariant:
     """gl_status must never be 'confirmed' unless a human set it. Nothing may
     learn a rule from a suggested row (brief §2.4)."""
