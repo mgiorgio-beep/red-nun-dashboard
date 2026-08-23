@@ -172,6 +172,34 @@ def init_register_tables():
             FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id)
         );
         CREATE INDEX IF NOT EXISTS idx_gl_rules_pattern ON gl_account_rules(location, pattern);
+
+        -- Invoice category_type → GL account, per entity.
+        --
+        -- The OCR pipeline tags every invoice line with a category_type
+        -- (FOOD, BEER, TOGO_SUPPLIES, ...). Those tags are their own little
+        -- namespace, and until now they resolved to a GL account by NAME at
+        -- runtime through a hardcoded dict. That is the same shape as the bug
+        -- that orphaned 225 codings: a name is not an identity, and nothing
+        -- stopped the name from resolving to a retired or wrong-entity copy.
+        --
+        -- So the mapping is data, per location, and it points at an account ID.
+        -- gl_accounts is the spine; category_type RESOLVES INTO it and never
+        -- grows an account space of its own. location is NOT NULL on purpose —
+        -- the two entities keep separate charts by design, and a shared
+        -- mapping row is exactly the cross-entity leak we are ruling out.
+        CREATE TABLE IF NOT EXISTS gl_category_mapping (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location TEXT NOT NULL,         -- chatham | dennis. Never NULL.
+            category_type TEXT NOT NULL,    -- uppercase, as emitted by the OCR pipeline
+            gl_account_id INTEGER NOT NULL,
+            confidence TEXT DEFAULT 'exact',-- exact | approximate (approximate prints on the P&L)
+            note TEXT,
+            created_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(location, category_type),
+            FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_gl_cat_map ON gl_category_mapping(location, category_type);
     """)
     # Idempotent ALTER for older installs that already had the table without
     # location (the unique constraint above is only enforced on new tables).
@@ -273,6 +301,13 @@ def init_register_tables():
         seed_default_gl_rules()
     except Exception as e:
         logger.warning(f"Default GL rules seed skipped: {e}")
+
+    # ── Seed the invoice category → GL mapping, per entity. Runs after the
+    # account seed above so the names it resolves are present.
+    try:
+        seed_gl_category_mapping()
+    except Exception as e:
+        logger.warning(f"Category → GL mapping seed skipped: {e}")
 
 
 # ─── GL ACCOUNT SEED ─────────────────────────────────────────────────────────
@@ -390,20 +425,142 @@ def _seed_one_csv(conn, path: Path, location: str) -> int:
 
 # ─── INVOICE CATEGORY → GL ACCOUNT MAPPING ───────────────────────────────────
 
-# Maps the category_type values produced by the OCR pipeline (see
-# integrations/invoices/processor.py) to the GL account NAME. Looked up by
-# name within the row's location at runtime.
-_CATEGORY_GL_MAP = {
-    "FOOD":             "Food Costs -F&B",
-    "LIQUOR":           "Liquor COGS",
-    "BEER":             "Beer COGS",
-    "WINE":             "Wine COGS",
-    "NA_BEVERAGES":     "NA Beverage COGS",
-    "NON_COGS":         "Other Business Expenses",
-    "TOGO_SUPPLIES":    "TakeOut Supplies",
-    "DR_SUPPLIES":      "Dining Room Supplies",
-    "KITCHEN_SUPPLIES": "Kitchen Supplies",
-}
+# SEED ONLY. The live mapping is the gl_category_mapping table, keyed by
+# (location, category_type) and pointing at a gl_accounts.id. This list exists
+# to populate that table the first time, by resolving each name inside each
+# location. After seeding, nothing reads a GL account by name at runtime —
+# edit the table (or the admin endpoint), not this list.
+#
+# category_type values come from the OCR pipeline; see
+# integrations/invoices/processor.py.
+#
+#   confidence 'exact'       — the category means exactly this account.
+#   confidence 'approximate' — a judgement call on a low-material or ambiguous
+#                              category. These print as a footnote on the P&L
+#                              rather than disappearing into a number.
+#
+# UNKNOWN is deliberately absent. An unmapped category must stay unresolved so
+# it surfaces as uncoded spend instead of being quietly absorbed into "Other".
+_CATEGORY_GL_SEED = [
+    # (category_type,     gl account name,           confidence,     note)
+    ("FOOD",             "Food Costs -F&B",          "exact",       None),
+    ("LIQUOR",           "Liquor COGS",              "exact",       None),
+    ("BEER",             "Beer COGS",                "exact",       None),
+    ("WINE",             "Wine COGS",                "exact",       None),
+    ("NA_BEVERAGES",     "NA Beverage COGS",         "exact",       None),
+    ("NON_COGS",         "Other Business Expenses",  "exact",       None),
+    ("TOGO_SUPPLIES",    "TakeOut Supplies",         "exact",       None),
+    ("DR_SUPPLIES",      "Dining Room Supplies",     "exact",       None),
+    ("KITCHEN_SUPPLIES", "Kitchen Supplies",         "exact",       None),
+    ("OTHER",            "Other Business Expenses",  "approximate",
+     "OCR grab-bag: cleaning, fire inspection, service calls. Real expenses, "
+     "but the specific account is a guess."),
+    ("TAX",              "Other Business Expenses",  "approximate",
+     "Sales tax charged on a supplies/linen invoice. Belongs with the item it "
+     "was charged on; booked to the same account the vendor's other lines use."),
+    ("DEPOSIT",          "Beer COGS",                "approximate",
+     "Keg and bottle deposits. Refundable in principle, so arguably an asset; "
+     "expensed to Beer COGS because the amounts are immaterial and the returns "
+     "net out in the same account."),
+    ("LIQUOR_WINE",      "Liquor COGS",              "approximate",
+     "Ambiguous multi-category OCR tag. Booked to Liquor; splits beverage COGS "
+     "slightly wrong but the total is correct."),
+    ("LIQUOR_WINE_BEER", "Liquor COGS",              "approximate",
+     "Ambiguous multi-category OCR tag. Booked to Liquor; splits beverage COGS "
+     "slightly wrong but the total is correct."),
+]
+
+
+def seed_gl_category_mapping() -> int:
+    """Populate gl_category_mapping from _CATEGORY_GL_SEED, per location.
+
+    Idempotent: only inserts (location, category_type) pairs that are missing,
+    so a hand edit in the table survives every restart.
+
+    A seed row is skipped — loudly — when the account name does not resolve to
+    an ACTIVE account inside that location. Seeding a mapping to a retired or
+    cross-entity account is the failure we are engineering out, so a missing
+    account is a visible gap, never a silent one.
+    """
+    inserted = 0
+    conn = get_connection()
+    try:
+        for loc in ("chatham", "dennis"):
+            for category, gl_name, confidence, note in _CATEGORY_GL_SEED:
+                exists = conn.execute(
+                    "SELECT 1 FROM gl_category_mapping "
+                    "WHERE location = ? AND category_type = ?",
+                    (loc, category),
+                ).fetchone()
+                if exists:
+                    continue
+                # Resolve inside this location only. Unlike the rule seed we do
+                # NOT fall back to an unscoped (location IS NULL) account: a
+                # category mapping drives COGS, and quietly borrowing the other
+                # entity's account is how food cost goes wrong by a whole site.
+                gl = conn.execute(
+                    "SELECT id FROM gl_accounts "
+                    "WHERE location = ? AND name = ? AND active = 1 LIMIT 1",
+                    (loc, gl_name),
+                ).fetchone()
+                if not gl:
+                    logger.warning(
+                        "No active %r account in %s — category %s left unmapped",
+                        gl_name, loc, category,
+                    )
+                    continue
+                try:
+                    conn.execute(
+                        """INSERT INTO gl_category_mapping
+                               (location, category_type, gl_account_id,
+                                confidence, note, created_by)
+                           VALUES (?, ?, ?, ?, ?, 'default-seed')""",
+                        (loc, category, gl["id"], confidence, note),
+                    )
+                    inserted += 1
+                except Exception as e:
+                    logger.warning(f"Skip category map {category!r} ({loc}): {e}")
+        conn.commit()
+        if inserted:
+            logger.info(f"Seeded {inserted} invoice category → GL mappings")
+    finally:
+        conn.close()
+    return inserted
+
+
+def audit_gl_category_mapping(conn=None) -> list[dict]:
+    """Return every gl_category_mapping row that points somewhere it must not.
+
+    Same three failure modes the register row guard rejects: the account is
+    gone, it is inactive, or it belongs to the other entity. Should always be
+    empty; the test asserts that, and the health endpoint reports it.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT m.id, m.location, m.category_type, m.gl_account_id,
+                   g.name AS gl_name, g.active, g.location AS gl_location,
+                   CASE
+                       WHEN g.id IS NULL       THEN 'missing'
+                       WHEN g.active = 0       THEN 'inactive'
+                       ELSE 'wrong_entity'
+                   END AS problem
+            FROM gl_category_mapping m
+            LEFT JOIN gl_accounts g ON g.id = m.gl_account_id
+            WHERE g.id IS NULL
+               OR g.active = 0
+               OR g.location IS NULL
+               OR g.location <> m.location
+            ORDER BY m.location, m.category_type
+            """
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        if own:
+            conn.close()
 
 
 def _compute_bp_category_breakdown(conn, payment_ids: list) -> dict:
@@ -435,15 +592,30 @@ def _compute_bp_category_breakdown(conn, payment_ids: list) -> dict:
 
 
 def _resolve_gl_for_category(conn, category: str, location: str | None) -> int | None:
-    """Look up a gl_accounts.id by category_type, scoped to location."""
-    name = _CATEGORY_GL_MAP.get((category or "").upper())
-    if not name:
+    """Look up a gl_accounts.id by category_type, scoped to location.
+
+    Reads the gl_category_mapping table and re-validates the target on the way
+    out: the account must still be active and still belong to this location.
+    A mapping row cannot outlive the account it points at.
+
+    Returns None when the category is unmapped or the mapping is unusable —
+    the caller leaves the row uncoded, which is the honest outcome.
+    """
+    category = (category or "").strip().upper()
+    if not category or not location:
         return None
     row = conn.execute(
-        "SELECT id FROM gl_accounts "
-        "WHERE name = ? AND active = 1 AND (location = ? OR location IS NULL) "
-        "ORDER BY (location = ?) DESC LIMIT 1",
-        (name, location, location),
+        """
+        SELECT g.id
+        FROM gl_category_mapping m
+        JOIN gl_accounts g ON g.id = m.gl_account_id
+        WHERE m.location = ?
+          AND m.category_type = ?
+          AND g.active = 1
+          AND g.location = m.location
+        LIMIT 1
+        """,
+        (location, category),
     ).fetchone()
     return row["id"] if row else None
 
@@ -485,9 +657,14 @@ def _apply_invoice_category_coding(conn, bp_rows_with_loc: list) -> int:
             cat = next(iter(meaningful))
             gl_id = _resolve_gl_for_category(conn, cat, loc_by_pid.get(pid))
             if gl_id:
+                # Stamp provenance. This is a machine coding, so it is
+                # 'suggested' and can never teach a rule — but it is sourced
+                # from the invoice, not from a bank description, so it carries
+                # its own source value.
                 conn.execute(
-                    "UPDATE vendor_payments SET gl_account_id = ? WHERE id = ?",
-                    (gl_id, pid),
+                    "UPDATE vendor_payments SET gl_account_id = ?, gl_source = ?, "
+                    "gl_status = ? WHERE id = ?",
+                    (gl_id, GL_SOURCE_CATEGORY, GL_STATUS_SUGGESTED, pid),
                 )
                 assigned += 1
     if assigned:
@@ -623,6 +800,11 @@ _RULE_SKIP_WORDS = {
 GL_SOURCE_HUMAN = "human"
 GL_SOURCE_RULE = "rule"
 GL_SOURCE_UNKNOWN = "unknown"
+# category — derived from the line items of the invoice this payment settles,
+# via gl_category_mapping. Distinct from 'rule' on purpose: a rule is a guess
+# off a bank description, whereas this is read from the invoice itself, which
+# is the accrual source of truth. The P&L needs to tell those two apart.
+GL_SOURCE_CATEGORY = "category"
 GL_STATUS_CONFIRMED = "confirmed"
 GL_STATUS_SUGGESTED = "suggested"
 
@@ -2106,6 +2288,8 @@ def import_balance_sheet():
                      AND id NOT IN (SELECT gl_account_id FROM bank_deposits
                                     WHERE gl_account_id IS NOT NULL)
                      AND id NOT IN (SELECT gl_account_id FROM gl_account_rules
+                                    WHERE gl_account_id IS NOT NULL)
+                     AND id NOT IN (SELECT gl_account_id FROM gl_category_mapping
                                     WHERE gl_account_id IS NOT NULL)""",
                 (location,),
             )
@@ -2114,7 +2298,8 @@ def import_balance_sheet():
                 """SELECT COUNT(*) FROM gl_accounts
                    WHERE location = ? AND active = 1
                      AND (id IN (SELECT gl_account_id FROM manual_bank_entries WHERE gl_account_id IS NOT NULL)
-                       OR id IN (SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL))""",
+                       OR id IN (SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL)
+                       OR id IN (SELECT gl_account_id FROM gl_category_mapping WHERE gl_account_id IS NOT NULL))""",
                 (location,),
             ).fetchone()[0]
             if protected:

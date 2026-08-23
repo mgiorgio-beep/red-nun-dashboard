@@ -710,15 +710,13 @@ class TestNoOrphanedGlReferences:
     render as an empty box) and silently wrong in any P&L built off the GL, so
     it has to be structurally impossible rather than periodically cleaned up.
 
-    KNOWN EXCEPTION, 2 rows + 2 rules: "Owner's Pay & Personal Expenses" (413,
-    Chatham) is typed Equity, so the P&L-only reactivation pass did not restore
-    it. The two Apple Card rows coded to it are arguably correct — an owner's
-    personal card paid from the business account is a draw, not an expense —
-    but reactivating an Equity account is a chart-of-accounts decision, not a
-    repair. Remove this allowance once that call is made.
+    There are no allowed exceptions. The last two — the Apple Card rows coded
+    to "Owner's Pay & Personal Expenses" (413, Chatham) — were closed on
+    2026-08-23 by reactivating 413. That was the chart-of-accounts call the
+    repair could not make on its own: an owner's personal card paid from the
+    business account IS a draw, so an Equity target is correct, and a register
+    row coding to a balance-sheet account is normal (draws, transfers, AP).
     """
-
-    ALLOWED_INACTIVE = {413}
 
     SOURCES = [
         ("manual_bank_entries", "bank_account_id"),
@@ -741,8 +739,6 @@ class TestNoOrphanedGlReferences:
                        OR (g.location IS NOT NULL AND ba.location IS NOT NULL
                            AND g.location <> ba.location))
             """):
-                if r["gl_account_id"] in self.ALLOWED_INACTIVE:
-                    continue
                 bad.append(f"{table}#{r['id']} -> {r['gl_account_id']} "
                            f"'{r['name']}' (active={r['active']}, "
                            f"{r['gl_loc']} vs row {r['row_loc']})")
@@ -759,8 +755,6 @@ class TestNoOrphanedGlReferences:
                OR (g.location IS NOT NULL AND r.location IS NOT NULL
                    AND g.location <> r.location)
         """):
-            if r["gl_account_id"] in self.ALLOWED_INACTIVE:
-                continue
             bad.append(f"rule#{r['id']} {r['pattern']!r} -> {r['gl_account_id']} "
                        f"'{r['name']}'")
         assert not bad, f"{len(bad)} orphaned rules: " + "; ".join(bad[:10])
@@ -787,9 +781,110 @@ class TestNoOrphanedGlReferences:
                 UNION SELECT gl_account_id FROM vendor_payments WHERE gl_account_id IS NOT NULL
                 UNION SELECT gl_account_id FROM payroll_checks WHERE gl_account_id IS NOT NULL
                 UNION SELECT gl_account_id FROM bank_deposits WHERE gl_account_id IS NOT NULL
-                UNION SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL)
+                UNION SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL
+                UNION SELECT gl_account_id FROM gl_category_mapping WHERE gl_account_id IS NOT NULL)
         """).fetchall()
         inactive = [r[0] for r in refd if conn.execute(
             "SELECT active FROM gl_accounts WHERE id = ?", (r[0],)).fetchone()[0] == 0]
-        inactive = [i for i in inactive if i not in self.ALLOWED_INACTIVE]
         assert not inactive, f"referenced but inactive accounts: {inactive}"
+
+
+class TestInvoiceCategoryMapping:
+    """Invoice category_type resolves into gl_accounts, per entity, by ID.
+
+    This is the mapping COGS is built on, so it gets the same treatment as the
+    register codings: it points at an account ID, the account must be active
+    and belong to the same entity, and nothing resolves a GL account by name at
+    runtime. The old hardcoded name dict is what this replaced — a name is not
+    an identity, and the 225-row orphaning is what happens when it is treated
+    as one.
+    """
+
+    EXPECTED_CATEGORIES = {
+        "FOOD", "LIQUOR", "BEER", "WINE", "NA_BEVERAGES", "NON_COGS",
+        "TOGO_SUPPLIES", "DR_SUPPLIES", "KITCHEN_SUPPLIES",
+        "OTHER", "TAX", "DEPOSIT", "LIQUOR_WINE", "LIQUOR_WINE_BEER",
+    }
+
+    def test_both_entities_are_fully_mapped(self, conn):
+        for loc in ("chatham", "dennis"):
+            got = {r[0] for r in conn.execute(
+                "SELECT category_type FROM gl_category_mapping WHERE location = ?", (loc,))}
+            missing = self.EXPECTED_CATEGORIES - got
+            assert not missing, f"{loc} is missing category mappings: {sorted(missing)}"
+
+    def test_no_mapping_points_at_an_invalid_account(self, conn):
+        from routes.register_routes import audit_gl_category_mapping
+        bad = audit_gl_category_mapping(conn)
+        assert not bad, (
+            f"{len(bad)} invalid category mappings: "
+            + "; ".join(f"{b['location']}/{b['category_type']} -> "
+                        f"{b['gl_account_id']} ({b['problem']})" for b in bad[:10])
+        )
+
+    def test_entities_never_share_a_gl_account(self, conn):
+        """The two COAs are separate by design. If one account id ever served
+        both locations, a Dennis invoice would post into Chatham's books."""
+        shared = conn.execute("""
+            SELECT gl_account_id, COUNT(DISTINCT location) n
+            FROM gl_category_mapping GROUP BY gl_account_id HAVING n > 1
+        """).fetchall()
+        assert not shared, f"category mappings shared across entities: {[dict(s) for s in shared]}"
+
+    def test_unknown_is_never_mapped(self, conn):
+        """An uncategorised line must stay visibly uncoded. Mapping UNKNOWN to
+        a real account would bury unclassified spend inside a legitimate one."""
+        n = conn.execute(
+            "SELECT COUNT(*) FROM gl_category_mapping WHERE category_type = 'UNKNOWN'"
+        ).fetchone()[0]
+        assert n == 0, "UNKNOWN must not be mapped — it has to surface as uncoded"
+
+    def test_every_confirmed_invoice_line_resolves(self, conn):
+        """Coverage, in dollars. A category present in the data but absent from
+        the mapping is silently-dropped COGS, so assert on spend, not on rows."""
+        from routes.register_routes import _resolve_gl_for_category
+        unresolved = {}
+        for r in conn.execute("""
+            SELECT si.location AS loc,
+                   COALESCE(NULLIF(TRIM(ii.category_type), ''), 'UNKNOWN') AS cat,
+                   SUM(COALESCE(ii.total_price, 0)) AS amt
+            FROM scanned_invoice_items ii
+            JOIN scanned_invoices si ON si.id = ii.invoice_id
+            WHERE si.status = 'confirmed' AND si.location IS NOT NULL
+            GROUP BY 1, 2
+        """):
+            if not _resolve_gl_for_category(conn, r["cat"], r["loc"]):
+                unresolved[f"{r['loc']}/{r['cat']}"] = round(r["amt"] or 0, 2)
+        assert not unresolved, f"confirmed invoice spend with no GL mapping: {unresolved}"
+
+    def test_cogs_categories_land_on_cogs_accounts(self, conn):
+        """Food/beverage categories must reach a Cost of Goods Sold account, or
+        food cost % is computed off the wrong side of the P&L."""
+        from routes.register_routes import _resolve_gl_for_category
+        for loc in ("chatham", "dennis"):
+            for cat in ("FOOD", "LIQUOR", "BEER", "WINE", "NA_BEVERAGES"):
+                gl_id = _resolve_gl_for_category(conn, cat, loc)
+                assert gl_id, f"{loc}/{cat} does not resolve"
+                t = conn.execute(
+                    "SELECT account_type FROM gl_accounts WHERE id = ?", (gl_id,)
+                ).fetchone()[0]
+                assert t == "Cost of Goods Sold", f"{loc}/{cat} -> {t}, expected COGS"
+
+    def test_resolver_refuses_a_cross_entity_lookup(self, conn):
+        """Chatham's Food account must never be reachable from a Dennis row."""
+        from routes.register_routes import _resolve_gl_for_category
+        chatham_food = _resolve_gl_for_category(conn, "FOOD", "chatham")
+        dennis_food = _resolve_gl_for_category(conn, "FOOD", "dennis")
+        assert chatham_food and dennis_food
+        assert chatham_food != dennis_food, (
+            "both entities resolved FOOD to the same account id — the charts are "
+            "supposed to be separate"
+        )
+
+    def test_unmapped_or_empty_category_resolves_to_none(self, conn):
+        from routes.register_routes import _resolve_gl_for_category
+        assert _resolve_gl_for_category(conn, "NOT_A_CATEGORY", "chatham") is None
+        assert _resolve_gl_for_category(conn, "", "chatham") is None
+        assert _resolve_gl_for_category(conn, None, "chatham") is None
+        # No location means no entity, and therefore no defensible account.
+        assert _resolve_gl_for_category(conn, "FOOD", None) is None
