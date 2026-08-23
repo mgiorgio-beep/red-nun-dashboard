@@ -486,3 +486,157 @@ class TestProvenanceInvariant:
         ).fetchone()
         if conf:
             assert _may_learn_rule_from(conn, "manual_bank_entries", conf["id"])
+
+
+# ── Transfer classifier ──────────────────────────────────────────────────────
+
+class TestTransferClassifier:
+    """Direction and counterparty both decide the answer, so a blanket
+    'any transfer is rent' rule is wrong. Only 2757 -> 5087 outflows are rent.
+
+    2757 Red Nun Public House (Dennis restaurant)
+    5975 Red Buoy Inc         (Chatham restaurant)
+    5087 Red Nun Realty LLC   (owns the Dennis Port property)
+    """
+
+    def _c(self):
+        from routes.register_routes import classify_transfer
+        return classify_transfer
+
+    def test_restaurant_to_realty_outflow_is_rent(self):
+        for desc in ("Transfer from x2757 to x5087",
+                     "Transfer to DDA Acct No. Acct Ending 5087"):
+            gl, reason = self._c()(desc, -1805.73, "2757")
+            assert gl == "Building Rent", f"{desc!r} -> {gl} ({reason})"
+
+    def test_variable_rent_amounts_still_classify(self):
+        for amt in (-1000.00, -2000.00, -2500.00, -4000.00):
+            gl, _ = self._c()("Transfer from x2757 to x5087", amt, "2757")
+            assert gl == "Building Rent", f"{amt} should still be rent"
+
+    def test_transfer_to_chatham_is_not_rent(self):
+        """5975 is the other restaurant — this is the intercompany loan."""
+        gl, reason = self._c()(
+            "Transfer from x2757 to x5975 Loan repayment", -2000.00, "2757")
+        assert gl is None
+        assert "5975" in reason
+
+    def test_inflow_from_realty_is_not_rent(self):
+        """Rent does not flow backward."""
+        gl, reason = self._c()(
+            "Transfer from x5087 to x2757 Rasmussen", 1750.00, "2757")
+        assert gl is None
+        assert "backward" in reason
+
+    def test_unknown_counterparty_is_not_rent(self):
+        gl, reason = self._c()("Transfer from x5975 to x1239", -1500.00, "5975")
+        assert gl is None and reason
+
+    def test_non_transfers_are_ignored_entirely(self):
+        gl, reason = self._c()("DBT CRD 1321 NORTH STATION GARAGE", -18.00, "2757")
+        assert gl is None and reason is None
+
+    def test_live_transfer_rows_match_the_classifier(self, conn):
+        """Every transfer row in the register must agree with the classifier:
+        coded to Building Rent, or uncoded and awaiting review."""
+        from routes.register_routes import classify_transfer
+        last4 = {r["id"]: (r["account_last4"] or "")
+                 for r in conn.execute("SELECT id, account_last4 FROM bank_accounts")}
+        rent = conn.execute(
+            "SELECT id FROM gl_accounts WHERE name = 'Building Rent' AND active = 1"
+        ).fetchone()
+        assert rent, "Building Rent account is missing"
+        rows = conn.execute(
+            "SELECT id, bank_account_id, payee, memo, amount, gl_account_id "
+            "FROM manual_bank_entries WHERE UPPER(COALESCE(payee,'')) LIKE '%TRANSFER%'"
+        ).fetchall()
+        assert rows, "no transfer rows found"
+        for r in rows:
+            desc = (r["payee"] or "") + " " + (r["memo"] or "")
+            name, reason = classify_transfer(
+                desc, r["amount"], last4.get(r["bank_account_id"], ""))
+            if name == "Building Rent":
+                assert r["gl_account_id"] == rent["id"], (
+                    f"row {r['id']} should be Building Rent, is {r['gl_account_id']}"
+                )
+            elif reason:
+                assert r["gl_account_id"] is None, (
+                    f"row {r['id']} must stay uncoded for review ({reason}), "
+                    f"is coded to {r['gl_account_id']}"
+                )
+
+
+# ── Reconciliation sign-off ──────────────────────────────────────────────────
+
+class TestReconciliationSignOff:
+    """A closed period records that the cleared rows tied exactly AND that a
+    named person accepted the itemized remainder."""
+
+    def test_every_loaded_period_is_reconciled(self, client, uploads):
+        j = client.get("/api/bank-reconcile/reconciliations").get_json()
+        closed = {(r["bank_account_id"], r["period_start"]) for r in j["reconciliations"]
+                  if r["status"] == "reconciled"}
+        for u in uploads:
+            assert (u["bank_account_id"], u["period_start"]) in closed, (
+                f"account {u['bank_account_id']} {u['period_start']} is not signed off"
+            )
+
+    def test_closed_periods_tie_exactly_and_name_a_signer(self, client):
+        j = client.get("/api/bank-reconcile/reconciliations").get_json()
+        for r in j["reconciliations"]:
+            assert cents(r["delta"]) == 0, (
+                f"rec {r['id']} closed with a nonzero delta {r['delta']}"
+            )
+            assert r["closed_by"], f"rec {r['id']} has no signer"
+            assert r["closed_at"], f"rec {r['id']} has no close timestamp"
+
+    def test_outstanding_is_fully_itemized(self, client):
+        """outstanding_net must equal the sum of the snapshot items. This is
+        the 'fully itemized' half of the pass condition — an unexplained
+        remainder is exactly what must not be signable."""
+        j = client.get("/api/bank-reconcile/reconciliations").get_json()
+        for r in j["reconciliations"]:
+            item_sum = sum(cents(i["amount"]) for i in r["items"])
+            assert item_sum == cents(r["outstanding_net"]), (
+                f"rec {r['id']}: items sum to {item_sum} but outstanding_net is "
+                f"{cents(r['outstanding_net'])}"
+            )
+
+    def test_snapshot_is_a_copy_not_a_view(self, conn):
+        """Items must carry their own amount/date/payee so the record survives
+        later edits to the underlying row."""
+        n = conn.execute(
+            "SELECT COUNT(*) FROM bank_reconciliation_items "
+            "WHERE amount IS NULL OR entry_date IS NULL"
+        ).fetchone()[0]
+        assert n == 0, f"{n} snapshot items are missing their frozen values"
+
+    def test_march_outstanding_is_maya_jones(self, client):
+        j = client.get("/api/bank-reconcile/reconciliations?account_id=2").get_json()
+        march = [r for r in j["reconciliations"] if r["period_start"] == "2026-03-02"]
+        assert march, "Dennis March is not reconciled"
+        nonzero = [i for i in march[0]["items"] if cents(i["amount"]) != 0]
+        assert len(nonzero) == 1, f"expected one nonzero outstanding item, got {nonzero}"
+        assert cents(nonzero[0]["amount"]) == -5746
+        assert "Maya" in (nonzero[0]["payee"] or "")
+
+    def test_close_refuses_a_period_that_does_not_tie(self, client, monkeypatch):
+        """A signature must never paper over an unexplained delta."""
+        import routes.bank_reconcile_routes as brr
+        real = brr._reconciliation_state
+        monkeypatch.setattr(
+            brr, "_reconciliation_state",
+            lambda conn, up: {**real(conn, up), "ties": False, "delta": -123.45},
+        )
+        u = client.get("/api/bank-reconcile/uploads").get_json()["uploads"][0]
+        r = client.post("/api/bank-reconcile/reconciliation/close",
+                        json={"upload_id": u["id"]})
+        assert r.status_code == 409
+        assert "-123.45" in r.get_json()["error"]
+
+    def test_preview_writes_nothing(self, client, conn, uploads):
+        before = conn.execute("SELECT COUNT(*) FROM bank_reconciliations").fetchone()[0]
+        for u in uploads:
+            client.get(f"/api/bank-reconcile/reconciliation/preview?upload_id={u['id']}")
+        after = conn.execute("SELECT COUNT(*) FROM bank_reconciliations").fetchone()[0]
+        assert before == after, "preview created reconciliation rows"

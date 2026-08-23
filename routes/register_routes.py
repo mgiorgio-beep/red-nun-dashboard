@@ -627,6 +627,91 @@ GL_STATUS_CONFIRMED = "confirmed"
 GL_STATUS_SUGGESTED = "suggested"
 
 
+# ── Inter-account transfers ──────────────────────────────────────────────────
+# Three entities share partners and move money between them, and the statement
+# descriptions name both accounts literally ("Transfer from x2757 to x5087",
+# or "Transfer to DDA" with "Acct Ending 5087" in the memo):
+#
+#   2757  Red Nun Public House Inc   (Dennis Port restaurant)
+#   5975  Red Buoy Inc               (Chatham restaurant)
+#   5087  Red Nun Realty LLC         (owns the Dennis Port property)
+#
+# Only ONE combination has a settled treatment: money leaving the Dennis
+# restaurant for the realty company is RENT. QBO precedent from 2025 codes
+# payee "Red Nun Dennis Realty" to Rent & Lease:Building Rent, base
+# $1,805.73/month plus variable extras.
+#
+# Everything else is deliberately NOT auto-coded, because direction and
+# counterparty both change the answer:
+#   2757 -> 5975  is the intercompany loan (Red Buoy carries "Loan to Red Nun
+#                 Dennisport", $109,208.01), not rent
+#   5087 -> 2757  is an INFLOW; rent does not flow backward
+# A blanket "any transfer is rent" rule miscodes both. Non-rent moves to the
+# realty company belong in "Loan to Rednun Dennis Realty" (Other Asset), which
+# is a judgement call, so those flag for review instead.
+ACCT_DENNIS_RESTAURANT = "2757"
+ACCT_CHATHAM_RESTAURANT = "5975"
+ACCT_DENNIS_REALTY = "5087"
+
+
+def _parse_transfer(description: str):
+    """Extract (from_acct, to_acct) as 4-digit strings from a transfer
+    description, or None if this isn't a recognisable transfer.
+
+    Handles both shapes seen on Cape Cod Five statements:
+        "Transfer from x2757 to x5087"          -> ("2757", "5087")
+        "Transfer to DDA" + "Acct Ending 5087"  -> (None, "5087")
+    """
+    if not description:
+        return None
+    text = description.upper()
+    if "TRANSFER" not in text:
+        return None
+    m = re.search(r"FROM\s+X?(\d{4})\s+TO\s+X?(\d{4})", text)
+    if m:
+        return m.group(1), m.group(2)
+    # "Transfer to DDA ... Acct Ending NNNN" — destination only.
+    m = re.search(r"(?:ACCT\s+)?ENDING\s+(\d{4})", text)
+    if m and re.search(r"TRANSFER\s+TO\b", text):
+        return None, m.group(1)
+    m = re.search(r"(?:ACCT\s+)?ENDING\s+(\d{4})", text)
+    if m and re.search(r"TRANSFER\s+FROM\b", text):
+        return m.group(1), None
+    return None
+
+
+def classify_transfer(description: str, amount: float, this_account_last4: str):
+    """Deterministic classifier for inter-account transfers.
+
+    Returns (gl_account_name, reason) when the combination has a settled
+    treatment, or (None, reason) when it must go to review. Never guesses.
+
+    `amount` is signed: negative = money left this account.
+    """
+    parsed = _parse_transfer(description)
+    if not parsed:
+        return None, None  # not a transfer at all
+    src, dst = parsed
+    outflow = (amount or 0) < 0
+
+    # Destination unstated ("Transfer to DDA") — infer from direction.
+    if src is None and outflow:
+        src = this_account_last4
+    if dst is None and not outflow:
+        dst = this_account_last4
+
+    if (src == ACCT_DENNIS_RESTAURANT and dst == ACCT_DENNIS_REALTY and outflow):
+        return "Building Rent", f"{src}->{dst} outflow: restaurant to realty = rent"
+
+    if ACCT_CHATHAM_RESTAURANT in (src, dst):
+        return None, (f"{src or '?'}->{dst or '?'}: counterparty is Chatham's "
+                      f"5975, this is the intercompany loan, not rent")
+    if src == ACCT_DENNIS_REALTY:
+        return None, (f"{src}->{dst or '?'}: inflow FROM the realty company; "
+                      f"rent does not flow backward")
+    return None, f"{src or '?'}->{dst or '?'}: unrecognised transfer pair"
+
+
 def _may_learn_rule_from(conn, table: str, row_id: int) -> bool:
     """True only if this row's GL coding is human-confirmed.
 
@@ -1190,21 +1275,42 @@ def get_register(account_id):
       end        YYYY-MM-DD (default: today)
       cleared    all | cleared | uncleared (default: all)
       include_unassigned  1 | 0 (default: 1 — show bill pay with NULL account on Chatham)
-    """
-    conn = get_connection()
-    account = conn.execute(
-        "SELECT * FROM bank_accounts WHERE id = ?", (account_id,)
-    ).fetchone()
-    if not account:
-        conn.close()
-        return jsonify({"error": "Account not found"}), 404
 
-    # Date range
+    Thin wrapper: all the work is in build_register_view() so the
+    reconciliation sign-off computes its figures from exactly the same code
+    the UI renders. Two implementations of "what is the bank balance" would
+    drift, and the whole premise is ties-to-the-penny.
+    """
     today = date.today()
     end = request.args.get("end") or today.strftime("%Y-%m-%d")
     start = request.args.get("start") or (today - timedelta(days=90)).strftime("%Y-%m-%d")
     cleared_filter = request.args.get("cleared", "all")
     include_unassigned = request.args.get("include_unassigned", "1") == "1"
+
+    conn = get_connection()
+    try:
+        view = build_register_view(conn, account_id, start, end,
+                                   cleared_filter=cleared_filter,
+                                   include_unassigned=include_unassigned)
+    finally:
+        conn.close()
+    if view is None:
+        return jsonify({"error": "Account not found"}), 404
+    return jsonify(view)
+
+
+def build_register_view(conn, account_id, start, end, cleared_filter="all",
+                        include_unassigned=True):
+    """The unified register for one account over one date range.
+
+    Returns the same dict the API serves, or None if the account is missing.
+    Does NOT close `conn` — the caller owns it.
+    """
+    account = conn.execute(
+        "SELECT * FROM bank_accounts WHERE id = ?", (account_id,)
+    ).fetchone()
+    if not account:
+        return None
 
     # For vendor_payments, payment_date is stored as YYYY-MM-DD (per billpay INSERT);
     # for payroll_checks, pay_date may be YYYY-MM-DD too. For bank_deposits it's YYYY-MM-DD.
@@ -1308,8 +1414,6 @@ def get_register(account_id):
         gid = r.get("gl_account_id")
         r["gl_account_name"] = gl_name_by_id.get(gid) if gid else None
 
-    conn.close()
-
     # ── Book vs bank, computed BEFORE the display filter ─────────────────────
     # These three are the reconciliation itself and must not move when the user
     # toggles the cleared filter, which is a display concern:
@@ -1360,7 +1464,7 @@ def get_register(account_id):
     unassigned_count = sum(1 for r in rows if r.get("unassigned"))
     uncleared_count = sum(1 for r in rows if not r["cleared"])
 
-    return jsonify({
+    return {
         "account": dict(account),
         "start": start,
         "end": end,
@@ -1382,7 +1486,7 @@ def get_register(account_id):
             "outstanding_inflow": round(_unc_in, 2),
             "outstanding_count": outstanding_count,
         },
-    })
+    }
 
 
 # ─── MANUAL ENTRY CRUD ───────────────────────────────────────────────────────

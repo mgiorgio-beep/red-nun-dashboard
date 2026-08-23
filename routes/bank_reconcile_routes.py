@@ -117,6 +117,61 @@ def init_bank_reconcile_tables():
             ON register_merge_audit(target_source, target_id);
         CREATE INDEX IF NOT EXISTS idx_rma_deleted
             ON register_merge_audit(deleted_entry_id);
+
+        -- ── Bank reconciliation sign-off ─────────────────────────────────
+        -- One row per (account, statement period). The pass condition is NOT
+        -- "delta == 0" — a period holding a legitimate outstanding check can
+        -- never satisfy that. It is "the delta is fully itemized and someone
+        -- accepted it", which is meaningless without a record of who accepted.
+        CREATE TABLE IF NOT EXISTS bank_reconciliations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bank_account_id INTEGER NOT NULL,
+            statement_upload_id INTEGER,
+            period_start TEXT NOT NULL,
+            period_end TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',   -- open | reconciled
+            -- the three anchors, frozen at close
+            beginning_balance REAL,
+            ending_balance REAL,
+            bank_balance REAL,                     -- computed from cleared rows
+            book_balance REAL,                     -- computed from all rows
+            outstanding_net REAL,                  -- book - bank, itemized below
+            delta REAL,                            -- bank_balance - ending_balance
+            closed_by TEXT,
+            closed_at TEXT,
+            notes TEXT,
+            FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_bank_rec_period
+            ON bank_reconciliations(bank_account_id, period_start, period_end);
+
+        -- Snapshot of what was outstanding at sign-off. Deliberately a COPY,
+        -- not a view: it is the record that these specific items, at these
+        -- amounts, were known and accepted when the period closed, and it must
+        -- survive later edits to the underlying row.
+        CREATE TABLE IF NOT EXISTS bank_reconciliation_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reconciliation_id INTEGER NOT NULL,
+            source TEXT NOT NULL,       -- manual | bill_pay | payroll | deposit
+            source_id INTEGER NOT NULL,
+            entry_date TEXT,
+            payee TEXT,
+            memo TEXT,
+            amount REAL,                -- signed: negative = outflow
+            age_days INTEGER,           -- period_end - entry_date at close
+            -- Set when the same item was already outstanding in the previous
+            -- period's snapshot. A long carried_from chain is the stale-
+            -- outstanding signal: a check nobody ever cashed, i.e. a void
+            -- candidate worth surfacing.
+            carried_from_item_id INTEGER,
+            carry_count INTEGER DEFAULT 0,
+            FOREIGN KEY (reconciliation_id) REFERENCES bank_reconciliations(id),
+            FOREIGN KEY (carried_from_item_id) REFERENCES bank_reconciliation_items(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_bri_rec
+            ON bank_reconciliation_items(reconciliation_id);
+        CREATE INDEX IF NOT EXISTS idx_bri_source
+            ON bank_reconciliation_items(source, source_id);
     """)
 
     # One statement per (account, period). The table was append-only, so a
@@ -316,6 +371,14 @@ def import_selected():
 
     created_by = session.get("username") or session.get("email") or "statement-import"
 
+    # Needed by the transfer classifier: which account is "this" one, and which
+    # entity's chart of accounts to resolve names against.
+    _acct = conn.execute(
+        "SELECT account_last4, location FROM bank_accounts WHERE id = ?", (account_id,)
+    ).fetchone()
+    acct_last4 = (_acct["account_last4"] if _acct else "") or ""
+    acct_location = _acct["location"] if _acct else None
+
     inserted = 0
     cleared_total = 0
     for idx in indexes:
@@ -337,19 +400,41 @@ def import_selected():
         memo_parts.append(f"[stmt #{upload_id}]")
         memo = " ".join(memo_parts).strip()
 
-        # Apply GL rule (if any) so freshly imported rows pre-fill the
-        # right account. Falls back to NULL if no rule matches yet.
-        from routes.register_routes import _find_gl_account_for_description
-        gl_id = _find_gl_account_for_description(
-            conn, (tx.get("description") or "") + " " + (tx.get("memo") or "")
+        # Pre-fill the GL account so freshly imported rows aren't all blank.
+        # The deterministic transfer classifier runs FIRST: inter-account
+        # transfers are the one case where a substring rule reliably gets the
+        # wrong answer (2757->5087 is rent, 2757->5975 is the intercompany
+        # loan, and the descriptions differ by four digits). Falls back to the
+        # learned rules, then to NULL.
+        from routes.register_routes import (
+            _find_gl_account_for_description, classify_transfer,
         )
+        _desc = (tx.get("description") or "") + " " + (tx.get("memo") or "")
+        gl_id = None
+        _xfer_name, _xfer_reason = classify_transfer(_desc, signed, acct_last4)
+        if _xfer_name:
+            _g = conn.execute(
+                "SELECT id FROM gl_accounts WHERE name = ? AND (location = ? OR location IS NULL) "
+                "AND active = 1 ORDER BY location IS NULL LIMIT 1",
+                (_xfer_name, acct_location),
+            ).fetchone()
+            if _g:
+                gl_id = _g["id"]
+        elif _xfer_reason:
+            # A transfer we deliberately refuse to guess at — leave uncoded so
+            # it surfaces in the review queue with its reason in the log.
+            logger.info("Transfer left for review: %s — %s", _desc.strip()[:70], _xfer_reason)
+        if gl_id is None and not _xfer_reason:
+            gl_id = _find_gl_account_for_description(conn, _desc)
 
+        # Any coding applied here is machine-derived, so it is suggested, never
+        # confirmed — nothing may learn a rule from it (see GL_PROVENANCE).
         cur = conn.execute(
             """INSERT INTO manual_bank_entries
                (bank_account_id, entry_date, entry_type, payee, memo,
                 ref_number, amount, cleared, cleared_date, created_by,
-                statement_upload_id, gl_account_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+                statement_upload_id, gl_account_id, gl_source, gl_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
             (
                 account_id,
                 tx.get("date"),
@@ -362,6 +447,8 @@ def import_selected():
                 created_by,
                 upload_id,
                 gl_id,
+                ("rule" if gl_id else None),
+                ("suggested" if gl_id else None),
             ),
         )
         if cur.rowcount:
@@ -1086,3 +1173,238 @@ def dedupe_register():
         "merged_count": merged_count,
         "deleted_manual_entries": deleted_count,
     })
+
+
+# ─── RECONCILIATION SIGN-OFF ─────────────────────────────────────────────────
+#
+# The pass condition is "the delta is fully itemized and accepted", not
+# "delta == 0". A period holding a legitimate outstanding check can never
+# satisfy the latter, so closing a period means: the cleared rows tie to the
+# statement exactly, and everything left over is captured as a named
+# reconciling item that somebody accepted.
+
+
+def _reconciliation_state(conn, upload):
+    """Compute the closing figures + the outstanding items for one statement
+    period, WITHOUT writing anything. Shared by preview and close."""
+    acct_id = upload["bank_account_id"]
+    start, end = upload["period_start"], upload["period_end"]
+
+    # Reuse the register's own builder so these figures can never drift from
+    # what the UI renders.
+    from routes.register_routes import build_register_view
+    view = build_register_view(conn, acct_id, start, end)
+    if view is None:
+        raise ValueError(f"bank account {acct_id} not found")
+    rows = view["rows"]
+    summary = view["summary"]
+
+    outstanding = [r for r in rows if not r["cleared"]]
+    begin_c = _c(upload["beginning_balance"])
+    end_c = _c(upload["ending_balance"])
+    clr_in = sum(_c(r["inflow"]) for r in rows if r["cleared"])
+    clr_out = sum(_c(r["outflow"]) for r in rows if r["cleared"])
+    bank_c = begin_c + clr_in - clr_out
+    delta_c = bank_c - end_c
+
+    end_date = date.fromisoformat(end)
+    items = []
+    for r in outstanding:
+        try:
+            age = (end_date - date.fromisoformat(r["date"])).days if r["date"] else None
+        except ValueError:
+            age = None
+        items.append({
+            "source": r["source"],
+            "source_id": r["source_id"],
+            "entry_date": r["date"],
+            "payee": r.get("payee"),
+            "memo": r.get("memo"),
+            "amount": round(r["inflow"] - r["outflow"], 2),
+            "age_days": age,
+        })
+
+    return {
+        "bank_account_id": acct_id,
+        "statement_upload_id": upload["id"],
+        "period_start": start,
+        "period_end": end,
+        "beginning_balance": round(begin_c / 100, 2),
+        "ending_balance": round(end_c / 100, 2),
+        "bank_balance": round(bank_c / 100, 2),
+        "book_balance": summary["book_balance"],
+        "outstanding_net": summary["outstanding_net"],
+        "delta": round(delta_c / 100, 2),
+        "ties": delta_c == 0,
+        "outstanding_items": items,
+    }
+
+
+def _c(x):
+    """Money -> integer cents. The premise is 'ties to the penny'."""
+    return int(round(float(x or 0) * 100))
+
+
+@bank_reconcile_bp.route("/api/bank-reconcile/reconciliation/preview", methods=["GET"])
+@login_required
+def preview_reconciliation():
+    """Dry run: what would closing this period record? Writes nothing.
+
+    Query: ?upload_id=N   (or ?account_id=&start=&end=)
+    """
+    conn = get_connection()
+    try:
+        upload = _resolve_upload(conn)
+        if upload is None:
+            return jsonify({"error": "Statement period not found"}), 404
+        state = _reconciliation_state(conn, upload)
+        existing = conn.execute(
+            "SELECT id, status, closed_by, closed_at FROM bank_reconciliations "
+            "WHERE bank_account_id = ? AND period_start = ? AND period_end = ?",
+            (upload["bank_account_id"], upload["period_start"], upload["period_end"]),
+        ).fetchone()
+        state["existing"] = dict(existing) if existing else None
+        state["outstanding_count"] = len(state["outstanding_items"])
+        return jsonify(state)
+    finally:
+        conn.close()
+
+
+@bank_reconcile_bp.route("/api/bank-reconcile/reconciliation/close", methods=["POST"])
+@admin_required
+def close_reconciliation():
+    """Sign off a statement period.
+
+    Body: { upload_id } or { account_id, start, end }, plus optional { notes }.
+
+    REFUSES unless the cleared rows tie to the statement exactly. A nonzero
+    delta means a transaction is missing, an amount is wrong, or something is
+    cleared that should not be — none of which a signature should paper over.
+    Outstanding items are NOT a reason to refuse; they are the point.
+    """
+    data = request.get_json(silent=True) or {}
+    conn = get_connection()
+    try:
+        upload = _resolve_upload(conn, data)
+        if upload is None:
+            return jsonify({"error": "Statement period not found"}), 404
+
+        state = _reconciliation_state(conn, upload)
+        if not state["ties"]:
+            return jsonify({
+                "error": f"Refusing to close: cleared rows are off by "
+                         f"${state['delta']:,.2f}. The statement must tie exactly "
+                         f"before it can be signed off — outstanding items are "
+                         f"fine, an unexplained delta is not.",
+                "delta": state["delta"],
+            }), 409
+
+        who = session.get("username") or session.get("email") or "unknown"
+        prior = conn.execute(
+            "SELECT id FROM bank_reconciliations WHERE bank_account_id = ? "
+            "AND period_end < ? AND status = 'reconciled' "
+            "ORDER BY period_end DESC LIMIT 1",
+            (upload["bank_account_id"], upload["period_start"]),
+        ).fetchone()
+
+        conn.execute("DELETE FROM bank_reconciliation_items WHERE reconciliation_id IN "
+                     "(SELECT id FROM bank_reconciliations WHERE bank_account_id = ? "
+                     " AND period_start = ? AND period_end = ?)",
+                     (upload["bank_account_id"], upload["period_start"], upload["period_end"]))
+        conn.execute("DELETE FROM bank_reconciliations WHERE bank_account_id = ? "
+                     "AND period_start = ? AND period_end = ?",
+                     (upload["bank_account_id"], upload["period_start"], upload["period_end"]))
+        cur = conn.execute(
+            """INSERT INTO bank_reconciliations
+               (bank_account_id, statement_upload_id, period_start, period_end,
+                status, beginning_balance, ending_balance, bank_balance,
+                book_balance, outstanding_net, delta, closed_by, closed_at, notes)
+               VALUES (?,?,?,?,'reconciled',?,?,?,?,?,?,?,datetime('now'),?)""",
+            (upload["bank_account_id"], upload["id"], upload["period_start"],
+             upload["period_end"], state["beginning_balance"], state["ending_balance"],
+             state["bank_balance"], state["book_balance"], state["outstanding_net"],
+             state["delta"], who, data.get("notes")),
+        )
+        rec_id = cur.lastrowid
+
+        carried = 0
+        for it in state["outstanding_items"]:
+            prev = None
+            if prior:
+                prev = conn.execute(
+                    "SELECT id, carry_count FROM bank_reconciliation_items "
+                    "WHERE reconciliation_id = ? AND source = ? AND source_id = ?",
+                    (prior["id"], it["source"], it["source_id"]),
+                ).fetchone()
+            conn.execute(
+                """INSERT INTO bank_reconciliation_items
+                   (reconciliation_id, source, source_id, entry_date, payee, memo,
+                    amount, age_days, carried_from_item_id, carry_count)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (rec_id, it["source"], it["source_id"], it["entry_date"],
+                 it["payee"], it["memo"], it["amount"], it["age_days"],
+                 (prev["id"] if prev else None),
+                 ((prev["carry_count"] or 0) + 1 if prev else 0)),
+            )
+            if prev:
+                carried += 1
+        conn.commit()
+
+        return jsonify({
+            "status": "ok",
+            "reconciliation_id": rec_id,
+            "closed_by": who,
+            "delta": state["delta"],
+            "outstanding_count": len(state["outstanding_items"]),
+            "carried_forward": carried,
+        })
+    finally:
+        conn.close()
+
+
+@bank_reconcile_bp.route("/api/bank-reconcile/reconciliations", methods=["GET"])
+@login_required
+def list_reconciliations():
+    """Closed periods, newest first, with their outstanding items.
+
+    `stale_outstanding` flags items that have been carried forward three or
+    more times — a check nobody has cashed in three statement periods is a
+    void candidate, not a timing difference.
+    """
+    conn = get_connection()
+    try:
+        acct = request.args.get("account_id", type=int)
+        q = ("SELECT * FROM bank_reconciliations "
+             + ("WHERE bank_account_id = ? " if acct else "")
+             + "ORDER BY bank_account_id, period_start DESC")
+        recs = [dict(r) for r in conn.execute(q, (acct,) if acct else ())]
+        stale = []
+        for r in recs:
+            r["items"] = [dict(i) for i in conn.execute(
+                "SELECT * FROM bank_reconciliation_items WHERE reconciliation_id = ? "
+                "ORDER BY entry_date", (r["id"],))]
+            for i in r["items"]:
+                if (i["carry_count"] or 0) >= 3:
+                    stale.append({**i, "period_end": r["period_end"]})
+        return jsonify({"reconciliations": recs, "stale_outstanding": stale})
+    finally:
+        conn.close()
+
+
+def _resolve_upload(conn, data=None):
+    """Find the statement upload from either an upload_id or an explicit
+    (account_id, start, end) triple."""
+    src = data if data is not None else request.args
+    up_id = src.get("upload_id")
+    if up_id:
+        return conn.execute(
+            "SELECT * FROM bank_statement_uploads WHERE id = ?", (int(up_id),)
+        ).fetchone()
+    acct = src.get("account_id")
+    start, end = src.get("start"), src.get("end")
+    if not (acct and start and end):
+        return None
+    return conn.execute(
+        "SELECT * FROM bank_statement_uploads WHERE bank_account_id = ? "
+        "AND period_start = ? AND period_end = ?", (int(acct), start, end)
+    ).fetchone()
