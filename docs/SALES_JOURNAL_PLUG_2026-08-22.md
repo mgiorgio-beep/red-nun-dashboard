@@ -149,3 +149,37 @@ like it can already answer.
 - Of 176 `ready` entries, exactly **1** has ever posted (id 3510, Dennis
   2026-08-20, QBO txn 29599 — the verification push). 175 remain `ready` by
   decision, not by failure.
+
+---
+
+## 6. Unrelated but found the same day: `payroll_checks.check_number` is not a key
+
+The number in `payroll_checks.check_number` is NOT the number printed on the
+physical check that cleared the bank.
+
+Dennis March statement lines read `Check 9689 / 9692 / 9693 / 9695`, clearing
+03/23–03/24. The `payroll_checks` rows bearing those exact numbers belong to
+the **2026-05-25..06-07** pay period, are different employees, and carry
+different amounts. The March checks were recorded in the dashboard under its
+own sequence, **2011–2017**, so the number the bank actually printed was never
+stored anywhere.
+
+Measured across all Dennis statement check lines:
+
+```
+statement "Check NNNN" lines : 66
+number AND amount agree      :  0
+```
+
+**Zero of 66.** Matching a statement line to a payroll check on check number
+would have matched a March bank line to a June payroll row. Amount + date is
+the reliable signal; the check number is actively misleading.
+
+This directly contradicts the handover brief's §7 job 034, which proposes
+backfilling `check_number` and matching on it. That plan needs rethinking
+before it is built — and OCR'd payee names, which 034 also proposes, are a
+better signal than the number precisely because the number is wrong.
+
+Pinned by `tests/test_bank_register.py::TestCheckNumberIsNotAKey`, which fails
+if any agreement ever appears — so check-number matching can only be adopted
+deliberately, never by accident.

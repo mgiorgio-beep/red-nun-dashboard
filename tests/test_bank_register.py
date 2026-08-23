@@ -177,23 +177,121 @@ class TestDennisTieOuts:
         assert stated == 3574663
         assert delta == 0, f"Dennis February must tie to the penny, off by {delta/100:.2f}"
 
-    def test_march_is_short_by_the_known_duplicate_payroll(self, client, uploads):
-        """KNOWN BREAK, asserted exactly.
+    def test_march_residual_is_one_uncleared_check(self, client, uploads):
+        """KNOWN BREAK, itemized down to a single outstanding check.
 
-        -3,246.49 = 3,189.03 of payroll checks 9689/9692/9693/9695 counted
+        Was -3,246.49 = 3,189.03 of payroll checks 9689/9692/9693/9695 counted
         twice (once as payroll_checks rows, once as statement 'Check NNNN'
-        lines) + 57.46 for Maya Jones, genuinely uncleared.
+        lines) + 57.46 for Maya Jones. The dedupe pass on 2026-08-22 merged the
+        four duplicates, leaving only the genuine item.
 
-        After the dedupe pass merges those four, this must become -5746.
-        Change the expected value in the same commit that runs the dedupe.
+        -57.46 is NOT a defect: it is one check written in March that had not
+        cleared the bank by 03/31. It is the worked example for why a strict
+        `delta == 0` pass condition is wrong — a period containing a legitimate
+        outstanding check can never go green, so the condition has to be
+        "delta is fully itemized and accepted".
+
+        This should go to 0 only when reconciling items are persisted and
+        carried forward, not by anything that alters the register.
         """
         u = _upload(uploads, DENNIS, "2026-03-02")
         computed, stated, delta = tie_out(client, u)
         assert stated == 3216219
-        assert delta == -324649, (
-            f"Dennis March delta moved from the documented -3246.49 to "
-            f"{delta/100:.2f}. If dedupe has run, expected -57.46."
+        assert delta == -5746, (
+            f"Dennis March delta moved from the documented -57.46 (one "
+            f"outstanding check) to {delta/100:.2f}"
         )
+
+    # The four March duplicates, as MERGED — identified by payroll_checks.id,
+    # deliberately not by check_number. See TestCheckNumberIsNotAKey.
+    MARCH_MERGES = {22: 360.98, 24: 978.20, 25: 645.98, 28: 1203.87}
+
+    def test_march_duplicate_payroll_checks_are_merged(self, conn):
+        """The four March payroll checks must be cleared book rows with no
+        statement twin left behind, and each must still carry the amount it
+        was matched on. Guards against a re-import recreating the duplicates.
+        """
+        for pid, amount in self.MARCH_MERGES.items():
+            r = conn.execute(
+                "SELECT check_number, employee_name, net_pay, cleared, cleared_date, "
+                "pay_period_start FROM payroll_checks WHERE id = ?", (pid,)
+            ).fetchone()
+            assert r, f"payroll_check #{pid} is gone"
+            assert cents(r["net_pay"]) == cents(amount), (
+                f"payroll_check #{pid} net_pay moved from {amount} to {r['net_pay']}"
+            )
+            assert r["cleared"] == 1, f"payroll_check #{pid} is no longer cleared"
+            assert r["cleared_date"], f"payroll_check #{pid} has no cleared_date"
+            assert r["pay_period_start"] == "2026-03-02", (
+                f"payroll_check #{pid} is not the March 02-15 pay period"
+            )
+
+        audited = conn.execute(
+            "SELECT COUNT(*) FROM register_merge_audit "
+            "WHERE target_source = 'payroll_check' AND target_id IN (22,24,25,28) "
+            "AND reversed_at IS NULL"
+        ).fetchone()[0]
+        assert audited == 4, f"expected 4 audited March merges, found {audited}"
+
+
+class TestCheckNumberIsNotAKey:
+    """payroll_checks.check_number does NOT identify the physical check that
+    cleared the bank, and must never be used as a join key.
+
+    Found 2026-08-22 while verifying the March dedupe. The March statement
+    lines read 'Check 9689 / 9692 / 9693 / 9695' and cleared 03/23-03/24. The
+    payroll_checks rows bearing those exact numbers belong to the
+    2026-05-25..06-07 pay period, are different employees, and carry different
+    amounts. The March checks were recorded in the dashboard as 2011-2017 —
+    its own sequence — so the number the bank printed was never stored.
+
+    This refutes the handover brief's §7 job 034, which proposes backfilling
+    check_number and matching statement lines on it. Doing that would have
+    matched a March statement line to a June payroll check. Amount + date is
+    the reliable signal here; the check number is actively misleading.
+    """
+
+    def test_no_statement_check_line_agrees_with_payroll_check_number(self, conn):
+        """Documents the scale of the mismatch. If this ever starts finding
+        agreements, the numbering has been reconciled and check-number matching
+        can be reconsidered — deliberately, not by accident."""
+        import re
+        rows = conn.execute(
+            "SELECT payee, amount FROM manual_bank_entries "
+            "WHERE bank_account_id = ? AND payee LIKE 'Check %'", (DENNIS,)
+        ).fetchall()
+        assert rows, "no statement check lines found for Dennis"
+        agree = 0
+        for r in rows:
+            num = re.sub(r"[^0-9]", "", r["payee"] or "")
+            if not num:
+                continue
+            p = conn.execute(
+                "SELECT net_pay FROM payroll_checks WHERE check_number = ?", (num,)
+            ).fetchone()
+            if p and cents(p["net_pay"]) == abs(cents(r["amount"])):
+                agree += 1
+        assert agree == 0, (
+            f"{agree} of {len(rows)} statement check lines now agree with "
+            f"payroll_checks.check_number on both number and amount. That is a "
+            f"CHANGE from the documented 0 — re-evaluate whether check-number "
+            f"matching is safe before relying on it."
+        )
+
+    def test_the_969x_rows_are_a_later_pay_period(self, conn):
+        """The specific collision, pinned so it can't be silently 'fixed' by
+        renumbering without someone reading this."""
+        for num in ("9689", "9692", "9693"):
+            r = conn.execute(
+                "SELECT pay_period_start FROM payroll_checks WHERE check_number = ?",
+                (num,)
+            ).fetchone()
+            if r:
+                assert r["pay_period_start"] == "2026-05-25", (
+                    f"check_number {num} moved to pay period "
+                    f"{r['pay_period_start']} — the documented collision with "
+                    f"the March statement has changed shape"
+                )
 
 
 class TestChathamTieOut:
