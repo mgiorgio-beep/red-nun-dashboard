@@ -201,6 +201,22 @@ def init_register_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_gl_cat_map ON gl_category_mapping(location, category_type);
     """)
+
+    # qb_line_mapping resolves into gl_accounts too. It was keyed on a RAW QBO
+    # account id, which is a second account namespace and was badly wrong for
+    # Chatham: 16 of 20 lines resolved silently to the wrong account (tender
+    # debits landing on "Food Sales", an Income account) and 4 to retired ones.
+    # Chatham's real clearing accounts are the "Daily Sales:*" hierarchy, whose
+    # qbo_id is NULL — they could not be addressed by a qbo-keyed mapping at
+    # all. gl_account_id fixes both problems; qbo_id is looked up from
+    # gl_accounts at PUSH time, which is the only place it means anything.
+    for sql in (
+        "ALTER TABLE qb_line_mapping ADD COLUMN gl_account_id INTEGER",
+    ):
+        try:
+            conn.execute(sql)
+        except Exception:
+            pass  # column already exists
     # Idempotent ALTER for older installs that already had the table without
     # location (the unique constraint above is only enforced on new tables).
     try:
@@ -308,6 +324,12 @@ def init_register_tables():
         seed_gl_category_mapping()
     except Exception as e:
         logger.warning(f"Category → GL mapping seed skipped: {e}")
+
+    # ── Resolve the sales-journal line mapping onto gl_accounts ids.
+    try:
+        backfill_qb_line_mapping_gl()
+    except Exception as e:
+        logger.warning(f"qb_line_mapping GL backfill skipped: {e}")
 
 
 # ─── GL ACCOUNT SEED ─────────────────────────────────────────────────────────
@@ -555,6 +577,150 @@ def seed_gl_category_mapping() -> int:
     finally:
         conn.close()
     return inserted
+
+
+# ─── SALES JOURNAL LINE → GL ACCOUNT ─────────────────────────────────────────
+
+# Each canonical sales-journal line maps to an ACCOUNT ROLE, and each role is a
+# list of candidate account names tried in order, first active match winning
+# inside that location. Candidates exist because the two charts name the same
+# role differently: Chatham's clearing accounts were restructured under a
+# "Daily Sales:" parent, Dennis's are still flat. Name lookup is legitimate
+# here because this runs ONCE, at seed time, to produce an id — never at
+# read time.
+#
+# Roles are taken from Dennis, whose mapping was verified line-by-line against
+# its chart and is correct. Chatham's was not: it reused Dennis's qbo ids, and
+# in Chatham's chart those numbers mean other things entirely.
+_JOURNAL_LINE_ROLES = {
+    "Gross Sales: Food":       ["Sales - Food"],
+    "Gross Sales: Beer":       ["Sales - Beer"],
+    "Gross Sales: Wine":       ["Sales - Wine"],
+    "Gross Sales: Liquor":     ["Sales - Liquor"],
+    "Gross Sales: NA Beverage": ["Sales - NA Beverages"],
+    "Discounts: Total":        ["Discounts/Refunds Given"],
+    # Tenders are CLEARING accounts — balance sheet, never income. Chatham
+    # previously pointed these at "Food Sales", which would have double-counted
+    # revenue on the wrong side of the ledger.
+    "Tenders: Cash":           ["Daily Sales:Cash Sales", "Cash Sales"],
+    "Tenders: Credit":         ["Daily Sales:Credit Card Sales", "Credit Card Sales"],
+    "Tenders: Visa":           ["Daily Sales:Credit Card Sales", "Credit Card Sales"],
+    "Tenders: Mastercard":     ["Daily Sales:Credit Card Sales", "Credit Card Sales"],
+    "Tenders: Amex":           ["Daily Sales:Credit Card Sales", "Credit Card Sales"],
+    "Tenders: Discover":       ["Daily Sales:Credit Card Sales", "Credit Card Sales"],
+    "Tenders: Other":          ["Daily Sales:Doordash", "Doordash"],
+    "Tenders: Gift Card":      ["Gift Certificates"],
+    "Tenders: House Account":  ["House Accounts Receivable"],
+    "Summary: Tax":            ["Sales Tax Payable"],
+    "Summary: Tips":           ["Tip Bank"],
+    "Summary: Gift Card Sold": ["Gift Certificates"],
+    "Summary: Non-Grat":       ["Services"],
+    "Summary: Other":          ["Cash Over/Short"],
+}
+
+
+def backfill_qb_line_mapping_gl(conn=None) -> dict:
+    """Resolve every qb_line_mapping row to a gl_accounts.id.
+
+    Two passes, in this order:
+
+      1. TRUST THE QBO ID where it already resolves to an ACTIVE account in
+         the same location. This is how Dennis is recovered — its ids were
+         verified correct, so the existing mapping is authoritative there.
+      2. Otherwise fall back to the ROLE, resolving the canonical account name
+         inside that location. This is how Chatham is repaired.
+
+    A row that resolves by neither is left NULL and reported. It stays visible
+    as an unmapped line rather than being guessed at.
+
+    Returns {"by_qbo": n, "by_role": n, "unmapped": [ ... ]}.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection()
+    by_qbo = by_role = 0
+    unmapped: list[str] = []
+    try:
+        rows = conn.execute(
+            "SELECT id, location, journal_name, qbo_account, gl_account_id "
+            "FROM qb_line_mapping"
+        ).fetchall()
+        for r in rows:
+            if r["gl_account_id"]:
+                continue
+            loc, jname = r["location"], r["journal_name"]
+            gl_id = None
+
+            # Pass 1 — the existing qbo id, but only if it lands on an active
+            # account in THIS location.
+            if r["qbo_account"]:
+                hit = conn.execute(
+                    "SELECT id, name FROM gl_accounts "
+                    "WHERE qbo_id = ? AND location = ? AND active = 1 LIMIT 1",
+                    (str(r["qbo_account"]), loc),
+                ).fetchone()
+                # It resolves — but does it resolve to the RIGHT thing? Only
+                # accept it when it agrees with the role. Otherwise a
+                # confidently-wrong id (Chatham's "Food Sales" for a tender
+                # debit) would be preserved as though it were correct.
+                if hit and hit["name"] in _JOURNAL_LINE_ROLES.get(jname, []):
+                    gl_id, by_qbo = hit["id"], by_qbo + 1
+
+            # Pass 2 — resolve the role by name inside this location.
+            if gl_id is None:
+                for cand in _JOURNAL_LINE_ROLES.get(jname, []):
+                    hit = conn.execute(
+                        "SELECT id FROM gl_accounts "
+                        "WHERE name = ? AND location = ? AND active = 1 LIMIT 1",
+                        (cand, loc),
+                    ).fetchone()
+                    if hit:
+                        gl_id, by_role = hit["id"], by_role + 1
+                        break
+
+            if gl_id is None:
+                unmapped.append(f"{loc}/{jname}")
+                continue
+            conn.execute(
+                "UPDATE qb_line_mapping SET gl_account_id = ? WHERE id = ?",
+                (gl_id, r["id"]),
+            )
+        conn.commit()
+        if unmapped:
+            logger.warning("qb_line_mapping unresolved: %s", ", ".join(unmapped))
+        logger.info("qb_line_mapping GL backfill: %d by qbo id, %d by role, %d unmapped",
+                    by_qbo, by_role, len(unmapped))
+    finally:
+        if own:
+            conn.close()
+    return {"by_qbo": by_qbo, "by_role": by_role, "unmapped": unmapped}
+
+
+def audit_qb_line_mapping(conn=None) -> list[dict]:
+    """qb_line_mapping rows whose gl_account_id is missing, inactive, or from
+    the other entity. Same three failure modes as everywhere else."""
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT m.id, m.location, m.journal_name, m.gl_account_id,
+                   g.name AS gl_name, g.active, g.location AS gl_location,
+                   CASE WHEN g.id IS NULL THEN 'missing'
+                        WHEN g.active = 0 THEN 'inactive'
+                        ELSE 'wrong_entity' END AS problem
+            FROM qb_line_mapping m
+            JOIN gl_accounts g ON g.id = m.gl_account_id
+            WHERE m.gl_account_id IS NOT NULL
+              AND (g.active = 0 OR g.location IS NULL OR g.location <> m.location)
+            ORDER BY m.location, m.journal_name
+            """
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        if own:
+            conn.close()
 
 
 def audit_gl_category_mapping(conn=None) -> list[dict]:
@@ -2319,6 +2485,8 @@ def import_balance_sheet():
                      AND id NOT IN (SELECT gl_account_id FROM gl_account_rules
                                     WHERE gl_account_id IS NOT NULL)
                      AND id NOT IN (SELECT gl_account_id FROM gl_category_mapping
+                                    WHERE gl_account_id IS NOT NULL)
+                     AND id NOT IN (SELECT gl_account_id FROM qb_line_mapping
                                     WHERE gl_account_id IS NOT NULL)""",
                 (location,),
             )
@@ -2328,7 +2496,8 @@ def import_balance_sheet():
                    WHERE location = ? AND active = 1
                      AND (id IN (SELECT gl_account_id FROM manual_bank_entries WHERE gl_account_id IS NOT NULL)
                        OR id IN (SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL)
-                       OR id IN (SELECT gl_account_id FROM gl_category_mapping WHERE gl_account_id IS NOT NULL))""",
+                       OR id IN (SELECT gl_account_id FROM gl_category_mapping WHERE gl_account_id IS NOT NULL)
+                       OR id IN (SELECT gl_account_id FROM qb_line_mapping WHERE gl_account_id IS NOT NULL))""",
                 (location,),
             ).fetchone()[0]
             if protected:

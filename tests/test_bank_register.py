@@ -782,11 +782,132 @@ class TestNoOrphanedGlReferences:
                 UNION SELECT gl_account_id FROM payroll_checks WHERE gl_account_id IS NOT NULL
                 UNION SELECT gl_account_id FROM bank_deposits WHERE gl_account_id IS NOT NULL
                 UNION SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL
-                UNION SELECT gl_account_id FROM gl_category_mapping WHERE gl_account_id IS NOT NULL)
+                UNION SELECT gl_account_id FROM gl_category_mapping WHERE gl_account_id IS NOT NULL
+                UNION SELECT gl_account_id FROM qb_line_mapping WHERE gl_account_id IS NOT NULL)
         """).fetchall()
         inactive = [r[0] for r in refd if conn.execute(
             "SELECT active FROM gl_accounts WHERE id = ?", (r[0],)).fetchone()[0] == 0]
         assert not inactive, f"referenced but inactive accounts: {inactive}"
+
+
+class TestSalesJournalMapping:
+    """qb_line_mapping resolves into gl_accounts, per entity, by id.
+
+    It used to key on a raw QBO account id — a second account namespace — and
+    for Chatham those ids were copied from Dennis, where the same numbers name
+    different accounts. 16 of 20 lines resolved SILENTLY to the wrong account
+    and 4 to retired ones. The worst was structural, not cosmetic: every credit
+    card tender pointed at "Food Sales", an Income account, so a clearing debit
+    would have landed in revenue and double-counted it.
+
+    Revenue on the P&L is built from these journal entries, so this mapping is
+    load-bearing for every income number we report.
+    """
+
+    # Lines whose account must be BALANCE SHEET. A tender is money moving
+    # between clearing accounts; it is not income, and this is the assertion
+    # that would have caught the Chatham breakage on day one.
+    CLEARING_LINES = [
+        "Tenders: Cash", "Tenders: Credit", "Tenders: Visa",
+        "Tenders: Mastercard", "Tenders: Amex", "Tenders: Discover",
+        "Tenders: Other", "Tenders: Gift Card",
+        "Summary: Tax", "Summary: Tips", "Summary: Gift Card Sold",
+    ]
+    BALANCE_SHEET_TYPES = {
+        "Bank", "Other Current Asset", "Other Current Liability",
+        "Accounts Receivable", "Accounts Payable", "Credit Card",
+        "Fixed Asset", "Other Asset", "Long Term Liability", "Equity",
+    }
+    REVENUE_LINES = [
+        "Gross Sales: Food", "Gross Sales: Beer", "Gross Sales: Wine",
+        "Gross Sales: Liquor", "Gross Sales: NA Beverage", "Discounts: Total",
+    ]
+
+    # Chatham's House Accounts Receivable is retired, so that one line is
+    # deliberately left unmapped and reported rather than guessed at.
+    # $675.55 over 19 days, and it is a clearing line, so it does not reach
+    # the P&L. Remove this once the account is reactivated.
+    KNOWN_UNMAPPED = {("chatham", "Tenders: House Account")}
+
+    def test_every_line_resolves_onto_the_spine(self, conn):
+        unmapped = {(r["location"], r["journal_name"]) for r in conn.execute(
+            "SELECT location, journal_name FROM qb_line_mapping WHERE gl_account_id IS NULL")}
+        assert unmapped <= self.KNOWN_UNMAPPED, (
+            f"unexpected unmapped journal lines: {sorted(unmapped - self.KNOWN_UNMAPPED)}")
+
+    def test_no_mapping_points_at_an_invalid_account(self, conn):
+        from routes.register_routes import audit_qb_line_mapping
+        bad = audit_qb_line_mapping(conn)
+        assert not bad, (
+            f"{len(bad)} invalid journal-line mappings: "
+            + "; ".join(f"{b['location']}/{b['journal_name']} ({b['problem']})" for b in bad[:10]))
+
+    def test_tenders_and_summaries_are_balance_sheet_not_income(self, conn):
+        """The Chatham regression, asserted directly. A tender debit on an
+        Income account inflates revenue by the full amount tendered."""
+        bad = []
+        for loc in ("chatham", "dennis"):
+            for jname in self.CLEARING_LINES:
+                r = conn.execute("""
+                    SELECT g.name, g.account_type FROM qb_line_mapping m
+                    JOIN gl_accounts g ON g.id = m.gl_account_id
+                    WHERE m.location = ? AND m.journal_name = ?
+                """, (loc, jname)).fetchone()
+                if not r:
+                    continue  # unmapped is covered by its own test
+                if r["account_type"] not in self.BALANCE_SHEET_TYPES:
+                    bad.append(f"{loc}/{jname} -> {r['name']} [{r['account_type']}]")
+        assert not bad, "clearing lines mapped to non-balance-sheet accounts: " + "; ".join(bad)
+
+    def test_gross_sales_lines_are_income(self, conn):
+        bad = []
+        for loc in ("chatham", "dennis"):
+            for jname in self.REVENUE_LINES:
+                r = conn.execute("""
+                    SELECT g.name, g.account_type FROM qb_line_mapping m
+                    JOIN gl_accounts g ON g.id = m.gl_account_id
+                    WHERE m.location = ? AND m.journal_name = ?
+                """, (loc, jname)).fetchone()
+                assert r, f"{loc}/{jname} is unmapped"
+                if r["account_type"] != "Income":
+                    bad.append(f"{loc}/{jname} -> {r['name']} [{r['account_type']}]")
+        assert not bad, "revenue lines not mapped to Income: " + "; ".join(bad)
+
+    def test_entities_never_share_a_gl_account(self, conn):
+        shared = conn.execute("""
+            SELECT gl_account_id, COUNT(DISTINCT location) n FROM qb_line_mapping
+            WHERE gl_account_id IS NOT NULL GROUP BY gl_account_id HAVING n > 1
+        """).fetchall()
+        assert not shared, f"journal mappings shared across entities: {[dict(s) for s in shared]}"
+
+    def test_each_line_maps_to_a_distinct_role_not_a_catch_all(self, conn):
+        """Chatham had Discounts and Tenders: Other both on qbo 52, and
+        Non-Grat and Summary: Other both on 212. Collapsing distinct roles onto
+        one account is how a plug hides."""
+        for loc in ("chatham", "dennis"):
+            for a, b in [("Discounts: Total", "Tenders: Other"),
+                         ("Summary: Non-Grat", "Summary: Other")]:
+                ra = conn.execute("SELECT gl_account_id FROM qb_line_mapping "
+                                  "WHERE location=? AND journal_name=?", (loc, a)).fetchone()
+                rb = conn.execute("SELECT gl_account_id FROM qb_line_mapping "
+                                  "WHERE location=? AND journal_name=?", (loc, b)).fetchone()
+                if ra and rb and ra[0] and rb[0]:
+                    assert ra[0] != rb[0], f"{loc}: {a!r} and {b!r} share account {ra[0]}"
+
+    def test_journal_entries_still_balance(self, conn):
+        """Remapping changes which account a line hits, never its amount.
+        Dennis March is the acceptance-test month."""
+        r = conn.execute("""
+            SELECT ROUND(SUM(COALESCE(li.debit, 0)), 2)  AS dr,
+                   ROUND(SUM(COALESCE(li.credit, 0)), 2) AS cr,
+                   COUNT(DISTINCT e.id) AS n
+            FROM qb_journal_line_items li
+            JOIN qb_journal_entries e ON e.id = li.entry_id
+            WHERE e.location = 'dennis' AND SUBSTR(e.entry_date, 1, 7) = '2026-03'
+        """).fetchone()
+        assert r["n"] == 22, f"expected 22 Dennis March JEs, got {r['n']}"
+        assert cents(r["dr"]) == cents(r["cr"]), \
+            f"Dennis March out of balance: debits {r['dr']} vs credits {r['cr']}"
 
 
 class TestInvoiceCategoryMapping:

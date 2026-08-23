@@ -375,11 +375,32 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
         GROUP BY payment_type, card_type
     """, (location, td)).fetchall()
 
+    # Resolve each journal line through gl_accounts, which is the account
+    # spine. The legacy qbo_account column on qb_line_mapping is a fallback
+    # only: for Chatham it held ids copied from Dennis, so 16 of 20 lines
+    # pointed at an unrelated account in Chatham's chart (tender debits landed
+    # on "Food Sales", an Income account). gl_account_id is authoritative;
+    # the QBO id is whatever that account currently carries.
     map_rows = conn.execute(
-        "SELECT journal_name, qbo_account FROM qb_line_mapping WHERE location=?",
+        """SELECT m.journal_name, m.qbo_account, m.gl_account_id, g.qbo_id
+           FROM qb_line_mapping m
+           LEFT JOIN gl_accounts g
+                  ON g.id = m.gl_account_id AND g.active = 1
+                 AND g.location = m.location
+           WHERE m.location = ?""",
         (location,)
     ).fetchall()
-    mapping = {r["journal_name"]: r["qbo_account"] for r in map_rows}
+    mapping = {}
+    for r in map_rows:
+        if r["gl_account_id"]:
+            # Once a line is resolved onto the spine, that account's qbo_id is
+            # the ONLY acceptable answer. Do not fall back to qbo_account here:
+            # Chatham's clearing accounts carry no qbo_id yet, and falling back
+            # would restore the very ids this mapping exists to replace. A None
+            # means "not pushable to QBO yet", which is correct and visible.
+            mapping[r["journal_name"]] = r["qbo_id"]
+        else:
+            mapping[r["journal_name"]] = r["qbo_account"]
 
     conn.close()
 
