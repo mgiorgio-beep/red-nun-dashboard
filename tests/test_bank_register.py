@@ -540,24 +540,31 @@ class TestTransferClassifier:
         """Every transfer row in the register must agree with the classifier:
         coded to Building Rent, or uncoded and awaiting review."""
         from routes.register_routes import classify_transfer
-        last4 = {r["id"]: (r["account_last4"] or "")
-                 for r in conn.execute("SELECT id, account_last4 FROM bank_accounts")}
-        rent = conn.execute(
-            "SELECT id FROM gl_accounts WHERE name = 'Building Rent' AND active = 1"
-        ).fetchone()
-        assert rent, "Building Rent account is missing"
+        acct = {r["id"]: dict(r) for r in conn.execute(
+            "SELECT id, account_last4, location FROM bank_accounts")}
+        # Building Rent exists PER ENTITY (both charts have one), so resolve it
+        # against the row's own location — not globally.
+        rent_by_loc = {
+            r["location"]: r["id"] for r in conn.execute(
+                "SELECT id, location FROM gl_accounts "
+                "WHERE name = 'Building Rent' AND active = 1")
+        }
+        assert rent_by_loc, "no active Building Rent account in any chart"
         rows = conn.execute(
             "SELECT id, bank_account_id, payee, memo, amount, gl_account_id "
             "FROM manual_bank_entries WHERE UPPER(COALESCE(payee,'')) LIKE '%TRANSFER%'"
         ).fetchall()
         assert rows, "no transfer rows found"
         for r in rows:
+            a = acct.get(r["bank_account_id"], {})
             desc = (r["payee"] or "") + " " + (r["memo"] or "")
             name, reason = classify_transfer(
-                desc, r["amount"], last4.get(r["bank_account_id"], ""))
+                desc, r["amount"], a.get("account_last4") or "")
             if name == "Building Rent":
-                assert r["gl_account_id"] == rent["id"], (
-                    f"row {r['id']} should be Building Rent, is {r['gl_account_id']}"
+                expected = rent_by_loc.get(a.get("location"))
+                assert r["gl_account_id"] == expected, (
+                    f"row {r['id']} ({a.get('location')}) should be Building Rent "
+                    f"{expected}, is {r['gl_account_id']}"
                 )
             elif reason:
                 assert r["gl_account_id"] is None, (
@@ -693,3 +700,96 @@ class TestGlAccountGuard:
         r = client.put("/api/register/row/gl-account", json={
             "source": "manual", "id": rid, "gl_account_id": 999999, "create_rule": False})
         assert r.status_code == 404
+
+
+class TestNoOrphanedGlReferences:
+    """No row and no rule may point at an inactive or cross-entity account.
+
+    This is the real deliverable of the 2026-08-22 repair — the 225 broken rows
+    were the symptom. An orphaned reference is invisible in the UI (it used to
+    render as an empty box) and silently wrong in any P&L built off the GL, so
+    it has to be structurally impossible rather than periodically cleaned up.
+
+    KNOWN EXCEPTION, 2 rows + 2 rules: "Owner's Pay & Personal Expenses" (413,
+    Chatham) is typed Equity, so the P&L-only reactivation pass did not restore
+    it. The two Apple Card rows coded to it are arguably correct — an owner's
+    personal card paid from the business account is a draw, not an expense —
+    but reactivating an Equity account is a chart-of-accounts decision, not a
+    repair. Remove this allowance once that call is made.
+    """
+
+    ALLOWED_INACTIVE = {413}
+
+    SOURCES = [
+        ("manual_bank_entries", "bank_account_id"),
+        ("vendor_payments", "bank_account_id"),
+        ("payroll_checks", "bank_account_id"),
+        ("bank_deposits", "bank_account_id"),
+    ]
+
+    def test_no_row_points_at_an_invalid_account(self, conn):
+        bad = []
+        for table, acct_col in self.SOURCES:
+            for r in conn.execute(f"""
+                SELECT t.id, t.gl_account_id, g.name, g.active, g.location AS gl_loc,
+                       ba.location AS row_loc
+                FROM {table} t
+                JOIN gl_accounts g ON g.id = t.gl_account_id
+                LEFT JOIN bank_accounts ba ON ba.id = t.{acct_col}
+                WHERE t.gl_account_id IS NOT NULL
+                  AND (g.active = 0
+                       OR (g.location IS NOT NULL AND ba.location IS NOT NULL
+                           AND g.location <> ba.location))
+            """):
+                if r["gl_account_id"] in self.ALLOWED_INACTIVE:
+                    continue
+                bad.append(f"{table}#{r['id']} -> {r['gl_account_id']} "
+                           f"'{r['name']}' (active={r['active']}, "
+                           f"{r['gl_loc']} vs row {r['row_loc']})")
+        assert not bad, f"{len(bad)} orphaned GL references: " + "; ".join(bad[:10])
+
+    def test_no_rule_points_at_an_invalid_account(self, conn):
+        bad = []
+        for r in conn.execute("""
+            SELECT r.id, r.pattern, r.location AS rule_loc, r.gl_account_id,
+                   g.name, g.active, g.location AS gl_loc
+            FROM gl_account_rules r
+            LEFT JOIN gl_accounts g ON g.id = r.gl_account_id
+            WHERE g.id IS NULL OR g.active = 0
+               OR (g.location IS NOT NULL AND r.location IS NOT NULL
+                   AND g.location <> r.location)
+        """):
+            if r["gl_account_id"] in self.ALLOWED_INACTIVE:
+                continue
+            bad.append(f"rule#{r['id']} {r['pattern']!r} -> {r['gl_account_id']} "
+                       f"'{r['name']}'")
+        assert not bad, f"{len(bad)} orphaned rules: " + "; ".join(bad[:10])
+
+    def test_every_entity_has_a_usable_pl_chart(self, conn):
+        """Chatham once had 44 active accounts, ALL balance-sheet — there was
+        nothing to code an expense to. An entity with no active expense
+        accounts cannot be coded at all, which is a silent dead end."""
+        for (loc,) in conn.execute(
+                "SELECT DISTINCT location FROM bank_accounts WHERE location IS NOT NULL"):
+            n = conn.execute(
+                "SELECT COUNT(*) FROM gl_accounts WHERE location = ? AND active = 1 "
+                "AND account_type IN ('Expense','Cost of Goods Sold')", (loc,)
+            ).fetchone()[0]
+            assert n > 0, f"{loc} has no active expense/COGS accounts — nothing to code to"
+
+    def test_replace_mode_cannot_deactivate_a_referenced_account(self, conn):
+        """The guard is a SQL predicate in import_balance_sheet's replace pass.
+        Assert the invariant it protects: every account referenced by a row or
+        a rule is active."""
+        refd = conn.execute("""
+            SELECT DISTINCT gl_account_id FROM (
+                SELECT gl_account_id FROM manual_bank_entries WHERE gl_account_id IS NOT NULL
+                UNION SELECT gl_account_id FROM vendor_payments WHERE gl_account_id IS NOT NULL
+                UNION SELECT gl_account_id FROM payroll_checks WHERE gl_account_id IS NOT NULL
+                UNION SELECT gl_account_id FROM bank_deposits WHERE gl_account_id IS NOT NULL
+                UNION SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL)
+        """).fetchall()
+        inactive = [r[0] for r in refd if conn.execute(
+            "SELECT active FROM gl_accounts WHERE id = ?", (r[0],)).fetchone()[0] == 0]
+        inactive = [i for i in inactive if i not in self.ALLOWED_INACTIVE]
+        assert not inactive, f"referenced but inactive accounts: {inactive}"

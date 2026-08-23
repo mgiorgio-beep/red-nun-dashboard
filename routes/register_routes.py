@@ -2085,11 +2085,41 @@ def import_balance_sheet():
         # are active=1. Unscoped (location IS NULL) rows are left alone —
         # those came from the legacy unified COA and may still be referenced.
         if replace_mode:
+            # NEVER deactivate an account that something still points at.
+            #
+            # This is the guard that was missing. A Balance Sheet CSV contains
+            # no P&L accounts by definition, so replace mode retired Chatham's
+            # ENTIRE expense/COGS/income chart, orphaning 225 register rows and
+            # 46 rules: their gl_account_id still resolved, but to a dead
+            # account, so the type-ahead rendered them as empty boxes and they
+            # looked uncoded. Retiring an unused account is housekeeping;
+            # retiring a referenced one is data corruption.
             cur = conn.execute(
-                "UPDATE gl_accounts SET active = 0 WHERE location = ?",
+                """UPDATE gl_accounts SET active = 0
+                   WHERE location = ?
+                     AND id NOT IN (SELECT gl_account_id FROM manual_bank_entries
+                                    WHERE gl_account_id IS NOT NULL)
+                     AND id NOT IN (SELECT gl_account_id FROM vendor_payments
+                                    WHERE gl_account_id IS NOT NULL)
+                     AND id NOT IN (SELECT gl_account_id FROM payroll_checks
+                                    WHERE gl_account_id IS NOT NULL)
+                     AND id NOT IN (SELECT gl_account_id FROM bank_deposits
+                                    WHERE gl_account_id IS NOT NULL)
+                     AND id NOT IN (SELECT gl_account_id FROM gl_account_rules
+                                    WHERE gl_account_id IS NOT NULL)""",
                 (location,),
             )
             deactivated_count = cur.rowcount or 0
+            protected = conn.execute(
+                """SELECT COUNT(*) FROM gl_accounts
+                   WHERE location = ? AND active = 1
+                     AND (id IN (SELECT gl_account_id FROM manual_bank_entries WHERE gl_account_id IS NOT NULL)
+                       OR id IN (SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL))""",
+                (location,),
+            ).fetchone()[0]
+            if protected:
+                logger.info("replace_mode: kept %d referenced %s accounts active",
+                            protected, location)
 
         # Apply bank_accounts update
         if bank_match:
