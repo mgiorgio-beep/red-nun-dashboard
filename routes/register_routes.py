@@ -1310,6 +1310,29 @@ def get_register(account_id):
 
     conn.close()
 
+    # ── Book vs bank, computed BEFORE the display filter ─────────────────────
+    # These three are the reconciliation itself and must not move when the user
+    # toggles the cleared filter, which is a display concern:
+    #
+    #   book balance  every row we know about        (what the books say)
+    #   bank balance  rows the bank has cleared      (what the statement says)
+    #   outstanding   the difference — checks written but not yet cashed,
+    #                 deposits in transit
+    #
+    # book - bank == outstanding, always. An outstanding check is NOT an error;
+    # it is why a period with legitimate timing differences can never satisfy a
+    # strict `delta == 0` pass condition.
+    opening_bal = float(account["opening_balance"] or 0)
+    _all_in = sum(r["inflow"] for r in rows)
+    _all_out = sum(r["outflow"] for r in rows)
+    _clr_in = sum(r["inflow"] for r in rows if r["cleared"])
+    _clr_out = sum(r["outflow"] for r in rows if r["cleared"])
+    _unc_in = _all_in - _clr_in
+    _unc_out = _all_out - _clr_out
+    book_balance = opening_bal + _all_in - _all_out
+    bank_balance = opening_bal + _clr_in - _clr_out
+    outstanding_count = sum(1 for r in rows if not r["cleared"])
+
     # Filter by cleared state
     if cleared_filter == "cleared":
         rows = [r for r in rows if r["cleared"]]
@@ -1321,7 +1344,8 @@ def get_register(account_id):
 
     # Running balance: starts from opening_balance at opening_date (or 0 if unset).
     # Anything dated before opening_date is ignored for balance purposes.
-    opening_bal = float(account["opening_balance"] or 0)
+    # NOTE: this runs over the FILTERED rows, so it is a display balance. The
+    # book / bank / outstanding figures computed above are the reconciliation.
     running = opening_bal
     for r in rows:
         running += r["inflow"] - r["outflow"]
@@ -1350,6 +1374,13 @@ def get_register(account_id):
             "row_count": len(rows),
             "unassigned_count": unassigned_count,
             "uncleared_count": uncleared_count,
+            # Reconciliation figures — independent of the cleared filter.
+            "book_balance": round(book_balance, 2),
+            "bank_balance": round(bank_balance, 2),
+            "outstanding_net": round(book_balance - bank_balance, 2),
+            "outstanding_outflow": round(_unc_out, 2),
+            "outstanding_inflow": round(_unc_in, 2),
+            "outstanding_count": outstanding_count,
         },
     })
 

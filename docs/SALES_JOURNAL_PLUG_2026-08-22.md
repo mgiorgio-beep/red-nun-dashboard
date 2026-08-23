@@ -183,3 +183,52 @@ better signal than the number precisely because the number is wrong.
 Pinned by `tests/test_bank_register.py::TestCheckNumberIsNotAKey`, which fails
 if any agreement ever appears — so check-number matching can only be adopted
 deliberately, never by accident.
+
+
+---
+
+## 7. Correction: the statements DO tie — the health-check formula was wrong
+
+Earlier the same day I reported Chatham January as an unexplained **-5,151.48**
+break and Dennis March as **-57.46** short. Both figures came from the formula
+in the handover brief §10:
+
+```js
+const computed = s.beginning_balance + j.summary.total_inflow - j.summary.total_outflow;
+```
+
+That sums **every** register row. A bank statement only reflects what the bank
+has actually processed, so any check written before the period end but cashed
+after it is counted as though it cleared. The formula reports timing as error.
+
+With the correct, cleared-only pass condition:
+
+```
+statement.beginning + cleared inflows - cleared outflows == statement.ending
+```
+
+| account | period | delta | outstanding items |
+|---|---|---:|---:|
+| Chatham 5975 | 2026-01-01..02-01 | **0.00** | 9 |
+| Dennis 2757 | 2026-01-01..02-01 | **0.00** | 0 |
+| Dennis 2757 | 2026-02-02..03-01 | **0.00** | 0 |
+| Dennis 2757 | 2026-03-02..03-31 | **0.00** | 3 |
+
+**All four statements tie to the penny.** Chatham January is not broken; it has
+9 outstanding items totalling -5,151.48. Dennis March has 3 totalling -57.46.
+
+Two consequences:
+
+1. **Fix the brief's §10 health-check snippet** before anyone runs it again —
+   it will report a false break on any account with outstanding checks, which
+   is most accounts most months.
+2. This is the concrete argument for the reconciling-items store. The books
+   already reconcile; what is missing is somewhere to record *"these 9 items
+   are known and accepted"* and carry them into the next period, so the pass
+   condition can be "delta is fully itemized and accepted" rather than
+   "delta is zero".
+
+`GET /api/register/<id>` now returns `book_balance`, `bank_balance`,
+`outstanding_net`, `outstanding_inflow`, `outstanding_outflow` and
+`outstanding_count`, computed before the display filter is applied, with
+`book - bank == outstanding` enforced by test.

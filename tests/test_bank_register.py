@@ -6,15 +6,16 @@ That is deliberate: the whole point is to replay the real statements Cape Cod
 Five actually issued and assert the tie-outs to the penny. A synthetic fixture
 would only prove the arithmetic, not that *these books* still balance.
 
-The three Dennis statements are the known-good corpus. Jan and Feb tie exactly
-and must never stop doing so — if either breaks, something changed the register
-query, the import, or the underlying rows.
+THE PASS CONDITION IS CLEARED-ONLY: a statement reflects only what the bank has
+processed, so the tie-out is
 
-March and Chatham January carry KNOWN, DOCUMENTED breaks and are asserted at
-their exact current values. When a fix lands, these numbers change and the test
-must be updated in the same commit. A test that says "March is off by
-3246.49" is a fact about the books; a test that says "March doesn't tie" is
-worth nothing.
+    statement.beginning + cleared inflows - cleared outflows == statement.ending
+
+All four covered statements satisfy this exactly. Uncleared rows are outstanding
+items — checks written but not yet cashed — and are asserted separately, at
+exact values, so a change is visible. A test that says "March doesn't tie" is
+worth nothing; a test that says "March has 3 outstanding items netting -57.46"
+is a fact about the books.
 
 All comparisons are in INTEGER CENTS. The premise is "ties to the penny", and
 float addition over ~200 rows does not.
@@ -68,16 +69,36 @@ def uploads(conn):
     )]
 
 
-def tie_out(client, upload):
-    """(computed_cents, stated_cents, delta_cents) for one statement period."""
+def register(client, upload):
     r = client.get(
         f"/api/register/{upload['bank_account_id']}"
         f"?start={upload['period_start']}&end={upload['period_end']}"
     )
     assert r.status_code == 200, f"register query failed: {r.status_code}"
-    s = r.get_json()["summary"]
-    computed = (cents(upload["beginning_balance"])
-                + cents(s["total_inflow"]) - cents(s["total_outflow"]))
+    return r.get_json()
+
+
+def tie_out(client, upload):
+    """(computed, stated, delta) in integer cents for one statement period.
+
+    THE PASS CONDITION IS CLEARED-ONLY:
+
+        statement.beginning_balance + cleared inflows - cleared outflows
+            == statement.ending_balance
+
+    A bank statement only ever reflects transactions the bank has processed.
+    Summing ALL register rows counts checks that were written but had not
+    cleared by the period end, and reports a break that is really just timing.
+
+    The handover brief's §10 health-check snippet makes exactly that mistake —
+    it uses summary.total_inflow/total_outflow over every row — which is why
+    Chatham January looked like an unexplained -5,151.48 shortfall. It is 9
+    outstanding items, and the account ties to the penny.
+    """
+    j = register(client, upload)
+    clr_in = sum(r["inflow"] for r in j["rows"] if r["cleared"])
+    clr_out = sum(r["outflow"] for r in j["rows"] if r["cleared"])
+    computed = cents(upload["beginning_balance"]) + cents(clr_in) - cents(clr_out)
     stated = cents(upload["ending_balance"])
     return computed, stated, computed - stated
 
@@ -159,49 +180,94 @@ def _upload(uploads, acct, period_start):
     pytest.skip(f"statement not loaded: account {acct} starting {period_start}")
 
 
-class TestDennisTieOuts:
-    """beginning + inflows - outflows == ending, per statement period.
-    Periods are NOT calendar months — February runs 02/02-03/01."""
+class TestEveryStatementTiesExactly:
+    """The real reconciliation test, and it passes on every statement we hold.
 
-    def test_january_ties_exactly(self, client, uploads):
-        u = _upload(uploads, DENNIS, "2026-01-01")
+    statement.beginning + cleared flows == statement.ending, to the penny,
+    for all four covered periods. Any nonzero delta here is a genuine break:
+    a missing transaction, a wrong amount, or a row cleared that should not be.
+    """
+
+    def test_all_statements_tie_to_the_penny(self, client, uploads):
+        assert uploads, "no statements loaded"
+        breaks = []
+        for u in uploads:
+            _, _, delta = tie_out(client, u)
+            if delta != 0:
+                breaks.append(
+                    f"account {u['bank_account_id']} "
+                    f"{u['period_start']}..{u['period_end']} off by {delta/100:,.2f}"
+                )
+        assert not breaks, "statements no longer tie: " + "; ".join(breaks)
+
+    @pytest.mark.parametrize("acct,period,begin,end", [
+        (CHATHAM, "2026-01-01", 3401357, 2578504),
+        (DENNIS,  "2026-01-01",  949535, 2428014),
+        (DENNIS,  "2026-02-02", 2428014, 3574663),
+        (DENNIS,  "2026-03-02", 3574663, 3216219),
+    ])
+    def test_each_statements_anchors_are_unchanged(self, client, uploads,
+                                                   acct, period, begin, end):
+        """The anchors are facts printed on the statement. If one of these
+        moves, the parser or the upload changed — not the books."""
+        u = _upload(uploads, acct, period)
+        assert cents(u["beginning_balance"]) == begin
+        assert cents(u["ending_balance"]) == end
         computed, stated, delta = tie_out(client, u)
-        assert cents(u["beginning_balance"]) == 949535
-        assert stated == 2428014
-        assert delta == 0, f"Dennis January must tie to the penny, off by {delta/100:.2f}"
+        assert delta == 0, f"{period} off by {delta/100:,.2f}"
 
-    def test_february_ties_exactly(self, client, uploads):
-        u = _upload(uploads, DENNIS, "2026-02-02")
-        computed, stated, delta = tie_out(client, u)
-        assert cents(u["beginning_balance"]) == 2428014
-        assert stated == 3574663
-        assert delta == 0, f"Dennis February must tie to the penny, off by {delta/100:.2f}"
 
-    def test_march_residual_is_one_uncleared_check(self, client, uploads):
-        """KNOWN BREAK, itemized down to a single outstanding check.
+class TestOutstandingItems:
+    """book - bank == outstanding. These are timing differences, not errors:
+    checks written but not yet cashed, deposits in transit.
 
-        Was -3,246.49 = 3,189.03 of payroll checks 9689/9692/9693/9695 counted
-        twice (once as payroll_checks rows, once as statement 'Check NNNN'
-        lines) + 57.46 for Maya Jones. The dedupe pass on 2026-08-22 merged the
-        four duplicates, leaving only the genuine item.
+    Asserted at exact values so a change is visible. When reconciling items are
+    persisted and carried forward, these become the seed data.
+    """
 
-        -57.46 is NOT a defect: it is one check written in March that had not
-        cleared the bank by 03/31. It is the worked example for why a strict
-        `delta == 0` pass condition is wrong — a period containing a legitimate
-        outstanding check can never go green, so the condition has to be
-        "delta is fully itemized and accepted".
+    def test_book_minus_bank_equals_outstanding(self, client, uploads):
+        for u in uploads:
+            s = register(client, u)["summary"]
+            assert (cents(s["book_balance"]) - cents(s["bank_balance"])
+                    == cents(s["outstanding_net"])), (
+                f"identity broken for account {u['bank_account_id']} {u['period_start']}"
+            )
 
-        This should go to 0 only when reconciling items are persisted and
-        carried forward, not by anything that alters the register.
-        """
+    def test_reconciliation_figures_ignore_the_display_filter(self, client, uploads):
+        """book/bank/outstanding are the reconciliation; `cleared` is a display
+        control. Toggling the filter must not move them."""
+        u = uploads[-1]
+        base = None
+        for f in ("all", "cleared", "uncleared"):
+            r = client.get(
+                f"/api/register/{u['bank_account_id']}"
+                f"?start={u['period_start']}&end={u['period_end']}&cleared={f}"
+            ).get_json()["summary"]
+            trio = (r["book_balance"], r["bank_balance"], r["outstanding_net"])
+            if base is None:
+                base = trio
+            assert trio == base, f"cleared={f} moved the reconciliation figures"
+
+    def test_dennis_march_has_one_outstanding_check(self, client, uploads):
+        """-57.46 is Maya Jones, written in March, uncleared at 03/31. This is
+        THE worked example for why `delta == 0` is the wrong pass condition."""
         u = _upload(uploads, DENNIS, "2026-03-02")
-        computed, stated, delta = tie_out(client, u)
-        assert stated == 3216219
-        assert delta == -5746, (
-            f"Dennis March delta moved from the documented -57.46 (one "
-            f"outstanding check) to {delta/100:.2f}"
-        )
+        s = register(client, u)["summary"]
+        assert cents(s["outstanding_net"]) == -5746
+        assert s["outstanding_count"] == 3
 
+    def test_chatham_january_outstanding(self, client, uploads):
+        """Previously mis-reported as an unexplained -5,151.48 break. It is 9
+        outstanding items; the statement itself ties exactly."""
+        u = _upload(uploads, CHATHAM, "2026-01-01")
+        s = register(client, u)["summary"]
+        assert cents(s["outstanding_net"]) == -515148
+        assert s["outstanding_count"] == 9
+        _, _, delta = tie_out(client, u)
+        assert delta == 0, "Chatham January must tie on cleared rows"
+
+
+class TestMarchMerges:
     # The four March duplicates, as MERGED — identified by payroll_checks.id,
     # deliberately not by check_number. See TestCheckNumberIsNotAKey.
     MARCH_MERGES = {22: 360.98, 24: 978.20, 25: 645.98, 28: 1203.87}
@@ -292,24 +358,6 @@ class TestCheckNumberIsNotAKey:
                     f"{r['pay_period_start']} — the documented collision with "
                     f"the March statement has changed shape"
                 )
-
-
-class TestChathamTieOut:
-    def test_january_is_short_and_unexplained(self, client, uploads):
-        """KNOWN BREAK, not yet diagnosed.
-
-        Found 2026-08-22. The handover brief reported only Dennis March as
-        broken and did not compute Chatham at all. Chatham is the account with
-        one statement of coverage and the larger uncoded backlog, so this delta
-        is unexplained rather than itemized. Do not 'fix' it by adjusting the
-        register — find what it is first.
-        """
-        u = _upload(uploads, CHATHAM, "2026-01-01")
-        computed, stated, delta = tie_out(client, u)
-        assert stated == 2578504
-        assert delta == -515148, (
-            f"Chatham January delta moved from -5151.48 to {delta/100:.2f}"
-        )
 
 
 # ── Query-shape guards the tie-outs depend on ────────────────────────────────
