@@ -781,12 +781,29 @@ function renderAcctSelect(r) {
   cls.push(currentId === '' ? 'unassigned' : 'assigned');
 
   let optsHtml = `<option value="" ${currentId === '' ? 'selected' : ''}>— Choose account —</option>`;
+  let foundCurrent = false;
   for (const type of Object.keys(STATE.glByType).sort()) {
     optsHtml += `<optgroup label="${esc(type)}">`;
     for (const a of STATE.glByType[type]) {
-      optsHtml += `<option value="${a.id}" ${Number(a.id) === Number(currentId) ? 'selected' : ''}>${esc(a.name)}</option>`;
+      const isCur = Number(a.id) === Number(currentId);
+      if (isCur) foundCurrent = true;
+      optsHtml += `<option value="${a.id}" ${isCur ? 'selected' : ''}>${esc(a.name)}</option>`;
     }
     optsHtml += `</optgroup>`;
+  }
+
+  // A row can be coded to an account that is NOT in the active list for this
+  // location — retired accounts, or codings made before the two charts were
+  // split per entity. Previously the select simply had nothing selected and
+  // the type-ahead rendered an EMPTY box, so the row looked uncoded and could
+  // not be inspected or changed. Never render blank-but-coded: show the stored
+  // account with a legacy marker. data-legacy keeps it out of the searchable
+  // list, so it can be SEEN but not re-selected.
+  if (currentId !== '' && !foundCurrent) {
+    const legacyName = r.gl_account_name || `account #${currentId}`;
+    optsHtml = `<option value="${currentId}" selected data-legacy="1">`
+             + `⚠ ${esc(legacyName)} (legacy — not in this chart)</option>` + optsHtml;
+    cls.push('legacy');
   }
 
   return `
@@ -1063,6 +1080,11 @@ document.querySelectorAll('.reg-table thead th.sortable').forEach(th => {
 .glcbx-item{padding:5px 12px;font-size:13px;color:var(--text);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .glcbx-item:hover,.glcbx-hi{background:var(--bg-elevated);color:var(--blue)}
 .glcbx-none{padding:8px 12px;font-size:12px;color:var(--text3)}
+/* A coding pointing at an account that is not in this location's active chart.
+   Must never look like an empty box — that is how 225 orphaned codings stayed
+   invisible until someone clicked one. */
+.acct-select.legacy + .glcbx-input, .glcbx-wrap .acct-select.legacy ~ .glcbx-input{
+  border-color:var(--amber);color:var(--amber)}
 </style>
 <script>
 (function(){
@@ -1107,6 +1129,7 @@ function enhance(sel){
     var grp=null;
     Array.prototype.forEach.call(sel.options, function(opt){
       if(!opt.value) return;
+      if(opt.dataset && opt.dataset.legacy) return;  // visible as current, not re-selectable
       var lab = labelFor(opt), low = lab.toLowerCase();
       var ok = toks.every(function(t){ return low.indexOf(t) >= 0; });
       if(!ok) return;

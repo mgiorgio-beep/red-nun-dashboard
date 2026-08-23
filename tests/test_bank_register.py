@@ -640,3 +640,56 @@ class TestReconciliationSignOff:
             client.get(f"/api/bank-reconcile/reconciliation/preview?upload_id={u['id']}")
         after = conn.execute("SELECT COUNT(*) FROM bank_reconciliations").fetchone()[0]
         assert before == after, "preview created reconciliation rows"
+
+
+# ── GL account integrity ─────────────────────────────────────────────────────
+
+class TestGlAccountGuard:
+    """The PUT validated existence only, which is how 225 rows ended up coded
+    to retired accounts. It must also require active + location-compatible.
+
+    All three cases below are rejected BEFORE any write, so exercising them
+    against the live database changes nothing.
+    """
+
+    def _a_dennis_row(self, conn):
+        return conn.execute(
+            "SELECT m.id FROM manual_bank_entries m "
+            "JOIN bank_accounts ba ON ba.id = m.bank_account_id "
+            "WHERE ba.location = 'dennis' LIMIT 1"
+        ).fetchone()["id"]
+
+    def test_rejects_inactive_account(self, client, conn):
+        bad = conn.execute("SELECT id FROM gl_accounts WHERE active = 0 LIMIT 1").fetchone()
+        if not bad:
+            pytest.skip("no inactive accounts to test with")
+        rid = self._a_dennis_row(conn)
+        before = conn.execute(
+            "SELECT gl_account_id FROM manual_bank_entries WHERE id = ?", (rid,)
+        ).fetchone()["gl_account_id"]
+        r = client.put("/api/register/row/gl-account", json={
+            "source": "manual", "id": rid, "gl_account_id": bad["id"], "create_rule": False})
+        assert r.status_code == 409
+        assert "inactive" in r.get_json()["error"]
+        after = conn.execute(
+            "SELECT gl_account_id FROM manual_bank_entries WHERE id = ?", (rid,)
+        ).fetchone()["gl_account_id"]
+        assert after == before, "a rejected PUT still wrote to the row"
+
+    def test_rejects_wrong_location_account(self, client, conn):
+        bad = conn.execute(
+            "SELECT id FROM gl_accounts WHERE active = 1 AND location = 'chatham' LIMIT 1"
+        ).fetchone()
+        if not bad:
+            pytest.skip("no active chatham accounts to test with")
+        rid = self._a_dennis_row(conn)
+        r = client.put("/api/register/row/gl-account", json={
+            "source": "manual", "id": rid, "gl_account_id": bad["id"], "create_rule": False})
+        assert r.status_code == 409
+        assert "chatham" in r.get_json()["error"]
+
+    def test_rejects_missing_account(self, client, conn):
+        rid = self._a_dennis_row(conn)
+        r = client.put("/api/register/row/gl-account", json={
+            "source": "manual", "id": rid, "gl_account_id": 999999, "create_rule": False})
+        assert r.status_code == 404

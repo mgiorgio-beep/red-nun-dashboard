@@ -949,12 +949,37 @@ def set_row_gl_account():
 
     conn = get_connection()
 
-    # Validate the GL account
+    # Validate the GL account: it must EXIST, be ACTIVE, and belong to the same
+    # entity as the row's bank account (a NULL gl location means "shared").
+    #
+    # Existence alone is not enough, and checking only existence is how 225 rows
+    # ended up coded to retired accounts: the two charts were merged before the
+    # per-location split, then the balance-sheet import's replace mode
+    # deactivated everything it didn't import. The rows kept their ids, the ids
+    # pointed at dead copies, and the type-ahead rendered them blank.
     if gl_id is not None:
-        gl = conn.execute("SELECT id, name FROM gl_accounts WHERE id = ?", (gl_id,)).fetchone()
+        gl = conn.execute(
+            "SELECT id, name, location, active FROM gl_accounts WHERE id = ?", (gl_id,)
+        ).fetchone()
         if not gl:
             conn.close()
             return jsonify({"error": "GL account not found"}), 404
+        if not gl["active"]:
+            conn.close()
+            return jsonify({"error": f"'{gl['name']}' is an inactive account and "
+                                     f"cannot be used for new codings"}), 409
+        row_loc = conn.execute(
+            "SELECT ba.location FROM bank_accounts ba "
+            "JOIN (SELECT bank_account_id FROM " + table + " WHERE id = ?) x "
+            "ON ba.id = x.bank_account_id", (row_id,)
+        ).fetchone()
+        row_loc = row_loc["location"] if row_loc else None
+        if gl["location"] and row_loc and gl["location"] != row_loc:
+            conn.close()
+            return jsonify({"error": f"'{gl['name']}' belongs to {gl['location']} "
+                                     f"but this row is a {row_loc} transaction — "
+                                     f"the two entities do not share a chart of "
+                                     f"accounts"}), 409
 
     # Update the row. This endpoint is only reachable from the UI, so the
     # coding is human and confirmed by definition. Clearing the coding clears
