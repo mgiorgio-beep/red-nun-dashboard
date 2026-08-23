@@ -790,6 +790,150 @@ class TestNoOrphanedGlReferences:
         assert not inactive, f"referenced but inactive accounts: {inactive}"
 
 
+class TestDennisMarchProfitLoss:
+    """The P&L acceptance test: Dennis, March 2026.
+
+    Dennis is the entity whose sales-journal mapping was verified correct
+    line-by-line, so it is the one the P&L is proven against. The assertions
+    below are the ones that would catch a mapping regression or a double count
+    — not a restatement of the arithmetic.
+    """
+
+    LOC, START, END = "dennis", "2026-03-01", "2026-03-31"
+
+    @pytest.fixture(scope="class")
+    def pl(self, conn):
+        from reports.profit_loss import build_profit_loss
+        return build_profit_loss(self.LOC, self.START, self.END, conn=conn)
+
+    def test_built_from_22_balanced_journal_entries(self, pl):
+        c = pl["guardrails"]["journal_control"]
+        assert c["entries"] == 22
+        assert c["balanced"], f"JEs out of balance: {c['debits']} vs {c['credits']}"
+        assert cents(c["debits"]) == cents(127757.91)
+        assert cents(c["credits"]) == cents(127757.91)
+
+    def test_guardrail_1_no_clearing_account_reaches_revenue(self, pl):
+        """Tenders and tax/tip summaries must all be balance-sheet, or a
+        deposit could be counted as revenue."""
+        assert pl["guardrails"]["clearing_excluded"], \
+            f"clearing leak: {pl['guardrails']['clearing_violations']}"
+
+    def test_revenue_is_sales_less_discounts(self, pl):
+        rev = pl["revenue"]
+        assert cents(rev["gross_sales"]) == cents(104616.00)
+        assert cents(rev["contra"]) == cents(-7912.28)
+        assert cents(rev["net_revenue"]) == cents(96703.72)
+
+    def test_tips_are_not_in_revenue(self, conn, pl):
+        """The 14.9%-of-revenue defect, asserted. Tips credit a balance-sheet
+        account, so no revenue line may carry them."""
+        tips = conn.execute(
+            """SELECT ROUND(SUM(COALESCE(li.credit,0) - COALESCE(li.debit,0)), 2)
+               FROM qb_journal_line_items li
+               JOIN qb_journal_entries e ON e.id = li.entry_id
+               WHERE e.location = ? AND e.entry_date BETWEEN ? AND ?
+                 AND li.journal_name = 'Summary: Tips'""",
+            (self.LOC, self.START, self.END)).fetchone()[0]
+        assert cents(tips) == cents(15526.58)
+        assert cents(pl["revenue"]["net_revenue"] + tips) != cents(pl["revenue"]["net_revenue"])
+        for line in pl["revenue"]["lines"]:
+            assert "tip" not in line["name"].lower(), \
+                f"a tip account reached revenue: {line['name']}"
+
+    def test_guardrail_2_plug_days_are_reported(self, pl):
+        p = pl["guardrails"]["plug"]
+        assert p["threshold"] == 50.00
+        assert p["count"] == 1, f"expected 1 flagged plug day, got {p['count']}"
+        assert p["banner"], "flagged plug days must produce a banner"
+        # Net hides the problem; gross is what gets reported.
+        assert cents(p["net"]) == cents(151.76)
+
+    def test_food_cost_percent_is_plausible(self, pl):
+        """Mike's range check: outside 25–40% means a mapping or double-count
+        problem, not a restaurant problem."""
+        fc = pl["cogs"]["food_cost_pct"]
+        assert 25.0 <= fc <= 40.0, f"food cost {fc}% is outside the sane band"
+        assert cents(pl["cogs"]["fnb_subtotal"]) == cents(29765.93)
+        assert cents(pl["cogs"]["total"]) == cents(30472.28)
+
+    def test_takeout_supplies_in_cogs_but_out_of_food_cost(self, pl):
+        """The 2026-08-23 decision, asserted on real numbers."""
+        assert cents(pl["cogs"]["non_fnb_subtotal"]) == cents(706.35)
+        assert cents(pl["cogs"]["fnb_subtotal"] + pl["cogs"]["non_fnb_subtotal"]) \
+            == cents(pl["cogs"]["total"])
+        names = {l["name"] for l in pl["cogs"]["lines"]
+                 if l["category"] in ("TOGO_SUPPLIES",)}
+        assert names == {"TakeOut Supplies"}
+
+    def test_cogs_lines_are_not_fragmented(self, pl):
+        """Each (category, account) pair appears once. `scanned_invoices` has
+        its own `category` column, which shadowed the query's alias in GROUP BY
+        and split every category across invoices."""
+        seen = [(l["category"], l["name"]) for l in pl["cogs"]["lines"]]
+        assert len(seen) == len(set(seen)), f"duplicate COGS lines: {seen}"
+
+    def test_labor_is_not_double_counted(self, pl):
+        """Labor belongs to prime cost. If a labor account also appears in
+        operating expenses the same wages are counted twice."""
+        from reports.profit_loss import LABOR_ACCOUNT_NAMES
+        leaked = [x["name"] for x in pl["operating_expenses"]["banked"]
+                  if x["name"] in LABOR_ACCOUNT_NAMES]
+        assert not leaked, f"labor accounts leaked into opex: {leaked}"
+
+    def test_tip_payouts_are_excluded_from_labor_and_reported(self, pl):
+        """Paying out a tip settles a liability; it is not a cost of
+        operating. It must be out of labor AND named in the footnotes."""
+        lab = pl["labor"]
+        assert cents(lab["tip_disbursements"]) == cents(19835.40)
+        assert cents(lab["labor_cost"]) == cents(28114.06)
+        assert cents(lab["total"] - lab["tip_disbursements"]) == cents(lab["labor_cost"])
+        assert any("TIP PAYOUTS" in n for n in pl["footnotes"])
+
+    def test_prime_cost(self, pl):
+        assert cents(pl["prime_cost"]) == cents(58586.34)
+        assert 45.0 <= pl["prime_cost_pct"] <= 75.0, \
+            f"prime cost {pl['prime_cost_pct']}% is outside any plausible band"
+        assert cents(pl["cogs"]["total"] + pl["labor"]["labor_cost"]) \
+            == cents(pl["prime_cost"])
+
+    def test_guardrail_3_inherited_defects_are_printed(self, pl):
+        """Every known defect prints on the report. A wrong number with a
+        label is honest; a wrong number alone is a trap."""
+        blob = " ".join(pl["footnotes"]).upper()
+        for required in ("TIPS", "TOAST FEES", "INVENTORY ADJUSTMENT",
+                         "LABOR SOURCE"):
+            assert required in blob, f"missing footnote: {required}"
+
+    def test_expense_side_is_complete_for_dennis_march(self, pl):
+        cov = pl["guardrails"]["expense_coverage"]
+        assert cov["expense_side_complete"], cov["warning"]
+        assert cov["bank_rows"] > 0 and cov["labor_rows"] > 0
+        assert pl["net_income"] is not None
+
+    def test_net_income_is_withheld_when_expenses_are_missing(self, conn):
+        """Chatham March 2026 has no imported statement, so it has full
+        revenue and virtually no cost. Printing a bottom line there would
+        report a fictitious profit — the report must refuse instead."""
+        from reports.profit_loss import build_profit_loss
+        pl = build_profit_loss("chatham", "2026-03-01", "2026-03-31", conn=conn)
+        cov = pl["guardrails"]["expense_coverage"]
+        if cov["expense_side_complete"]:
+            pytest.skip("Chatham March statement has since been imported")
+        assert pl["net_income"] is None, \
+            "a bottom line was printed without an expense side"
+        assert pl["net_income_withheld_reason"]
+        assert any("NO BANK ROWS" in n for n in pl["footnotes"])
+        # Revenue is still valid — it comes from Toast, not the bank.
+        assert pl["revenue"]["net_revenue"] > 0
+
+    def test_settlements_do_not_appear_as_expense(self, conn, pl):
+        """The accrual rule end-to-end: COGS comes from invoices, and no
+        vendor payment settling those invoices adds to expense on top."""
+        from routes.register_routes import audit_settlement_codings
+        assert not audit_settlement_codings(conn)
+
+
 class TestSettlementIsNotAnExpense:
     """Accrual invariant: a row that settles an invoice may not carry a P&L
     account.

@@ -21,16 +21,20 @@ The mapping itself is fixed (see PREREQ notes below); entries built from now on
 resolve correctly through `gl_accounts`. **History was deliberately not
 rewritten** — that was an explicit call on 2026-08-23, not an oversight.
 
-Consequence: **any Chatham P&L covering dates before the fix will be wrong** if
-it groups by the stored `qbo_account`. Two ways out, whichever is preferred:
+**RESOLVED for the internal P&L, 2026-08-23.** `reports/profit_loss.py` joins
+`journal_name → qb_line_mapping.gl_account_id` at read time and never reads the
+stored `qbo_account`. The stored id is a push artifact, not a fact about the
+books, so Chatham's revenue is already correct for every historical month
+without touching a single stored row. Verified: Chatham March 2026 returns
+$62,734.31 net revenue off 26 balanced JEs.
 
-- restamp the stored lines from the corrected mapping, or
-- have the P&L join `journal_name → qb_line_mapping.gl_account_id` at read time
-  and ignore the stored `qbo_account` entirely (cheaper, and arguably right —
-  the stored id is a push artifact, not a fact about the books).
+**Still required for the QBO export only.** A push sends the stored line
+accounts, so the restamp (or a push path that re-resolves through the mapping,
+which is the better fix and mirrors what the JE builder now does) is a
+PREREQ for step 7, not for reporting.
 
-Amounts are unaffected either way. Only the account each line points at is
-wrong, and every JE still balances.
+Amounts were never affected. Only the account each line points at, and every JE
+still balances.
 
 Dennis needs none of this. Its mapping was correct throughout.
 
