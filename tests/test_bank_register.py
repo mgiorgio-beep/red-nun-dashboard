@@ -790,6 +790,121 @@ class TestNoOrphanedGlReferences:
         assert not inactive, f"referenced but inactive accounts: {inactive}"
 
 
+class TestSettlementIsNotAnExpense:
+    """Accrual invariant: a row that settles an invoice may not carry a P&L
+    account.
+
+    These books recognise cost at INVOICE date from the invoice's own line
+    items. The bank transaction that pays it is an AP settlement:
+
+        invoice confirmed :  Dr Food COGS         Cr Accounts Payable
+        payment clears    :  Dr Accounts Payable  Cr Bank
+
+    Coding the payment to Food COGS as well books the cost twice. That was
+    live, not theoretical: 9 of the 12 coded vendor_payments were on a P&L
+    account while linked to confirmed invoices, and every one of them was a
+    double count of real money.
+
+    Bank rows with NO invoice behind them — autopay utilities, card charges,
+    bank fees — are the legitimate P&L source and are untouched.
+    """
+
+    PL_TYPES = {"Income", "Other Income", "Expense", "Other Expense",
+                "Cost of Goods Sold"}
+
+    def test_no_settlement_is_coded_to_a_pl_account(self, conn):
+        from routes.register_routes import audit_settlement_codings
+        bad = audit_settlement_codings(conn)
+        assert not bad, (
+            f"{len(bad)} settlements double-counted as expense: "
+            + "; ".join(f"{b['table']}#{b['id']} -> {b['gl_name']} ({b['evidence']})"
+                        for b in bad[:10]))
+
+    def test_both_entities_have_an_ap_account(self, conn):
+        """Without one there is nowhere for a settlement to go, so the coder
+        would fall back to an expense account and silently double count."""
+        from routes.register_routes import _resolve_ap_account
+        for loc in ("chatham", "dennis"):
+            assert _resolve_ap_account(conn, loc), \
+                f"{loc} has no active Accounts Payable account"
+
+    def test_vendor_payment_with_invoices_is_detected(self, conn):
+        """The detector must actually fire on real data, or the guard is
+        decorative."""
+        from routes.register_routes import settlement_evidence
+        row = conn.execute("""
+            SELECT vp.id FROM vendor_payments vp
+            JOIN ap_payment_invoices api ON api.payment_id = vp.ap_payment_id
+            LIMIT 1
+        """).fetchone()
+        if not row:
+            pytest.skip("no invoice-linked vendor payments present")
+        ev = settlement_evidence(conn, "vendor_payments", row["id"])
+        assert ev and ev["kind"] == "direct" and ev["invoices"] > 0
+
+    def test_payment_without_invoices_is_not_a_settlement(self, conn):
+        """The converse matters just as much: a bank row with no invoice must
+        stay freely codeable, or every utility bill becomes unclassifiable."""
+        from routes.register_routes import settlement_evidence
+        row = conn.execute("""
+            SELECT vp.id FROM vendor_payments vp
+            WHERE NOT EXISTS (SELECT 1 FROM ap_payment_invoices api
+                              WHERE api.payment_id = vp.ap_payment_id)
+              AND NOT EXISTS (SELECT 1 FROM vendor_payment_invoices vpi
+                              WHERE vpi.payment_id = vp.id)
+            LIMIT 1
+        """).fetchone()
+        if not row:
+            pytest.skip("every vendor payment has invoices attached")
+        assert settlement_evidence(conn, "vendor_payments", row["id"]) is None
+
+    def test_api_refuses_a_pl_account_on_a_settlement(self, client, conn):
+        """End-to-end: the endpoint returns 409 and names the AP account."""
+        row = conn.execute("""
+            SELECT vp.id, vp.location FROM vendor_payments vp
+            JOIN ap_payment_invoices api ON api.payment_id = vp.ap_payment_id
+            WHERE vp.location IS NOT NULL LIMIT 1
+        """).fetchone()
+        if not row:
+            pytest.skip("no invoice-linked vendor payments present")
+        cogs = conn.execute(
+            "SELECT id FROM gl_accounts WHERE location = ? AND active = 1 "
+            "AND account_type = 'Cost of Goods Sold' LIMIT 1", (row["location"],)
+        ).fetchone()
+        assert cogs, f"no COGS account for {row['location']}"
+
+        before = conn.execute("SELECT gl_account_id FROM vendor_payments WHERE id = ?",
+                              (row["id"],)).fetchone()[0]
+        r = client.put("/api/register/row/gl-account", json={
+            "source": "bill_pay", "id": row["id"],
+            "gl_account_id": cogs["id"], "create_rule": False})
+        assert r.status_code == 409, f"expected refusal, got {r.status_code}"
+        body = r.get_json()
+        assert body.get("reason") == "settlement_not_expense"
+        assert body.get("suggested_gl_account_id"), "refusal must name the AP account"
+
+        after = conn.execute("SELECT gl_account_id FROM vendor_payments WHERE id = ?",
+                             (row["id"],)).fetchone()[0]
+        assert after == before, "a refused coding must not have been written"
+
+    def test_ap_account_is_still_accepted_on_a_settlement(self, client, conn):
+        """The guard blocks P&L accounts, not all coding. Re-applying the AP
+        account a settlement already carries must succeed."""
+        from routes.register_routes import _resolve_ap_account
+        row = conn.execute("""
+            SELECT vp.id, vp.location, vp.gl_account_id FROM vendor_payments vp
+            JOIN ap_payment_invoices api ON api.payment_id = vp.ap_payment_id
+            WHERE vp.location IS NOT NULL AND vp.gl_account_id IS NOT NULL LIMIT 1
+        """).fetchone()
+        if not row:
+            pytest.skip("no coded invoice-linked vendor payments present")
+        ap = _resolve_ap_account(conn, row["location"])
+        r = client.put("/api/register/row/gl-account", json={
+            "source": "bill_pay", "id": row["id"],
+            "gl_account_id": ap, "create_rule": False})
+        assert r.status_code == 200, f"AP coding refused: {r.get_json()}"
+
+
 class TestSalesJournalMapping:
     """qb_line_mapping resolves into gl_accounts, per entity, by id.
 
@@ -823,17 +938,14 @@ class TestSalesJournalMapping:
         "Gross Sales: Liquor", "Gross Sales: NA Beverage", "Discounts: Total",
     ]
 
-    # Chatham's House Accounts Receivable is retired, so that one line is
-    # deliberately left unmapped and reported rather than guessed at.
-    # $675.55 over 19 days, and it is a clearing line, so it does not reach
-    # the P&L. Remove this once the account is reactivated.
-    KNOWN_UNMAPPED = {("chatham", "Tenders: House Account")}
-
     def test_every_line_resolves_onto_the_spine(self, conn):
-        unmapped = {(r["location"], r["journal_name"]) for r in conn.execute(
-            "SELECT location, journal_name FROM qb_line_mapping WHERE gl_account_id IS NULL")}
-        assert unmapped <= self.KNOWN_UNMAPPED, (
-            f"unexpected unmapped journal lines: {sorted(unmapped - self.KNOWN_UNMAPPED)}")
+        """All 40 lines, both entities, no exceptions. Chatham's
+        Tenders: House Account was the last gap — closed 2026-08-23 by
+        reactivating House Accounts Receivable (343), the same call as 413:
+        the account was right, it was merely switched off."""
+        unmapped = [(r["location"], r["journal_name"]) for r in conn.execute(
+            "SELECT location, journal_name FROM qb_line_mapping WHERE gl_account_id IS NULL")]
+        assert not unmapped, f"unmapped journal lines: {sorted(unmapped)}"
 
     def test_no_mapping_points_at_an_invalid_account(self, conn):
         from routes.register_routes import audit_qb_line_mapping

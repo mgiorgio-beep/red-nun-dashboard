@@ -579,6 +579,156 @@ def seed_gl_category_mapping() -> int:
     return inserted
 
 
+# ─── ACCRUAL: SETTLEMENTS ARE NOT EXPENSES ───────────────────────────────────
+#
+# DECIDED 2026-08-23: invoices drive the P&L. COGS and expense are recognised at
+# INVOICE date, from scanned_invoice_items via gl_category_mapping. A bank
+# transaction that pays that invoice is therefore an AP SETTLEMENT:
+#
+#     invoice confirmed :  Dr  Food COGS        Cr  Accounts Payable
+#     payment clears    :  Dr  Accounts Payable Cr  Bank
+#
+# Coding the payment to Food COGS as well books the same cost twice. That was
+# not hypothetical — 9 of the 12 coded vendor_payments carried a P&L account
+# while also being linked to confirmed invoices.
+#
+# Bank rows remain the P&L source for anything with NO invoice behind it:
+# utilities on autopay, card charges, bank fees. Those are unaffected.
+#
+# Tax basis is Rasmussen's call and does not constrain these management books.
+
+# An accrual settlement may never carry one of these.
+_PL_ACCOUNT_TYPES = frozenset({
+    "Income", "Other Income", "Expense", "Other Expense", "Cost of Goods Sold",
+})
+
+# Same tolerance the reconciler's dedupe uses to pair a statement row with a
+# book row, so "matches a vendor payment" means the same thing in both places.
+SETTLEMENT_MATCH_DAYS = 5
+
+
+def _resolve_ap_account(conn, location: str | None) -> int | None:
+    """The Accounts Payable account for an entity — the settlement target."""
+    if not location:
+        return None
+    row = conn.execute(
+        "SELECT id FROM gl_accounts "
+        "WHERE location = ? AND active = 1 AND account_type = 'Accounts Payable' "
+        "ORDER BY id LIMIT 1",
+        (location,),
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def settlement_evidence(conn, table: str, row_id: int) -> dict | None:
+    """Does this register row settle one or more invoices?
+
+    Returns None when it does not (the row is free to carry a P&L account), or
+    a dict describing the linkage when it does.
+
+    Two kinds of evidence, in order of strength:
+
+      direct  — the row IS a vendor payment with invoices attached. Certain.
+      matched — the row is a statement line that pairs with such a payment on
+                the same bank account, same amount, within the reconciler's
+                date tolerance. This is the case the accrual rule was written
+                for: an unmerged statement row that is really a settlement.
+    """
+    if table == "vendor_payments":
+        r = conn.execute(
+            """
+            SELECT vp.location,
+                   (SELECT COUNT(*) FROM ap_payment_invoices api
+                     WHERE api.payment_id = vp.ap_payment_id) AS n_ap,
+                   (SELECT COUNT(*) FROM vendor_payment_invoices vpi
+                     WHERE vpi.payment_id = vp.id)            AS n_vpi
+            FROM vendor_payments vp WHERE vp.id = ?
+            """,
+            (row_id,),
+        ).fetchone()
+        if not r:
+            return None
+        n = (r["n_ap"] or 0) + (r["n_vpi"] or 0)
+        if n == 0:
+            return None
+        return {"kind": "direct", "invoices": n, "location": r["location"],
+                "detail": f"vendor payment with {n} invoice(s) attached"}
+
+    if table == "manual_bank_entries":
+        me = conn.execute(
+            """SELECT m.bank_account_id, m.entry_date, m.amount, ba.location
+               FROM manual_bank_entries m
+               LEFT JOIN bank_accounts ba ON ba.id = m.bank_account_id
+               WHERE m.id = ?""",
+            (row_id,),
+        ).fetchone()
+        if not me or me["amount"] is None:
+            return None
+        hit = conn.execute(
+            """
+            SELECT vp.id, vp.vendor,
+                   (SELECT COUNT(*) FROM ap_payment_invoices api
+                     WHERE api.payment_id = vp.ap_payment_id) AS n_ap,
+                   (SELECT COUNT(*) FROM vendor_payment_invoices vpi
+                     WHERE vpi.payment_id = vp.id)            AS n_vpi
+            FROM vendor_payments vp
+            WHERE vp.bank_account_id = ?
+              AND ROUND(ABS(vp.payment_total), 2) = ROUND(ABS(?), 2)
+              AND ABS(JULIANDAY(vp.payment_date) - JULIANDAY(?)) <= ?
+              AND (vp.status IS NULL OR vp.status NOT IN ('void', 'failed'))
+            ORDER BY ABS(JULIANDAY(vp.payment_date) - JULIANDAY(?))
+            LIMIT 1
+            """,
+            (me["bank_account_id"], me["amount"], me["entry_date"],
+             SETTLEMENT_MATCH_DAYS, me["entry_date"]),
+        ).fetchone()
+        if not hit:
+            return None
+        n = (hit["n_ap"] or 0) + (hit["n_vpi"] or 0)
+        if n == 0:
+            return None
+        return {"kind": "matched", "invoices": n, "location": me["location"],
+                "detail": f"matches vendor payment #{hit['id']} "
+                          f"({hit['vendor']}) carrying {n} invoice(s)"}
+
+    return None
+
+
+def audit_settlement_codings(conn=None) -> list[dict]:
+    """Register rows that settle invoices but are coded to a P&L account.
+
+    Every row here is a double count: the cost is already recognised at invoice
+    date, and this books it again at payment date.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
+        bad = []
+        for table in ("vendor_payments", "manual_bank_entries"):
+            rows = conn.execute(
+                f"""SELECT t.id, t.gl_account_id, g.name AS gl_name,
+                           g.account_type
+                    FROM {table} t
+                    JOIN gl_accounts g ON g.id = t.gl_account_id
+                    WHERE t.gl_account_id IS NOT NULL"""
+            ).fetchall()
+            for r in rows:
+                if r["account_type"] not in _PL_ACCOUNT_TYPES:
+                    continue
+                ev = settlement_evidence(conn, table, r["id"])
+                if ev:
+                    bad.append({"table": table, "id": r["id"],
+                                "gl_account_id": r["gl_account_id"],
+                                "gl_name": r["gl_name"],
+                                "account_type": r["account_type"],
+                                "evidence": ev["detail"], "kind": ev["kind"]})
+        return bad
+    finally:
+        if own:
+            conn.close()
+
+
 # ─── SALES JOURNAL LINE → GL ACCOUNT ─────────────────────────────────────────
 
 # Each canonical sales-journal line maps to an ACCOUNT ROLE, and each role is a
@@ -846,22 +996,26 @@ def _apply_invoice_category_coding(conn, bp_rows_with_loc: list) -> int:
         if existing and existing["gl_account_id"]:
             continue
 
-        # Single category? Auto-assign.
-        meaningful = {k: v for k, v in cats.items() if k != "UNKNOWN" and v > 0}
-        if len(meaningful) == 1:
-            cat = next(iter(meaningful))
-            gl_id = _resolve_gl_for_category(conn, cat, loc_by_pid.get(pid))
-            if gl_id:
-                # Stamp provenance. This is a machine coding, so it is
-                # 'suggested' and can never teach a rule — but it is sourced
-                # from the invoice, not from a bank description, so it carries
-                # its own source value.
-                conn.execute(
-                    "UPDATE vendor_payments SET gl_account_id = ?, gl_source = ?, "
-                    "gl_status = ? WHERE id = ?",
-                    (gl_id, GL_SOURCE_CATEGORY, GL_STATUS_SUGGESTED, pid),
-                )
-                assigned += 1
+        # ACCRUAL: this payment settles an invoice, so it codes to Accounts
+        # Payable — NOT to the category's expense account. The cost was already
+        # recognised at invoice date; coding it here too books it twice.
+        #
+        # The category breakdown is still computed and returned, because the
+        # register UI shows "what this check paid for". It just no longer
+        # decides the GL account.
+        loc = loc_by_pid.get(pid)
+        gl_id = _resolve_ap_account(conn, loc)
+        if gl_id:
+            conn.execute(
+                "UPDATE vendor_payments SET gl_account_id = ?, gl_source = ?, "
+                "gl_status = ? WHERE id = ?",
+                (gl_id, GL_SOURCE_CATEGORY, GL_STATUS_SUGGESTED, pid),
+            )
+            assigned += 1
+        elif loc:
+            logger.warning(
+                "No active Accounts Payable account for %s — vendor payment %s "
+                "left uncoded rather than booked as an expense", loc, pid)
     if assigned:
         conn.commit()
     return assigned
@@ -1336,7 +1490,8 @@ def set_row_gl_account():
     # pointed at dead copies, and the type-ahead rendered them blank.
     if gl_id is not None:
         gl = conn.execute(
-            "SELECT id, name, location, active FROM gl_accounts WHERE id = ?", (gl_id,)
+            "SELECT id, name, location, active, account_type "
+            "FROM gl_accounts WHERE id = ?", (gl_id,)
         ).fetchone()
         if not gl:
             conn.close()
@@ -1357,6 +1512,24 @@ def set_row_gl_account():
                                      f"but this row is a {row_loc} transaction — "
                                      f"the two entities do not share a chart of "
                                      f"accounts"}), 409
+
+        # ACCRUAL GUARD. These books recognise cost at invoice date, so a row
+        # that settles an invoice may not also be coded to a P&L account —
+        # that books the same cost twice. Offer the AP account instead.
+        if gl["account_type"] in _PL_ACCOUNT_TYPES:
+            ev = settlement_evidence(conn, table, row_id)
+            if ev:
+                ap_id = _resolve_ap_account(conn, ev["location"] or row_loc)
+                conn.close()
+                return jsonify({
+                    "error": f"This row settles an invoice ({ev['detail']}), so it "
+                             f"is an AP settlement, not an expense. The cost is "
+                             f"already recognised at invoice date — coding it to "
+                             f"'{gl['name']}' would book it twice.",
+                    "reason": "settlement_not_expense",
+                    "evidence": ev["detail"],
+                    "suggested_gl_account_id": ap_id,
+                }), 409
 
     # Update the row. This endpoint is only reachable from the UI, so the
     # coding is human and confirmed by definition. Clearing the coding clears
