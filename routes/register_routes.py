@@ -471,6 +471,35 @@ _CATEGORY_GL_SEED = [
 ]
 
 
+# ── P&L grouping decisions, 2026-08-23 ───────────────────────────────────────
+#
+# TOGO_SUPPLIES. "TakeOut Supplies" is typed Cost of Goods Sold in BOTH charts
+# (Chatham 480, Dennis 224, subtype SuppliesMaterialsCogs), so the type-based
+# grouping in the P&L puts it inside COGS. We are deliberately NOT retyping the
+# account: the chart mirrors QBO and the tax books, so retyping it is
+# Rasmussen's call, and leaving it alone keeps the step-7 export a straight
+# type-for-type mapping.
+#
+# It is still not food. Letting takeout packaging into the food cost
+# denominator inflated Dennis March by 4.6% ($706.35 on $29,765.93). So:
+# TakeOut Supplies prints as its own line INSIDE COGS, and is EXCLUDED from the
+# "Food & Beverage COGS" subtotal that food cost % is computed from.
+#
+# That subtotal is defined here, by category, so the P&L cannot quietly drift
+# from the decision.
+FNB_COGS_CATEGORIES = frozenset({
+    "FOOD", "LIQUOR", "BEER", "WINE", "NA_BEVERAGES",
+    # Immaterial and beverage-shaped; they belong in the denominator even
+    # though their split across beverage lines is approximate.
+    "DEPOSIT", "LIQUOR_WINE", "LIQUOR_WINE_BEER",
+})
+
+# Categories that reach a COGS-typed account but must stay OUT of the food cost
+# denominator. Kept explicit so the exclusion is auditable rather than implied
+# by whatever FNB_COGS_CATEGORIES happens to omit.
+COGS_NON_FNB_CATEGORIES = frozenset({"TOGO_SUPPLIES"})
+
+
 def seed_gl_category_mapping() -> int:
     """Populate gl_category_mapping from _CATEGORY_GL_SEED, per location.
 

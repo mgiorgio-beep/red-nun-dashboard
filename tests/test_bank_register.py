@@ -881,6 +881,47 @@ class TestInvoiceCategoryMapping:
             "supposed to be separate"
         )
 
+    def test_food_cost_denominator_excludes_takeout_supplies(self, conn):
+        """Decision of 2026-08-23. TakeOut Supplies is COGS-typed in both
+        charts and stays that way (retyping is the accountant's call), so it
+        sits inside COGS — but takeout packaging is not food, and including it
+        inflated Dennis March food cost by 4.6%. It gets its own line and stays
+        out of the denominator."""
+        from routes.register_routes import (
+            FNB_COGS_CATEGORIES, COGS_NON_FNB_CATEGORIES, _resolve_gl_for_category)
+
+        assert "TOGO_SUPPLIES" not in FNB_COGS_CATEGORIES
+        assert "TOGO_SUPPLIES" in COGS_NON_FNB_CATEGORIES
+        assert not (FNB_COGS_CATEGORIES & COGS_NON_FNB_CATEGORIES), \
+            "a category cannot be both in and out of the food cost denominator"
+
+        # Every category in either set must actually land on a COGS account —
+        # otherwise the split is being applied to the wrong side of the P&L.
+        for loc in ("chatham", "dennis"):
+            for cat in FNB_COGS_CATEGORIES | COGS_NON_FNB_CATEGORIES:
+                gl_id = _resolve_gl_for_category(conn, cat, loc)
+                assert gl_id, f"{loc}/{cat} does not resolve"
+                t = conn.execute(
+                    "SELECT account_type FROM gl_accounts WHERE id = ?", (gl_id,)
+                ).fetchone()[0]
+                assert t == "Cost of Goods Sold", f"{loc}/{cat} -> {t}, expected COGS"
+
+    def test_approximate_categories_are_flagged_for_the_pl_footnote(self, conn):
+        """The five judgement-call mappings must stay marked, in both entities.
+        The flag is what turns a wrong-ish number into a labelled one."""
+        expected = {"OTHER", "TAX", "DEPOSIT", "LIQUOR_WINE", "LIQUOR_WINE_BEER"}
+        for loc in ("chatham", "dennis"):
+            got = {r[0] for r in conn.execute(
+                "SELECT category_type FROM gl_category_mapping "
+                "WHERE location = ? AND confidence = 'approximate'", (loc,))}
+            assert got == expected, f"{loc} approximate set drifted: {sorted(got)}"
+            # An approximate mapping without a note is just an unexplained guess.
+            missing = [r[0] for r in conn.execute(
+                "SELECT category_type FROM gl_category_mapping "
+                "WHERE location = ? AND confidence = 'approximate' "
+                "AND (note IS NULL OR TRIM(note) = '')", (loc,))]
+            assert not missing, f"{loc} approximate mappings with no note: {missing}"
+
     def test_unmapped_or_empty_category_resolves_to_none(self, conn):
         from routes.register_routes import _resolve_gl_for_category
         assert _resolve_gl_for_category(conn, "NOT_A_CATEGORY", "chatham") is None
