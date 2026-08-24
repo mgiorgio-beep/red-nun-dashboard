@@ -465,7 +465,9 @@ function syncFromToast() {
   fetch('/staff/api/board/sync-toast', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({location: 'chatham'})
+    // No location: the server syncs its own RN_LOCATION. Hardcoding one
+    // here made the Dennis board pull Chatham's Toast menu.
+    body: JSON.stringify({})
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
@@ -510,7 +512,7 @@ function showSyncModal(d) {
   });
 
   if (!h) {
-    toast('No specials found in Toast', 'error');
+    toast(d.note || 'No specials found in Toast', 'error');
     return;
   }
 

@@ -208,41 +208,99 @@ def update_board():
     return jsonify({'ok': True})
 
 
+def _walk_menu_groups(groups):
+    """Yield every menu group, including nested subgroups.
+
+    Toast's Menus API nests menuGroups inside menuGroups, so a Specials
+    subgroup sitting under a parent group is invisible to a single-level walk.
+    """
+    for group in groups or []:
+        yield group
+        for sub in _walk_menu_groups(group.get('menuGroups')):
+            yield sub
+
+
+def _walk_menu_items(group):
+    """Yield every menuItem in a group, including items in its subgroups."""
+    for item in group.get('menuItems') or []:
+        yield item
+    for sub in group.get('menuGroups') or []:
+        for item in _walk_menu_items(sub):
+            yield item
+
+
+def _fmt_price(price):
+    """$18 for whole dollars, $18.50 when there are cents."""
+    try:
+        price = float(price)
+    except (TypeError, ValueError):
+        return ''
+    if not price:
+        return ''
+    if price == int(price):
+        return '${:.0f}'.format(price)
+    return '${:.2f}'.format(price)
+
+
 @staff_bp.route('/staff/api/board/sync-toast', methods=['POST'])
 def sync_toast_specials():
     """Pull specials from Toast POS and return structured board data."""
     try:
         from integrations.toast.toast_client import ToastAPIClient
         client = ToastAPIClient()
-        location = (request.json or {}).get('location', LOCATION)
+        # No location in the request means "this box's own location" — never
+        # let one Beelink pull the other's menu.
+        location = (request.json or {}).get('location') or LOCATION
         menus = client.get_menus(location)
+
+        if not isinstance(menus, dict) or not menus.get('menus'):
+            logger.warning("Toast returned no published menus for %s", location)
+            return jsonify({
+                'ok': True, 'soup': {}, 'appetizer': {}, 'items': [],
+                'location': location, 'groups': [],
+                'note': 'Toast returned no published menus for {}. '
+                        'Publish the menu in Toast Web, then sync '
+                        'again.'.format(location),
+            })
 
         soup = {}
         appetizer = {}
         entrees = []
+        group_names = []
+        seen_items = set()
 
         for menu in menus.get('menus', []):
-            for group in menu.get('menuGroups', []):
-                gname = group.get('name', '').lower()
+            for group in _walk_menu_groups(menu.get('menuGroups')):
+                gname = (group.get('name') or '').strip().lower()
+                if gname:
+                    group_names.append(group.get('name').strip())
 
                 # Soup of the Day from Soups group
                 if 'soup' in gname:
-                    for item in group.get('menuItems', []):
-                        if 'soup' in item.get('name', '').lower():
+                    for item in _walk_menu_items(group):
+                        if 'soup' in (item.get('name') or '').lower():
                             desc = (item.get('description') or '').strip()
                             if desc:
                                 soup = {
                                     'name': desc,
                                     'desc': '',
-                                    'price': '${:.0f}'.format(item['price']) if item.get('price') else ''
+                                    'price': _fmt_price(item.get('price')),
                                 }
 
-                # Specials group — app + entrees
-                if gname == 'specials':
-                    for item in group.get('menuItems', []):
+                # Specials group — app + entrees. Substring match so
+                # "Daily Specials" / "Dinner Specials" still land.
+                if 'special' in gname:
+                    for item in _walk_menu_items(group):
+                        # A group and its subgroup can both match; only take
+                        # each item once.
+                        key = item.get('guid') or item.get('name')
+                        if key in seen_items:
+                            continue
+                        seen_items.add(key)
+
                         iname = item.get('name', '')
                         desc = (item.get('description') or '').strip()
-                        price = '${:.0f}'.format(item['price']) if item.get('price') else ''
+                        price = _fmt_price(item.get('price'))
 
                         if 'special app' in iname.lower():
                             appetizer = {
@@ -270,12 +328,25 @@ def sync_toast_specials():
                                 'color': 'white'
                             })
 
-        return jsonify({
+        logger.info(
+            "Toast sync for %s: %d entree(s), soup=%s, app=%s, from groups %s",
+            location, len(entrees), bool(soup), bool(appetizer), group_names,
+        )
+
+        payload = {
             'ok': True,
             'soup': soup,
             'appetizer': appetizer,
-            'items': entrees
-        })
+            'items': entrees,
+            'location': location,
+            'groups': group_names,
+        }
+        if not (soup or appetizer or entrees):
+            payload['note'] = (
+                'Toast has no Specials or Soup group for {}. Groups found: '
+                '{}'.format(location, ', '.join(group_names) or 'none')
+            )
+        return jsonify(payload)
     except Exception as e:
         logger.error("Toast sync failed: %s", e)
         return jsonify({'ok': False, 'error': str(e)}), 500
