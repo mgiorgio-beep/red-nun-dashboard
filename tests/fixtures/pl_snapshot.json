@@ -8195,7 +8195,7 @@
      "status",
      "amount"
     ],
-    "count": 8,
+    "count": 9,
     "key": "Dues & Subscriptions",
     "rows": [
      {
@@ -8212,6 +8212,14 @@
       "detail": "DDA B/P 1335 03/02/26 535325",
       "reference": "SPI*DIRECTV SERVICE | 800-531-5000 CA C# 9032 [stmt #8]",
       "row_id": 963,
+      "status": "suggested"
+     },
+     {
+      "amount": 61.61,
+      "date": "2026-03-03",
+      "detail": "ACH DAVO TECHNOLOGIE",
+      "reference": "PPD [stmt #8]",
+      "row_id": 983,
       "status": "suggested"
      },
      {
@@ -8264,7 +8272,7 @@
      }
     ],
     "source": "opex_banked",
-    "total": 4081.32
+    "total": 4142.93
    },
    "opex_banked:Electric": {
     "columns": [
@@ -11102,9 +11110,7 @@
     "TOAST FEES ARE NOT BOOKED. Processing fees are netted out of the settlement deposit and never reach an expense account, so operating expense is understated and net income is overstated by roughly the monthly Toast fee.",
     "NO INVENTORY ADJUSTMENT. COGS here is PURCHASES, not cost of goods consumed. Without opening and closing counts, a month that stocks up looks expensive and a month that draws down looks cheap. Food cost % is therefore directionally right and precisely wrong.",
     "LABOR SOURCE is the bank rows on labor accounts, the only complete view. For comparison: Toast time entries show $23,167.13 over 1,388.5 hours (249 shifts) \u2014 hourly wages only, no employer taxes or salaried staff \u2014 and payroll checks total $7,375.86 across 7 check(s), which is partial coverage for the period.",
-    "APPROXIMATE CATEGORY MAPPINGS: $12.16 across LIQUOR_WINE_BEER, LIQUOR_WINE. Totals are right; the split between beverage lines is a judgement call.",
-    "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 4 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost.",
-    "DAVO REMITTANCES ON THE WRONG ACCOUNT \u2014 1 row(s) totalling $61.61 sit on Sales - Beer instead of Sales Tax Payable. They are real remittances, so the tax account looks more unremitted than it is, and whichever account they landed on is overstated."
+    "APPROXIMATE CATEGORY MAPPINGS: $12.16 across LIQUOR_WINE_BEER, LIQUOR_WINE. Totals are right; the split between beverage lines is a judgement call."
    ],
    "guardrails": {
     "clearing_excluded": true,
@@ -11135,7 +11141,7 @@
      "threshold": 50.0
     },
     "sales_tax": {
-     "alarm": true,
+     "alarm": false,
      "available": true,
      "avg_daily_tax": 232.73,
      "collected": 27928.09,
@@ -11148,7 +11154,7 @@
       "lag_min": 2,
       "match_rate": 97.67,
       "matched": 84,
-      "pulls": 89,
+      "pulls": 86,
       "reversals": [
        {
         "amount": -63.05,
@@ -11172,27 +11178,12 @@
        }
       ],
       "tax_days": 86,
-      "unmatched_pull_total": 186.86,
+      "unmatched_pull_total": 2.03,
       "unmatched_pulls": [
-       {
-        "amount": 61.61,
-        "date": "2026-02-03",
-        "id": 811
-       },
-       {
-        "amount": 61.61,
-        "date": "2026-03-03",
-        "id": 983
-       },
        {
         "amount": 2.03,
         "date": "2026-03-23",
         "id": 1110
-       },
-       {
-        "amount": 61.61,
-        "date": "2026-04-06",
-        "id": 1201
        }
       ],
       "unremitted_days": [],
@@ -11236,10 +11227,8 @@
        }
       ]
      },
-     "message": "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 4 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost.",
-     "messages": [
-      "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 4 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost."
-     ],
+     "message": null,
+     "messages": [],
      "monthly": [
       {
        "collected": 6817.76,
@@ -11250,29 +11239,29 @@
       },
       {
        "collected": 6190.64,
-       "cumulative": 869.19,
+       "cumulative": 930.8,
        "month": "2026-02",
-       "remitted": 5323.77,
-       "residual": 866.87
+       "remitted": 5262.16,
+       "residual": 928.48
       },
       {
        "collected": 6813.57,
-       "cumulative": -737.72,
+       "cumulative": -614.5,
        "month": "2026-03",
-       "remitted": 8420.48,
-       "residual": -1606.91
+       "remitted": 8358.87,
+       "residual": -1545.3
       },
       {
        "collected": 8106.12,
-       "cumulative": -122.7,
+       "cumulative": 62.13,
        "month": "2026-04",
-       "remitted": 7491.1,
-       "residual": 615.02
+       "remitted": 7429.49,
+       "residual": 676.63
       }
      ],
-     "pulls": 93,
-     "remitted": 28050.79,
-     "residual": -122.7,
+     "pulls": 90,
+     "remitted": 27865.96,
+     "residual": 62.13,
      "tolerance_band": 1163.65,
      "transit_days": 5,
      "window": {
@@ -11328,7 +11317,7 @@
     "wages_excl_tip_payouts": 34176.74
    },
    "location": "dennis",
-   "net_income": -21680.64,
+   "net_income": -21742.25,
    "net_income_withheld_reason": null,
    "operating_expenses": {
     "banked": [
@@ -11365,7 +11354,7 @@
       "name": "Accountant"
      },
      {
-      "amount": 4081.32,
+      "amount": 4142.93,
       "drill": {
        "key": "Dues & Subscriptions",
        "source": "opex_banked"
@@ -11533,7 +11522,7 @@
       "name": "Knife Sharpening"
      }
     ],
-    "banked_total": 49261.16,
+    "banked_total": 49322.77,
     "invoiced": [
      {
       "amount": 3733.05,
@@ -11573,7 +11562,7 @@
      }
     ],
     "invoiced_total": 4474.18,
-    "total": 53735.34
+    "total": 53796.95
    },
    "period": {
     "end": "2026-03-31",

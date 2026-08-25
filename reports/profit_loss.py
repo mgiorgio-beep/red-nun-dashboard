@@ -209,6 +209,10 @@ def plug_days(conn, location: str, start: str, end: str) -> dict:
 # makes the alarm worth acting on.
 
 SALES_TAX_TRANSIT_DAYS = 5
+# A pull with no accrual behind it below this is noise — a rounding true-up or
+# a cent-level adjustment. The double-remit warning is a serious claim and
+# should not be made over $2. Reported quietly instead.
+SALES_TAX_MATERIALITY = 25.00
 # How far back a pull may reach for its accrual day. Observed lag is 2-5 days;
 # this allows for a weekend plus a holiday.
 SALES_TAX_MAX_LAG_DAYS = 10
@@ -444,12 +448,14 @@ def sales_tax_rollforward(conn, location: str, end: str | None = None) -> dict:
             f"exactly, {match['lag_min']}-{match['lag_max']} days later, so a "
             f"day still unmatched well beyond that lag was not remitted. This "
             f"is the state's money.")
-    if match["unmatched_pulls"]:
-        n = len(match["unmatched_pulls"])
+    material_pulls = [p for p in match["unmatched_pulls"]
+                      if abs(p["amount"]) >= SALES_TAX_MATERIALITY]
+    if material_pulls:
+        n = len(material_pulls)
         # A repeated identical amount is a subscription, not a remittance.
         # DAVO's own monthly fee was landing on Sales Tax Payable this way:
         # $61.61 on 02-03, 03-03 and 04-06, with matching credits alongside.
-        amounts = [p["amount"] for p in match["unmatched_pulls"]]
+        amounts = [p["amount"] for p in material_pulls]
         recurring = sorted({a for a in amounts if amounts.count(a) > 1})
         if recurring:
             messages.append(
@@ -460,8 +466,9 @@ def sales_tax_rollforward(conn, location: str, end: str | None = None) -> dict:
                 f"It belongs on an expense account: on Sales Tax Payable it "
                 f"understates the liability and hides a real cost.")
         else:
+            total = sum(p["amount"] for p in material_pulls)
             messages.append(
-                f"DAVO REMITTED ${match['unmatched_pull_total']:,.2f} WITH NO "
+                f"DAVO REMITTED ${total:,.2f} WITH NO "
                 f"MATCHING ACCRUAL — {n} pull(s) do not correspond to any day's "
                 f"tax. DAVO takes its figures from Toast, so this should not "
                 f"happen. Check whether DoorDash is remitting marketplace-"
@@ -477,7 +484,7 @@ def sales_tax_rollforward(conn, location: str, end: str | None = None) -> dict:
             f"pull to the penny. The residual is tax in transit across the "
             f"window edges, not a remittance failure.")
 
-    alarm = bool(match["unremitted_days"] or match["unmatched_pulls"])
+    alarm = bool(match["unremitted_days"] or material_pulls)
 
     return {
         "available": True,
@@ -519,11 +526,15 @@ def _sales_tax_footnotes(conn, location: str, st: dict) -> list[str]:
 
 
 def sales_tax_misrouted_remittances(conn, location: str) -> list[dict]:
-    """DAVO rows NOT coded to Sales Tax Payable.
+    """DAVO rows that are neither a remittance nor the known subscription fee.
 
-    A remittance sitting on some other account is invisible to the
-    roll-forward above and inflates the apparent unremitted balance, so it is
-    reported separately rather than silently swept in by payee-matching.
+    A remittance sitting on some other account is invisible to the roll-forward
+    and inflates the apparent unremitted balance, so it is reported rather than
+    swept in by payee-matching.
+
+    Dues & Subscriptions is excluded deliberately: DAVO is a subscription
+    service and bills monthly, and that fee belongs on an expense account. A
+    row there is a correct coding, not a stray remittance.
     """
     return [dict(r) for r in conn.execute(
         """SELECT m.id, m.entry_date, m.payee, ROUND(-m.amount, 2) AS amount,
@@ -533,7 +544,8 @@ def sales_tax_misrouted_remittances(conn, location: str) -> list[dict]:
            LEFT JOIN gl_accounts g ON g.id = m.gl_account_id
            WHERE ba.location = ?
              AND UPPER(COALESCE(m.payee,'') || ' ' || COALESCE(m.memo,'')) LIKE '%DAVO%'
-             AND (g.name IS NULL OR g.name <> 'Sales Tax Payable')
+             AND (g.name IS NULL OR g.name NOT IN
+                  ('Sales Tax Payable', 'Dues & Subscriptions'))
            ORDER BY m.entry_date""", (location,))]
 
 

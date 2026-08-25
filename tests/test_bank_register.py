@@ -1512,6 +1512,31 @@ class TestSalesTaxRollsForward:
             assert msg in pl["footnotes"], \
                 "a sales-tax finding did not reach the P&L footnotes"
 
+    def test_a_trivial_unmatched_pull_does_not_cry_double_remit(self, conn):
+        """Materiality. The DoorDash double-remit warning is a serious claim
+        and must not be made over a $2.03 rounding true-up."""
+        from reports.profit_loss import SALES_TAX_MATERIALITY
+        for loc in ("chatham", "dennis"):
+            r = self._rf(conn, loc)
+            if not r["available"]:
+                continue
+            small = [p for p in r["matching"]["unmatched_pulls"]
+                     if abs(p["amount"]) < SALES_TAX_MATERIALITY]
+            if small and not [p for p in r["matching"]["unmatched_pulls"]
+                              if abs(p["amount"]) >= SALES_TAX_MATERIALITY]:
+                assert not any("DoorDash" in m for m in r["messages"]), \
+                    f"{loc}: double-remit warning raised over ${small[0]['amount']}"
+                assert r["alarm"] is False
+
+    def test_the_davo_fee_account_is_not_flagged_as_misrouted(self, conn):
+        """DAVO is a subscription service; its fee on Dues & Subscriptions is a
+        correct coding, not a stray remittance. Flagging it would train the
+        reader to ignore the finding."""
+        from reports.profit_loss import sales_tax_misrouted_remittances
+        for loc in ("chatham", "dennis"):
+            for m in sales_tax_misrouted_remittances(conn, loc):
+                assert m["gl_name"] != "Dues & Subscriptions"
+
     def test_misrouted_davo_rows_are_reported(self, conn):
         """A DAVO row on the wrong account is invisible to the roll-forward and
         makes the tax account look more unremitted than it is."""
