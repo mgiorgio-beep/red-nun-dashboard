@@ -881,21 +881,36 @@ class TestDennisMarchProfitLoss:
                   if x["name"] in LABOR_ACCOUNT_NAMES]
         assert not leaked, f"labor accounts leaked into opex: {leaked}"
 
+    # Revenue and COGS come from journal entries and confirmed invoices, which
+    # are settled history — those are pinned to the penny above. Labor and opex
+    # come from BANK ROW CODINGS, which are still being worked through in the
+    # register, so they legitimately move day to day. Pinning them would make
+    # the suite fail every time a row gets coded. These assert the invariants
+    # instead: the relationships that must hold at any point in that process.
+
     def test_tip_payouts_are_excluded_from_labor_and_reported(self, pl):
         """Paying out a tip settles a liability; it is not a cost of
         operating. It must be out of labor AND named in the footnotes."""
         lab = pl["labor"]
-        assert cents(lab["tip_disbursements"]) == cents(19835.40)
-        assert cents(lab["labor_cost"]) == cents(28114.06)
-        assert cents(lab["total"] - lab["tip_disbursements"]) == cents(lab["labor_cost"])
+        assert lab["tip_disbursements"] > 0, \
+            "March had 7shifts and Venmo tip payouts; none were detected"
+        assert cents(lab["total"] - lab["tip_disbursements"]) == cents(lab["labor_cost"]), \
+            "labor_cost must be the labor-account total net of tip payouts"
         assert any("TIP PAYOUTS" in n for n in pl["footnotes"])
 
-    def test_prime_cost(self, pl):
-        assert cents(pl["prime_cost"]) == cents(58586.34)
-        assert 45.0 <= pl["prime_cost_pct"] <= 75.0, \
-            f"prime cost {pl['prime_cost_pct']}% is outside any plausible band"
+    def test_prime_cost_is_cogs_plus_labor(self, pl):
         assert cents(pl["cogs"]["total"] + pl["labor"]["labor_cost"]) \
             == cents(pl["prime_cost"])
+        assert 45.0 <= pl["prime_cost_pct"] <= 75.0, \
+            f"prime cost {pl['prime_cost_pct']}% is outside any plausible band"
+
+    def test_net_income_is_the_sum_of_its_parts(self, pl):
+        """Guards against a section being dropped or counted twice."""
+        if pl["net_income"] is None:
+            pytest.skip("net income withheld for this period")
+        expected = (pl["revenue"]["net_revenue"] - pl["cogs"]["total"]
+                    - pl["labor"]["labor_cost"] - pl["operating_expenses"]["total"])
+        assert cents(pl["net_income"]) == cents(expected)
 
     def test_guardrail_3_inherited_defects_are_printed(self, pl):
         """Every known defect prints on the report. A wrong number with a
@@ -932,6 +947,114 @@ class TestDennisMarchProfitLoss:
         vendor payment settling those invoices adds to expense on top."""
         from routes.register_routes import audit_settlement_codings
         assert not audit_settlement_codings(conn)
+
+
+class TestProfitLossEndpoint:
+    """The API door onto the P&L engine, and the page that consumes it."""
+
+    URL = "/api/reports/profit-loss"
+
+    def test_returns_the_full_report(self, client):
+        r = client.get(f"{self.URL}?location=dennis&start=2026-03-01&end=2026-03-31")
+        assert r.status_code == 200
+        j = r.get_json()
+        assert j["location"] == "dennis" and j["location_label"] == "Dennis Port"
+        assert j["period"] == {"start": "2026-03-01", "end": "2026-03-31"}
+        assert j["has_sales_journal"] is True
+        assert j["guardrails"]["journal_control"]["entries"] == 22
+        assert cents(j["revenue"]["net_revenue"]) == cents(96703.72)
+        assert j["footnotes"]
+
+    def test_payload_carries_every_field_the_page_renders(self, client):
+        """The page reads these by name. A rename in the engine that this
+        misses shows up as a blank section rather than an error, so assert the
+        contract explicitly."""
+        j = client.get(f"{self.URL}?location=dennis"
+                       "&start=2026-03-01&end=2026-03-31").get_json()
+        for k in ("has_sales_journal", "location_label", "period", "revenue",
+                  "cogs", "labor", "prime_cost", "prime_cost_pct",
+                  "operating_expenses", "net_income",
+                  "net_income_withheld_reason", "footnotes", "guardrails"):
+            assert k in j, f"missing top-level key: {k}"
+        for k in ("clearing_excluded", "clearing_violations", "plug",
+                  "journal_control", "expense_coverage"):
+            assert k in j["guardrails"], f"missing guardrail: {k}"
+        assert {"lines", "net_revenue", "gross_sales", "contra"} <= set(j["revenue"])
+        assert {"lines", "fnb_subtotal", "non_fnb_subtotal", "total",
+                "food_cost_pct", "total_cogs_pct"} <= set(j["cogs"])
+        assert {"by_account", "labor_cost", "labor_pct", "tip_disbursements",
+                "total"} <= set(j["labor"])
+        assert {"invoiced", "banked", "total"} <= set(j["operating_expenses"])
+        for line in j["cogs"]["lines"]:
+            assert {"category", "name", "amount", "confidence"} <= set(line)
+        for line in j["operating_expenses"]["banked"]:
+            assert {"name", "amount"} <= set(line)
+        assert {"threshold", "count", "banner"} <= set(j["guardrails"]["plug"])
+
+    def test_month_with_no_journal_entries_says_so(self, client):
+        """Rendering zeros would look like a measured zero."""
+        j = client.get(f"{self.URL}?location=dennis"
+                       "&start=2024-01-01&end=2024-01-31").get_json()
+        assert j["has_sales_journal"] is False
+        assert j["guardrails"]["journal_control"]["entries"] == 0
+
+    def test_withheld_net_income_carries_its_reason(self, client, conn):
+        j = client.get(f"{self.URL}?location=chatham"
+                       "&start=2026-03-01&end=2026-03-31").get_json()
+        if j["net_income"] is not None:
+            pytest.skip("Chatham March statement has since been imported")
+        assert j["net_income_withheld_reason"], \
+            "a withheld bottom line must explain itself"
+
+    def test_labor_is_unknown_not_zero_when_uncoded(self, client):
+        """Chatham March has no labor rows. Reporting 0.00 would read as a
+        measured figure, and prime cost built on it is COGS wearing a
+        prime-cost label — it showed 39.65% that way."""
+        j = client.get(f"{self.URL}?location=chatham"
+                       "&start=2026-03-01&end=2026-03-31").get_json()
+        if j["guardrails"]["expense_coverage"]["labor_rows"]:
+            pytest.skip("Chatham March labor has since been coded")
+        assert j["labor"]["available"] is False
+        assert j["labor"]["labor_cost"] is None
+        assert j["labor"]["labor_pct"] is None
+        assert j["prime_cost"] is None
+        assert j["prime_cost_pct"] is None
+
+    def test_labor_is_present_when_coded(self, client):
+        j = client.get(f"{self.URL}?location=dennis"
+                       "&start=2026-03-01&end=2026-03-31").get_json()
+        assert j["labor"]["available"] is True
+        assert j["labor"]["labor_cost"] is not None
+        assert j["prime_cost"] is not None
+
+    def test_rejects_a_bad_location(self, client):
+        r = client.get(f"{self.URL}?location=bogus")
+        assert r.status_code == 400
+        assert "chatham" in r.get_json()["error"]
+
+    def test_rejects_malformed_and_inverted_dates(self, client):
+        assert client.get(f"{self.URL}?location=dennis&start=nope").status_code == 400
+        r = client.get(f"{self.URL}?location=dennis&start=2026-05-01&end=2026-04-01")
+        assert r.status_code == 400
+
+    def test_defaults_to_the_current_month(self, client):
+        r = client.get(self.URL)
+        assert r.status_code == 200
+        assert r.get_json()["location"] == "dennis"
+
+    def test_requires_auth(self):
+        """Same posture as the other register routes — no anonymous access."""
+        from web.server import app
+        app.config["TESTING"] = True
+        with app.test_client() as anon:
+            r = anon.get(f"{self.URL}?location=dennis")
+        assert r.status_code in (301, 302, 401, 403), \
+            f"unauthenticated request returned {r.status_code}"
+
+    def test_page_is_served_and_linked_in_the_sidebar(self, client):
+        assert client.get("/profit-loss").status_code == 200
+        sidebar = client.get("/static/sidebar.js").get_data(as_text=True)
+        assert "/profit-loss" in sidebar, "P&L is not linked in the Accounting menu"
 
 
 class TestSettlementIsNotAnExpense:

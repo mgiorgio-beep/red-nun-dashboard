@@ -292,6 +292,13 @@ def registers_page():
     return send_from_directory("static", "register.html")
 
 
+@app.route("/profit-loss")
+@login_required
+def profit_loss_page():
+    """Serve the management P&L page (accrual basis, per entity)."""
+    return send_from_directory("static", "profit_loss.html")
+
+
 @app.route("/opening-balances")
 @login_required
 def opening_balances_page():

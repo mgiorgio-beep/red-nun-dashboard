@@ -883,3 +883,47 @@ def report_drive_upload():
     except Exception as e:
         logger.exception("Drive upload failed")
         return jsonify({"error": f"Google Drive upload failed: {e}"}), 500
+
+
+# ------------------------------------------------------------------
+# Management P&L — accrual basis
+# ------------------------------------------------------------------
+
+@report_bp.route("/api/reports/profit-loss")
+@login_required
+def report_profit_loss():
+    """Management P&L for one entity and period.
+
+    Query: location=chatham|dennis, start=YYYY-MM-DD, end=YYYY-MM-DD
+           (start/end default to the current month to date)
+
+    A thin wrapper over reports.profit_loss.build_profit_loss — deliberately
+    thin. Every judgement (accrual basis, the guardrails, what is withheld and
+    why) lives in the engine, so the API and any future export cannot drift
+    from each other by re-deciding it here.
+    """
+    location = (request.args.get("location") or "dennis").strip().lower()
+    if location not in ("chatham", "dennis"):
+        return jsonify({"error": "location must be 'chatham' or 'dennis' — "
+                                 "the two entities keep separate books"}), 400
+
+    now = datetime.now(ET)
+    start = request.args.get("start") or now.replace(day=1).strftime("%Y-%m-%d")
+    end = request.args.get("end") or now.strftime("%Y-%m-%d")
+    for label, value in (("start", start), ("end", end)):
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": f"{label} must be YYYY-MM-DD"}), 400
+    if start > end:
+        return jsonify({"error": "start must not be after end"}), 400
+
+    try:
+        from reports.profit_loss import build_profit_loss
+        pl = build_profit_loss(location, start, end)
+    except Exception as e:
+        logger.exception("P&L build failed for %s %s..%s", location, start, end)
+        return jsonify({"error": f"Could not build the P&L: {e}"}), 500
+
+    pl["location_label"] = LOC_LABELS.get(location, location)
+    return jsonify(pl)

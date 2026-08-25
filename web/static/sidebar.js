@@ -70,6 +70,7 @@ var sections=[
 ]}
 ,
 {id:'sec-accounting',label:'Accounting',icon:'accounting',children:[
+  {id:'nav-acct-pl',label:'Profit & Loss',page:'/profit-loss'},
   {id:'nav-acct-reports',label:'Reports',page:'/reports'},
   {id:'nav-acct-entries',label:'Sales Entries',page:'/sales-journal'},
   {id:'nav-acct-registers',label:'Registers',page:'/registers'},

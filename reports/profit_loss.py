@@ -551,7 +551,11 @@ def build_profit_loss(location: str, start: str, end: str, conn=None) -> dict:
         # server is not a cost of running the restaurant — it is the settlement
         # of money held on their behalf.
         labor_cost = lab["wages_excl_tip_payouts"]
-        prime = _r2(cg["total"] + labor_cost)
+        # With no labor rows imported, labor is UNKNOWN, not zero. Reporting
+        # 0.00 reads as a measured figure, and prime cost built on it is COGS
+        # wearing a prime-cost label — Chatham March showed 39.65% that way.
+        labor_known = coverage["labor_rows"] > 0
+        prime = _r2(cg["total"] + labor_cost) if labor_known else None
         parts = {"revenue": rev, "cogs": cg, "labor": lab}
 
         def pct(x):
@@ -560,6 +564,10 @@ def build_profit_loss(location: str, start: str, end: str, conn=None) -> dict:
         return {
             "location": location,
             "period": {"start": start, "end": end},
+            # No sales journal entries at all. Every figure below would be a
+            # zero that LOOKS like a measured zero, so callers must say "no
+            # data for this period" rather than render an empty statement.
+            "has_sales_journal": control["entries"] > 0,
             "guardrails": {
                 "clearing_excluded": not violations,
                 "clearing_violations": violations,
@@ -571,10 +579,12 @@ def build_profit_loss(location: str, start: str, end: str, conn=None) -> dict:
             "cogs": {**cg,
                      "food_cost_pct": pct(cg["fnb_subtotal"]),
                      "total_cogs_pct": pct(cg["total"])},
-            "labor": {**lab, "labor_cost": labor_cost,
-                      "labor_pct": pct(labor_cost)},
+            "labor": {**lab,
+                      "available": labor_known,
+                      "labor_cost": labor_cost if labor_known else None,
+                      "labor_pct": pct(labor_cost) if labor_known else None},
             "prime_cost": prime,
-            "prime_cost_pct": pct(prime),
+            "prime_cost_pct": pct(prime) if labor_known else None,
             "operating_expenses": opex,
             # Withheld rather than printed when the expense side is missing —
             # a bottom line computed off half the costs is worse than none.

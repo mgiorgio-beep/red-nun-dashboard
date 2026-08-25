@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Profit &amp; Loss — Red Nun</title>
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, monospace;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+.main-content { padding: 24px; overflow-y: auto; }
+.content-wrap { max-width: 1100px; }
+
+.page-header { margin-bottom: 20px; }
+.page-title { font-size: 22px; font-weight: 700; }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+/* Controls */
+.controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+.loc-pill {
+  padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.loc-pill:hover { border-color: var(--border-focus); color: var(--text); }
+.loc-pill.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.spacer { flex: 1 1 auto; }
+input[type=month], select {
+  padding: 9px 12px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text); font-size: 13px; font-family: var(--font);
+}
+input[type=month]:focus, select:focus { outline: none; border-color: var(--border-focus); }
+
+/* Banners */
+.banner {
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px;
+  border-radius: 10px; font-size: 13px; line-height: 1.55; margin-bottom: 14px;
+  border: 1px solid; word-break: break-word;
+}
+.banner-amber { background: var(--amber-soft); border-color: rgba(245,158,11,0.4); color: #fde68a; }
+.banner-blue  { background: var(--blue-soft);  border-color: rgba(56,189,248,0.4); color: #bae6fd; }
+.banner-icon { flex: 0 0 auto; font-weight: 700; }
+
+/* Guardrail strip */
+.rails { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.rail {
+  font-size: 11px; padding: 6px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text2);
+  display: flex; align-items: center; gap: 6px;
+}
+.rail b { color: var(--text); font-weight: 600; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.dot-ok { background: var(--green); } .dot-warn { background: var(--amber); }
+
+/* Statement */
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; margin-bottom: 20px; }
+table.pl { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+table.pl td { padding: 7px 14px; border-bottom: 1px solid rgba(30,41,59,0.5); }
+table.pl tr:last-child td { border-bottom: none; }
+.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pct { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text3); width: 84px; white-space: nowrap; }
+tr.sec td {
+  font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase;
+  letter-spacing: 0.6px; padding-top: 16px; background: transparent; border-bottom: 1px solid var(--border);
+}
+tr.item td:first-child { padding-left: 26px; color: var(--text2); }
+tr.item td.cat { color: var(--text3); font-size: 11px; }
+tr.sub td { font-weight: 600; border-top: 1px solid var(--border); }
+tr.total td { font-weight: 700; font-size: 14px; border-top: 2px solid var(--border-focus); background: rgba(30,41,59,0.35); }
+tr.bottom td { font-weight: 700; font-size: 15px; border-top: 2px solid var(--border-focus); background: rgba(30,41,59,0.55); }
+.neg { color: var(--red); } .pos { color: var(--green); }
+.approx { color: var(--amber); font-size: 10px; margin-left: 6px; }
+.withheld { color: var(--amber); font-weight: 600; font-size: 12.5px; line-height: 1.5; }
+
+/* Footnotes */
+.fn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.fn-title { font-size: 12px; font-weight: 700; color: var(--amber); text-transform: uppercase; letter-spacing: 0.6px; }
+.fn-sub { font-size: 12px; color: var(--text3); }
+.fn-card { background: var(--bg-card); border: 1px solid rgba(245,158,11,0.35); border-radius: 12px; padding: 4px 0; }
+ol.fns { list-style: none; counter-reset: fn; }
+ol.fns li {
+  counter-increment: fn; position: relative; padding: 11px 16px 11px 46px;
+  font-size: 12.5px; line-height: 1.6; color: var(--text2);
+  border-bottom: 1px solid rgba(30,41,59,0.6);
+}
+ol.fns li:last-child { border-bottom: none; }
+ol.fns li::before {
+  content: counter(fn); position: absolute; left: 14px; top: 11px;
+  width: 20px; height: 20px; border-radius: 5px; background: var(--amber-soft);
+  color: var(--amber); font-size: 10px; font-weight: 700; display: flex;
+  align-items: center; justify-content: center; font-family: var(--mono);
+}
+ol.fns li b { color: #fde68a; font-weight: 600; }
+
+.empty { padding: 44px 20px; text-align: center; color: var(--text3); font-size: 13.5px; line-height: 1.6; }
+.empty .big { font-size: 15px; color: var(--text2); font-weight: 600; margin-bottom: 6px; }
+
+@media (max-width: 767px) {
+  .main-content { padding: 14px; }
+  .page-title { font-size: 18px; }
+  .content-wrap { max-width: 100%; }
+  table.pl td { padding: 7px 10px; }
+  .pct { width: 62px; }
+  tr.item td:first-child { padding-left: 18px; }
+  tr.item td.cat { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="main-content">
+  <div class="content-wrap">
+
+    <div class="page-header">
+      <div class="page-title">Profit &amp; Loss</div>
+      <div class="page-sub">Management basis — cost recognised at invoice date, revenue from the daily sales journal.</div>
+    </div>
+
+    <div class="controls">
+      <div class="loc-pill" data-loc="dennis">Dennis Port</div>
+      <div class="loc-pill" data-loc="chatham">Chatham</div>
+      <div class="spacer"></div>
+      <input type="month" id="month">
+    </div>
+
+    <div id="out"><div class="empty">Loading…</div></div>
+
+  </div>
+</div>
+
+<script>
+var LOC = 'dennis';
+
+function money(v){
+  if (v === null || v === undefined) return '—';
+  var s = Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2});
+  return (v < 0 ? '(' + s + ')' : s);
+}
+function pct(v){ return (v === null || v === undefined) ? '' : v.toFixed(2) + '%'; }
+function esc(s){
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+// Lead-in caps in a footnote are the subject — bold them so the list scans.
+function fnHtml(s){
+  var e = esc(s);
+  return e.replace(/^([A-Z][A-Z0-9 &%\/'’.,\-]{3,}?)(\s*[—:-]|\s+(?:is|are|was|were)\b)/,
+                   function(_, head, tail){ return '<b>' + head + '</b>' + tail; });
+}
+function row(cls, label, amount, percent, extra){
+  return '<tr class="' + cls + '">' +
+    '<td>' + label + '</td>' +
+    '<td class="cat">' + (extra || '') + '</td>' +
+    '<td class="num' + (amount < 0 ? ' neg' : '') + '">' + money(amount) + '</td>' +
+    '<td class="pct">' + (percent || '') + '</td></tr>';
+}
+
+function monthRange(v){
+  var y = +v.slice(0,4), m = +v.slice(5,7);
+  var last = new Date(y, m, 0).getDate();
+  return [v + '-01', v + '-' + String(last).padStart(2,'0')];
+}
+
+function render(d){
+  var g = d.guardrails, out = [];
+
+  // ── No sales journal at all: say so. Zeros here would look measured.
+  if (!d.has_sales_journal){
+    document.getElementById('out').innerHTML =
+      '<div class="card"><div class="empty">' +
+      '<div class="big">No sales journal entries for this period.</div>' +
+      esc(d.location_label) + ' has no daily sales entries between ' +
+      esc(d.period.start) + ' and ' + esc(d.period.end) + '.<br>' +
+      'Nothing is being reported as zero — there is simply no data to report yet.' +
+      '</div></div>';
+    return;
+  }
+
+  var cov = g.expense_coverage, jc = g.journal_control, plug = g.plug;
+
+  // ── Banners
+  if (cov.warning)
+    out.push('<div class="banner banner-amber"><span class="banner-icon">!</span><span>' +
+             esc(cov.warning) + '</span></div>');
+  if (plug.banner)
+    out.push('<div class="banner banner-amber"><span class="banner-icon">!</span><span>' +
+             esc(plug.banner) + '</span></div>');
+  if (!g.clearing_excluded)
+    out.push('<div class="banner banner-amber"><span class="banner-icon">!</span><span>' +
+             'Clearing accounts are reaching the revenue section: ' +
+             esc((g.clearing_violations || []).join('; ')) +
+             '. Revenue below is not trustworthy.</span></div>');
+
+  // ── Guardrail strip
+  out.push('<div class="rails">' +
+    '<div class="rail"><span class="dot ' + (jc.balanced ? 'dot-ok' : 'dot-warn') + '"></span>' +
+      '<b>' + jc.entries + '</b> sales JEs' + (jc.balanced ? ', balanced' : ', OUT OF BALANCE') + '</div>' +
+    '<div class="rail"><span class="dot ' + (g.clearing_excluded ? 'dot-ok' : 'dot-warn') + '"></span>' +
+      'clearing accounts excluded</div>' +
+    '<div class="rail"><span class="dot ' + (plug.count ? 'dot-warn' : 'dot-ok') + '"></span>' +
+      '<b>' + plug.count + '</b> plug day' + (plug.count === 1 ? '' : 's') + ' over $' + plug.threshold.toFixed(0) + '</div>' +
+    '<div class="rail"><span class="dot ' + (cov.expense_side_complete ? 'dot-ok' : 'dot-warn') + '"></span>' +
+      '<b>' + cov.bank_rows + '</b> bank rows</div>' +
+  '</div>');
+
+  // ── Statement
+  var t = ['<div class="card"><table class="pl">'];
+
+  t.push('<tr class="sec"><td colspan="4">Revenue</td></tr>');
+  d.revenue.lines.forEach(function(l){ t.push(row('item', esc(l.name), l.amount, '')); });
+  t.push(row('total', 'Net revenue', d.revenue.net_revenue, '100.00%'));
+
+  t.push('<tr class="sec"><td colspan="4">Cost of goods sold <span style="text-transform:none;letter-spacing:0;font-weight:400">— at invoice date</span></td></tr>');
+  d.cogs.lines.forEach(function(l){
+    t.push(row('item', esc(l.name) +
+      (l.confidence === 'approximate' ? '<span class="approx">approx</span>' : ''),
+      l.amount, '', esc(l.category)));
+  });
+  t.push(row('sub', 'Food &amp; beverage COGS', d.cogs.fnb_subtotal, pct(d.cogs.food_cost_pct)));
+  if (d.cogs.non_fnb_subtotal)
+    t.push(row('item', 'Takeout supplies <span style="color:var(--text3)">(in COGS, out of food cost)</span>',
+               d.cogs.non_fnb_subtotal, ''));
+  t.push(row('total', 'Total COGS', d.cogs.total, pct(d.cogs.total_cogs_pct)));
+
+  t.push('<tr class="sec"><td colspan="4">Labor</td></tr>');
+  if (!d.labor.available){
+    // Unknown, not zero. A 0.00 here reads as a measured figure, and prime
+    // cost built on it is COGS wearing a prime-cost label.
+    t.push('<tr class="total"><td colspan="4"><span class="withheld">' +
+           'Labor not available — no labor rows imported for this period. ' +
+           'Prime cost cannot be computed.</span></td></tr>');
+  } else {
+    Object.keys(d.labor.by_account).sort(function(a,b){
+      return d.labor.by_account[b] - d.labor.by_account[a];
+    }).forEach(function(k){ t.push(row('item', esc(k), d.labor.by_account[k], '')); });
+    if (d.labor.tip_disbursements)
+      t.push(row('item', 'Less tip disbursements <span style="color:var(--text3)">(liability, not labor)</span>',
+                 -d.labor.tip_disbursements, ''));
+    t.push(row('total', 'Labor cost', d.labor.labor_cost, pct(d.labor.labor_pct)));
+    t.push(row('total', 'Prime cost', d.prime_cost, pct(d.prime_cost_pct)));
+  }
+
+  t.push('<tr class="sec"><td colspan="4">Operating expenses</td></tr>');
+  d.operating_expenses.invoiced.forEach(function(l){
+    t.push(row('item', esc(l.name), l.amount, '', esc(l.category || 'invoiced')));
+  });
+  d.operating_expenses.banked.forEach(function(l){
+    t.push(row('item', esc(l.name), l.amount, '', 'banked'));
+  });
+  t.push(row('total', 'Total operating expenses', d.operating_expenses.total, ''));
+
+  // ── Bottom line, or the reason there isn't one.
+  if (d.net_income === null || d.net_income === undefined){
+    t.push('<tr class="bottom"><td colspan="4"><div class="withheld">' +
+           'Net income withheld — ' + esc(d.net_income_withheld_reason || 'the expense side is incomplete.') +
+           '</div></td></tr>');
+  } else {
+    var nr = d.revenue.net_revenue;
+    t.push('<tr class="bottom"><td>Net income</td><td class="cat"></td>' +
+           '<td class="num ' + (d.net_income < 0 ? 'neg' : 'pos') + '">' + money(d.net_income) + '</td>' +
+           '<td class="pct">' + (nr ? pct(d.net_income / nr * 100) : '') + '</td></tr>');
+  }
+  t.push('</table></div>');
+  out.push(t.join(''));
+
+  // ── Footnotes — part of the report, not fine print.
+  if (d.footnotes && d.footnotes.length){
+    out.push('<div class="fn-head"><span class="fn-title">Read with these</span>' +
+             '<span class="fn-sub">known defects and limits affecting the numbers above</span></div>' +
+             '<div class="fn-card"><ol class="fns">' +
+             d.footnotes.map(function(f){ return '<li>' + fnHtml(f) + '</li>'; }).join('') +
+             '</ol></div>');
+  }
+
+  document.getElementById('out').innerHTML = out.join('');
+}
+
+function load(){
+  var mv = document.getElementById('month').value;
+  if (!mv) return;
+  var r = monthRange(mv);
+  document.getElementById('out').innerHTML = '<div class="empty">Loading…</div>';
+  fetch('/api/reports/profit-loss?location=' + encodeURIComponent(LOC) +
+        '&start=' + r[0] + '&end=' + r[1])
+    .then(function(res){
+      return res.json().then(function(j){
+        if (!res.ok) throw new Error(j.error || ('HTTP ' + res.status));
+        return j;
+      });
+    })
+    .then(render)
+    .catch(function(e){
+      document.getElementById('out').innerHTML =
+        '<div class="banner banner-amber"><span class="banner-icon">!</span><span>' +
+        esc(e.message) + '</span></div>';
+    });
+}
+
+document.querySelectorAll('.loc-pill').forEach(function(p){
+  p.addEventListener('click', function(){
+    LOC = p.dataset.loc;
+    document.querySelectorAll('.loc-pill').forEach(function(x){ x.classList.remove('active'); });
+    p.classList.add('active');
+    try { localStorage.setItem('pl_loc', LOC); } catch(e){}
+    load();
+  });
+});
+document.getElementById('month').addEventListener('change', function(){
+  try { localStorage.setItem('pl_month', this.value); } catch(e){}
+  load();
+});
+
+(function init(){
+  var savedLoc = null, savedMonth = null;
+  try { savedLoc = localStorage.getItem('pl_loc'); savedMonth = localStorage.getItem('pl_month'); } catch(e){}
+  var q = new URLSearchParams(location.search);
+  LOC = q.get('location') || savedLoc || 'dennis';
+  if (LOC !== 'chatham' && LOC !== 'dennis') LOC = 'dennis';
+  document.querySelector('.loc-pill[data-loc="' + LOC + '"]').classList.add('active');
+
+  var now = new Date();
+  // Default to last complete month — the current one is always partial.
+  var d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  document.getElementById('month').value =
+    q.get('month') || savedMonth || (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0'));
+  load();
+})();
+</script>
+
+<script src="/static/sidebar.js"></script>
+</body>
+</html>
