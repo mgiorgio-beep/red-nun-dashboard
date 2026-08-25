@@ -82,12 +82,28 @@ def resolve_import_gl(conn, tx: dict, signed: float,
     """
     from routes.register_routes import (
         _find_gl_account_for_description, classify_transfer, classify_venmo,
-        resolve_gl_for_location,
+        classify_tip_settlement, resolve_gl_for_location,
     )
     desc = (tx.get("description") or "") + " " + (tx.get("memo") or "")
     gl_id = None
 
     name, reason = classify_transfer(desc, signed, acct_last4 or "")
+
+    # Tip settlement channels (7shifts tip service, Kickfin). Runs before the
+    # rules because a bare "7SHIFTS" rule cannot tell a tip reload from a
+    # payroll draft from the SaaS bill — that is what put tip reloads on
+    # Payroll Expenses. Returns a reason with no name when a row needs a human,
+    # notably the first Kickfin row, which is the float retainer.
+    if not name and not reason:
+        name, tip_reason = classify_tip_settlement(
+            conn, desc, signed, acct_location, tx.get("date"))
+        if name:
+            logger.info("Tip channel classified: %s — %s", desc.strip()[:60], tip_reason)
+        elif tip_reason:
+            reason = tip_reason
+            logger.warning("Tip channel left for review: %s — %s",
+                           desc.strip()[:70], tip_reason)
+
     if not name and not reason:
         name, venmo_reason = classify_venmo(desc, signed)
         if name:

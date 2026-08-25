@@ -53,19 +53,24 @@ LABOR_ACCOUNT_NAMES = frozenset({
     "Contract Labor", "Tip Wages", "Cash Tip Expense",
 })
 
-# Payees whose disbursements are TIPS being handed to staff, not wages. These
-# settle a liability and should never have been coded to an expense account.
+# Tip-payout channels. These settle the Tip Bank liability and must never sit
+# on a labor account.
 #
-# VENMO WAS HERE AND WAS WRONG. Mike pays bands and the trivia host through
-# Venmo, exclusively — it is never tips. Including it swept $6,050 of March
-# entertainment spend into "tip disbursements", which then netted straight out
-# of labor. A channel is not a purpose. See classify_venmo() in
-# register_routes, which codes that channel properly at import.
-_TIP_PAYOUT_HINTS = ("7SHIFTS TI",)
+# THIS IS NO LONGER AN ADJUSTMENT. The P&L used to detect these rows and
+# SUBTRACT them from labor, because they were miscoded to Payroll Expenses and
+# Tip Wages. That was a report papering over a coding fault. classify_tip_
+# settlement() in register_routes now codes them to Tip Bank at import, and the
+# historical rows were recoded, so labor is simply the labor accounts.
+#
+# The hints stay as an AUDIT: a tip-channel row sitting on a labor account is
+# now a FAILURE to be fixed, not a number to be quietly adjusted around.
+#
+# VENMO WAS HERE AND WAS WRONG — Mike pays bands and the trivia host through
+# Venmo, exclusively. Including it swept $6,050 of March entertainment into
+# "tip disbursements" and out of labor. A channel is not a purpose.
+_TIP_PAYOUT_HINTS = ("7SHIFTS TI", "KICKFIN")
 
-# Human-readable names for the hints above, used when the footnote lists which
-# channels actually contributed in the period.
-_TIP_CHANNEL_LABELS = {"7SHIFTS TI": "7shifts tip runs"}
+_TIP_CHANNEL_LABELS = {"7SHIFTS TI": "7shifts tip runs", "KICKFIN": "Kickfin"}
 
 # Account types that belong on a P&L at all.
 REVENUE_TYPES = frozenset({"Income", "Other Income"})
@@ -395,9 +400,9 @@ def labor(conn, location: str, start: str, end: str) -> dict:
     ).fetchall()
 
     by_account, total, tips_out = {}, 0.0, 0.0
-    # Which channels actually contributed, so the footnote names what is in
-    # THIS period's data rather than a hardcoded list that goes stale — the
-    # footnote claimed "Venmo" for weeks after Venmo stopped qualifying.
+    # Tip-channel rows found sitting on a LABOR account. This should now be
+    # empty: they are coded to Tip Bank at import. Anything here is a coding
+    # fault to fix, and it is reported rather than silently netted out.
     tip_channels: dict[str, float] = {}
     for r in rows:
         amt = float(r["amount"] or 0)
@@ -446,8 +451,11 @@ def labor(conn, location: str, start: str, end: str) -> dict:
         "tip_drill": {"source": "labor_tips", "key": "*"},
         "total": _r2(total),
         # Labor net of the tip disbursements that do not belong in it.
-        "wages_excl_tip_payouts": _r2(total - tips_out),
-        "tip_disbursements": _r2(tips_out),
+        # Labor is the labor accounts. No tip subtraction — tip payouts are
+        # coded to Tip Bank now, so there is nothing in here to net out. These
+        # two report a CODING FAULT when nonzero, and the footnote says so.
+        "wages_excl_tip_payouts": _r2(total),
+        "tip_channel_rows_on_labor": _r2(tips_out),
         "tip_channels": tip_channels,
         "comparison": {
             "toast_hourly_wages": _r2(toast["wages"]),
@@ -498,24 +506,21 @@ def footnotes(conn, location: str, start: str, end: str, parts: dict) -> list[st
 
     lab = parts["labor"]
     cmp_ = lab["comparison"]
-    if lab["tip_disbursements"]:
-        tips_in = _r2(tips or 0)
-        # Name the channels present in THIS period's rows. The previous
-        # hardcoded list kept claiming Venmo after Venmo stopped qualifying.
+    # This footnote is now an EXCEPTION report, not a standing caveat. Tip
+    # payouts code to Tip Bank at import, so labor should contain none of them.
+    if lab["tip_channel_rows_on_labor"]:
         chans = ", ".join(
             f"{name} ${amt:,.2f}" for name, amt
             in sorted(lab["tip_channels"].items(), key=lambda kv: -kv[1])
         ) or "unattributed"
         notes.append(
-            f"TIP PAYOUTS ARE CODED AS AN EXPENSE — ${lab['tip_disbursements']:,.2f} "
-            f"in this period ({chans}). Tips are collected into Tip Bank, a balance-sheet "
-            f"account, so paying them out should DEBIT that liability, not hit an "
-            f"expense account. Booking both sides this way overstates labor and "
-            f"understates net income by that amount. Tips collected in the same "
-            f"period were ${tips_in:,.2f}, so the two roughly offset. Labor above "
-            f"is stated NET of these payouts; the raw total on labor accounts is "
-            f"${lab['total']:,.2f}. This is a CODING fix in the register, not a "
-            f"reporting one, so the figures are reported rather than reclassified."
+            f"MISCODED TIP PAYOUTS IN LABOR — "
+            f"${lab['tip_channel_rows_on_labor']:,.2f} of tip-channel rows "
+            f"({chans}) are sitting on labor accounts. They settle the Tip Bank "
+            f"liability and are not labor, so labor above is OVERSTATED by that "
+            f"amount. These are coded to Tip Bank automatically on import, so "
+            f"any row here predates that or was coded by hand — fix it in the "
+            f"register rather than adjusting the report."
         )
     notes.append(
         f"LABOR SOURCE is the bank rows on labor accounts, the only complete "

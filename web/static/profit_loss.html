@@ -326,9 +326,12 @@ function render(d){
     (d.labor.accounts || []).forEach(function(a){
       t.push(row('item', esc(a.name), a.amount, '', '', a.drill));
     });
-    if (d.labor.tip_disbursements)
-      t.push(row('item', 'Less tip disbursements <span style="color:var(--text3)">(liability, not labor)</span>',
-                 -d.labor.tip_disbursements, '', '', d.labor.tip_drill));
+    // Should never appear: tip payouts code to Tip Bank at import. When it
+    // does, it is a miscoding to fix — shown, not subtracted.
+    if (d.labor.tip_channel_rows_on_labor)
+      t.push(row('item',
+                 '<span style="color:var(--amber)">⚠ miscoded tip payouts included above</span>',
+                 d.labor.tip_channel_rows_on_labor, '', 'fix in register', d.labor.tip_drill));
     t.push(row('total', 'Labor cost', d.labor.labor_cost, pct(d.labor.labor_pct)));
     t.push(row('total', 'Prime cost', d.prime_cost, pct(d.prime_cost_pct)));
   }

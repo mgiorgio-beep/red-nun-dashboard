@@ -985,7 +985,8 @@ class TestPostImportAudit:
         a = audit_register_invariants(conn)
         names = {c["name"] for c in a["checks"]}
         assert names == {"row_codings", "rules", "category_mappings",
-                         "journal_mappings", "settlements"}
+                         "journal_mappings", "settlements",
+                         "tip_payouts_on_labor"}
         for c in a["checks"]:
             assert set(c) >= {"name", "ok", "count", "summary", "detail"}
 
@@ -1075,6 +1076,291 @@ class TestPostImportAudit:
             "post-import audit failed: "
             + "; ".join(f"{c['name']}={c['count']}"
                         for c in j["audit"]["checks"] if not c["ok"]))
+
+
+class TestTipSettlementChannels:
+    """Tip payouts settle the Tip Bank liability. They are never labor.
+
+    Two channels have carried them: 7shifts' tip service until June 2026, then
+    Kickfin. The P&L used to DETECT these rows and subtract them from labor,
+    which was a report working around a coding fault. They are coded correctly
+    at import now, and a tip-channel row on a labor account is an audit
+    failure.
+    """
+
+    def _c(self, conn):
+        from routes.register_routes import classify_tip_settlement
+        return lambda d, a, loc="dennis", dt=None: classify_tip_settlement(
+            conn, d, a, loc, dt)
+
+    def test_7shifts_tip_reload_is_a_tip_bank_settlement(self, conn):
+        name, reason = self._c(conn)("7shifts ti 7shifts", -450.00)
+        assert name == "Tip Bank" and "reload" in reason
+
+    def test_the_june_refund_inflow_also_goes_to_tip_bank(self, conn):
+        """BOTH DIRECTIONS. Reloads debited Tip Bank going out; the refund of
+        the unused float credits it coming back. 7shifts ended the service in
+        June 2026, so this row is expected in the May-July statements."""
+        name, reason = self._c(conn)("7shifts ti 7shifts", +1250.00)
+        assert name == "Tip Bank", "the 7shifts refund inflow must code to Tip Bank"
+        assert "refund" in reason
+
+    def test_payroll_drafts_are_not_claimed(self, conn):
+        """PCR/COL/TAX 7shifts are payroll. The classifier must not overreach —
+        sharing a vendor name is not sharing a meaning."""
+        for payee in ("PCR 7shifts CCD | Red Nun Public House",
+                      "COL 7shifts CCD", "TAX 7shifts CCD"):
+            assert self._c(conn)(payee, -13000.00) == (None, None), \
+                f"classifier wrongly claimed {payee!r}"
+
+    def test_the_subscription_is_dues_and_subscriptions(self, conn):
+        """Identified by 7SHIFTS.COM in the MEMO — its payee is an opaque
+        'DBT CRD 1216 03/31/26 064566'."""
+        desc = "DBT CRD 1216 03/31/26 064566 7SHIFTS | 7SHIFTS.COM DE C# 9032"
+        name, reason = self._c(conn)(desc, -95.63)
+        assert name == "Dues & Subscriptions" and "subscription" in reason
+
+    def test_non_tip_rows_are_ignored(self, conn):
+        assert self._c(conn)("DBT CRD SYSCO", -400.00) == (None, None)
+        assert self._c(conn)("PAYMENT VENMO", -400.00) == (None, None)
+
+    def test_first_kickfin_row_is_flagged_not_coded(self, conn):
+        """The retainer is by definition the first Kickfin row, so first-ever
+        is the deterministic catch — no hard-coded $5,000."""
+        loc = "chatham" if not conn.execute(
+            "SELECT 1 FROM manual_bank_entries m JOIN bank_accounts ba "
+            "ON ba.id = m.bank_account_id WHERE ba.location='chatham' AND "
+            "UPPER(COALESCE(m.payee,'')) LIKE '%KICKFIN%' LIMIT 1").fetchone() else None
+        if not loc:
+            pytest.skip("Chatham already has Kickfin rows")
+        name, reason = self._c(conn)("KICKFIN DRAFT", -5000.00, loc)
+        assert name is None, "the first Kickfin row must not be auto-coded"
+        assert "float" in reason.lower() and "Kickfin Float Deposit" in reason
+
+    def test_a_flagged_float_row_suggests_the_float_account(self, conn):
+        from routes.register_routes import suggested_account_for_review
+        _, reason = self._c(conn)("KICKFIN DRAFT", -5000.00, "chatham")
+        if not reason:
+            pytest.skip("Chatham Kickfin history already established")
+        s = suggested_account_for_review(conn, reason, "chatham")
+        assert s and s["name"] == "Kickfin Float Deposit"
+
+    def test_float_account_exists_per_entity_as_an_asset(self, conn):
+        """The retainer is Mike's money held at Kickfin — an asset, not an
+        expense and not a tip settlement."""
+        for loc in ("chatham", "dennis"):
+            r = conn.execute(
+                "SELECT account_type, active FROM gl_accounts "
+                "WHERE name = 'Kickfin Float Deposit' AND location = ?", (loc,)
+            ).fetchone()
+            assert r, f"{loc} has no Kickfin Float Deposit account"
+            assert r["account_type"] == "Other Current Asset"
+            assert r["active"] == 1
+
+    def test_historical_tip_reloads_are_all_on_tip_bank(self, conn):
+        """The recode, asserted. No 7shifts-ti row on a labor account."""
+        from reports.profit_loss import LABOR_ACCOUNT_NAMES
+        ph = ",".join("?" * len(LABOR_ACCOUNT_NAMES))
+        bad = conn.execute(f"""
+            SELECT m.id, ba.location, g.name FROM manual_bank_entries m
+            JOIN bank_accounts ba ON ba.id = m.bank_account_id
+            JOIN gl_accounts g ON g.id = m.gl_account_id
+            WHERE UPPER(COALESCE(m.payee,'')) LIKE '%7SHIFTS TI%'
+              AND g.name IN ({ph})
+        """, tuple(sorted(LABOR_ACCOUNT_NAMES))).fetchall()
+        assert not bad, ("7shifts tip reloads still on labor accounts: "
+                         + "; ".join(f"#{r['id']} {r['location']} {r['name']}" for r in bad))
+
+    def test_audit_fails_on_a_tip_row_moved_back_to_labor(self, conn):
+        """The belt-and-suspenders check must actually fire."""
+        from routes.register_routes import audit_register_invariants
+        row = conn.execute("""
+            SELECT m.id, m.gl_account_id, ba.location FROM manual_bank_entries m
+            JOIN bank_accounts ba ON ba.id = m.bank_account_id
+            WHERE UPPER(COALESCE(m.payee,'')) LIKE '%7SHIFTS TI%' LIMIT 1
+        """).fetchone()
+        if not row:
+            pytest.skip("no 7shifts tip rows present")
+        payroll = conn.execute(
+            "SELECT id FROM gl_accounts WHERE name = 'Payroll Expenses' "
+            "AND location = ? AND active = 1", (row["location"],)).fetchone()["id"]
+        try:
+            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? WHERE id = ?",
+                         (payroll, row["id"]))
+            a = audit_register_invariants(conn)
+            assert not a["ok"]
+            failed = {c["name"] for c in a["checks"] if not c["ok"]}
+            assert "tip_payouts_on_labor" in failed
+        finally:
+            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? WHERE id = ?",
+                         (row["gl_account_id"], row["id"]))
+            conn.commit()
+
+
+class TestJuneSwitchAcceptance:
+    """The concrete acceptance check for the May/June statements.
+
+    7shifts ended its tip service in June 2026 and Red Nun moved to Kickfin.
+    Three one-time things happen around the switch and each must land right the
+    first time, because these rows arrive once and a wrong coding on a
+    one-time event is the hardest kind to notice later.
+    """
+
+    LOC, LAST4 = "dennis", "2757"
+
+    def _code(self, conn, desc, amount, date):
+        from routes.bank_reconcile_routes import resolve_import_gl
+        return resolve_import_gl(conn, {"description": desc, "memo": "", "date": date},
+                                 amount, self.LOC, self.LAST4)
+
+    def _name(self, conn, gl_id):
+        if not gl_id:
+            return None
+        return conn.execute("SELECT name FROM gl_accounts WHERE id = ?",
+                            (gl_id,)).fetchone()["name"]
+
+    def test_the_7shifts_refund_inflow_auto_codes_to_tip_bank(self, conn):
+        gl = self._code(conn, "7shifts ti 7shifts CCD", +1418.55, "2026-06-10")
+        assert self._name(conn, gl) == "Tip Bank"
+
+    def test_the_kickfin_sequence(self, conn):
+        """Retainer flagged, then routine drafts settle Tip Bank, then an
+        oversized later draft flagged again as a float movement.
+
+        Order matters and is real: the import loop inserts each row before
+        classifying the next, so by the time the second Kickfin row is seen the
+        first is already in the register.
+        """
+        from routes.register_routes import suggested_account_for_review, classify_tip_settlement
+        ba = conn.execute("SELECT id FROM bank_accounts WHERE location = ?",
+                          (self.LOC,)).fetchone()["id"]
+        flt = conn.execute(
+            "SELECT id FROM gl_accounts WHERE name = 'Kickfin Float Deposit' "
+            "AND location = ?", (self.LOC,)).fetchone()["id"]
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM manual_bank_entries m JOIN bank_accounts ba "
+            "ON ba.id = m.bank_account_id WHERE ba.location = ? AND "
+            "UPPER(COALESCE(m.payee,'')) LIKE '%KICKFIN%'", (self.LOC,)).fetchone()[0]
+        if existing:
+            pytest.skip("real Kickfin rows present — the switch has happened")
+        try:
+            # 1. The retainer: first Kickfin row ever, must be flagged.
+            gl = self._code(conn, "KICKFIN CCD", -5000.00, "2026-06-02")
+            assert gl is None, "the retainer must not be auto-coded"
+            _, reason = classify_tip_settlement(
+                conn, "KICKFIN CCD", -5000.00, self.LOC, "2026-06-02")
+            s = suggested_account_for_review(conn, reason, self.LOC)
+            assert s and s["name"] == "Kickfin Float Deposit"
+
+            # A human codes it to the float, as the suggestion advises.
+            conn.execute(
+                """INSERT INTO manual_bank_entries
+                   (bank_account_id, entry_date, entry_type, payee, memo, amount,
+                    gl_account_id, gl_source, gl_status)
+                   VALUES (?, '2026-06-02', 'other', 'KICKFIN', 'pytest-sim',
+                           -5000.00, ?, 'human', 'confirmed')""", (ba, flt))
+
+            # 2. A routine draft now settles Tip Bank without being asked.
+            gl = self._code(conn, "KICKFIN CCD", -640.25, "2026-06-05")
+            assert self._name(conn, gl) == "Tip Bank", \
+                "routine Kickfin drafts must settle Tip Bank from day one"
+
+            # 3. A later oversized draft is a float movement, flagged again.
+            gl = self._code(conn, "KICKFIN CCD", -4200.00, "2026-06-20")
+            assert gl is None, "an oversized Kickfin draft must be flagged"
+        finally:
+            conn.execute("DELETE FROM manual_bank_entries WHERE memo = 'pytest-sim'")
+            conn.commit()
+
+    def test_the_subscription_survives_the_switch(self, conn):
+        """The 7shifts SaaS bill continues after the tip service ends — it is a
+        different thing that happens to share the vendor name."""
+        gl = self._code(
+            conn, "DBT CRD 1221 06/30/26 7SHIFTS | 7SHIFTS.COM DE C# 9032",
+            -134.78, "2026-06-30")
+        assert self._name(conn, gl) == "Dues & Subscriptions"
+
+    def test_payroll_drafts_are_unaffected(self, conn):
+        gl = self._code(conn, "PCR 7shifts CCD | Red Nun Public House",
+                        -13500.00, "2026-06-12")
+        assert self._name(conn, gl) in ("Payroll Expenses", "Wages"), \
+            "payroll drafts must keep going to payroll accounts"
+
+
+class TestTipBankRollsForward:
+    """Tip Bank is a real balance now, not a bucket things fall into.
+
+    Tips collected CREDIT it through the daily sales JEs; 7shifts and Kickfin
+    drafts DEBIT it. Over a period the two should very nearly cancel — Mike
+    holds tips for days, not months.
+
+    TIMING: Kickfin pays staff instantly out of the float while card tips
+    settle 1-3 days later, so the balance legitimately dips slightly negative
+    intra-week. That is not a fault. A persistent or growing negative is.
+    """
+
+    def _tips_in(self, conn, loc, start, end):
+        return conn.execute("""
+            SELECT ROUND(SUM(COALESCE(li.credit,0) - COALESCE(li.debit,0)), 2)
+            FROM qb_journal_line_items li
+            JOIN qb_journal_entries e ON e.id = li.entry_id
+            WHERE e.location = ? AND e.entry_date BETWEEN ? AND ?
+              AND li.journal_name = 'Summary: Tips'
+        """, (loc, start, end)).fetchone()[0] or 0
+
+    def _paid_out(self, conn, loc, start, end):
+        return conn.execute("""
+            SELECT ROUND(SUM(-m.amount), 2) FROM manual_bank_entries m
+            JOIN bank_accounts ba ON ba.id = m.bank_account_id
+            JOIN gl_accounts g ON g.id = m.gl_account_id
+            WHERE ba.location = ? AND m.entry_date BETWEEN ? AND ?
+              AND g.name = 'Tip Bank'
+        """, (loc, start, end)).fetchone()[0] or 0
+
+    def test_tip_bank_receives_the_payouts(self, conn):
+        """After the recode, tip payouts land on Tip Bank rather than labor."""
+        out = self._paid_out(conn, "dennis", "2026-01-01", "2026-04-30")
+        assert out > 0, "no tip payouts reached Tip Bank"
+
+    def test_collected_and_paid_roughly_cancel(self, conn):
+        """The roll-forward. Not to the penny — statement coverage is partial
+        and payouts lag collection — but the same order of magnitude, which is
+        what distinguishes a real clearing account from a dumping ground."""
+        loc, start, end = "dennis", "2026-02-01", "2026-04-30"
+        tips_in = self._tips_in(conn, loc, start, end)
+        paid = self._paid_out(conn, loc, start, end)
+        if not tips_in or not paid:
+            pytest.skip("insufficient overlap of JE and statement coverage")
+        ratio = paid / tips_in
+        assert 0.5 <= ratio <= 1.5, (
+            f"{loc}: tips collected ${tips_in:,.2f} vs paid out ${paid:,.2f} "
+            f"(ratio {ratio:.2f}) — Tip Bank is not rolling forward")
+
+    def test_tip_bank_is_a_balance_sheet_account_in_both_charts(self, conn):
+        """Whatever its side, it must not be a P&L account — a tip is never
+        revenue and never expense."""
+        for loc in ("chatham", "dennis"):
+            t = conn.execute(
+                "SELECT account_type FROM gl_accounts WHERE name = 'Tip Bank' "
+                "AND location = ? AND active = 1", (loc,)).fetchone()
+            assert t, f"{loc} has no active Tip Bank"
+            assert t["account_type"] not in (
+                "Income", "Other Income", "Expense", "Other Expense",
+                "Cost of Goods Sold"), f"{loc} Tip Bank is {t['account_type']}"
+
+    def test_kickfin_float_moves_only_when_the_float_changes(self, conn):
+        """The float is a retainer, not a running account: few movements, and
+        each one deliberate. Before the June switch it should be empty."""
+        for loc in ("chatham", "dennis"):
+            gl = conn.execute(
+                "SELECT id FROM gl_accounts WHERE name = 'Kickfin Float Deposit' "
+                "AND location = ?", (loc,)).fetchone()["id"]
+            rows = conn.execute(
+                "SELECT COUNT(*) FROM manual_bank_entries WHERE gl_account_id = ?",
+                (gl,)).fetchone()[0]
+            assert rows <= 4, (
+                f"{loc}: {rows} rows on Kickfin Float Deposit — a retainer "
+                f"should move rarely; routine drafts belong on Tip Bank")
 
 
 class TestVenmoIsNeverTips:
@@ -1201,7 +1487,6 @@ class TestProfitLossSnapshot:
 
     def test_dennis_march_labor_and_prime(self, dennis):
         lab = dennis["labor"]
-        assert cents(lab["total"] - lab["tip_disbursements"]) == cents(lab["labor_cost"])
         assert cents(dennis["cogs"]["total"] + lab["labor_cost"]) == cents(dennis["prime_cost"])
 
     def test_venmo_is_not_counted_as_a_tip_channel(self, snap):
@@ -1308,9 +1593,18 @@ class TestProfitLossInvariants:
                   if x["name"] in LABOR_ACCOUNT_NAMES]
         assert not leaked, f"labor accounts leaked into opex: {leaked}"
 
-    def test_labor_nets_out_tip_disbursements(self, pl):
+    def test_labor_is_the_labor_accounts_with_nothing_netted(self, pl):
+        """Tip payouts code to Tip Bank at import, so there is nothing left in
+        labor to subtract. The old netting was a report working around a
+        coding fault."""
         lab = pl["labor"]
-        assert cents(lab["total"] - lab["tip_disbursements"]) == cents(lab["labor_cost"])
+        assert cents(lab["total"]) == cents(lab["labor_cost"])
+        assert cents(sum(lab["by_account"].values())) == cents(lab["labor_cost"])
+
+    def test_no_tip_channel_row_sits_on_a_labor_account(self, pl):
+        """Belt and suspenders: the P&L reports it, the audit fails on it."""
+        assert not pl["labor"]["tip_channel_rows_on_labor"], (
+            f"tip-channel rows on labor accounts: {pl['labor']['tip_channels']}")
 
     def test_venmo_is_never_a_tip_channel(self, pl):
         """Standing rule: Mike pays bands and the trivia host by Venmo,
@@ -1407,11 +1701,11 @@ class TestDrillDownSumsToItsLine:
 
     def test_tip_adjustment_drills_to_its_rows(self, conn, pl):
         from reports.profit_loss import drill
-        if not pl["labor"]["tip_disbursements"]:
-            pytest.skip("no tip disbursements in this period")
+        if not pl["labor"]["tip_channel_rows_on_labor"]:
+            pytest.skip("no miscoded tip rows in labor — the expected state")
         d = pl["labor"]["tip_drill"]
         got = drill(conn, self.LOC, self.START, self.END, d["source"], d["key"])
-        assert cents(got["total"]) == cents(pl["labor"]["tip_disbursements"])
+        assert cents(got["total"]) == cents(pl["labor"]["tip_channel_rows_on_labor"])
 
 
 class TestProfitLossEndpoint:
@@ -1447,8 +1741,8 @@ class TestProfitLossEndpoint:
         assert {"lines", "net_revenue", "gross_sales", "contra"} <= set(j["revenue"])
         assert {"lines", "fnb_subtotal", "non_fnb_subtotal", "total",
                 "food_cost_pct", "total_cogs_pct"} <= set(j["cogs"])
-        assert {"by_account", "labor_cost", "labor_pct", "tip_disbursements",
-                "total"} <= set(j["labor"])
+        assert {"by_account", "labor_cost", "labor_pct",
+                "tip_channel_rows_on_labor", "total"} <= set(j["labor"])
         assert {"invoiced", "banked", "total"} <= set(j["operating_expenses"])
         for line in j["cogs"]["lines"]:
             assert {"category", "name", "amount", "confidence"} <= set(line)

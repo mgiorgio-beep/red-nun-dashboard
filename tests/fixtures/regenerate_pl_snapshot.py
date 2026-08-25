@@ -72,7 +72,7 @@ def main():
             add(line["drill"])
         for acct in pl["labor"].get("accounts", []):
             add(acct["drill"])
-        if pl["labor"]["tip_disbursements"]:
+        if pl["labor"].get("tip_channel_rows_on_labor"):
             add(pl["labor"]["tip_drill"])
 
     with open(OUT, "w") as fh:

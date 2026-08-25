@@ -4355,8 +4355,8 @@
     "labor_cost": null,
     "labor_pct": null,
     "source": "bank_rows_on_labor_accounts",
+    "tip_channel_rows_on_labor": 0.0,
     "tip_channels": {},
-    "tip_disbursements": 0.0,
     "tip_drill": {
      "key": "*",
      "source": "labor_tips"
@@ -7603,41 +7603,9 @@
      "status",
      "amount"
     ],
-    "count": 19,
+    "count": 2,
     "key": "Payroll Expenses",
     "rows": [
-     {
-      "amount": 178.5,
-      "date": "2026-03-02",
-      "detail": "DBT CRD 1335 03/02/26 059696",
-      "reference": "7SHIFTS | 7SHIFTS.COM DE C# 9032 [stmt #8]",
-      "row_id": 961,
-      "status": "suggested"
-     },
-     {
-      "amount": 187.27,
-      "date": "2026-03-02",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000353749302 [stmt #8]",
-      "row_id": 967,
-      "status": "suggested"
-     },
-     {
-      "amount": 454.0,
-      "date": "2026-03-02",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000353957956 [stmt #8]",
-      "row_id": 972,
-      "status": "suggested"
-     },
-     {
-      "amount": 483.61,
-      "date": "2026-03-02",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000353903822 [stmt #8]",
-      "row_id": 973,
-      "status": "suggested"
-     },
      {
       "amount": 13518.17,
       "date": "2026-03-04",
@@ -7647,120 +7615,16 @@
       "status": "suggested"
      },
      {
-      "amount": 562.56,
-      "date": "2026-03-09",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000354403688 [stmt #8]",
-      "row_id": 1024,
-      "status": "suggested"
-     },
-     {
-      "amount": 2249.29,
-      "date": "2026-03-10",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000354687822 [stmt #8]",
-      "row_id": 1033,
-      "status": "suggested"
-     },
-     {
-      "amount": 517.14,
-      "date": "2026-03-13",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000354905204 [stmt #8]",
-      "row_id": 1049,
-      "status": "suggested"
-     },
-     {
-      "amount": 268.37,
-      "date": "2026-03-16",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000354990728 [stmt #8]",
-      "row_id": 1061,
-      "status": "suggested"
-     },
-     {
-      "amount": 1731.63,
-      "date": "2026-03-16",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355166328 [stmt #8]",
-      "row_id": 1068,
-      "status": "suggested"
-     },
-     {
-      "amount": 306.47,
-      "date": "2026-03-17",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355246668 [stmt #8]",
-      "row_id": 1076,
-      "status": "suggested"
-     },
-     {
       "amount": 14321.76,
       "date": "2026-03-18",
       "detail": "PCR 7shifts",
       "reference": "CCD | Red Nun Public House I [stmt #8]",
       "row_id": 1082,
       "status": "suggested"
-     },
-     {
-      "amount": 704.32,
-      "date": "2026-03-19",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355400564 [stmt #8]",
-      "row_id": 1088,
-      "status": "suggested"
-     },
-     {
-      "amount": 1058.5,
-      "date": "2026-03-23",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355602422 [stmt #8]",
-      "row_id": 1119,
-      "status": "suggested"
-     },
-     {
-      "amount": 1926.74,
-      "date": "2026-03-23",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355764231 [stmt #8]",
-      "row_id": 1120,
-      "status": "suggested"
-     },
-     {
-      "amount": 773.0,
-      "date": "2026-03-27",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000356251122 [stmt #8]",
-      "row_id": 1148,
-      "status": "suggested"
-     },
-     {
-      "amount": 317.22,
-      "date": "2026-03-30",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000356470137 [stmt #8]",
-      "row_id": 1165,
-      "status": "suggested"
-     },
-     {
-      "amount": 95.63,
-      "date": "2026-03-31",
-      "detail": "DBT CRD 1216 03/31/26 064566",
-      "reference": "7SHIFTS | 7SHIFTS.COM DE C# 9032 [stmt #8]",
-      "row_id": 1171,
-      "status": "suggested"
-     },
-     {
-      "amount": 2245.28,
-      "date": "2026-03-31",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000356724570 [stmt #8]",
-      "row_id": 1176,
-      "status": "suggested"
      }
     ],
     "source": "labor",
-    "total": 41899.46
+    "total": 27839.93
    },
    "labor:Wages": {
     "columns": [
@@ -7872,141 +7736,6 @@
     ],
     "source": "labor",
     "total": 6336.81
-   },
-   "labor_tips:*": {
-    "columns": [
-     "date",
-     "detail",
-     "reference",
-     "account",
-     "amount"
-    ],
-    "count": 15,
-    "key": "*",
-    "rows": [
-     {
-      "account": "Payroll Expenses",
-      "amount": 187.27,
-      "date": "2026-03-02",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000353749302 [stmt #8]",
-      "row_id": 967
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 454.0,
-      "date": "2026-03-02",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000353957956 [stmt #8]",
-      "row_id": 972
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 483.61,
-      "date": "2026-03-02",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000353903822 [stmt #8]",
-      "row_id": 973
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 562.56,
-      "date": "2026-03-09",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000354403688 [stmt #8]",
-      "row_id": 1024
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 2249.29,
-      "date": "2026-03-10",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000354687822 [stmt #8]",
-      "row_id": 1033
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 517.14,
-      "date": "2026-03-13",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000354905204 [stmt #8]",
-      "row_id": 1049
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 268.37,
-      "date": "2026-03-16",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000354990728 [stmt #8]",
-      "row_id": 1061
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 1731.63,
-      "date": "2026-03-16",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355166328 [stmt #8]",
-      "row_id": 1068
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 306.47,
-      "date": "2026-03-17",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355246668 [stmt #8]",
-      "row_id": 1076
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 704.32,
-      "date": "2026-03-19",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355400564 [stmt #8]",
-      "row_id": 1088
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 1058.5,
-      "date": "2026-03-23",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355602422 [stmt #8]",
-      "row_id": 1119
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 1926.74,
-      "date": "2026-03-23",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000355764231 [stmt #8]",
-      "row_id": 1120
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 773.0,
-      "date": "2026-03-27",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000356251122 [stmt #8]",
-      "row_id": 1148
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 317.22,
-      "date": "2026-03-30",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000356470137 [stmt #8]",
-      "row_id": 1165
-     },
-     {
-      "account": "Payroll Expenses",
-      "amount": 2245.28,
-      "date": "2026-03-31",
-      "detail": "7shifts ti 7shifts",
-      "reference": "CCD | GIORGIO MICHAEL | 000000356724570 [stmt #8]",
-      "row_id": 1176
-     }
-    ],
-    "source": "labor_tips",
-    "total": 13785.4
    },
    "opex_banked:Accountant": {
     "columns": [
@@ -8384,9 +8113,17 @@
      "status",
      "amount"
     ],
-    "count": 6,
+    "count": 8,
     "key": "Dues & Subscriptions",
     "rows": [
+     {
+      "amount": 178.5,
+      "date": "2026-03-02",
+      "detail": "DBT CRD 1335 03/02/26 059696",
+      "reference": "7SHIFTS | 7SHIFTS.COM DE C# 9032 [stmt #8]",
+      "row_id": 961,
+      "status": "suggested"
+     },
      {
       "amount": 442.22,
       "date": "2026-03-02",
@@ -8434,10 +8171,18 @@
       "reference": "SPI*DIRECTV SERVICE | 800-531-5000 CA C# 9032 [stmt #8]",
       "row_id": 1160,
       "status": "suggested"
+     },
+     {
+      "amount": 95.63,
+      "date": "2026-03-31",
+      "detail": "DBT CRD 1216 03/31/26 064566",
+      "reference": "7SHIFTS | 7SHIFTS.COM DE C# 9032 [stmt #8]",
+      "row_id": 1171,
+      "status": "suggested"
      }
     ],
     "source": "opex_banked",
-    "total": 3807.19
+    "total": 4081.32
    },
    "opex_banked:Electric": {
     "columns": [
@@ -11274,7 +11019,6 @@
     "TIPS: $15,526.58 passed through in this period (16.1% of net revenue). Booked to Tip Bank, a balance-sheet account, so it is correctly EXCLUDED from revenue here. Summing all JE credits instead would overstate revenue by that amount.",
     "TOAST FEES ARE NOT BOOKED. Processing fees are netted out of the settlement deposit and never reach an expense account, so operating expense is understated and net income is overstated by roughly the monthly Toast fee.",
     "NO INVENTORY ADJUSTMENT. COGS here is PURCHASES, not cost of goods consumed. Without opening and closing counts, a month that stocks up looks expensive and a month that draws down looks cheap. Food cost % is therefore directionally right and precisely wrong.",
-    "TIP PAYOUTS ARE CODED AS AN EXPENSE \u2014 $13,785.40 in this period (7shifts tip runs $13,785.40). Tips are collected into Tip Bank, a balance-sheet account, so paying them out should DEBIT that liability, not hit an expense account. Booking both sides this way overstates labor and understates net income by that amount. Tips collected in the same period were $15,526.58, so the two roughly offset. Labor above is stated NET of these payouts; the raw total on labor accounts is $48,236.27. This is a CODING fix in the register, not a reporting one, so the figures are reported rather than reclassified.",
     "LABOR SOURCE is the bank rows on labor accounts, the only complete view. For comparison: Toast time entries show $23,167.13 over 1,388.5 hours (249 shifts) \u2014 hourly wages only, no employer taxes or salaried staff \u2014 and payroll checks total $7,375.86 across 7 check(s), which is partial coverage for the period.",
     "APPROXIMATE CATEGORY MAPPINGS: $12.16 across LIQUOR_WINE_BEER, LIQUOR_WINE. Totals are right; the split between beverage lines is a judgement call."
    ],
@@ -11284,7 +11028,7 @@
     "expense_coverage": {
      "bank_rows": 221,
      "expense_side_complete": true,
-     "labor_rows": 31,
+     "labor_rows": 14,
      "warning": null
     },
     "journal_control": {
@@ -11311,7 +11055,7 @@
    "labor": {
     "accounts": [
      {
-      "amount": 41899.46,
+      "amount": 27839.93,
       "drill": {
        "key": "Payroll Expenses",
        "source": "labor"
@@ -11329,7 +11073,7 @@
     ],
     "available": true,
     "by_account": {
-     "Payroll Expenses": 41899.46,
+     "Payroll Expenses": 27839.93,
      "Wages": 6336.81
     },
     "comparison": {
@@ -11339,19 +11083,17 @@
      "toast_hours": 1388.5,
      "toast_shifts": 249
     },
-    "labor_cost": 34450.87,
-    "labor_pct": 35.63,
+    "labor_cost": 34176.74,
+    "labor_pct": 35.34,
     "source": "bank_rows_on_labor_accounts",
-    "tip_channels": {
-     "7shifts tip runs": 13785.4
-    },
-    "tip_disbursements": 13785.4,
+    "tip_channel_rows_on_labor": 0.0,
+    "tip_channels": {},
     "tip_drill": {
      "key": "*",
      "source": "labor_tips"
     },
-    "total": 48236.27,
-    "wages_excl_tip_payouts": 34450.87
+    "total": 34176.74,
+    "wages_excl_tip_payouts": 34176.74
    },
    "location": "dennis",
    "net_income": -21680.64,
@@ -11391,7 +11133,7 @@
       "name": "Accountant"
      },
      {
-      "amount": 3807.19,
+      "amount": 4081.32,
       "drill": {
        "key": "Dues & Subscriptions",
        "source": "opex_banked"
@@ -11559,7 +11301,7 @@
       "name": "Knife Sharpening"
      }
     ],
-    "banked_total": 48987.03,
+    "banked_total": 49261.16,
     "invoiced": [
      {
       "amount": 3733.05,
@@ -11599,14 +11341,14 @@
      }
     ],
     "invoiced_total": 4474.18,
-    "total": 53461.21
+    "total": 53735.34
    },
    "period": {
     "end": "2026-03-31",
     "start": "2026-03-01"
    },
-   "prime_cost": 64923.15,
-   "prime_cost_pct": 67.14,
+   "prime_cost": 64649.02,
+   "prime_cost_pct": 66.85,
    "revenue": {
     "contra": -7912.28,
     "gross_sales": 104616.0,

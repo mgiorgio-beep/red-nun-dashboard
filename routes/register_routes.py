@@ -768,6 +768,29 @@ def audit_register_invariants(conn=None, location: str | None = None) -> dict:
         add("settlements", "invoice settlements coded as expense (double count)",
             audit_settlement_codings(conn))
 
+        # 6. Tip payouts settle Tip Bank; they are not labor. This used to be
+        # a silent subtraction inside the P&L — a report working around a
+        # coding fault. The coding is fixed at import now, so a row here is a
+        # real defect and says so.
+        from reports.profit_loss import LABOR_ACCOUNT_NAMES  # local: avoids a cycle
+        ph = ",".join("?" * len(LABOR_ACCOUNT_NAMES))
+        hint_clause = " OR ".join(
+            "UPPER(COALESCE(m.payee,'') || ' ' || COALESCE(m.memo,'')) LIKE ?"
+            for _ in TIP_CHANNEL_HINTS)
+        tip_on_labor = [dict(r) for r in conn.execute(
+            f"""SELECT m.id, m.entry_date, m.payee, ba.location, g.name AS gl_name,
+                       ROUND(-m.amount, 2) AS amount, m.gl_status
+                FROM manual_bank_entries m
+                JOIN bank_accounts ba ON ba.id = m.bank_account_id
+                JOIN gl_accounts g ON g.id = m.gl_account_id
+                WHERE g.name IN ({ph}) AND ({hint_clause}){loc_clause}
+                ORDER BY m.entry_date""",
+            (*sorted(LABOR_ACCOUNT_NAMES),
+             *[f"%{h}%" for h in TIP_CHANNEL_HINTS], *loc_params))]
+        add("tip_payouts_on_labor",
+            "tip-channel rows coded to a labor account (they settle Tip Bank)",
+            tip_on_labor)
+
         failures = sum(1 for c in checks if not c["ok"])
         return {"ok": failures == 0, "failures": failures,
                 "location": location, "checks": checks}
@@ -1459,6 +1482,145 @@ def classify_venmo(description: str, amount: float):
     if round(abs(amount), 2) == TRIVIA_RATE:
         return "Trivia", f"Venmo outflow of exactly ${TRIVIA_RATE:.2f} = trivia host"
     return "Bands", "Venmo outflow = band pay (single-purpose channel)"
+
+
+# ─── TIP SETTLEMENT CHANNELS ─────────────────────────────────────────────────
+#
+# Tips are collected into Tip Bank by the daily sales JEs. Paying them out
+# SETTLES that liability — it is never labor expense. Two channels have carried
+# those payouts:
+#
+#   7shifts tip service   until June 2026   rows read "7shifts ti 7shifts"
+#   Kickfin               from June 2026    rows read "KICKFIN"
+#
+# THREE DIFFERENT 7SHIFTS ROW SHAPES share a vendor name and mean different
+# things. Conflating them is how tip reloads ended up on Payroll Expenses:
+#
+#   "7shifts ti …"                  tip reload      -> Tip Bank
+#   "PCR/COL/TAX 7shifts"           payroll run     -> payroll accounts
+#   memo "7SHIFTS.COM …" (~$95-180) the SaaS bill   -> Dues & Subscriptions
+#
+# The subscription is identified by 7SHIFTS.COM in the MEMO, not the payee —
+# its payee is an opaque "DBT CRD 1216 03/31/26 064566".
+#
+# KICKFIN FLOAT. Kickfin holds a retainer — Mike's money sitting at Kickfin,
+# an ASSET, not a tip settlement and not an expense. A routine draft settles
+# Tip Bank; the float deposit does not. We do not hard-code the retainer
+# amount: the FIRST Kickfin row for an entity is always flagged for review
+# (the retainer is by definition the first one), and later rows are flagged if
+# they are markedly larger than a few days' tips, which catches a top-up.
+# Flag-and-suggest beats guessing on a one-time event.
+#
+# KICKFIN TIMING. Kickfin pays staff instantly out of the float while card tips
+# settle 1-3 days later, so Tip Bank legitimately dips slightly negative
+# intra-week. That is not a fault. A PERSISTENT or GROWING negative balance is.
+
+TIP_CHANNEL_HINTS = ("7SHIFTS TI", "KICKFIN")
+SEVENSHIFTS_SUBSCRIPTION_HINT = "7SHIFTS.COM"
+# Payroll-side 7shifts prefixes that must NOT be claimed as tip settlements.
+SEVENSHIFTS_PAYROLL_PREFIXES = ("PCR ", "COL ", "TAX ")
+# A Kickfin draft above this many days of average tips looks like a float
+# movement rather than a payout.
+KICKFIN_ROUTINE_DAYS = 3
+
+
+def _avg_daily_tips(conn, location: str | None, before: str | None = None) -> float:
+    """Average daily tips from the sales journal, for sizing a Kickfin draft."""
+    if not location:
+        return 0.0
+    params = [location]
+    date_clause = ""
+    if before:
+        date_clause = " AND e.entry_date < ?"
+        params.append(before)
+    row = conn.execute(
+        f"""SELECT AVG(d) FROM (
+              SELECT SUM(COALESCE(li.credit, 0) - COALESCE(li.debit, 0)) AS d
+              FROM qb_journal_line_items li
+              JOIN qb_journal_entries e ON e.id = li.entry_id
+              WHERE e.location = ? AND li.journal_name = 'Summary: Tips'{date_clause}
+              GROUP BY e.entry_date)""",
+        params,
+    ).fetchone()
+    return float(row[0] or 0)
+
+
+def classify_tip_settlement(conn, description: str, amount: float,
+                            location: str | None, entry_date: str | None = None):
+    """Classify a tip-channel row.
+
+    Returns (gl_account_name, reason) to code it, or (None, reason) to leave it
+    uncoded FOR REVIEW with the reason explaining what to do, or (None, None)
+    when this is not a tip-channel row at all.
+
+    Unlike classify_transfer/classify_venmo this takes `conn`: sizing a Kickfin
+    draft needs the tip history, and deciding whether a Kickfin row is the
+    first one needs the register. That is a real dependency, not convenience.
+
+    BOTH DIRECTIONS code to Tip Bank. Reloads debited the account going out;
+    the June 2026 refund of the unused 7shifts float credits it coming back.
+    """
+    desc = (description or "").upper()
+
+    # The SaaS subscription. Checked FIRST — it is the one 7shifts row that is
+    # a genuine operating expense, and its memo is the only thing telling it
+    # apart from the tip reloads.
+    if SEVENSHIFTS_SUBSCRIPTION_HINT in desc:
+        return "Dues & Subscriptions", "7shifts.com card charge = the SaaS subscription"
+
+    # Payroll-side 7shifts rows are not ours to claim.
+    if "7SHIFTS" in desc:
+        stripped = desc.strip()
+        if any(stripped.startswith(p) for p in SEVENSHIFTS_PAYROLL_PREFIXES):
+            return None, None
+        if "7SHIFTS TI" in desc:
+            direction = "refund inflow" if (amount or 0) > 0 else "reload outflow"
+            return "Tip Bank", f"7shifts tip service {direction} = Tip Bank settlement"
+        return None, None
+
+    if "KICKFIN" not in desc:
+        return None, None
+
+    # ── Kickfin ──
+    prior = conn.execute(
+        """SELECT COUNT(*) FROM manual_bank_entries m
+           JOIN bank_accounts ba ON ba.id = m.bank_account_id
+           WHERE ba.location = ?
+             AND UPPER(COALESCE(m.payee,'') || ' ' || COALESCE(m.memo,'')) LIKE '%KICKFIN%'
+             AND (? IS NULL OR m.entry_date < ?)""",
+        (location, entry_date, entry_date),
+    ).fetchone()[0]
+    if prior == 0:
+        return None, ("first Kickfin row for this entity — almost certainly the "
+                      "float retainer, not a tip payout. Code to Kickfin Float "
+                      "Deposit if it is the retainer, Tip Bank if it is a payout")
+
+    avg = _avg_daily_tips(conn, location, entry_date)
+    if avg <= 0:
+        return None, ("Kickfin row but no tip history to size it against — "
+                      "review: Tip Bank if a payout, Kickfin Float Deposit if float")
+    ceiling = avg * KICKFIN_ROUTINE_DAYS
+    if abs(amount or 0) > ceiling:
+        return None, (f"Kickfin draft of ${abs(amount or 0):,.2f} exceeds "
+                      f"{KICKFIN_ROUTINE_DAYS} days of tips (${ceiling:,.2f}) — "
+                      f"looks like a float movement; suggest Kickfin Float Deposit")
+    direction = "inflow" if (amount or 0) > 0 else "draft"
+    return "Tip Bank", f"routine Kickfin {direction} = Tip Bank settlement"
+
+
+def suggested_account_for_review(conn, reason: str, location: str | None):
+    """The account a flagged tip-channel row most likely wants, for the UI to
+    offer. Never applied automatically — that is the whole point of flagging."""
+    if not reason or not location:
+        return None
+    name = "Kickfin Float Deposit" if "Float" in reason or "float" in reason else None
+    if not name:
+        return None
+    row = conn.execute(
+        "SELECT id, name FROM gl_accounts WHERE name = ? AND location = ? AND active = 1",
+        (name, location),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def _may_learn_rule_from(conn, table: str, row_id: int) -> bool:
