@@ -76,6 +76,21 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   color: var(--amber); padding: 10px 14px; border-radius: 8px; font-size: 12px;
   margin-bottom: 6px;
 }
+/* Post-import audit. A failure means rows were just coded to accounts that
+   cannot be right, so it is red and it stays on screen — not an alert() the
+   user dismisses on the way past. */
+.audit-fail {
+  background: rgba(239,68,68,0.09); border: 1px solid rgba(239,68,68,0.45);
+  color: #fecaca; padding: 12px 15px; border-radius: 9px; font-size: 12.5px;
+  margin-bottom: 10px; line-height: 1.6;
+}
+.audit-fail b { color: #fca5a5; }
+.audit-fail ul { margin: 6px 0 0 18px; }
+.audit-ok {
+  background: rgba(34,197,94,0.07); border: 1px solid rgba(34,197,94,0.3);
+  color: #86efac; padding: 9px 14px; border-radius: 8px; font-size: 12px;
+  margin-bottom: 10px;
+}
 
 .review-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .review-tools .label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
@@ -183,6 +198,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   <div class="section" id="review-section" style="display:none">
     <h2>3. Review &amp; import</h2>
 
+    <div id="audit-result"></div>
     <div class="summary-bar" id="summary-bar"></div>
     <div class="warnings" id="warnings"></div>
 
@@ -453,6 +469,7 @@ function showReview() {
   `;
 
   // Warnings
+  renderAuditResult(null);   // a fresh render clears any prior audit banner
   const warnings = p.warnings || [];
   $('warnings').innerHTML = warnings.length
     ? warnings.map(w => `<div class="warning">⚠ ${esc(w)}</div>`).join('')
@@ -565,6 +582,41 @@ function selectByPredicate(pred) {
 // ────────────────────────────────────────────────────────────────────────────
 // Import
 // ────────────────────────────────────────────────────────────────────────────
+// Post-import audit banner. Import codes rows automatically, so import is when
+// the codings get checked — the cross-entity guard existed for months as a test
+// nobody ran. A failure stays on the page; it is not an alert to dismiss.
+function renderAuditResult(audit){
+  const el = $('audit-result');
+  if (!el) return;
+  if (!audit){ el.innerHTML = ''; return; }
+  if (audit.ok === null || audit.ok === undefined){
+    el.innerHTML = `<div class="warning">⚠ Post-import audit could not run`
+      + (audit.error ? `: ${esc(audit.error)}` : '') + `</div>`;
+    return;
+  }
+  const failed = (audit.checks || []).filter(c => !c.ok);
+  if (!failed.length){
+    el.innerHTML = `<div class="audit-ok">✓ Post-import audit clean —
+      ${(audit.checks || []).length} invariants checked${
+        audit.location ? ` for ${esc(audit.location)}` : ''}.</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="audit-fail">
+    <b>⚠ Post-import audit FAILED — ${failed.length} of
+    ${(audit.checks||[]).length} invariants broken.</b>
+    The rows were imported (they are real transactions), but some codings
+    cannot be correct and need fixing before this period is relied on.
+    <ul>${failed.map(c => `<li><b>${esc(c.name)}</b> — ${c.count}: ${esc(c.summary)}${
+      (c.detail||[]).length
+        ? `<br><span style="color:var(--text3)">e.g. ${esc(
+            c.detail.slice(0,3).map(d =>
+              d.table ? `${d.table}#${d.id} → ${d.gl_name} (${d.problem})`
+                      : (d.journal_name || d.category_type || d.pattern || d.id)
+            ).join('; '))}</span>`
+        : ''}</li>`).join('')}</ul></div>`;
+}
+
+
 async function doImport() {
   if (!STATE.upload || STATE.selected.size === 0) return;
   const indexes = Array.from(STATE.selected).sort((a,b) => a - b);
@@ -594,7 +646,11 @@ async function doImport() {
       $('btn-import').textContent = 'Import selected';
       return;
     }
-    alert(`Imported ${d.inserted} entries${alsoClear ? `, cleared ${d.cleared} register rows` : ''}.`);
+    renderAuditResult(d.audit);
+    alert(`Imported ${d.inserted} entries${alsoClear ? `, cleared ${d.cleared} register rows` : ''}.`
+      + (d.audit && d.audit.ok === false
+         ? '\n\n⚠ POST-IMPORT AUDIT FAILED — see the red banner above the summary.'
+         : ''));
     // Reload the upload to refresh match status
     if (STATE.upload.upload_id) {
       const r2 = await fetch('/api/bank-reconcile/uploads/' + STATE.upload.upload_id);

@@ -509,12 +509,42 @@ def import_selected():
         (inserted, upload_id),
     )
     conn.commit()
+
+    # ── POST-IMPORT AUDIT ────────────────────────────────────────────────
+    # Import is the moment rows get coded automatically, so it is the moment
+    # to check the codings. The guard that would have caught the 114
+    # cross-entity codings already existed — as a pytest assertion nobody ran
+    # between the April import and someone spotting the wrong accounts on
+    # screen. It runs here now, and its result rides back in the same response
+    # as the import summary so a failure is impossible to miss.
+    #
+    # The audit NEVER blocks or rolls back the import: the rows are real bank
+    # transactions and belong in the register either way. It reports.
+    audit = None
+    try:
+        from routes.register_routes import audit_register_invariants
+        audit = audit_register_invariants(conn, location=acct_location)
+        if not audit["ok"]:
+            logger.error(
+                "POST-IMPORT AUDIT FAILED after upload %s (%s): %s",
+                upload_id, acct_location,
+                "; ".join(f"{c['name']}={c['count']}"
+                          for c in audit["checks"] if not c["ok"]),
+            )
+        else:
+            logger.info("Post-import audit clean for upload %s (%s)",
+                        upload_id, acct_location)
+    except Exception as e:
+        logger.exception("Post-import audit could not run")
+        audit = {"ok": None, "error": str(e), "checks": []}
+
     conn.close()
 
     return jsonify({
         "status": "ok",
         "inserted": inserted,
         "cleared": cleared_total,
+        "audit": audit,
     })
 
 

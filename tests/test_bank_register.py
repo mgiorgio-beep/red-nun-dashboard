@@ -970,6 +970,113 @@ class TestEveryWritePathValidatesGl:
         assert not bad, f"{len(bad)} invalid codings: " + "; ".join(bad[:10])
 
 
+class TestPostImportAudit:
+    """The invariants run automatically at import, not when someone remembers
+    to run pytest.
+
+    The guard that would have caught the 114 cross-entity codings already
+    existed as an assertion in this file. Nothing ran it between the April
+    import and someone noticing the wrong accounts on screen. An audit that
+    waits for a human to invoke it is documentation, not a control.
+    """
+
+    def test_audit_reports_every_invariant(self, conn):
+        from routes.register_routes import audit_register_invariants
+        a = audit_register_invariants(conn)
+        names = {c["name"] for c in a["checks"]}
+        assert names == {"row_codings", "rules", "category_mappings",
+                         "journal_mappings", "settlements"}
+        for c in a["checks"]:
+            assert set(c) >= {"name", "ok", "count", "summary", "detail"}
+
+    def test_audit_is_currently_clean(self, conn):
+        from routes.register_routes import audit_register_invariants
+        a = audit_register_invariants(conn)
+        assert a["ok"], "; ".join(
+            f"{c['name']}={c['count']}" for c in a["checks"] if not c["ok"])
+
+    def test_audit_detects_a_cross_entity_coding(self, conn):
+        """The audit must FAIL on the exact defect it exists for — proving it
+        passes is not proving it works. Injected and rolled back."""
+        from routes.register_routes import audit_register_invariants
+        row = conn.execute("""
+            SELECT m.id, m.gl_account_id FROM manual_bank_entries m
+            JOIN bank_accounts ba ON ba.id = m.bank_account_id
+            WHERE ba.location = 'dennis' LIMIT 1
+        """).fetchone()
+        chatham = conn.execute(
+            "SELECT id FROM gl_accounts WHERE location = 'chatham' AND active = 1 "
+            "LIMIT 1").fetchone()["id"]
+        try:
+            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? WHERE id = ?",
+                         (chatham, row["id"]))
+            a = audit_register_invariants(conn)
+            assert not a["ok"], "audit passed a Dennis row coded to a Chatham account"
+            failed = [c for c in a["checks"] if not c["ok"]]
+            assert [c["name"] for c in failed] == ["row_codings"]
+            assert failed[0]["detail"][0]["problem"] == "wrong_entity"
+            assert failed[0]["detail"][0]["row_location"] == "dennis"
+        finally:
+            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? WHERE id = ?",
+                         (row["gl_account_id"], row["id"]))
+            conn.commit()
+        assert audit_register_invariants(conn)["ok"], "cleanup failed to restore"
+
+    def test_audit_detects_an_inactive_coding(self, conn):
+        from routes.register_routes import audit_register_invariants
+        row = conn.execute(
+            "SELECT id, gl_account_id FROM manual_bank_entries LIMIT 1").fetchone()
+        dead = conn.execute(
+            "SELECT id FROM gl_accounts WHERE active = 0 LIMIT 1").fetchone()
+        if not dead:
+            pytest.skip("no inactive accounts to test with")
+        try:
+            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? WHERE id = ?",
+                         (dead["id"], row["id"]))
+            a = audit_register_invariants(conn)
+            assert not a["ok"]
+            problems = {d["problem"] for c in a["checks"] if not c["ok"]
+                        for d in c["detail"]}
+            assert "inactive" in problems
+        finally:
+            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? WHERE id = ?",
+                         (row["gl_account_id"], row["id"]))
+            conn.commit()
+
+    def test_location_scope_narrows_the_row_check(self, conn):
+        from routes.register_routes import audit_register_invariants
+        for loc in ("chatham", "dennis"):
+            a = audit_register_invariants(conn, location=loc)
+            assert a["location"] == loc
+            for d in next(c for c in a["checks"] if c["name"] == "row_codings")["detail"]:
+                assert d["row_location"] == loc
+
+    def test_import_response_carries_the_audit(self, client, conn):
+        """The hook, end to end: the audit result rides back in the same
+        response as the import summary, where the parse summary shows.
+
+        Imports zero rows against an existing upload — the audit runs
+        regardless, which is the point being tested.
+        """
+        upload = conn.execute(
+            "SELECT id FROM bank_statement_uploads ORDER BY id DESC LIMIT 1").fetchone()
+        if not upload:
+            pytest.skip("no statement uploads present")
+        r = client.post("/api/bank-reconcile/import",
+                        json={"upload_id": upload["id"], "indexes": [],
+                              "also_clear_matches": False})
+        assert r.status_code == 200, r.get_data(as_text=True)
+        j = r.get_json()
+        assert j["inserted"] == 0
+        assert "audit" in j, "import response does not carry the audit"
+        assert j["audit"] is not None
+        assert "checks" in j["audit"] and j["audit"]["checks"]
+        assert j["audit"]["ok"] is True, (
+            "post-import audit failed: "
+            + "; ".join(f"{c['name']}={c['count']}"
+                        for c in j["audit"]["checks"] if not c["ok"]))
+
+
 class TestVenmoIsNeverTips:
     """Standing rule (Mike, 2026-08-25): VENMO IS NEVER TIPS.
 

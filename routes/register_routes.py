@@ -694,6 +694,88 @@ def settlement_evidence(conn, table: str, row_id: int) -> dict | None:
     return None
 
 
+def audit_register_invariants(conn=None, location: str | None = None) -> dict:
+    """Run every register invariant and report. Returns a structured result.
+
+    THIS RUNS AUTOMATICALLY AT THE END OF EVERY STATEMENT IMPORT. The guard
+    that would have caught the 114 cross-entity codings already existed as a
+    pytest assertion — and nothing ran it between the April import and someone
+    noticing the wrong accounts on screen weeks later. An audit that waits for
+    a human to run the test suite is not a control, it is documentation.
+
+    `location` narrows the row-level checks to one entity; the mapping and
+    rule checks are global because a bad rule in either chart is everyone's
+    problem.
+
+    Returns {"ok", "failures", "checks": [{name, ok, count, detail, summary}]}.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
+        checks = []
+
+        def add(name, summary, rows):
+            checks.append({"name": name, "ok": not rows, "count": len(rows),
+                           "summary": summary, "detail": rows[:20]})
+
+        # 1. Rows coded to a retired or cross-entity account.
+        loc_clause, loc_params = "", ()
+        if location:
+            loc_clause = " AND ba.location = ?"
+            loc_params = (location,)
+        bad_rows = []
+        for table in ("manual_bank_entries", "vendor_payments",
+                      "payroll_checks", "bank_deposits"):
+            for r in conn.execute(f"""
+                SELECT t.id, g.name AS gl_name, g.active,
+                       g.location AS gl_location, ba.location AS row_location
+                FROM {table} t
+                JOIN gl_accounts g ON g.id = t.gl_account_id
+                LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+                WHERE t.gl_account_id IS NOT NULL
+                  AND (g.active = 0
+                       OR (g.location IS NOT NULL AND ba.location IS NOT NULL
+                           AND g.location <> ba.location)){loc_clause}
+            """, loc_params):
+                d = dict(r)
+                d["table"] = table
+                d["problem"] = ("inactive" if not r["active"] else "wrong_entity")
+                bad_rows.append(d)
+        add("row_codings",
+            "register rows coded to a retired or cross-entity account", bad_rows)
+
+        # 2. Rules pointing somewhere unusable.
+        bad_rules = [dict(r) for r in conn.execute("""
+            SELECT r.id, r.location AS rule_location, r.pattern,
+                   g.name AS gl_name, g.active, g.location AS gl_location
+            FROM gl_account_rules r
+            LEFT JOIN gl_accounts g ON g.id = r.gl_account_id
+            WHERE g.id IS NULL OR g.active = 0
+               OR (g.location IS NOT NULL AND r.location IS NOT NULL
+                   AND g.location <> r.location)
+        """)]
+        add("rules", "coding rules pointing at a retired or cross-entity account",
+            bad_rules)
+
+        # 3 & 4. The two mapping tables that resolve into gl_accounts.
+        add("category_mappings", "invoice category → GL mappings",
+            audit_gl_category_mapping(conn))
+        add("journal_mappings", "sales-journal line → GL mappings",
+            audit_qb_line_mapping(conn))
+
+        # 5. Accrual: a settlement may not carry a P&L account.
+        add("settlements", "invoice settlements coded as expense (double count)",
+            audit_settlement_codings(conn))
+
+        failures = sum(1 for c in checks if not c["ok"])
+        return {"ok": failures == 0, "failures": failures,
+                "location": location, "checks": checks}
+    finally:
+        if own:
+            conn.close()
+
+
 def audit_settlement_codings(conn=None) -> list[dict]:
     """Register rows that settle invoices but are coded to a P&L account.
 
@@ -1178,6 +1260,35 @@ GL_STATUS_SUGGESTED = "suggested"
 GL_PROBLEM_MISSING = "missing"
 GL_PROBLEM_INACTIVE = "inactive"
 GL_PROBLEM_WRONG_ENTITY = "wrong_entity"
+
+
+# ─── REPAIR POLICY: THE RULE BEATS THE NAME ──────────────────────────────────
+#
+# When a cross-entity coding is repaired, the obvious move is to remap by NAME
+# into the row's own chart: Chatham "Linens" -> Dennis "Linens". That is
+# mechanical, and it is right most of the time.
+#
+# It is NOT authoritative. A same-entity rule encodes how Mike actually coded
+# that payee before; a name match encodes nothing but a string. WHERE THE TWO
+# DISAGREE, THE RULE WINS.
+#
+# Both cases from the 2026-08-25 repair show why:
+#
+#   COLONIAL WHOLESA — name-matched to Dennis "Food Costs -F&B" because the
+#       Chatham row sat on Chatham's "Food Costs -F&B". Colonial is a BEER
+#       distributor and the Dennis rule says Beer COGS. The rule is right; the
+#       name match had merely inherited a Chatham miscoding.
+#   QBOOKS ONL — name-matched to "Bookkeeping"; the Dennis rule says Dues &
+#       Subscriptions, consistent with how other software subscriptions are
+#       coded.
+#
+# So a repair pass resolves in this order:
+#   1. the same-entity rule for the row's description, if one matches
+#   2. otherwise the same-entity account with the same name
+#   3. otherwise leave uncoded and report it
+# and whatever comes out still goes through validate_gl_account() below.
+#
+# A human-confirmed coding outranks both and is never overwritten by a repair.
 
 
 def validate_gl_account(conn, gl_id, location: str | None):
