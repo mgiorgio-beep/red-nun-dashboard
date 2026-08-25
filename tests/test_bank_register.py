@@ -1363,6 +1363,164 @@ class TestTipBankRollsForward:
                 f"should move rarely; routine drafts belong on Tip Bank")
 
 
+class TestSalesTaxRollsForward:
+    """Sales Tax Payable is a pass-through: sales JEs credit it, DAVO debits it.
+
+    DAVO IS PENNY-EXACT — it reads each day's tax off the Toast integration and
+    pulls that figure 2-5 days later. Verified across Dennis February 2026,
+    every accrual day matching a pull to the cent. So this audit matches pulls
+    to accrual DAYS rather than comparing monthly totals, which turns "the
+    balance looks off" into two answerable questions: a day with no pull, or a
+    pull with no day.
+    """
+
+    def _rf(self, conn, loc):
+        from reports.profit_loss import sales_tax_rollforward
+        return sales_tax_rollforward(conn, loc)
+
+    def test_the_window_is_the_overlap_not_all_time(self, conn):
+        """Sales JEs start 2025-04; statements start later and stop earlier.
+        Comparing over all time would show a huge fake unremitted balance —
+        the same trap as a bottom line for a month with no bank rows."""
+        for loc in ("chatham", "dennis"):
+            r = self._rf(conn, loc)
+            if not r["available"]:
+                continue
+            w = r["window"]
+            je = conn.execute(
+                "SELECT MIN(entry_date) FROM qb_journal_entries WHERE location = ?",
+                (loc,)).fetchone()[0]
+            stmt = conn.execute(
+                """SELECT MIN(u.period_start) FROM bank_statement_uploads u
+                   JOIN bank_accounts ba ON ba.id = u.bank_account_id
+                   WHERE ba.location = ?""", (loc,)).fetchone()[0]
+            assert w["start"] == max(je, stmt), \
+                f"{loc}: window starts before both sides have data"
+            assert w["start"] <= w["end"]
+
+    def test_davo_pulls_match_accrual_days(self, conn):
+        """The core claim. If this drops, either DAVO changed how it remits or
+        our accrual stopped agreeing with Toast."""
+        r = self._rf(conn, "dennis")
+        if not r["available"]:
+            pytest.skip("no overlap window for Dennis")
+        m = r["matching"]
+        assert m["tax_days"] > 20, "too few accrual days to be meaningful"
+        assert m["match_rate"] >= 90.0, (
+            f"only {m['match_rate']}% of accrual days matched a DAVO pull "
+            f"({m['exact']} exact, {len(m['variances'])} near)")
+        assert m["exact"] >= m["matched"] * 0.8, \
+            "most matches should be penny-exact, not near-matches"
+
+    def test_the_observed_lag_is_a_few_days(self, conn):
+        r = self._rf(conn, "dennis")
+        if not r["available"] or not r["matching"]["matched"]:
+            pytest.skip("nothing matched")
+        m = r["matching"]
+        assert 0 <= m["lag_min"] <= m["lag_max"] <= 10
+        assert m["lag_avg"] <= 7, f"DAVO lag averaging {m['lag_avg']} days"
+
+    def test_no_day_of_tax_goes_unremitted(self, conn):
+        """The finding that would matter most: tax collected and kept."""
+        for loc in ("chatham", "dennis"):
+            r = self._rf(conn, loc)
+            if not r["available"]:
+                continue
+            un = r["matching"]["unremitted_days"]
+            assert not un, (
+                f"{loc}: {len(un)} day(s) of tax never remitted, "
+                f"${r['matching']['unremitted_total']:,.2f}, oldest {un[0]['date']}")
+
+    def test_near_match_variances_are_immaterial_and_one_directional(self, conn):
+        """Variances run one way — accrued exceeds remitted, never the reverse.
+        Rounding would be symmetric. They track voided orders (every variance
+        day has voids) though not exactly, and total ~$22, so they are reported
+        rather than alarmed on."""
+        for loc in ("chatham", "dennis"):
+            r = self._rf(conn, loc)
+            if not r["available"]:
+                continue
+            m = r["matching"]
+            for v in m["variances"]:
+                assert v["variance"] > 0, (
+                    f"{loc} {v['date']}: DAVO remitted MORE than accrued "
+                    f"({v['remitted']} vs {v['accrued']}) — that direction "
+                    f"means over-remittance, not a void")
+            assert abs(m["variance_total"]) < max(100.0, r["collected"] * 0.01), \
+                f"{loc}: near-match variance ${m['variance_total']:,.2f} is material"
+
+    def test_residual_stays_within_the_transit_band(self, conn):
+        """The aggregate sanity check behind the day matching."""
+        for loc in ("chatham", "dennis"):
+            r = self._rf(conn, loc)
+            if not r["available"]:
+                continue
+            assert abs(r["residual"]) <= r["tolerance_band"], (
+                f"{loc}: residual ${r['residual']:,.2f} exceeds the "
+                f"${r['tolerance_band']:,.2f} transit band")
+
+    def test_an_unremitted_day_raises_the_alarm(self, conn):
+        """Injected: delete a pull and the day it settled must surface."""
+        from reports.profit_loss import sales_tax_rollforward
+        gl = conn.execute(
+            "SELECT id FROM gl_accounts WHERE name = 'Sales Tax Payable' "
+            "AND location = 'dennis' AND active = 1").fetchone()["id"]
+        row = conn.execute(
+            """SELECT m.id, m.gl_account_id FROM manual_bank_entries m
+               JOIN bank_accounts ba ON ba.id = m.bank_account_id
+               WHERE ba.location = 'dennis' AND m.gl_account_id = ?
+                 AND m.entry_date BETWEEN '2026-02-05' AND '2026-04-20'
+               ORDER BY m.entry_date LIMIT 1""", (gl,)).fetchone()
+        if not row:
+            pytest.skip("no mid-window DAVO pull to remove")
+        try:
+            conn.execute("UPDATE manual_bank_entries SET gl_account_id = NULL "
+                         "WHERE id = ?", (row["id"],))
+            r = sales_tax_rollforward(conn, "dennis")
+            assert r["matching"]["unremitted_days"], \
+                "removing a pull did not surface an unremitted day"
+            assert r["alarm"] is True
+            assert any("NOT REMITTED" in m for m in r["messages"])
+        finally:
+            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? "
+                         "WHERE id = ?", (row["gl_account_id"], row["id"]))
+            conn.commit()
+
+    def test_davo_subscription_fee_is_reported_not_treated_as_tax(self, conn):
+        """DAVO is a subscription service and bills monthly. That fee sitting
+        on Sales Tax Payable is a recurring identical amount with no accrual
+        behind it — a subscription, not a remittance."""
+        r = self._rf(conn, "dennis")
+        if not r["available"]:
+            pytest.skip("no window")
+        pulls = r["matching"]["unmatched_pulls"]
+        if not pulls:
+            pytest.skip("no unmatched pulls — the fee has been recoded")
+        amounts = [p["amount"] for p in pulls]
+        recurring = [a for a in set(amounts) if amounts.count(a) > 1]
+        if recurring:
+            assert any("OWN FEE" in m for m in r["messages"]), \
+                "a recurring identical pull was not called out as a fee"
+
+    def test_the_note_reaches_the_pl_footnotes(self, conn):
+        """Out-of-tolerance findings must surface where the numbers are read."""
+        from reports.profit_loss import build_profit_loss
+        pl = build_profit_loss("dennis", "2026-03-01", "2026-03-31", conn=conn)
+        st = pl["guardrails"]["sales_tax"]
+        assert st["available"], st.get("reason")
+        for msg in (st.get("messages") or []):
+            assert msg in pl["footnotes"], \
+                "a sales-tax finding did not reach the P&L footnotes"
+
+    def test_misrouted_davo_rows_are_reported(self, conn):
+        """A DAVO row on the wrong account is invisible to the roll-forward and
+        makes the tax account look more unremitted than it is."""
+        from reports.profit_loss import sales_tax_misrouted_remittances
+        for loc in ("chatham", "dennis"):
+            for m in sales_tax_misrouted_remittances(conn, loc):
+                assert m["gl_name"] != "Sales Tax Payable"
+
+
 class TestVenmoIsNeverTips:
     """Standing rule (Mike, 2026-08-25): VENMO IS NEVER TIPS.
 

@@ -4338,6 +4338,88 @@
      "gross": 0.0,
      "net": 38.97,
      "threshold": 50.0
+    },
+    "sales_tax": {
+     "alarm": false,
+     "available": true,
+     "avg_daily_tax": 132.25,
+     "collected": 4232.07,
+     "direction": "balanced",
+     "growing": false,
+     "matching": {
+      "exact": 20,
+      "lag_avg": 2.91,
+      "lag_max": 5,
+      "lag_min": 2,
+      "match_rate": 85.19,
+      "matched": 23,
+      "pulls": 26,
+      "reversals": [
+       {
+        "amount": -6.16,
+        "date": "2026-01-13",
+        "id": 307
+       }
+      ],
+      "tax_days": 27,
+      "unmatched_pull_total": 0.0,
+      "unmatched_pulls": [],
+      "unremitted_days": [],
+      "unremitted_total": 0.0,
+      "variance_total": 4.28,
+      "variances": [
+       {
+        "accrued": 141.74,
+        "date": "2026-01-06",
+        "pull_id": 277,
+        "remitted": 141.38,
+        "variance": 0.36
+       },
+       {
+        "accrued": 109.94,
+        "date": "2026-01-08",
+        "pull_id": 302,
+        "remitted": 107.91,
+        "variance": 2.03
+       },
+       {
+        "accrued": 211.49,
+        "date": "2026-01-17",
+        "pull_id": 371,
+        "remitted": 209.6,
+        "variance": 1.89
+       }
+      ]
+     },
+     "message": null,
+     "messages": [],
+     "monthly": [
+      {
+       "collected": 4159.39,
+       "cumulative": -665.83,
+       "month": "2026-01",
+       "remitted": 4825.22,
+       "residual": -665.83
+      },
+      {
+       "collected": 72.68,
+       "cumulative": -593.15,
+       "month": "2026-02",
+       "remitted": 0.0,
+       "residual": 72.68
+      }
+     ],
+     "pulls": 27,
+     "remitted": 4825.22,
+     "residual": -593.15,
+     "tolerance_band": 661.25,
+     "transit_days": 5,
+     "window": {
+      "days": 32,
+      "end": "2026-02-01",
+      "start": "2026-01-01"
+     },
+     "within_tolerance": true
     }
    },
    "has_sales_journal": true,
@@ -11020,7 +11102,9 @@
     "TOAST FEES ARE NOT BOOKED. Processing fees are netted out of the settlement deposit and never reach an expense account, so operating expense is understated and net income is overstated by roughly the monthly Toast fee.",
     "NO INVENTORY ADJUSTMENT. COGS here is PURCHASES, not cost of goods consumed. Without opening and closing counts, a month that stocks up looks expensive and a month that draws down looks cheap. Food cost % is therefore directionally right and precisely wrong.",
     "LABOR SOURCE is the bank rows on labor accounts, the only complete view. For comparison: Toast time entries show $23,167.13 over 1,388.5 hours (249 shifts) \u2014 hourly wages only, no employer taxes or salaried staff \u2014 and payroll checks total $7,375.86 across 7 check(s), which is partial coverage for the period.",
-    "APPROXIMATE CATEGORY MAPPINGS: $12.16 across LIQUOR_WINE_BEER, LIQUOR_WINE. Totals are right; the split between beverage lines is a judgement call."
+    "APPROXIMATE CATEGORY MAPPINGS: $12.16 across LIQUOR_WINE_BEER, LIQUOR_WINE. Totals are right; the split between beverage lines is a judgement call.",
+    "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 4 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost.",
+    "DAVO REMITTANCES ON THE WRONG ACCOUNT \u2014 1 row(s) totalling $61.61 sit on Sales - Beer instead of Sales Tax Payable. They are real remittances, so the tax account looks more unremitted than it is, and whichever account they landed on is overstated."
    ],
    "guardrails": {
     "clearing_excluded": true,
@@ -11049,6 +11133,154 @@
      "gross": 81.5,
      "net": 151.76,
      "threshold": 50.0
+    },
+    "sales_tax": {
+     "alarm": true,
+     "available": true,
+     "avg_daily_tax": 232.73,
+     "collected": 27928.09,
+     "direction": "balanced",
+     "growing": false,
+     "matching": {
+      "exact": 79,
+      "lag_avg": 3.12,
+      "lag_max": 5,
+      "lag_min": 2,
+      "match_rate": 97.67,
+      "matched": 84,
+      "pulls": 89,
+      "reversals": [
+       {
+        "amount": -63.05,
+        "date": "2026-01-13",
+        "id": 500
+       },
+       {
+        "amount": -62.74,
+        "date": "2026-02-12",
+        "id": 867
+       },
+       {
+        "amount": -52.58,
+        "date": "2026-03-19",
+        "id": 1083
+       },
+       {
+        "amount": -60.09,
+        "date": "2026-04-09",
+        "id": 1230
+       }
+      ],
+      "tax_days": 86,
+      "unmatched_pull_total": 186.86,
+      "unmatched_pulls": [
+       {
+        "amount": 61.61,
+        "date": "2026-02-03",
+        "id": 811
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-03-03",
+        "id": 983
+       },
+       {
+        "amount": 2.03,
+        "date": "2026-03-23",
+        "id": 1110
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-04-06",
+        "id": 1201
+       }
+      ],
+      "unremitted_days": [],
+      "unremitted_total": 0.0,
+      "variance_total": 22.09,
+      "variances": [
+       {
+        "accrued": 279.08,
+        "date": "2026-01-08",
+        "pull_id": 495,
+        "remitted": 277.72,
+        "variance": 1.36
+       },
+       {
+        "accrued": 526.22,
+        "date": "2026-01-09",
+        "pull_id": 498,
+        "remitted": 519.38,
+        "variance": 6.84
+       },
+       {
+        "accrued": 389.9,
+        "date": "2026-01-16",
+        "pull_id": 550,
+        "remitted": 380.99,
+        "variance": 8.91
+       },
+       {
+        "accrued": 322.3,
+        "date": "2026-03-18",
+        "pull_id": 1112,
+        "remitted": 319.0,
+        "variance": 3.3
+       },
+       {
+        "accrued": 301.58,
+        "date": "2026-04-16",
+        "pull_id": 1295,
+        "remitted": 299.9,
+        "variance": 1.68
+       }
+      ]
+     },
+     "message": "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 4 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost.",
+     "messages": [
+      "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 4 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost."
+     ],
+     "monthly": [
+      {
+       "collected": 6817.76,
+       "cumulative": 2.32,
+       "month": "2026-01",
+       "remitted": 6815.44,
+       "residual": 2.32
+      },
+      {
+       "collected": 6190.64,
+       "cumulative": 869.19,
+       "month": "2026-02",
+       "remitted": 5323.77,
+       "residual": 866.87
+      },
+      {
+       "collected": 6813.57,
+       "cumulative": -737.72,
+       "month": "2026-03",
+       "remitted": 8420.48,
+       "residual": -1606.91
+      },
+      {
+       "collected": 8106.12,
+       "cumulative": -122.7,
+       "month": "2026-04",
+       "remitted": 7491.1,
+       "residual": 615.02
+      }
+     ],
+     "pulls": 93,
+     "remitted": 28050.79,
+     "residual": -122.7,
+     "tolerance_band": 1163.65,
+     "transit_days": 5,
+     "window": {
+      "days": 120,
+      "end": "2026-04-30",
+      "start": "2026-01-01"
+     },
+     "within_tolerance": true
     }
    },
    "has_sales_journal": true,

@@ -33,6 +33,7 @@ with no invoice behind them: autopay utilities, card charges, bank fees.
 Tax basis is the accountant's call and does not constrain these books.
 """
 import logging
+from datetime import date
 
 from integrations.toast.data_store import get_connection
 from routes.register_routes import (
@@ -160,6 +161,381 @@ def plug_days(conn, location: str, start: str, end: str) -> dict:
 
 
 # ─── REVENUE (guardrail 1 in practice) ───────────────────────────────────────
+
+# ─── SALES TAX PAYABLE ROLL-FORWARD ──────────────────────────────────────────
+#
+# Sales Tax Payable is a pass-through: the daily sales JEs CREDIT it with tax
+# collected, and DAVO DEBITS it when it remits to the state. DAVO pulls close to
+# daily — 22-29 times a month — so the balance should sit near zero and the
+# residual is just tax in transit.
+#
+# WHAT THE TWO DIRECTIONS MEAN, and why a growing balance either way matters:
+#
+#   growing CREDIT (collected > remitted)
+#       Tax collected and not handed over. This is the state's money sitting in
+#       the operating account, and it compounds quietly.
+#
+#   growing DEBIT (remitted > collected)
+#       DAVO pulling more than we accrue. Either the lag unwinding after a
+#       catch-up — harmless and self-correcting — or the DoorDash
+#       marketplace-facilitator problem: DoorDash remits tax on its own orders
+#       as the facilitator, and if those sales still carry tax in our accrual
+#       we remit it a second time. That one does not self-correct; it just
+#       keeps costing money.
+#
+# A single month proves nothing either way. The alarm needs BOTH a residual
+# outside the transit band AND a balance that keeps growing in one direction.
+
+# DAVO IS PENNY-EXACT. It reads the day's tax off the Toast integration and
+# pulls that exact figure a few days later — verified across Dennis February
+# 2026, where every accrual day matched a pull to the cent:
+#
+#     02-04 accrued 223.57 -> pulled 02-06 as 223.57
+#     02-14 accrued 509.17 -> pulled 02-18 as 509.17
+#
+# So the audit MATCHES pulls to accrual days by exact amount rather than
+# comparing fuzzy monthly totals. That turns a vague "the balance looks off"
+# into two precise questions:
+#
+#   a tax day with no pull, older than the observed lag
+#       -> collected and never remitted
+#   a pull with no tax day
+#       -> remitted with nothing behind it. This is what the DoorDash
+#          marketplace-facilitator double-remit would look like: DoorDash
+#          remits on its own orders, and if we remit the same tax again the
+#          second payment has no accrual to match.
+#
+# The aggregate roll-forward is kept as the headline, but the matching is what
+# makes the alarm worth acting on.
+
+SALES_TAX_TRANSIT_DAYS = 5
+# How far back a pull may reach for its accrual day. Observed lag is 2-5 days;
+# this allows for a weekend plus a holiday.
+SALES_TAX_MAX_LAG_DAYS = 10
+# Consecutive months of growth in the same direction before it counts as a
+# trend rather than timing.
+SALES_TAX_TREND_MONTHS = 3
+
+
+def _match_tax_pulls(conn, location: str, start: str, end: str, gl_id: int) -> dict:
+    """Match each DAVO pull to the accrual day it is remitting, by exact amount.
+
+    Greedy nearest-first within SALES_TAX_MAX_LAG_DAYS. Amounts are compared in
+    integer cents — DAVO is exact, so anything that fails to match is a real
+    finding rather than a rounding artefact.
+
+    Edge effects are excluded deliberately: pulls early in the window are
+    remitting accruals from before it, and accruals late in the window have not
+    been pulled yet. Neither is a defect, and counting them would make every
+    window look broken at both ends.
+    """
+    def cents(x):
+        return int(round(float(x or 0) * 100))
+
+    days = [{"date": r["d"], "cents": cents(r["t"]), "matched": None}
+            for r in conn.execute(
+                """SELECT e.entry_date AS d,
+                          SUM(COALESCE(li.credit,0) - COALESCE(li.debit,0)) AS t
+                   FROM qb_journal_line_items li
+                   JOIN qb_journal_entries e ON e.id = li.entry_id
+                   WHERE e.location = ? AND li.journal_name = 'Summary: Tax'
+                     AND e.entry_date BETWEEN ? AND ?
+                   GROUP BY 1 ORDER BY 1""", (location, start, end))
+            if cents(r["t"]) > 0]
+
+    pulls = [{"id": r["id"], "date": r["d"], "cents": cents(r["a"]), "matched": None}
+             for r in conn.execute(
+                 """SELECT m.id, m.entry_date AS d, -m.amount AS a
+                    FROM manual_bank_entries m
+                    JOIN bank_accounts ba ON ba.id = m.bank_account_id
+                    WHERE ba.location = ? AND m.gl_account_id = ?
+                      AND m.entry_date BETWEEN ? AND ?
+                    ORDER BY m.entry_date""", (location, gl_id, start, end))]
+
+    # PASS 1 — exact to the cent. This is the normal case: DAVO reads the day's
+    # tax off Toast and pulls that figure.
+    lags = []
+    for p in pulls:
+        if p["cents"] <= 0:
+            continue                      # credits/reversals are not remittances
+        pd = date.fromisoformat(p["date"])
+        best = None
+        for d in days:
+            if d["matched"] is not None or d["cents"] != p["cents"]:
+                continue
+            lag = (pd - date.fromisoformat(d["date"])).days
+            if 0 <= lag <= SALES_TAX_MAX_LAG_DAYS and (best is None or lag < best[0]):
+                best = (lag, d)
+        if best:
+            best[1]["matched"] = p["id"]
+            p["matched"] = best[1]["date"]
+            lags.append(best[0])
+
+    # PASS 2 — leftovers, matched by nearest amount within the lag window.
+    #
+    # Exact matching alone CASCADES: one day that differs by a few cents
+    # orphans both its day and its pull, and the next pull then finds the wrong
+    # day free. That manufactured a $1,819 "never remitted" figure on Dennis
+    # out of days that plainly had a pull two days later, a few dollars light.
+    # A near-match is a remittance with a variance, not a missing one, and the
+    # variance is reported rather than alarmed on.
+    variances = []
+    for p in pulls:
+        if p["matched"] is not None or p["cents"] <= 0:
+            continue
+        pd = date.fromisoformat(p["date"])
+        best = None
+        for d in days:
+            if d["matched"] is not None:
+                continue
+            lag = (pd - date.fromisoformat(d["date"])).days
+            if not (0 <= lag <= SALES_TAX_MAX_LAG_DAYS):
+                continue
+            gap = abs(d["cents"] - p["cents"])
+            # Only pair things that are recognisably the same remittance.
+            if gap > max(500, int(d["cents"] * 0.10)):
+                continue
+            if best is None or gap < best[0]:
+                best = (gap, lag, d)
+        if best:
+            gap, lag, d = best
+            d["matched"] = p["id"]
+            p["matched"] = d["date"]
+            lags.append(lag)
+            variances.append({"date": d["date"], "pull_id": p["id"],
+                              "accrued": _r2(d["cents"] / 100),
+                              "remitted": _r2(p["cents"] / 100),
+                              "variance": _r2((d["cents"] - p["cents"]) / 100)})
+
+    win_end = date.fromisoformat(end)
+    win_start = date.fromisoformat(start)
+    # An accrual within the lag window of the end is still legitimately in
+    # transit; a pull within the lag window of the start is settling an accrual
+    # from before the window.
+    unremitted = [d for d in days if d["matched"] is None
+                  and (win_end - date.fromisoformat(d["date"])).days > SALES_TAX_MAX_LAG_DAYS]
+    unmatched_pulls = [p for p in pulls if p["matched"] is None and p["cents"] > 0
+                       and (date.fromisoformat(p["date"]) - win_start).days > SALES_TAX_MAX_LAG_DAYS]
+    reversals = [p for p in pulls if p["cents"] < 0]
+
+    return {
+        "tax_days": len(days), "pulls": len([p for p in pulls if p["cents"] > 0]),
+        "matched": len(lags),
+        "exact": len(lags) - len(variances),
+        "variances": variances,
+        "variance_total": _r2(sum(v["variance"] for v in variances)),
+        "match_rate": _r2(100 * len(lags) / len(days)) if days else None,
+        "lag_min": min(lags) if lags else None,
+        "lag_max": max(lags) if lags else None,
+        "lag_avg": _r2(sum(lags) / len(lags)) if lags else None,
+        "unremitted_days": [{"date": d["date"], "amount": _r2(d["cents"] / 100)}
+                            for d in unremitted],
+        "unremitted_total": _r2(sum(d["cents"] for d in unremitted) / 100),
+        "unmatched_pulls": [{"id": p["id"], "date": p["date"],
+                             "amount": _r2(p["cents"] / 100)} for p in unmatched_pulls],
+        "unmatched_pull_total": _r2(sum(p["cents"] for p in unmatched_pulls) / 100),
+        "reversals": [{"id": p["id"], "date": p["date"],
+                       "amount": _r2(p["cents"] / 100)} for p in reversals],
+    }
+
+
+def sales_tax_rollforward(conn, location: str, end: str | None = None) -> dict:
+    """Roll Sales Tax Payable forward over the window both sides cover.
+
+    THE WINDOW MATTERS MORE THAN THE ARITHMETIC. Sales JEs run from 2025-04;
+    imported statements start later and stop earlier. Comparing cumulative
+    credits against cumulative debits over all time would show a huge unremitted
+    balance that is nothing but missing statements — the same trap as computing
+    a bottom line for a month with no bank rows. So the roll-forward runs only
+    where BOTH sides have data, and says which window it used.
+    """
+    je = conn.execute(
+        """SELECT MIN(entry_date), MAX(entry_date) FROM qb_journal_entries
+           WHERE location = ?""", (location,)).fetchone()
+    stmt = conn.execute(
+        """SELECT MIN(u.period_start), MAX(u.period_end)
+           FROM bank_statement_uploads u
+           JOIN bank_accounts ba ON ba.id = u.bank_account_id
+           WHERE ba.location = ?""", (location,)).fetchone()
+    if not je[0] or not stmt[0]:
+        return {"available": False,
+                "reason": "no sales journal entries or no imported statements"}
+
+    start = max(je[0], stmt[0])
+    win_end = min(je[1], stmt[1])
+    if end:
+        win_end = min(win_end, end)
+    if start > win_end:
+        return {"available": False,
+                "reason": "sales journal and statement coverage do not overlap"}
+
+    gl = conn.execute(
+        "SELECT id FROM gl_accounts WHERE name = 'Sales Tax Payable' "
+        "AND location = ? AND active = 1", (location,)).fetchone()
+    if not gl:
+        return {"available": False, "reason": "no active Sales Tax Payable account"}
+
+    # Credits: tax collected, from the sales journal.
+    collected_rows = conn.execute(
+        """SELECT SUBSTR(e.entry_date, 1, 7) AS m,
+                  ROUND(SUM(COALESCE(li.credit,0) - COALESCE(li.debit,0)), 2) AS amt
+           FROM qb_journal_line_items li
+           JOIN qb_journal_entries e ON e.id = li.entry_id
+           WHERE e.location = ? AND li.journal_name = 'Summary: Tax'
+             AND e.entry_date BETWEEN ? AND ?
+           GROUP BY 1""", (location, start, win_end)).fetchall()
+
+    # Debits: remittances, taken from the ACCOUNT rather than the payee string.
+    # This is the account's own roll-forward, so a remittance through some other
+    # channel still counts and a DAVO row miscoded elsewhere correctly does not.
+    remitted_rows = conn.execute(
+        """SELECT SUBSTR(m.entry_date, 1, 7) AS m,
+                  ROUND(SUM(-m.amount), 2) AS amt, COUNT(*) AS n
+           FROM manual_bank_entries m
+           JOIN bank_accounts ba ON ba.id = m.bank_account_id
+           WHERE ba.location = ? AND m.gl_account_id = ?
+             AND m.entry_date BETWEEN ? AND ?
+           GROUP BY 1""", (location, gl["id"], start, win_end)).fetchall()
+
+    coll = {r["m"]: float(r["amt"] or 0) for r in collected_rows}
+    remit = {r["m"]: float(r["amt"] or 0) for r in remitted_rows}
+    pulls = sum(r["n"] for r in remitted_rows)
+
+    monthly, cum = [], 0.0
+    for m in sorted(set(coll) | set(remit)):
+        c_, r_ = _r2(coll.get(m, 0)), _r2(remit.get(m, 0))
+        cum = _r2(cum + c_ - r_)
+        monthly.append({"month": m, "collected": c_, "remitted": r_,
+                        "residual": _r2(c_ - r_), "cumulative": cum})
+
+    total_collected = _r2(sum(coll.values()))
+    total_remitted = _r2(sum(remit.values()))
+    residual = _r2(total_collected - total_remitted)
+
+    days = max(1, (date.fromisoformat(win_end) - date.fromisoformat(start)).days + 1)
+    avg_daily = _r2(total_collected / days)
+    band = _r2(avg_daily * SALES_TAX_TRANSIT_DAYS)
+
+    # A trend is growth in the SAME direction, in absolute terms, for several
+    # months running. Oscillation around zero is DAVO's lag and is expected.
+    trend = False
+    tail = [m["cumulative"] for m in monthly][-(SALES_TAX_TREND_MONTHS + 1):]
+    if len(tail) >= SALES_TAX_TREND_MONTHS + 1:
+        rising = all(abs(tail[i + 1]) > abs(tail[i]) for i in range(len(tail) - 1))
+        same_side = len({x > 0 for x in tail if x}) <= 1
+        trend = rising and same_side
+
+    within = abs(residual) <= band
+    direction = ("balanced" if within
+                 else ("credit" if residual > 0 else "debit"))
+
+    match = _match_tax_pulls(conn, location, start, win_end, gl["id"])
+
+    # The precise findings outrank the aggregate. DAVO is exact, so a day with
+    # no pull or a pull with no day is a fact, not a tolerance question.
+    messages = []
+    if match["unremitted_days"]:
+        n = len(match["unremitted_days"])
+        oldest = match["unremitted_days"][0]["date"]
+        messages.append(
+            f"SALES TAX COLLECTED BUT NOT REMITTED — {n} business day(s) "
+            f"totalling ${match['unremitted_total']:,.2f} have no matching DAVO "
+            f"pull, the oldest being {oldest}. DAVO remits each day's tax "
+            f"exactly, {match['lag_min']}-{match['lag_max']} days later, so a "
+            f"day still unmatched well beyond that lag was not remitted. This "
+            f"is the state's money.")
+    if match["unmatched_pulls"]:
+        n = len(match["unmatched_pulls"])
+        # A repeated identical amount is a subscription, not a remittance.
+        # DAVO's own monthly fee was landing on Sales Tax Payable this way:
+        # $61.61 on 02-03, 03-03 and 04-06, with matching credits alongside.
+        amounts = [p["amount"] for p in match["unmatched_pulls"]]
+        recurring = sorted({a for a in amounts if amounts.count(a) > 1})
+        if recurring:
+            messages.append(
+                f"DAVO'S OWN FEE IS ON THE TAX ACCOUNT — "
+                f"{', '.join(f'${a:,.2f}' for a in recurring)} recurs monthly "
+                f"among {n} pull(s) with no matching day's tax. A repeated "
+                f"identical amount is a subscription charge, not a remittance. "
+                f"It belongs on an expense account: on Sales Tax Payable it "
+                f"understates the liability and hides a real cost.")
+        else:
+            messages.append(
+                f"DAVO REMITTED ${match['unmatched_pull_total']:,.2f} WITH NO "
+                f"MATCHING ACCRUAL — {n} pull(s) do not correspond to any day's "
+                f"tax. DAVO takes its figures from Toast, so this should not "
+                f"happen. Check whether DoorDash is remitting marketplace-"
+                f"facilitator tax on orders we are also taxing, which would "
+                f"mean the same tax is being paid twice.")
+    if not messages and not within:
+        # Everything matched but the totals still drift: that is window edge
+        # effects, not a defect. Say so rather than alarming.
+        side = "credit" if residual > 0 else "debit"
+        messages.append(
+            f"Sales Tax Payable shows a {side} residual of ${abs(residual):,.2f} "
+            f"over {start}..{win_end}, but every accrual day matched a DAVO "
+            f"pull to the penny. The residual is tax in transit across the "
+            f"window edges, not a remittance failure.")
+
+    alarm = bool(match["unremitted_days"] or match["unmatched_pulls"])
+
+    return {
+        "available": True,
+        "window": {"start": start, "end": win_end, "days": days},
+        "collected": total_collected, "remitted": total_remitted,
+        "residual": residual, "pulls": pulls,
+        "avg_daily_tax": avg_daily, "tolerance_band": band,
+        "transit_days": SALES_TAX_TRANSIT_DAYS,
+        "within_tolerance": within, "direction": direction,
+        "growing": trend, "alarm": alarm,
+        "matching": match,
+        "monthly": monthly,
+        "message": messages[0] if messages else None,
+        "messages": messages,
+    }
+
+
+def _sales_tax_footnotes(conn, location: str, st: dict) -> list[str]:
+    """Sales-tax notes for the P&L, only when something needs saying.
+
+    Sales tax never touches the P&L — it is a liability pass-through — so this
+    prints nothing when the account is behaving. A clean roll-forward is not
+    news; an unremitted day is.
+    """
+    if not st.get("available"):
+        return []
+    notes = list(st.get("messages") or [])
+    misrouted = sales_tax_misrouted_remittances(conn, location)
+    if misrouted:
+        total = sum(m["amount"] for m in misrouted)
+        where = ", ".join(sorted({m["gl_name"] for m in misrouted}))
+        notes.append(
+            f"DAVO REMITTANCES ON THE WRONG ACCOUNT — {len(misrouted)} row(s) "
+            f"totalling ${total:,.2f} sit on {where} instead of Sales Tax "
+            f"Payable. They are real remittances, so the tax account looks "
+            f"more unremitted than it is, and whichever account they landed on "
+            f"is overstated.")
+    return notes
+
+
+def sales_tax_misrouted_remittances(conn, location: str) -> list[dict]:
+    """DAVO rows NOT coded to Sales Tax Payable.
+
+    A remittance sitting on some other account is invisible to the
+    roll-forward above and inflates the apparent unremitted balance, so it is
+    reported separately rather than silently swept in by payee-matching.
+    """
+    return [dict(r) for r in conn.execute(
+        """SELECT m.id, m.entry_date, m.payee, ROUND(-m.amount, 2) AS amount,
+                  COALESCE(g.name, '(uncoded)') AS gl_name, m.gl_status
+           FROM manual_bank_entries m
+           JOIN bank_accounts ba ON ba.id = m.bank_account_id
+           LEFT JOIN gl_accounts g ON g.id = m.gl_account_id
+           WHERE ba.location = ?
+             AND UPPER(COALESCE(m.payee,'') || ' ' || COALESCE(m.memo,'')) LIKE '%DAVO%'
+             AND (g.name IS NULL OR g.name <> 'Sales Tax Payable')
+           ORDER BY m.entry_date""", (location,))]
+
 
 def expense_coverage(conn, location: str, start: str, end: str) -> dict:
     """Is there enough bank data for the expense side to mean anything?
@@ -694,6 +1070,10 @@ def build_profit_loss(location: str, start: str, end: str, conn=None) -> dict:
         plugs = plug_days(conn, location, start, end)
         control = journal_control_total(conn, location, start, end)
         coverage = expense_coverage(conn, location, start, end)
+        # Entity-wide and cumulative, not period-specific: it is a statement
+        # about the account's health, so it rides on every P&L for that entity
+        # rather than only the month the drift happened in.
+        sales_tax = sales_tax_rollforward(conn, location)
 
         net_rev = rev["net_revenue"]
         # Prime cost uses labor NET of tip disbursements. A tip handed to a
@@ -723,6 +1103,7 @@ def build_profit_loss(location: str, start: str, end: str, conn=None) -> dict:
                 "plug": plugs,
                 "journal_control": control,
                 "expense_coverage": coverage,
+                "sales_tax": sales_tax,
             },
             "revenue": rev,
             "cogs": {**cg,
@@ -742,7 +1123,8 @@ def build_profit_loss(location: str, start: str, end: str, conn=None) -> dict:
             "net_income_withheld_reason": (None if coverage["expense_side_complete"]
                                            else coverage["warning"]),
             "footnotes": ([coverage["warning"]] if coverage["warning"] else [])
-                         + footnotes(conn, location, start, end, parts),
+                         + footnotes(conn, location, start, end, parts)
+                         + _sales_tax_footnotes(conn, location, sales_tax),
         }
     finally:
         if own:
