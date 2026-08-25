@@ -927,3 +927,49 @@ def report_profit_loss():
 
     pl["location_label"] = LOC_LABELS.get(location, location)
     return jsonify(pl)
+
+
+@report_bp.route("/api/reports/profit-loss/drill")
+@login_required
+def report_profit_loss_drill():
+    """The rows behind one P&L line.
+
+    Query: location, start, end, source, key
+
+    `source` and `key` come straight off the line's own `drill` descriptor in
+    the P&L payload — the UI hands back what the engine gave it rather than
+    re-deriving how a line was built. The rows returned must sum to the line.
+    """
+    location = (request.args.get("location") or "dennis").strip().lower()
+    if location not in ("chatham", "dennis"):
+        return jsonify({"error": "location must be 'chatham' or 'dennis'"}), 400
+
+    now = datetime.now(ET)
+    start = request.args.get("start") or now.replace(day=1).strftime("%Y-%m-%d")
+    end = request.args.get("end") or now.strftime("%Y-%m-%d")
+    for label, value in (("start", start), ("end", end)):
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": f"{label} must be YYYY-MM-DD"}), 400
+
+    source = (request.args.get("source") or "").strip()
+    key = request.args.get("key")
+    if key is None or key == "":
+        return jsonify({"error": "key is required"}), 400
+
+    from reports.profit_loss import drill, DRILL_SOURCES
+    if source not in DRILL_SOURCES:
+        return jsonify({"error": f"source must be one of "
+                                 f"{', '.join(DRILL_SOURCES)}"}), 400
+
+    conn = get_connection()
+    try:
+        return jsonify(drill(conn, location, start, end, source, key))
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Bad drill request: {e}"}), 400
+    except Exception as e:
+        logger.exception("Drill failed: %s/%s", source, key)
+        return jsonify({"error": f"Could not load the detail: {e}"}), 500
+    finally:
+        conn.close()

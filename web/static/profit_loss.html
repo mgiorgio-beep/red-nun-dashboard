@@ -109,6 +109,31 @@ ol.fns li b { color: #fde68a; font-weight: 600; }
 .empty { padding: 44px 20px; text-align: center; color: var(--text3); font-size: 13.5px; line-height: 1.6; }
 .empty .big { font-size: 15px; color: var(--text2); font-weight: 600; margin-bottom: 6px; }
 
+/* Drill-down */
+tr.drillable { cursor: pointer; }
+tr.drillable:hover td { background: rgba(56,189,248,0.06); }
+tr.drillable.open td { background: rgba(56,189,248,0.09); }
+.caret {
+  display: inline-block; width: 12px; margin-left: -12px; color: var(--text3);
+  transition: transform 0.12s; font-size: 13px;
+}
+tr.drillable.open .caret { transform: rotate(90deg); color: var(--blue); }
+tr.dd-row > td { padding: 0 !important; background: var(--bg) !important; }
+.dd-wrap { padding: 10px 14px 12px 30px; overflow-x: auto; }
+table.dd { width: 100%; border-collapse: collapse; font-size: 11.5px; min-width: 420px; }
+table.dd th {
+  text-align: left; padding: 5px 9px; font-size: 9.5px; font-weight: 700;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+table.dd th.num { text-align: right; }
+table.dd td { padding: 4px 9px; border-bottom: 1px solid rgba(30,41,59,0.45); color: var(--text2); }
+table.dd tfoot td {
+  border-top: 1px solid var(--border-focus); border-bottom: none;
+  font-weight: 700; color: var(--text); padding-top: 6px;
+}
+.dd-empty { padding: 10px 4px; color: var(--text3); font-size: 12px; }
+
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
   .page-title { font-size: 18px; }
@@ -161,12 +186,66 @@ function fnHtml(s){
   return e.replace(/^([A-Z][A-Z0-9 &%\/'’.,\-]{3,}?)(\s*[—:-]|\s+(?:is|are|was|were)\b)/,
                    function(_, head, tail){ return '<b>' + head + '</b>' + tail; });
 }
-function row(cls, label, amount, percent, extra){
-  return '<tr class="' + cls + '">' +
-    '<td>' + label + '</td>' +
+function row(cls, label, amount, percent, extra, drill){
+  var attr = drill
+    ? ' class="' + cls + ' drillable" data-drill="' + esc(JSON.stringify(drill)) + '"'
+    : ' class="' + cls + '"';
+  return '<tr' + attr + '>' +
+    '<td>' + (drill ? '<span class="caret">›</span>' : '') + label + '</td>' +
     '<td class="cat">' + (extra || '') + '</td>' +
     '<td class="num' + (amount < 0 ? ' neg' : '') + '">' + money(amount) + '</td>' +
     '<td class="pct">' + (percent || '') + '</td></tr>';
+}
+
+// ── Drill-down: open the rows behind a number, inline beneath it.
+function currentRange(){
+  var mv = document.getElementById('month').value;
+  return monthRange(mv);
+}
+function detailTable(d){
+  if (!d.rows.length) return '<div class="dd-empty">No underlying rows found.</div>';
+  var cols = d.columns;
+  var h = '<table class="dd"><thead><tr>' +
+    cols.map(function(c){
+      return '<th' + (c === 'amount' || c === 'qty' ? ' class="num"' : '') + '>' + esc(c) + '</th>';
+    }).join('') + '</tr></thead><tbody>';
+  d.rows.forEach(function(r){
+    h += '<tr>' + cols.map(function(c){
+      var v = r[c];
+      if (c === 'amount') return '<td class="num' + (v < 0 ? ' neg' : '') + '">' + money(v) + '</td>';
+      if (c === 'qty')    return '<td class="num">' + (v === null || v === undefined ? '' : v) + '</td>';
+      return '<td>' + esc(v === null || v === undefined ? '' : v) + '</td>';
+    }).join('') + '</tr>';
+  });
+  h += '</tbody><tfoot><tr>' +
+    '<td colspan="' + (cols.length - 1) + '">' + d.count + ' row' + (d.count === 1 ? '' : 's') + '</td>' +
+    '<td class="num">' + money(d.total) + '</td></tr></tfoot></table>';
+  return h;
+}
+function toggleDrill(tr){
+  var next = tr.nextElementSibling;
+  if (next && next.classList.contains('dd-row')){ next.remove(); tr.classList.remove('open'); return; }
+  var d;
+  try { d = JSON.parse(tr.dataset.drill); } catch(e){ return; }
+  var r = currentRange();
+  var holder = document.createElement('tr');
+  holder.className = 'dd-row';
+  holder.innerHTML = '<td colspan="4"><div class="dd-wrap">Loading…</div></td>';
+  tr.parentNode.insertBefore(holder, tr.nextSibling);
+  tr.classList.add('open');
+  fetch('/api/reports/profit-loss/drill?location=' + encodeURIComponent(LOC) +
+        '&start=' + r[0] + '&end=' + r[1] +
+        '&source=' + encodeURIComponent(d.source) +
+        '&key=' + encodeURIComponent(d.key))
+    .then(function(res){ return res.json().then(function(j){
+      if (!res.ok) throw new Error(j.error || ('HTTP ' + res.status)); return j; }); })
+    .then(function(j){
+      holder.querySelector('.dd-wrap').innerHTML = detailTable(j);
+    })
+    .catch(function(e){
+      holder.querySelector('.dd-wrap').innerHTML =
+        '<div class="dd-empty">' + esc(e.message) + '</div>';
+    });
 }
 
 function monthRange(v){
@@ -221,14 +300,14 @@ function render(d){
   var t = ['<div class="card"><table class="pl">'];
 
   t.push('<tr class="sec"><td colspan="4">Revenue</td></tr>');
-  d.revenue.lines.forEach(function(l){ t.push(row('item', esc(l.name), l.amount, '')); });
+  d.revenue.lines.forEach(function(l){ t.push(row('item', esc(l.name), l.amount, '', '', l.drill)); });
   t.push(row('total', 'Net revenue', d.revenue.net_revenue, '100.00%'));
 
   t.push('<tr class="sec"><td colspan="4">Cost of goods sold <span style="text-transform:none;letter-spacing:0;font-weight:400">— at invoice date</span></td></tr>');
   d.cogs.lines.forEach(function(l){
     t.push(row('item', esc(l.name) +
       (l.confidence === 'approximate' ? '<span class="approx">approx</span>' : ''),
-      l.amount, '', esc(l.category)));
+      l.amount, '', esc(l.category), l.drill));
   });
   t.push(row('sub', 'Food &amp; beverage COGS', d.cogs.fnb_subtotal, pct(d.cogs.food_cost_pct)));
   if (d.cogs.non_fnb_subtotal)
@@ -244,22 +323,22 @@ function render(d){
            'Labor not available — no labor rows imported for this period. ' +
            'Prime cost cannot be computed.</span></td></tr>');
   } else {
-    Object.keys(d.labor.by_account).sort(function(a,b){
-      return d.labor.by_account[b] - d.labor.by_account[a];
-    }).forEach(function(k){ t.push(row('item', esc(k), d.labor.by_account[k], '')); });
+    (d.labor.accounts || []).forEach(function(a){
+      t.push(row('item', esc(a.name), a.amount, '', '', a.drill));
+    });
     if (d.labor.tip_disbursements)
       t.push(row('item', 'Less tip disbursements <span style="color:var(--text3)">(liability, not labor)</span>',
-                 -d.labor.tip_disbursements, ''));
+                 -d.labor.tip_disbursements, '', '', d.labor.tip_drill));
     t.push(row('total', 'Labor cost', d.labor.labor_cost, pct(d.labor.labor_pct)));
     t.push(row('total', 'Prime cost', d.prime_cost, pct(d.prime_cost_pct)));
   }
 
   t.push('<tr class="sec"><td colspan="4">Operating expenses</td></tr>');
   d.operating_expenses.invoiced.forEach(function(l){
-    t.push(row('item', esc(l.name), l.amount, '', esc(l.category || 'invoiced')));
+    t.push(row('item', esc(l.name), l.amount, '', esc(l.category || 'invoiced'), l.drill));
   });
   d.operating_expenses.banked.forEach(function(l){
-    t.push(row('item', esc(l.name), l.amount, '', 'banked'));
+    t.push(row('item', esc(l.name), l.amount, '', 'banked', l.drill));
   });
   t.push(row('total', 'Total operating expenses', d.operating_expenses.total, ''));
 
@@ -286,7 +365,13 @@ function render(d){
              '</ol></div>');
   }
 
-  document.getElementById('out').innerHTML = out.join('');
+  var el = document.getElementById('out');
+  el.innerHTML = out.join('');
+  // One delegated handler per render — the statement is replaced wholesale.
+  el.addEventListener('click', function(ev){
+    var tr = ev.target.closest ? ev.target.closest('tr.drillable') : null;
+    if (tr && el.contains(tr)) toggleDrill(tr);
+  });
 }
 
 function load(){

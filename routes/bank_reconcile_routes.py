@@ -407,11 +407,20 @@ def import_selected():
         # loan, and the descriptions differ by four digits). Falls back to the
         # learned rules, then to NULL.
         from routes.register_routes import (
-            _find_gl_account_for_description, classify_transfer,
+            _find_gl_account_for_description, classify_transfer, classify_venmo,
         )
         _desc = (tx.get("description") or "") + " " + (tx.get("memo") or "")
         gl_id = None
         _xfer_name, _xfer_reason = classify_transfer(_desc, signed, acct_last4)
+        # Venmo is single-purpose (bands, and the trivia host at exactly $350),
+        # so it gets a deterministic classifier too. A substring rule alone
+        # cannot split the two — they differ only by amount.
+        if not _xfer_name and not _xfer_reason:
+            _venmo_name, _venmo_reason = classify_venmo(_desc, signed)
+            if _venmo_name:
+                _xfer_name = _venmo_name
+                logger.info("Venmo classified: %s — %s",
+                            _desc.strip()[:60], _venmo_reason)
         if _xfer_name:
             _g = conn.execute(
                 "SELECT id FROM gl_accounts WHERE name = ? AND (location = ? OR location IS NULL) "

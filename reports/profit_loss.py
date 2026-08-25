@@ -53,10 +53,19 @@ LABOR_ACCOUNT_NAMES = frozenset({
     "Contract Labor", "Tip Wages", "Cash Tip Expense",
 })
 
-# Payees whose disbursements are TIPS being handed to staff, not wages.
-# See the tip_disbursement footnote: these settle a liability and should never
-# have been coded to an expense account in the first place.
-_TIP_PAYOUT_HINTS = ("7SHIFTS TI", "VENMO")
+# Payees whose disbursements are TIPS being handed to staff, not wages. These
+# settle a liability and should never have been coded to an expense account.
+#
+# VENMO WAS HERE AND WAS WRONG. Mike pays bands and the trivia host through
+# Venmo, exclusively — it is never tips. Including it swept $6,050 of March
+# entertainment spend into "tip disbursements", which then netted straight out
+# of labor. A channel is not a purpose. See classify_venmo() in
+# register_routes, which codes that channel properly at import.
+_TIP_PAYOUT_HINTS = ("7SHIFTS TI",)
+
+# Human-readable names for the hints above, used when the footnote lists which
+# channels actually contributed in the period.
+_TIP_CHANNEL_LABELS = {"7SHIFTS TI": "7shifts tip runs"}
 
 # Account types that belong on a P&L at all.
 REVENUE_TYPES = frozenset({"Income", "Other Income"})
@@ -217,7 +226,9 @@ def revenue(conn, location: str, start: str, end: str) -> dict:
         (location, start, end),
     ).fetchall()
     lines = [{"gl_account_id": r["gl_id"], "name": r["gl_name"],
-              "amount": _r2(r["amount"])} for r in rows]
+              "amount": _r2(r["amount"]),
+              "drill": {"source": "revenue", "key": r["gl_id"]}}
+             for r in rows]
     gross = _r2(sum(l["amount"] for l in lines if l["amount"] > 0))
     contra = _r2(sum(l["amount"] for l in lines if l["amount"] < 0))
     return {"lines": lines, "gross_sales": gross, "contra": contra,
@@ -296,7 +307,8 @@ def cogs(conn, location: str, start: str, end: str) -> dict:
     for r in rows:
         amt = _r2(r["amount"])
         lines.append({"category": r["category"], "name": r["gl_name"],
-                      "amount": amt, "confidence": r["confidence"]})
+                      "amount": amt, "confidence": r["confidence"],
+                      "drill": {"source": "cogs", "key": r["category"]}})
         if r["category"] in FNB_COGS_CATEGORIES:
             fnb += amt
         else:
@@ -318,7 +330,8 @@ def operating_expenses(conn, location: str, start: str, end: str) -> dict:
                from carrying a P&L account.
     """
     invoiced = [
-        {"category": r["category"], "name": r["gl_name"], "amount": _r2(r["amount"])}
+        {"category": r["category"], "name": r["gl_name"], "amount": _r2(r["amount"]),
+         "drill": {"source": "opex_invoiced", "key": r["category"]}}
         for r in _invoice_costs(conn, location, start, end)
         if r["account_type"] in EXPENSE_TYPES
     ]
@@ -340,7 +353,8 @@ def operating_expenses(conn, location: str, start: str, end: str) -> dict:
         """,
         (location, start, end, *sorted(LABOR_ACCOUNT_NAMES)),
     ).fetchall()
-    banked = [{"name": r["gl_name"], "amount": _r2(r["amount"])}
+    banked = [{"name": r["gl_name"], "amount": _r2(r["amount"]),
+               "drill": {"source": "opex_banked", "key": r["gl_name"]}}
               for r in banked_rows]
     return {"invoiced": invoiced, "banked": banked,
             "invoiced_total": _r2(sum(x["amount"] for x in invoiced)),
@@ -381,13 +395,20 @@ def labor(conn, location: str, start: str, end: str) -> dict:
     ).fetchall()
 
     by_account, total, tips_out = {}, 0.0, 0.0
+    # Which channels actually contributed, so the footnote names what is in
+    # THIS period's data rather than a hardcoded list that goes stale — the
+    # footnote claimed "Venmo" for weeks after Venmo stopped qualifying.
+    tip_channels: dict[str, float] = {}
     for r in rows:
         amt = float(r["amount"] or 0)
         total += amt
         by_account[r["gl_name"]] = _r2(by_account.get(r["gl_name"], 0) + amt)
-        blob = f"{r['payee'] or ''} {r['memo'] or ''} {r['gl_name']}".upper()
-        if r["gl_name"] == "Tip Wages" or any(h in blob for h in _TIP_PAYOUT_HINTS):
+        blob = f"{r['payee'] or ''} {r['memo'] or ''}".upper()
+        hint = next((h for h in _TIP_PAYOUT_HINTS if h in blob), None)
+        if hint or r["gl_name"] == "Tip Wages":
             tips_out += amt
+            label = _TIP_CHANNEL_LABELS.get(hint, r["gl_name"] if not hint else hint)
+            tip_channels[label] = _r2(tip_channels.get(label, 0) + amt)
 
     ymd_start, ymd_end = start.replace("-", ""), end.replace("-", "")
     toast = conn.execute(
@@ -415,10 +436,19 @@ def labor(conn, location: str, start: str, end: str) -> dict:
     return {
         "source": "bank_rows_on_labor_accounts",
         "by_account": by_account,
+        # Same figures as by_account, carrying drill descriptors. by_account
+        # stays because it is the shape the page already renders from.
+        "accounts": [
+            {"name": n, "amount": a,
+             "drill": {"source": "labor", "key": n}}
+            for n, a in sorted(by_account.items(), key=lambda kv: -kv[1])
+        ],
+        "tip_drill": {"source": "labor_tips", "key": "*"},
         "total": _r2(total),
         # Labor net of the tip disbursements that do not belong in it.
         "wages_excl_tip_payouts": _r2(total - tips_out),
         "tip_disbursements": _r2(tips_out),
+        "tip_channels": tip_channels,
         "comparison": {
             "toast_hourly_wages": _r2(toast["wages"]),
             "toast_hours": _r2(toast["hours"]),
@@ -470,10 +500,15 @@ def footnotes(conn, location: str, start: str, end: str, parts: dict) -> list[st
     cmp_ = lab["comparison"]
     if lab["tip_disbursements"]:
         tips_in = _r2(tips or 0)
+        # Name the channels present in THIS period's rows. The previous
+        # hardcoded list kept claiming Venmo after Venmo stopped qualifying.
+        chans = ", ".join(
+            f"{name} ${amt:,.2f}" for name, amt
+            in sorted(lab["tip_channels"].items(), key=lambda kv: -kv[1])
+        ) or "unattributed"
         notes.append(
             f"TIP PAYOUTS ARE CODED AS AN EXPENSE — ${lab['tip_disbursements']:,.2f} "
-            f"in this period (7shifts tip runs and Venmo, on Payroll Expenses and "
-            f"Tip Wages). Tips are collected into Tip Bank, a balance-sheet "
+            f"in this period ({chans}). Tips are collected into Tip Bank, a balance-sheet "
             f"account, so paying them out should DEBIT that liability, not hit an "
             f"expense account. Booking both sides this way overstates labor and "
             f"understates net income by that amount. Tips collected in the same "
@@ -521,6 +556,115 @@ def footnotes(conn, location: str, start: str, end: str, parts: dict) -> list[st
 
 
 # ─── THE REPORT ──────────────────────────────────────────────────────────────
+
+# ─── DRILL-DOWN ──────────────────────────────────────────────────────────────
+#
+# Every figure on the P&L has to be openable, and what opens must ADD UP to the
+# figure. That is the contract: a line whose drill does not sum to it is a bug
+# in one of the two, and the tests assert it per source type.
+#
+# The line's own `drill` descriptor names its source and key, so the UI hands
+# back what the engine gave it rather than re-deriving how a line was built.
+
+DRILL_SOURCES = ("revenue", "cogs", "opex_invoiced", "opex_banked",
+                 "labor", "labor_tips")
+
+
+def drill(conn, location: str, start: str, end: str,
+          source: str, key: str) -> dict:
+    """The rows behind one P&L line.
+
+    Returns {"source", "key", "columns", "rows", "total", "count"}; `total` is
+    the sum of the rows' amounts and must equal the line it came from.
+    """
+    if source not in DRILL_SOURCES:
+        raise ValueError(f"unknown drill source: {source!r}")
+
+    # ── Journal entry lines, behind a revenue account.
+    if source == "revenue":
+        rows = conn.execute(
+            """
+            SELECT e.entry_date AS date, li.journal_name AS detail,
+                   ROUND(COALESCE(li.credit, 0) - COALESCE(li.debit, 0), 2) AS amount
+            FROM qb_journal_line_items li
+            JOIN qb_journal_entries e ON e.id = li.entry_id
+            JOIN qb_line_mapping m ON m.location = e.location
+                                  AND m.journal_name = li.journal_name
+            WHERE e.location = ? AND e.entry_date BETWEEN ? AND ?
+              AND m.gl_account_id = ?
+            ORDER BY e.entry_date, li.journal_name
+            """,
+            (location, start, end, int(key)),
+        ).fetchall()
+        cols = ["date", "detail", "amount"]
+
+    # ── Invoice line items, behind a COGS or invoiced-expense category.
+    elif source in ("cogs", "opex_invoiced"):
+        rows = conn.execute(
+            """
+            SELECT si.invoice_date AS date,
+                   si.vendor_name AS vendor,
+                   si.invoice_number AS reference,
+                   ii.product_name AS detail,
+                   ii.quantity AS qty,
+                   ROUND(COALESCE(ii.total_price, 0), 2) AS amount
+            FROM scanned_invoice_items ii
+            JOIN scanned_invoices si ON si.id = ii.invoice_id
+            WHERE si.location = ? AND si.status = 'confirmed'
+              AND si.invoice_date BETWEEN ? AND ?
+              AND COALESCE(NULLIF(TRIM(ii.category_type), ''), 'UNKNOWN') = ?
+            ORDER BY si.invoice_date, si.vendor_name, ii.product_name
+            """,
+            (location, start, end, str(key).strip().upper()),
+        ).fetchall()
+        cols = ["date", "vendor", "reference", "detail", "qty", "amount"]
+
+    # ── Bank rows, behind a banked expense or labor account.
+    elif source in ("opex_banked", "labor"):
+        rows = conn.execute(
+            """
+            SELECT m.entry_date AS date, m.payee AS detail, m.memo AS reference,
+                   m.gl_status AS status, m.id AS row_id,
+                   ROUND(-m.amount, 2) AS amount
+            FROM manual_bank_entries m
+            JOIN bank_accounts ba ON ba.id = m.bank_account_id
+            JOIN gl_accounts g ON g.id = m.gl_account_id AND g.active = 1
+            WHERE ba.location = ? AND m.entry_date BETWEEN ? AND ?
+              AND g.name = ?
+            ORDER BY m.entry_date, m.id
+            """,
+            (location, start, end, str(key)),
+        ).fetchall()
+        cols = ["date", "detail", "reference", "status", "amount"]
+
+    # ── The tip-disbursement adjustment: the rows it nets out.
+    else:  # labor_tips
+        ph = ",".join("?" * len(LABOR_ACCOUNT_NAMES))
+        candidates = conn.execute(
+            f"""
+            SELECT m.entry_date AS date, m.payee AS detail, m.memo AS reference,
+                   g.name AS account, m.id AS row_id,
+                   ROUND(-m.amount, 2) AS amount
+            FROM manual_bank_entries m
+            JOIN bank_accounts ba ON ba.id = m.bank_account_id
+            JOIN gl_accounts g ON g.id = m.gl_account_id AND g.active = 1
+            WHERE ba.location = ? AND m.entry_date BETWEEN ? AND ?
+              AND g.name IN ({ph})
+            ORDER BY m.entry_date, m.id
+            """,
+            (location, start, end, *sorted(LABOR_ACCOUNT_NAMES)),
+        ).fetchall()
+        # Same predicate labor() uses, so the two cannot disagree.
+        rows = [r for r in candidates
+                if r["account"] == "Tip Wages"
+                or any(h in f"{r['detail'] or ''} {r['reference'] or ''}".upper()
+                       for h in _TIP_PAYOUT_HINTS)]
+        cols = ["date", "detail", "reference", "account", "amount"]
+
+    out = [dict(r) for r in rows]
+    return {"source": source, "key": key, "columns": cols, "rows": out,
+            "count": len(out), "total": _r2(sum(r["amount"] or 0 for r in out))}
+
 
 def build_profit_loss(location: str, start: str, end: str, conn=None) -> dict:
     """Assemble the management P&L for one entity and period.

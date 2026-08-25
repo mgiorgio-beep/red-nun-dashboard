@@ -1243,6 +1243,39 @@ def classify_transfer(description: str, amount: float, this_account_last4: str):
     return None, f"{src or '?'}->{dst or '?'}: unrecognised transfer pair"
 
 
+# The trivia host's recurring rate. An exact match on this amount is the only
+# thing separating trivia from band pay on the Venmo channel.
+TRIVIA_RATE = 350.00
+
+
+def classify_venmo(description: str, amount: float):
+    """Deterministic classifier for Venmo outflow.
+
+    STANDING RULE (Mike, 2026-08-25): VENMO IS NEVER TIPS. He pays bands and
+    the trivia host through Venmo, exclusively, at both locations. Outflow is
+    band pay; an exact $350 is the trivia host.
+
+    Ruling a payment channel is normally the wrong move — that caution stands
+    for PayPal, which carries mixed traffic and stays unruled. Venmo earns a
+    rule precisely because the channel has exactly one purpose.
+
+    Returns (gl_account_name, reason) or (None, None) when this is not a Venmo
+    outflow. Codings from here are SUGGESTED, never confirmed, so an oddball
+    amount surfaces for review instead of silently becoming band pay.
+
+    `amount` is signed: negative = money left this account.
+    """
+    if "VENMO" not in (description or "").upper():
+        return None, None
+    if (amount or 0) >= 0:
+        # Money coming IN over Venmo is not entertainment spend and has no
+        # settled treatment. Leave it alone rather than invent one.
+        return None, None
+    if round(abs(amount), 2) == TRIVIA_RATE:
+        return "Trivia", f"Venmo outflow of exactly ${TRIVIA_RATE:.2f} = trivia host"
+    return "Bands", "Venmo outflow = band pay (single-purpose channel)"
+
+
 def _may_learn_rule_from(conn, table: str, row_id: int) -> bool:
     """True only if this row's GL coding is human-confirmed.
 
