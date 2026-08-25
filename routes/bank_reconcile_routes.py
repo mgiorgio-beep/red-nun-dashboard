@@ -526,6 +526,23 @@ def import_selected():
     )
     conn.commit()
 
+    # ── CHECKS ARE ALWAYS OCR'D ──────────────────────────────────────────
+    # Extraction used to be a separate job, so April imported 15 check rows
+    # reading "Check 9698" with no payee and no image. It runs here now, on
+    # every import, and its coverage rides back in the response.
+    #
+    # OCR is local (tesseract), so this is not metered API spend. It never
+    # blocks the import: the rows are real transactions either way.
+    checks = None
+    try:
+        from integrations.bank_statements.check_ocr import enrich_upload
+        checks = enrich_upload(conn, upload_id)
+        logger.info("Check OCR for upload %s: %s", upload_id,
+                    checks.get("banner") or checks.get("error"))
+    except Exception as e:
+        logger.exception("Check extraction failed for upload %s", upload_id)
+        checks = {"ok": False, "error": str(e)}
+
     # ── POST-IMPORT AUDIT ────────────────────────────────────────────────
     # Import is the moment rows get coded automatically, so it is the moment
     # to check the codings. The guard that would have caught the 114
@@ -561,7 +578,32 @@ def import_selected():
         "inserted": inserted,
         "cleared": cleared_total,
         "audit": audit,
+        "checks": checks,
     })
+
+
+@bank_reconcile_bp.route("/api/bank-reconcile/checks/<int:upload_id>", methods=["POST"])
+@login_required
+def rerun_check_ocr(upload_id: int):
+    """Re-run check extraction and OCR over one upload.
+
+    Idempotent, so this is the safe way to pick up an OCR improvement over a
+    statement already imported. `force=true` re-reads images whose payee is
+    already stored; without it, stored payees are kept and only missing ones
+    are attempted.
+    """
+    force = bool((request.get_json(silent=True) or {}).get("force"))
+    conn = get_connection()
+    try:
+        from integrations.bank_statements.check_ocr import enrich_upload
+        result = enrich_upload(conn, upload_id, force=force)
+        code = 200 if result.get("ok") else 400
+        return jsonify(result), code
+    except Exception as e:
+        logger.exception("Check OCR re-run failed for upload %s", upload_id)
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        conn.close()
 
 
 # ─── HISTORY ─────────────────────────────────────────────────────────────────

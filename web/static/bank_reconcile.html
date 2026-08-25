@@ -199,6 +199,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     <h2>3. Review &amp; import</h2>
 
     <div id="audit-result"></div>
+    <div id="check-result"></div>
     <div class="summary-bar" id="summary-bar"></div>
     <div class="warnings" id="warnings"></div>
 
@@ -585,6 +586,38 @@ function selectByPredicate(pred) {
 // Post-import audit banner. Import codes rows automatically, so import is when
 // the codings get checked — the cross-entity guard existed for months as a test
 // nobody ran. A failure stays on the page; it is not an alert to dismiss.
+// Check OCR coverage. ALWAYS shown after an import, never only on failure —
+// "15 checks, 15 images, 6 payees read, 9 below confidence" is the whole point.
+// A check the OCR could not read is listed by number and amount so it becomes
+// a visible queue rather than a silent gap.
+function renderCheckResult(ck){
+  const el = $('check-result');
+  if (!el) return;
+  if (!ck){ el.innerHTML = ''; return; }
+  if (!ck.ok){
+    el.innerHTML = `<div class="warning">⚠ Check extraction did not run`
+      + (ck.error ? `: ${esc(ck.error)}` : '') + `</div>`;
+    return;
+  }
+  if (!ck.checks_on_statement){
+    el.innerHTML = `<div class="audit-ok">No checks on this statement.</div>`;
+    return;
+  }
+  const held = ck.unread || [];
+  const cls = held.length ? 'warning' : 'audit-ok';
+  el.innerHTML = `<div class="${cls}">
+    <b>${esc(ck.banner)}</b>
+    ${ck.newly_coded ? ` — ${ck.newly_coded} coded from the payee.` : ''}
+    ${held.length ? `<div style="margin-top:6px">Held for review — the payee could
+      not be read with confidence, so these stay uncoded:
+      <ul style="margin:4px 0 0 18px">${held.map(u =>
+        `<li>check ${esc(u.check_number)} — $${Number(u.amount).toLocaleString('en-US',
+          {minimumFractionDigits:2, maximumFractionDigits:2})}
+          ${u.payee ? `(read as “${esc(u.payee)}”)` : '(nothing legible)'}</li>`
+      ).join('')}</ul></div>` : ''}
+  </div>`;
+}
+
 function renderAuditResult(audit){
   const el = $('audit-result');
   if (!el) return;
@@ -647,6 +680,7 @@ async function doImport() {
       return;
     }
     renderAuditResult(d.audit);
+    renderCheckResult(d.checks);
     alert(`Imported ${d.inserted} entries${alsoClear ? `, cleared ${d.cleared} register rows` : ''}.`
       + (d.audit && d.audit.ok === false
          ? '\n\n⚠ POST-IMPORT AUDIT FAILED — see the red banner above the summary.'

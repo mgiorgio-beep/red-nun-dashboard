@@ -24,6 +24,8 @@ Run:  venv/bin/python3 -m pytest tests/test_bank_register.py -v
 """
 import json
 import os
+import re
+from pathlib import Path
 import sys
 from datetime import date, timedelta
 
@@ -582,11 +584,24 @@ class TestTransferClassifier:
             elif reason:
                 if r["gl_account_id"] is None:
                     continue                      # still awaiting review — fine
-                assert r["gl_status"] == "confirmed", (
-                    f"row {r['id']} was flagged for review ({reason}) but carries "
-                    f"a machine coding to {r['gl_account_id']} — a flagged "
-                    f"transfer may only be coded by a human"
-                )
+                if r["gl_status"] != "confirmed":
+                    # A machine coding is acceptable ONLY when it is the rule a
+                    # human's own decision taught: Mike confirmed row 1122
+                    # ("Transfer from x2757 to x5975 / Loan repayment") as Loan
+                    # to Red Buoy Inc., the PUT learned a rule, and the rule
+                    # back-filled the identical row 1227. That is the review
+                    # propagating, not the machine guessing.
+                    precedent = conn.execute(
+                        """SELECT COUNT(*) FROM manual_bank_entries
+                           WHERE gl_account_id = ? AND gl_status = 'confirmed'
+                             AND UPPER(COALESCE(payee,'')) = ?""",
+                        (r["gl_account_id"], (r["payee"] or "").upper())
+                    ).fetchone()[0]
+                    assert precedent, (
+                        f"row {r['id']} was flagged for review ({reason}) but "
+                        f"carries a machine coding to {r['gl_account_id']} with "
+                        f"no human-confirmed row of the same payee behind it"
+                    )
                 assert r["gl_account_id"] not in rent_ids, (
                     f"row {r['id']} was flagged as NOT rent ({reason}) but is "
                     f"coded to Building Rent"
@@ -1544,6 +1559,171 @@ class TestSalesTaxRollsForward:
         for loc in ("chatham", "dennis"):
             for m in sales_tax_misrouted_remittances(conn, loc):
                 assert m["gl_name"] != "Sales Tax Payable"
+
+
+class TestChecksAreAlwaysOcrd:
+    """Mike's invariant: checks are ALWAYS OCR'd.
+
+    Extraction used to be a separate job, so the April import produced 15 check
+    rows reading "Check 9698" with no payee, no image and no coding. It runs
+    inside the import now.
+
+    Coverage is REPORTED, never assumed — a check the OCR cannot read stays
+    uncoded and listed. The failure mode is a visible queue, not a silent gap.
+    """
+
+    UPLOAD = 9   # Dennis April 2026, the statement that exposed the gap
+
+    def test_check_metadata_is_read_not_ocrd(self, conn):
+        """Number, amount and date come from the PDF's text layer. Only the
+        payee needs vision, and it is the one thing the layer omits."""
+        from integrations.bank_statements.check_ocr import extract_checks, _CHECK_TOKEN
+        up = conn.execute(
+            "SELECT file_path FROM bank_statement_uploads WHERE id = ?",
+            (self.UPLOAD,)).fetchone()
+        if not up or not up["file_path"] or not os.path.exists(up["file_path"]):
+            pytest.skip("April statement PDF not on disk")
+        checks = extract_checks(Path(up["file_path"]), "acct2")
+        assert len(checks) == 15, f"expected 15 checks, extracted {len(checks)}"
+        for c in checks:
+            assert c["check_number"].isdigit()
+            assert c["amount"] > 0
+            assert re.match(r"\d{4}-\d{2}-\d{2}", c["check_date"])
+            assert c["image_path"].exists()
+
+    def test_every_check_row_got_an_image(self, conn):
+        """The reported gap was zero images. Each check row's number must have
+        a file on disk."""
+        rows = conn.execute(
+            """SELECT payee FROM manual_bank_entries
+               WHERE statement_upload_id = ? AND payee LIKE 'Check %'""",
+            (self.UPLOAD,)).fetchall()
+        if not rows:
+            pytest.skip("April check rows not present")
+        missing = []
+        for r in rows:
+            m = re.search(r"check\s*#?\s*(\d+)", r["payee"], re.I)
+            if m and not Path(f"web/static/check_images/acct2_check_{m.group(1)}.png").exists():
+                missing.append(m.group(1))
+        assert not missing, f"check rows with no image: {missing}"
+
+    def test_read_payees_reached_the_memos(self, conn):
+        """The enrichment's visible output: '| CHK: <payee>' on the row."""
+        n = conn.execute(
+            """SELECT COUNT(*) FROM manual_bank_entries
+               WHERE statement_upload_id = ? AND memo LIKE '%| CHK: %'""",
+            (self.UPLOAD,)).fetchone()[0]
+        assert n >= 5, f"only {n} check rows carry a CHK memo"
+
+    def test_the_amount_line_never_becomes_a_payee(self, conn):
+        """The scoring gate, on real output. Tesseract reads the
+        amount-in-words line under the payee at 65% confidence — gating on raw
+        confidence would have written 'Savan hiindrad fiftaan and 22 ronte' as
+        a payee. A confident read of the wrong line is worse than no read."""
+        from integrations.bank_statements.check_ocr import _AMOUNT_WORDS
+        for r in conn.execute(
+                """SELECT id, memo FROM manual_bank_entries
+                   WHERE memo LIKE '%| CHK: %'"""):
+            payee = re.search(r"\|\s*CHK:\s*(.+)$", r["memo"]).group(1)
+            assert not _AMOUNT_WORDS.search(payee), \
+                f"row {r['id']}: amount-words line written as a payee: {payee!r}"
+
+    def test_scoring_rejects_implausible_payees(self):
+        from integrations.bank_statements.check_ocr import _score, MIN_PAYEE_SCORE
+        # A high-confidence read of the amount line must lose to a mediocre name.
+        assert _score("Savan hiindrad fiftaan and 22 ronte", 65.0) < MIN_PAYEE_SCORE
+        assert _score("The Caron Group of Companies LLC", 85.1) >= MIN_PAYEE_SCORE
+        assert _score(None, 0.0) < MIN_PAYEE_SCORE
+        # Character fragmentation is a failed read, not a name.
+        assert _score("E ric J a ri S e if ee", 54.2) < MIN_PAYEE_SCORE
+
+    def test_the_anchor_survives_tesseract_merging_it(self):
+        """ORDER OF comes back as ',ORDEROF' or 'ORDER'+'OF' depending on the
+        check. Keying on the two-word form alone found it on 3 of 15."""
+        from integrations.bank_statements.check_ocr import _find_anchor
+        base = {"left": 10, "top": 10, "width": 5, "height": 5, "conf": 90.0}
+        assert _find_anchor([{**base, "text": ",ORDEROF"}])
+        assert _find_anchor([{**base, "text": "ORDER"}, {**base, "text": "OF"}])
+        assert _find_anchor([{**base, "text": "PAYTOTHE"}])
+        assert _find_anchor([{**base, "text": "SYSCO"}]) is None
+
+    def test_enrichment_is_idempotent(self, conn):
+        """Re-running must not stack '| CHK:' suffixes or duplicate check_ocr
+        rows. Re-running is the intended way to pick up an OCR improvement."""
+        from integrations.bank_statements.check_ocr import enrich_upload
+        before = conn.execute(
+            """SELECT id, memo FROM manual_bank_entries
+               WHERE statement_upload_id = ? AND memo LIKE '%CHK:%'
+               ORDER BY id""", (self.UPLOAD,)).fetchall()
+        if not before:
+            pytest.skip("nothing enriched yet")
+        rows_before = conn.execute("SELECT COUNT(*) FROM check_ocr").fetchone()[0]
+        r = enrich_upload(conn, self.UPLOAD)          # no force: cheap path
+        assert r["ok"]
+        after = conn.execute(
+            """SELECT id, memo FROM manual_bank_entries
+               WHERE statement_upload_id = ? AND memo LIKE '%CHK:%'
+               ORDER BY id""", (self.UPLOAD,)).fetchall()
+        assert len(after) == len(before)
+        assert conn.execute("SELECT COUNT(*) FROM check_ocr").fetchone()[0] == rows_before
+        for r0, r1 in zip(before, after):
+            assert r1["memo"].count("CHK:") == 1, f"row {r1['id']} stacked suffixes"
+
+    def test_coverage_is_always_reported(self, conn):
+        from integrations.bank_statements.check_ocr import enrich_upload
+        r = enrich_upload(conn, self.UPLOAD)
+        for k in ("checks_on_statement", "images", "payees_read",
+                  "below_confidence", "unread", "banner"):
+            assert k in r, f"coverage field missing: {k}"
+        assert r["payees_read"] + r["below_confidence"] == r["checks_on_statement"], \
+            "every check must be either read or reported as unread"
+        assert str(r["checks_on_statement"]) in r["banner"]
+
+    def test_payroll_matching_reports_and_does_not_clear(self, conn):
+        """Stamping a payroll check cleared while its statement row stays
+        cleared double-counts. An earlier version did exactly that and Dennis
+        April stopped tying by $1,251.75 — check 9705 — which the tie-out test
+        caught. Half a merge is a broken balance, so this reports candidates
+        for the audited dedupe path instead."""
+        import inspect
+        from integrations.bank_statements import check_ocr
+        src = inspect.getsource(check_ocr.match_payroll_checks)
+        # The name appears in the docstring explaining why it is NOT used, so
+        # look for an actual CALL, and for the mutation it would imply.
+        assert "_mark_cleared(" not in src, \
+            "matcher clears a payroll check without removing the statement row"
+        assert "UPDATE payroll_checks" not in src.upper()
+        assert "candidates.append" in src
+
+    def test_payroll_matching_never_keys_on_check_number(self, conn):
+        """TestCheckNumberIsNotAKey, applied to the OCR path. The matcher must
+        join on amount + date + payee — the two entities reuse numbers and
+        payroll runs its own sequence."""
+        import inspect
+        from integrations.bank_statements import check_ocr
+        src = inspect.getsource(check_ocr.match_payroll_checks)
+        assert "check_number" not in src, \
+            "payroll matching references check_number — it is not a key"
+        assert "net_pay" in src and "employee_name" in src
+
+    def test_manifest_covers_the_images_on_disk(self, conn):
+        from integrations.bank_statements.check_ocr import MANIFEST_PATH, CHECK_IMAGE_DIR
+        if not MANIFEST_PATH.exists():
+            pytest.skip("manifest not built")
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        listed = {p for acct in manifest.values() for p in acct.values()}
+        on_disk = list(CHECK_IMAGE_DIR.glob("*_check_*.png"))
+        assert len(listed) == len(on_disk), \
+            f"manifest lists {len(listed)} images, {len(on_disk)} on disk"
+
+    def test_rerun_endpoint_exists_and_is_authed(self, client):
+        r = client.post(f"/api/bank-reconcile/checks/{self.UPLOAD}", json={})
+        assert r.status_code in (200, 400), r.get_data(as_text=True)
+        from web.server import app
+        app.config["TESTING"] = True
+        with app.test_client() as anon:
+            r2 = anon.post(f"/api/bank-reconcile/checks/{self.UPLOAD}", json={})
+        assert r2.status_code in (301, 302, 401, 403)
 
 
 class TestVenmoIsNeverTips:
