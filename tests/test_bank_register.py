@@ -599,13 +599,28 @@ class TestReconciliationSignOff:
     """A closed period records that the cleared rows tied exactly AND that a
     named person accepted the itemized remainder."""
 
-    def test_every_loaded_period_is_reconciled(self, client, uploads):
+    def test_unreconciled_periods_are_only_the_most_recent(self, client, uploads):
+        """A freshly imported statement is not yet signed off, and that is
+        ordinary workflow — Mike imports, then reconciles. What must not happen
+        is an OLD period being skipped and left behind while later ones close.
+
+        So the invariant is ordering, not completeness: per account, every
+        unreconciled period must be more recent than every reconciled one.
+        """
         j = client.get("/api/bank-reconcile/reconciliations").get_json()
         closed = {(r["bank_account_id"], r["period_start"]) for r in j["reconciliations"]
                   if r["status"] == "reconciled"}
+        by_acct = {}
         for u in uploads:
-            assert (u["bank_account_id"], u["period_start"]) in closed, (
-                f"account {u['bank_account_id']} {u['period_start']} is not signed off"
+            by_acct.setdefault(u["bank_account_id"], []).append(u["period_start"])
+        for acct, periods in by_acct.items():
+            done = sorted(p for p in periods if (acct, p) in closed)
+            open_ = sorted(p for p in periods if (acct, p) not in closed)
+            if not done or not open_:
+                continue
+            assert min(open_) > max(done), (
+                f"account {acct}: period {min(open_)} is unreconciled but "
+                f"{max(done)} is closed — an earlier period was skipped"
             )
 
     def test_closed_periods_tie_exactly_and_name_a_signer(self, client):
@@ -808,6 +823,151 @@ class TestNoOrphanedGlReferences:
         inactive = [r[0] for r in refd if conn.execute(
             "SELECT active FROM gl_accounts WHERE id = ?", (r[0],)).fetchone()[0] == 0]
         assert not inactive, f"referenced but inactive accounts: {inactive}"
+
+
+class TestEveryWritePathValidatesGl:
+    """One validator, applied on every door that sets gl_account_id.
+
+    The PUT endpoint checked active + entity. The IMPORT auto-coder did not,
+    and a Dennis statement import coded 114 rows to Chatham accounts — Daily
+    Sales:Doordash, Linens, Payroll Expenses among them. The rules were never
+    at fault: every one was correctly scoped. The import called
+    _find_gl_account_for_description() WITHOUT a location, which considers
+    rules from both charts and returns whichever pattern is longest.
+
+    A guard on one door is not a guard. These tests knock on each one.
+    """
+
+    def test_validator_rejects_the_three_failure_modes(self, conn):
+        from routes.register_routes import (
+            validate_gl_account, GL_PROBLEM_MISSING, GL_PROBLEM_INACTIVE,
+            GL_PROBLEM_WRONG_ENTITY)
+        assert validate_gl_account(conn, 99999999, "dennis")[1] == GL_PROBLEM_MISSING
+        assert validate_gl_account(conn, None, "dennis")[1] == GL_PROBLEM_MISSING
+
+        inactive = conn.execute(
+            "SELECT id, location FROM gl_accounts WHERE active = 0 LIMIT 1").fetchone()
+        if inactive:
+            assert validate_gl_account(
+                conn, inactive["id"], inactive["location"])[1] == GL_PROBLEM_INACTIVE
+
+        chatham = conn.execute(
+            "SELECT id FROM gl_accounts WHERE location = 'chatham' AND active = 1 "
+            "LIMIT 1").fetchone()
+        assert validate_gl_account(
+            conn, chatham["id"], "dennis")[1] == GL_PROBLEM_WRONG_ENTITY
+        assert validate_gl_account(conn, chatham["id"], "chatham")[1] is None
+
+    def test_machine_wrapper_drops_an_invalid_coding(self, conn):
+        """Automatic coders leave the row uncoded rather than write a coding a
+        human would be refused. Uncoded is visible; wrong is not."""
+        from routes.register_routes import resolve_gl_for_location
+        chatham = conn.execute(
+            "SELECT id FROM gl_accounts WHERE location = 'chatham' AND active = 1 "
+            "LIMIT 1").fetchone()["id"]
+        assert resolve_gl_for_location(conn, chatham, "dennis") is None
+        assert resolve_gl_for_location(conn, chatham, "chatham") == chatham
+        assert resolve_gl_for_location(conn, None, "dennis") is None
+
+    def test_rule_lookup_is_scoped_to_the_entity(self, conn):
+        """The actual bug. An unscoped lookup can return the other chart's
+        account; a scoped one cannot."""
+        from routes.register_routes import _find_gl_account_for_description
+        rule = conn.execute("""
+            SELECT r.pattern, r.location, g.location AS gl_loc
+            FROM gl_account_rules r JOIN gl_accounts g ON g.id = r.gl_account_id
+            WHERE r.location IS NOT NULL AND g.location IS NOT NULL LIMIT 1
+        """).fetchone()
+        if not rule:
+            pytest.skip("no location-scoped rules present")
+        other = "dennis" if rule["location"] == "chatham" else "chatham"
+        got = _find_gl_account_for_description(conn, rule["pattern"], other)
+        if got is not None:
+            loc = conn.execute("SELECT location FROM gl_accounts WHERE id = ?",
+                               (got,)).fetchone()["location"]
+            assert loc in (other, None), \
+                f"scoped lookup for {other} returned a {loc} account"
+
+    def test_import_path_never_produces_a_cross_entity_coding(self, conn):
+        """THE REGRESSION TEST. Drive the real import coder — the same function
+        the import loop calls — with descriptions that match rules from BOTH
+        charts, for each entity, and assert nothing invalid comes out."""
+        from routes.bank_reconcile_routes import resolve_import_gl
+        from routes.register_routes import validate_gl_account
+
+        patterns = [r["pattern"] for r in conn.execute(
+            "SELECT DISTINCT pattern FROM gl_account_rules "
+            "WHERE pattern IS NOT NULL AND TRIM(pattern) <> ''")]
+        assert patterns, "no rules to exercise"
+
+        accounts = {r["location"]: r["account_last4"] for r in conn.execute(
+            "SELECT location, account_last4 FROM bank_accounts "
+            "WHERE location IS NOT NULL")}
+        assert len(accounts) >= 2, "expected both entities to have a bank account"
+
+        # Descriptions that exercise the classifiers too, not just the rules.
+        extra = ["Transfer from x2757 to x5975 Loan repayment",
+                 "Transfer from x2757 to x5087",
+                 "PAYMENT VENMO", "PAYMENT VENMO 350",
+                 "DBT CRD 1335 SOMETHING UNRECOGNISED"]
+
+        checked = 0
+        for location, last4 in accounts.items():
+            for desc in patterns + extra:
+                for signed in (-350.00, -1234.56, 987.65):
+                    gl_id = resolve_import_gl(
+                        conn, {"description": desc, "memo": ""},
+                        signed, location, last4)
+                    checked += 1
+                    if gl_id is None:
+                        continue
+                    row, problem = validate_gl_account(conn, gl_id, location)
+                    assert problem is None, (
+                        f"import coder produced an invalid coding for a "
+                        f"{location} row: {desc!r} -> #{gl_id} "
+                        f"'{row['name'] if row else '?'}' ({problem})")
+        assert checked > 50, f"only {checked} import decisions exercised"
+
+    def test_backfill_refuses_to_cross_entities_when_unscoped(self, conn):
+        """A location-specific account must never be sprayed across both
+        entities by an unscoped backfill."""
+        from routes.register_routes import _backfill_unassigned_for_pattern
+        chatham = conn.execute(
+            "SELECT id FROM gl_accounts WHERE location = 'chatham' AND active = 1 "
+            "LIMIT 1").fetchone()["id"]
+        n = _backfill_unassigned_for_pattern(
+            conn, "ZZZ_NO_SUCH_PATTERN_ZZZ", chatham, None)
+        assert n == 0, "unscoped backfill of a Chatham account was allowed"
+
+    def test_backfill_refuses_a_cross_entity_target(self, conn):
+        from routes.register_routes import _backfill_unassigned_for_pattern
+        chatham = conn.execute(
+            "SELECT id FROM gl_accounts WHERE location = 'chatham' AND active = 1 "
+            "LIMIT 1").fetchone()["id"]
+        n = _backfill_unassigned_for_pattern(
+            conn, "ZZZ_NO_SUCH_PATTERN_ZZZ", chatham, "dennis")
+        assert n == 0, "backfill wrote a Chatham account onto Dennis rows"
+
+    def test_no_row_anywhere_is_cross_entity_or_inactive(self, conn):
+        """The state assertion, across every register-source table."""
+        bad = []
+        for table in ("manual_bank_entries", "vendor_payments",
+                      "payroll_checks", "bank_deposits"):
+            for r in conn.execute(f"""
+                SELECT t.id, g.name, g.active, g.location AS gl_loc,
+                       ba.location AS row_loc
+                FROM {table} t
+                JOIN gl_accounts g ON g.id = t.gl_account_id
+                LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+                WHERE t.gl_account_id IS NOT NULL
+                  AND (g.active = 0
+                       OR (g.location IS NOT NULL AND ba.location IS NOT NULL
+                           AND g.location <> ba.location))
+            """):
+                bad.append(f"{table}#{r['id']} -> '{r['name']}' "
+                           f"({r['gl_loc']} on a {r['row_loc']} row, "
+                           f"active={r['active']})")
+        assert not bad, f"{len(bad)} invalid codings: " + "; ".join(bad[:10])
 
 
 class TestVenmoIsNeverTips:

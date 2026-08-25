@@ -59,6 +59,70 @@ STATEMENT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── TABLE INIT ──────────────────────────────────────────────────────────────
 
+def resolve_import_gl(conn, tx: dict, signed: float,
+                      acct_location: str | None, acct_last4: str | None):
+    """Decide the GL account for one freshly imported statement row.
+
+    Extracted from the import loop so the regression test can drive THIS code
+    rather than a copy of it — the bug being guarded against was a write path
+    that skipped a check the other paths had.
+
+    Order:
+      1. The deterministic transfer classifier. Inter-account transfers are the
+         one case a substring rule reliably gets wrong (2757->5087 is rent,
+         2757->5975 is the intercompany loan, four digits apart). A transfer it
+         refuses to guess at stays UNCODED — it must not fall through to the
+         rules, which would happily guess.
+      2. The Venmo classifier — single-purpose channel, split by amount, which
+         a text rule cannot do.
+      3. The learned rules, SCOPED TO THIS ENTITY.
+      4. Nothing.
+
+    Whatever comes out is validated exactly as a human coding would be.
+    """
+    from routes.register_routes import (
+        _find_gl_account_for_description, classify_transfer, classify_venmo,
+        resolve_gl_for_location,
+    )
+    desc = (tx.get("description") or "") + " " + (tx.get("memo") or "")
+    gl_id = None
+
+    name, reason = classify_transfer(desc, signed, acct_last4 or "")
+    if not name and not reason:
+        name, venmo_reason = classify_venmo(desc, signed)
+        if name:
+            logger.info("Venmo classified: %s — %s", desc.strip()[:60], venmo_reason)
+
+    if name:
+        # Prefer this entity's own account; a NULL-location (shared) one is the
+        # fallback. Never the other entity's copy of the same name.
+        hit = conn.execute(
+            "SELECT id FROM gl_accounts WHERE name = ? AND (location = ? OR location IS NULL) "
+            "AND active = 1 ORDER BY location IS NULL LIMIT 1",
+            (name, acct_location),
+        ).fetchone()
+        if hit:
+            gl_id = hit["id"]
+        else:
+            logger.warning("No active %r account for %s — leaving row uncoded",
+                           name, acct_location)
+    elif reason:
+        logger.info("Transfer left for review: %s — %s", desc.strip()[:70], reason)
+
+    if gl_id is None and not reason:
+        # SCOPE THE LOOKUP TO THIS ENTITY. Omitting the location here is what
+        # coded 114 Dennis rows to Chatham accounts: the unscoped query
+        # considers rules from BOTH charts and returns whichever pattern is
+        # longest, so a Chatham "LINENS" rule won a Dennis row. The rules were
+        # correctly scoped all along; the caller discarded the scoping.
+        gl_id = _find_gl_account_for_description(conn, desc, acct_location)
+
+    # Final gate — the same validator a human coding passes through. An
+    # automatic coder must never write what the PUT endpoint would refuse.
+    return resolve_gl_for_location(conn, gl_id, acct_location,
+                                   context="statement import")
+
+
 def init_bank_reconcile_tables():
     """Create the upload-history table. Idempotent."""
     conn = get_connection()
@@ -401,40 +465,7 @@ def import_selected():
         memo = " ".join(memo_parts).strip()
 
         # Pre-fill the GL account so freshly imported rows aren't all blank.
-        # The deterministic transfer classifier runs FIRST: inter-account
-        # transfers are the one case where a substring rule reliably gets the
-        # wrong answer (2757->5087 is rent, 2757->5975 is the intercompany
-        # loan, and the descriptions differ by four digits). Falls back to the
-        # learned rules, then to NULL.
-        from routes.register_routes import (
-            _find_gl_account_for_description, classify_transfer, classify_venmo,
-        )
-        _desc = (tx.get("description") or "") + " " + (tx.get("memo") or "")
-        gl_id = None
-        _xfer_name, _xfer_reason = classify_transfer(_desc, signed, acct_last4)
-        # Venmo is single-purpose (bands, and the trivia host at exactly $350),
-        # so it gets a deterministic classifier too. A substring rule alone
-        # cannot split the two — they differ only by amount.
-        if not _xfer_name and not _xfer_reason:
-            _venmo_name, _venmo_reason = classify_venmo(_desc, signed)
-            if _venmo_name:
-                _xfer_name = _venmo_name
-                logger.info("Venmo classified: %s — %s",
-                            _desc.strip()[:60], _venmo_reason)
-        if _xfer_name:
-            _g = conn.execute(
-                "SELECT id FROM gl_accounts WHERE name = ? AND (location = ? OR location IS NULL) "
-                "AND active = 1 ORDER BY location IS NULL LIMIT 1",
-                (_xfer_name, acct_location),
-            ).fetchone()
-            if _g:
-                gl_id = _g["id"]
-        elif _xfer_reason:
-            # A transfer we deliberately refuse to guess at — leave uncoded so
-            # it surfaces in the review queue with its reason in the log.
-            logger.info("Transfer left for review: %s — %s", _desc.strip()[:70], _xfer_reason)
-        if gl_id is None and not _xfer_reason:
-            gl_id = _find_gl_account_for_description(conn, _desc)
+        gl_id = resolve_import_gl(conn, tx, signed, acct_location, acct_last4)
 
         # Any coding applied here is machine-derived, so it is suggested, never
         # confirmed — nothing may learn a rule from it (see GL_PROVENANCE).

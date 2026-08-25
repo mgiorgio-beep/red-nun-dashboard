@@ -1004,7 +1004,9 @@ def _apply_invoice_category_coding(conn, bp_rows_with_loc: list) -> int:
         # register UI shows "what this check paid for". It just no longer
         # decides the GL account.
         loc = loc_by_pid.get(pid)
-        gl_id = _resolve_ap_account(conn, loc)
+        gl_id = resolve_gl_for_location(
+            conn, _resolve_ap_account(conn, loc), loc,
+            context="invoice settlement coding")
         if gl_id:
             conn.execute(
                 "UPDATE vendor_payments SET gl_account_id = ?, gl_source = ?, "
@@ -1156,6 +1158,78 @@ GL_SOURCE_UNKNOWN = "unknown"
 GL_SOURCE_CATEGORY = "category"
 GL_STATUS_CONFIRMED = "confirmed"
 GL_STATUS_SUGGESTED = "suggested"
+
+
+# ─── THE ONE GL VALIDATOR ────────────────────────────────────────────────────
+#
+# EVERY write path that sets gl_account_id must go through this. There is no
+# second opinion about what a usable coding is.
+#
+# The PUT endpoint had this check and the IMPORT auto-coder did not, so a
+# Dennis statement import coded 114 rows to Chatham accounts — Daily
+# Sales:Doordash, Linens, Payroll Expenses and the rest. The rules were not at
+# fault: every one was correctly scoped to its own entity. The caller threw the
+# scoping away by calling _find_gl_account_for_description() without a
+# location, which considers rules from BOTH charts and returns whichever
+# pattern is longest.
+#
+# A guard on one door is not a guard. This is the door.
+
+GL_PROBLEM_MISSING = "missing"
+GL_PROBLEM_INACTIVE = "inactive"
+GL_PROBLEM_WRONG_ENTITY = "wrong_entity"
+
+
+def validate_gl_account(conn, gl_id, location: str | None):
+    """Is `gl_id` a usable coding for a row belonging to `location`?
+
+    Returns (row, problem). `problem` is None when the account is usable;
+    otherwise one of the GL_PROBLEM_* constants and `row` may be None.
+
+    Three ways a coding is invalid, and all three have bitten us:
+      missing       — the id resolves to nothing.
+      inactive      — a retired account. This is how 225 codings orphaned:
+                      the ids still resolved, to dead accounts.
+      wrong_entity  — the account belongs to the other chart. The two
+                      entities do not share a chart of accounts.
+
+    A NULL account location means "shared" and is compatible with anything.
+    A NULL row location cannot be checked for entity, so it only fails on
+    missing/inactive — callers that can supply a location should.
+    """
+    if gl_id is None:
+        return None, GL_PROBLEM_MISSING
+    row = conn.execute(
+        "SELECT id, name, location, active, account_type "
+        "FROM gl_accounts WHERE id = ?", (gl_id,)
+    ).fetchone()
+    if not row:
+        return None, GL_PROBLEM_MISSING
+    if not row["active"]:
+        return row, GL_PROBLEM_INACTIVE
+    if row["location"] and location and row["location"] != location:
+        return row, GL_PROBLEM_WRONG_ENTITY
+    return row, None
+
+
+def resolve_gl_for_location(conn, gl_id, location: str | None, *, context: str = ""):
+    """Machine-path wrapper: returns `gl_id` if usable, else None.
+
+    Automatic coders must never write a coding a human would be refused. They
+    leave the row uncoded and log — an uncoded row is visible and fixable; a
+    confidently wrong one is neither.
+    """
+    if gl_id is None:
+        return None
+    row, problem = validate_gl_account(conn, gl_id, location)
+    if problem is None:
+        return gl_id
+    logger.warning(
+        "Refusing GL coding%s: account %s (%s) is %s for a %s row",
+        f" [{context}]" if context else "", gl_id,
+        (row["name"] if row else "?"), problem, location or "unscoped",
+    )
+    return None
 
 
 # ── Inter-account transfers ──────────────────────────────────────────────────
@@ -1522,24 +1596,23 @@ def set_row_gl_account():
     # deactivated everything it didn't import. The rows kept their ids, the ids
     # pointed at dead copies, and the type-ahead rendered them blank.
     if gl_id is not None:
-        gl = conn.execute(
-            "SELECT id, name, location, active, account_type "
-            "FROM gl_accounts WHERE id = ?", (gl_id,)
-        ).fetchone()
-        if not gl:
-            conn.close()
-            return jsonify({"error": "GL account not found"}), 404
-        if not gl["active"]:
-            conn.close()
-            return jsonify({"error": f"'{gl['name']}' is an inactive account and "
-                                     f"cannot be used for new codings"}), 409
         row_loc = conn.execute(
             "SELECT ba.location FROM bank_accounts ba "
             "JOIN (SELECT bank_account_id FROM " + table + " WHERE id = ?) x "
             "ON ba.id = x.bank_account_id", (row_id,)
         ).fetchone()
         row_loc = row_loc["location"] if row_loc else None
-        if gl["location"] and row_loc and gl["location"] != row_loc:
+
+        # Same validator every other write path uses. See validate_gl_account.
+        gl, problem = validate_gl_account(conn, gl_id, row_loc)
+        if problem == GL_PROBLEM_MISSING:
+            conn.close()
+            return jsonify({"error": "GL account not found"}), 404
+        if problem == GL_PROBLEM_INACTIVE:
+            conn.close()
+            return jsonify({"error": f"'{gl['name']}' is an inactive account and "
+                                     f"cannot be used for new codings"}), 409
+        if problem == GL_PROBLEM_WRONG_ENTITY:
             conn.close()
             return jsonify({"error": f"'{gl['name']}' belongs to {gl['location']} "
                                      f"but this row is a {row_loc} transaction — "
@@ -1663,6 +1736,23 @@ def _backfill_unassigned_for_pattern(conn, pattern: str, gl_id: int, location: s
     """
     if not pattern:
         return 0
+
+    # The account must be usable for the location we are about to write into.
+    # Without a location we cannot check entity compatibility, so an account
+    # that belongs to ONE entity must not be sprayed across both — refuse
+    # rather than guess. (A shared, NULL-location account is still fine.)
+    gl_row, problem = validate_gl_account(conn, gl_id, location)
+    if problem is not None:
+        logger.warning("Backfill refused: account %s is %s for %s",
+                       gl_id, problem, location or "unscoped")
+        return 0
+    if location is None and gl_row["location"] is not None:
+        logger.warning(
+            "Backfill refused: account %s (%s) belongs to %s but the backfill "
+            "is unscoped — it would cross entities",
+            gl_id, gl_row["name"], gl_row["location"])
+        return 0
+
     upper_like = f"%{pattern.upper()}%"
 
     # Resolve the set of bank_account_ids that belong to this location.
