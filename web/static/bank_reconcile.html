@@ -20,145 +20,118 @@
 }
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
 .main-content { padding: 24px; overflow-y: auto; }
-.content-wrap { max-width: 1280px; }
+.content-wrap { max-width: 1400px; }
 
 .page-header { margin-bottom: 18px; }
 .page-title { font-size: 22px; font-weight: 700; }
-.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; max-width: 900px; }
+.page-sub a { color: var(--blue); text-decoration: none; }
 
 .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-.section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); margin-bottom: 12px; font-weight: 700; }
+.section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); margin-bottom: 12px; font-weight: 700; }
 
 .account-bar { display: flex; gap: 10px; flex-wrap: wrap; }
-.account-pill {
-  padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
+.pill {
+  padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--bg); color: var(--text2); font-size: 13px; font-weight: 600;
   cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 10px;
 }
-.account-pill:hover { border-color: var(--border-focus); color: var(--text); }
-.account-pill.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
-.account-pill .acct-last4 { font-family: var(--mono); font-size: 11px; color: var(--text3); }
-.account-pill.active .acct-last4 { color: var(--blue); }
+.pill:hover { border-color: var(--border-focus); color: var(--text); }
+.pill.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.pill .sub { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+.pill.active .sub { color: var(--blue); }
+.pill.closed { border-color: var(--green); color: var(--green); }
+.pill.closed.active { background: var(--green-soft); }
 
-.upload-zone {
-  border: 2px dashed var(--border-focus); border-radius: 12px; padding: 28px;
-  text-align: center; color: var(--text2); cursor: pointer; transition: all 0.15s;
+.periods { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.periods .empty { color: var(--text3); font-size: 13px; font-style: italic; }
+
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.tile {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px;
 }
-.upload-zone:hover, .upload-zone.dragover { border-color: var(--blue); background: rgba(56,189,248,0.05); color: var(--blue); }
-.upload-zone .lbl { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-.upload-zone .hint { font-size: 12px; color: var(--text3); }
-.upload-zone input[type=file] { display: none; }
+.tile .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text3); margin-bottom: 4px; font-weight: 700; }
+.tile .val { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--text); }
+.tile.delta.ties .val { color: var(--green); }
+.tile.delta.off  .val { color: var(--red); }
+.tile.delta { border-color: var(--border-focus); }
+.tile.delta.ties { border-color: var(--green); background: var(--green-soft); }
+.tile.delta.off  { border-color: var(--red);   background: var(--red-soft); }
 
+.subtle { color: var(--text3); font-size: 11px; margin-top: 4px; }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } .tiles { grid-template-columns: 1fr 1fr; } }
+
+.list-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.list-hdr .title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text2); }
+.list-hdr .count { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+
+.txlist {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg);
+  max-height: 460px; overflow-y: auto;
+}
+.txrow {
+  display: grid; grid-template-columns: 20px 80px 1fr 90px 20px;
+  gap: 10px; padding: 8px 12px; align-items: center; font-size: 12px;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.txrow:last-child { border-bottom: none; }
+.txrow:hover { background: rgba(56,189,248,0.04); }
+.txrow.checked { background: rgba(56,189,248,0.08); }
+.txrow.locked  { background: rgba(34,197,94,0.06); cursor: help; }
+.txrow .date { font-family: var(--mono); color: var(--text3); }
+.txrow .payee { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.txrow .amt { font-family: var(--mono); text-align: right; }
+.txrow.out .amt { color: var(--red); }
+.txrow.in  .amt { color: var(--green); }
+.txrow .chk { color: var(--text3); font-family: var(--mono); font-weight: 700; text-align: center; font-size: 11px; }
+.txrow.checked .chk { color: var(--blue); }
+.txrow.locked  .chk { color: var(--green); }
+.empty-list { padding: 30px; text-align: center; color: var(--text3); font-size: 12px; font-style: italic; }
+
+.actions { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.actions .left { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.notes-box { width: 320px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--font); font-size: 13px; resize: vertical; min-height: 40px; }
 .btn {
-  padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+  padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--bg-card); color: var(--text2); font-size: 13px; font-family: var(--font);
-  cursor: pointer; transition: all 0.15s; font-weight: 500;
+  cursor: pointer; transition: all 0.15s; font-weight: 600;
 }
-.btn:hover { border-color: var(--blue); color: var(--blue); }
-.btn-primary { border-color: var(--green); color: var(--green); }
-.btn-primary:hover { background: var(--green-soft); }
-.btn-warn { border-color: var(--amber); color: var(--amber); }
-.btn-warn:hover { background: var(--amber-soft); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+.btn.primary { border-color: var(--green); color: var(--green); }
+.btn.primary:hover:not(:disabled) { background: var(--green-soft); }
+.btn.warn { border-color: var(--amber); color: var(--amber); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.summary-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 16px; }
-.summary-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
-.summary-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
-.summary-value { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
-.summary-value.green { color: var(--green); }
-.summary-value.red { color: var(--red); }
-.summary-value.blue { color: var(--blue); }
-.summary-value.amber { color: var(--amber); }
+.closed-banner {
+  border: 1px solid var(--green); background: var(--green-soft);
+  border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
+  color: var(--green); font-size: 13px;
+}
+.closed-banner b { color: var(--text); }
 
-.warnings { margin-bottom: 12px; }
-.warning {
-  background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3);
-  color: var(--amber); padding: 10px 14px; border-radius: 8px; font-size: 12px;
-  margin-bottom: 6px;
-}
-/* Post-import audit. A failure means rows were just coded to accounts that
-   cannot be right, so it is red and it stays on screen — not an alert() the
-   user dismisses on the way past. */
-.audit-fail {
-  background: rgba(239,68,68,0.09); border: 1px solid rgba(239,68,68,0.45);
-  color: #fecaca; padding: 12px 15px; border-radius: 9px; font-size: 12.5px;
-  margin-bottom: 10px; line-height: 1.6;
-}
-.audit-fail b { color: #fca5a5; }
-.audit-fail ul { margin: 6px 0 0 18px; }
-.audit-ok {
-  background: rgba(34,197,94,0.07); border: 1px solid rgba(34,197,94,0.3);
-  color: #86efac; padding: 9px 14px; border-radius: 8px; font-size: 12px;
-  margin-bottom: 10px;
+.err-banner {
+  border: 1px solid var(--red); background: var(--red-soft);
+  border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
+  color: var(--red); font-size: 13px;
 }
 
-.review-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-.review-tools .label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
-.filter-input {
-  padding: 7px 10px; border-radius: 7px; border: 1px solid var(--border);
-  background: var(--bg); color: var(--text); font-size: 13px; min-width: 140px;
+.discrepancy-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: var(--amber-soft); color: var(--amber); font-size: 11px;
+  font-weight: 700; margin-left: 8px;
 }
 
-.tx-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.tx-table thead th {
-  text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 700;
-  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
-  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 1;
-}
-.tx-table tbody td {
-  padding: 9px 12px; border-bottom: 1px solid rgba(30,41,59,0.6); vertical-align: top;
-}
-.tx-table tbody tr.row-exact { background: rgba(34,197,94,0.04); }
-.tx-table tbody tr.row-likely { background: rgba(56,189,248,0.04); }
-.tx-table tbody tr:hover td { background: rgba(56,189,248,0.06); }
-.col-chk { width: 36px; text-align: center; }
-.col-date { font-family: var(--mono); font-size: 12px; color: var(--text2); white-space: nowrap; width: 90px; }
-.col-amt { text-align: right; font-family: var(--mono); white-space: nowrap; width: 110px; }
-.col-bal { text-align: right; font-family: var(--mono); white-space: nowrap; width: 110px; color: var(--text3); }
-
-.amt-out { color: var(--red); }
-.amt-in { color: var(--green); }
-
-.match-pill {
-  display: inline-block; padding: 2px 8px; border-radius: 5px;
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
-}
-.match-exact { background: var(--green-soft); color: var(--green); }
-.match-likely { background: var(--blue-soft); color: var(--blue); }
-.match-none { background: rgba(148,163,184,0.15); color: var(--text2); }
-
-.match-detail {
-  font-size: 11px; color: var(--text3); margin-top: 2px;
-  font-family: var(--mono);
-}
-
-.history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.history-table th { text-align: left; padding: 8px 10px; font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
-.history-table td { padding: 8px 10px; border-bottom: 1px solid rgba(30,41,59,0.6); }
-.history-table .right { text-align: right; font-family: var(--mono); }
-.history-table .clickable { cursor: pointer; color: var(--blue); }
-
-.empty { text-align: center; padding: 30px; color: var(--text3); font-size: 13px; }
-.loading { text-align: center; padding: 20px; color: var(--text3); font-size: 13px; }
-
-.action-bar {
-  background: rgba(56,189,248,0.04);
-  border: 1px solid var(--border); border-radius: 10px;
-  padding: 12px 16px; margin-bottom: 12px;
-  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-}
-.action-bar .left { color: var(--text2); font-size: 13px; font-weight: 600; }
-.action-bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-.action-bar .btn-primary { padding: 9px 18px; font-size: 14px; }
-
+/* Mobile */
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
   .page-title { font-size: 18px; }
-  .summary-bar { grid-template-columns: 1fr 1fr; }
-  .summary-value { font-size: 16px; }
-  .tx-table thead th, .tx-table tbody td { padding: 7px 6px; font-size: 11px; }
-  .col-bal { display: none; }
+  .tiles { grid-template-columns: 1fr 1fr; }
+  .tile .val { font-size: 15px; }
+  .txrow { grid-template-columns: 20px 70px 1fr 80px 18px; padding: 7px 8px; font-size: 11px; }
+  .notes-box { width: 100%; }
 }
 </style>
 </head>
@@ -167,777 +140,441 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="main-content">
 <div class="content-wrap">
 
-  <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap">
-    <div>
-      <div class="page-title">Bank Reconcile</div>
-      <div class="page-sub">Upload a Cape Cod Five PDF statement, parse it, and import transactions that aren't in the register.</div>
-    </div>
-    <div>
-      <button id="btn-dedupe" style="padding:9px 14px;border-radius:8px;border:1px solid var(--amber);background:var(--bg-card);color:var(--amber);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Dedupe Existing Register</button>
+  <div class="page-header">
+    <div class="page-title">Bank Reconcile</div>
+    <div class="page-sub">
+      Sign off a statement period. Pick a period; tick uncleared items until the delta hits zero; finish to lock those rows into R.
+      Statement PDFs live on <a href="/import-statement">Import Statement</a>. Reads the statement beginning/ending balances straight
+      off the upload — never a text input.
     </div>
   </div>
 
-  <!-- Account picker -->
+  <div id="err" style="display:none"></div>
+
   <div class="section">
     <h2>1. Account</h2>
-    <div class="account-bar" id="account-bar"><div class="loading">Loading accounts…</div></div>
+    <div class="account-bar" id="accounts"><div class="empty-list" style="grid-column:1/-1">Loading accounts…</div></div>
   </div>
 
-  <!-- Upload zone -->
-  <div class="section">
-    <h2>2. Statement</h2>
-    <label class="upload-zone" id="upload-zone">
-      <div class="lbl">Drop PDF here or click to browse</div>
-      <div class="hint">Cape Cod Five statement (5975 Chatham or 2757 Dennis). Max 50 MB.</div>
-      <input type="file" id="file-input" accept="application/pdf">
-    </label>
-    <div id="upload-status" style="margin-top:10px; font-size:12px; color: var(--text3); min-height: 18px;"></div>
+  <div class="section" id="period-section" style="display:none">
+    <h2>2. Period</h2>
+    <div class="periods" id="periods"></div>
+    <div class="subtle" id="period-hint"></div>
   </div>
 
-  <!-- Review section (hidden until upload completes) -->
-  <div class="section" id="review-section" style="display:none">
-    <h2>3. Review &amp; import</h2>
+  <div id="body" style="display:none">
 
-    <div id="audit-result"></div>
-    <div id="check-result"></div>
-    <div class="summary-bar" id="summary-bar"></div>
-    <div class="warnings" id="warnings"></div>
+    <div id="closed-banner-slot"></div>
 
-    <div class="review-tools">
-      <span class="label">Show</span>
-      <select class="filter-input" id="flt-show">
-        <option value="all">All rows</option>
-        <option value="unmatched">Unmatched only</option>
-        <option value="matched">Matched only</option>
-        <option value="checked">Checked only</option>
-      </select>
-      <span class="label">Search</span>
-      <input class="filter-input" id="flt-search" type="text" placeholder="payee, ref, memo…">
-      <button class="btn" id="btn-select-unmatched">Select unmatched</button>
-      <button class="btn" id="btn-select-all">Select all</button>
-      <button class="btn" id="btn-clear-selection">Clear</button>
+    <div class="section">
+      <h2>Statement Anchors — read from upload, not typed</h2>
+      <div class="tiles" id="tiles-anchors"></div>
     </div>
 
-    <div class="action-bar">
-      <div class="left">
-        <span id="sel-count">0</span> selected
-        · <span id="sel-net">$0.00</span> net
-      </div>
-      <div class="right">
-        <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px;">
-          <input type="checkbox" id="opt-clear-matches"> Mark matched register rows as cleared
-        </label>
-        <button class="btn btn-primary" id="btn-import" disabled>Import selected</button>
+    <div class="section">
+      <h2>Reconciliation</h2>
+      <div class="tiles" id="tiles-recon"></div>
+      <div class="subtle" id="delta-hint" style="margin-top:10px"></div>
+    </div>
+
+    <div class="section">
+      <h2>Rows in this period — tick to clear</h2>
+      <div class="two-col">
+        <div>
+          <div class="list-hdr">
+            <div class="title">Payments (outflow)</div>
+            <div class="count" id="cnt-out"></div>
+          </div>
+          <div class="txlist" id="list-out"></div>
+        </div>
+        <div>
+          <div class="list-hdr">
+            <div class="title">Deposits (inflow)</div>
+            <div class="count" id="cnt-in"></div>
+          </div>
+          <div class="txlist" id="list-in"></div>
+        </div>
       </div>
     </div>
 
-    <div style="overflow-x:auto">
-      <table class="tx-table" id="tx-table">
-        <thead>
-          <tr>
-            <th class="col-chk"><input type="checkbox" id="chk-all"></th>
-            <th class="col-date">Date</th>
-            <th>Description</th>
-            <th>Match</th>
-            <th class="col-amt">Out</th>
-            <th class="col-amt">In</th>
-            <th class="col-bal">Balance</th>
-          </tr>
-        </thead>
-        <tbody id="tx-body"></tbody>
-      </table>
-    </div>
-  </div>
+    <div class="section">
+      <h2>Outstanding at close — itemized</h2>
+      <div class="txlist" id="list-outstanding"></div>
+      <div class="subtle" style="margin-top:8px">
+        These are the checks written but not yet cashed, and deposits in transit — timing differences,
+        not errors. They're what makes book != bank on a period that otherwise ties. They will be recorded
+        against this reconciliation on close, and if they carry forward long enough they'll flag as stale.
+      </div>
 
-  <!-- History -->
-  <div class="section">
-    <h2>4. Past uploads</h2>
-    <div id="history-wrap"><div class="loading">Loading…</div></div>
+      <div class="actions">
+        <div class="left">
+          <textarea class="notes-box" id="notes" placeholder="Notes (optional) — anything unusual about this close"></textarea>
+        </div>
+        <div>
+          <button class="btn primary" id="btn-close" disabled>Sign off period</button>
+          <button class="btn warn"    id="btn-reopen" style="display:none">Re-open (recompute)</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
 </div>
 
-<!-- ─── Dedupe Modal ──────────────────────────────────────────────────── -->
-<div id="dedupe-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px">
-  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:22px;width:100%;max-width:980px;max-height:90vh;overflow-y:auto">
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px">Dedupe Existing Register</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.5">
-      Finds <code>manual_bank_entries</code> rows (statement-imported) that have a matching <code>vendor_payment</code> or Manual <code>payroll_check</code> in the dashboard. On apply, the dashboard row gets <em>cleared = 1</em> + <em>bank_account_id</em> set, and the duplicate manual entry is deleted. Use this when you imported a statement and ended up with both sides in the register.
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
-      <div>
-        <label style="display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;font-weight:600">Account</label>
-        <select id="dd-account" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px"></select>
-      </div>
-      <div>
-        <label style="display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;font-weight:600">Start Date</label>
-        <input type="date" id="dd-start" value="2026-01-01" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px">
-      </div>
-      <div>
-        <label style="display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;font-weight:600">End Date</label>
-        <input type="date" id="dd-end" value="2026-01-31" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px">
-      </div>
-    </div>
-    <div style="display:flex;gap:18px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-      <label style="font-size:12px;color:var(--text2)">
-        Date tolerance ±<input type="number" id="dd-tol" value="5" min="0" max="60" style="width:60px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);margin:0 4px"> days
-      </label>
-      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
-        <input type="checkbox" id="dd-bp" checked> Match vendor payments
-      </label>
-      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
-        <input type="checkbox" id="dd-pr" checked> Match Manual payroll checks
-      </label>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button id="dd-preview" style="padding:8px 14px;border-radius:8px;border:1px solid var(--blue);background:var(--bg-card);color:var(--blue);font-size:13px;font-weight:500;cursor:pointer">Preview</button>
-    </div>
-
-    <div id="dd-summary" style="font-size:12px;color:var(--text2);padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;min-height:18px;margin-bottom:12px"></div>
-
-    <div id="dd-results" style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:12px"></div>
-
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button id="dd-cancel" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text2);font-size:13px;font-weight:500;cursor:pointer">Close</button>
-      <button id="dd-apply" disabled style="padding:8px 14px;border-radius:8px;border:1px solid var(--green);background:rgba(34,197,94,0.12);color:var(--green);font-size:13px;font-weight:600;cursor:pointer;opacity:0.5">Apply Merge</button>
-    </div>
-  </div>
-</div>
-
+<script src="/static/sidebar.js"></script>
 <script>
-// ────────────────────────────────────────────────────────────────────────────
-// State
-// ────────────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt = n => (n < 0 ? '-$' : '$') + Math.abs(Number(n) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cents = n => Math.round((Number(n) || 0) * 100);
+
 const STATE = {
   accounts: [],
   currentAcct: null,
-  upload: null,        // last response from /upload or /uploads/<id>
-  selected: new Set(), // parsed indexes selected for import
+  uploads: [],
+  recs: {},               // {upload_id: bank_reconciliation}
+  currentUpload: null,    // upload row
+  currentRec: null,       // if this period is already closed
+  register: null,         // GET /api/register/<id>?start&end (all rows)
+  preview: null,          // GET /api/bank-reconcile/reconciliation/preview
 };
 
-// ────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────────────────
-const $ = (id) => document.getElementById(id);
-const fmt = (n) => Number(n||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-const fmtMoney = (n) => '$' + fmt(n);
-const esc = (s) => (s == null ? '' : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+function showErr(msg) {
+  const e = $('err');
+  e.style.display = 'block';
+  e.className = 'err-banner';
+  e.textContent = msg;
+}
+function hideErr() { $('err').style.display = 'none'; }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Accounts
-// ────────────────────────────────────────────────────────────────────────────
-async function loadAccounts() {
-  try {
-    const r = await fetch('/api/register/accounts');
-    const d = await r.json();
-    STATE.accounts = d.accounts || [];
-    if (!STATE.accounts.length) {
-      $('account-bar').innerHTML = '<div class="empty">No bank accounts configured.</div>';
-      return;
-    }
-    renderAccountBar();
-    // Auto-select based on global location
-    const loc = (window.currentLocation || localStorage.getItem('globalLocation') || 'chatham');
-    const match = STATE.accounts.find(a => a.location === loc) || STATE.accounts[0];
-    selectAccount(match.id);
-  } catch (e) {
-    $('account-bar').innerHTML = `<div class="empty">Failed to load accounts: ${esc(String(e))}</div>`;
-  }
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const ct = r.headers.get('content-type') || '';
+  const body = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) throw new Error((body && body.error) || (typeof body === 'string' ? body : r.statusText));
+  return body;
 }
 
-function renderAccountBar() {
-  $('account-bar').innerHTML = STATE.accounts.map(a => `
-    <div class="account-pill" data-acct="${a.id}" onclick="selectAccount(${a.id})">
-      <div>
-        <div>${esc(a.short_name || a.name)}</div>
-        <div class="acct-last4">••• ${esc(a.account_last4 || '----')}</div>
-      </div>
+async function loadAccounts() {
+  try {
+    const j = await api('/api/register/accounts');
+    STATE.accounts = j.accounts || [];
+    renderAccounts();
+    // Auto-pick a query-string account if present, else the first
+    const q = new URLSearchParams(window.location.search);
+    const wantAcct = q.get('account_id');
+    const pick = STATE.accounts.find(a => String(a.id) === wantAcct) || STATE.accounts[0];
+    if (pick) selectAccount(pick.id);
+  } catch (e) { showErr('Could not load accounts: ' + e.message); }
+}
+
+function renderAccounts() {
+  const el = $('accounts');
+  if (!STATE.accounts.length) { el.innerHTML = '<div class="empty-list">No accounts.</div>'; return; }
+  el.innerHTML = STATE.accounts.map(a => `
+    <div class="pill ${STATE.currentAcct && STATE.currentAcct.id === a.id ? 'active' : ''}"
+         onclick="selectAccount(${a.id})">
+      <span>${esc(a.short_name || a.name)}</span>
+      <span class="sub">•••${esc(a.account_last4 || '')}</span>
     </div>
   `).join('');
 }
 
-function selectAccount(id) {
-  STATE.currentAcct = STATE.accounts.find(a => a.id === id);
-  document.querySelectorAll('.account-pill').forEach(el => {
-    el.classList.toggle('active', Number(el.dataset.acct) === id);
-  });
-  loadHistory();
-  // Don't auto-clear an in-progress review
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Upload
-// ────────────────────────────────────────────────────────────────────────────
-function setupUploadZone() {
-  const zone = $('upload-zone');
-  const input = $('file-input');
-
-  zone.addEventListener('click', (e) => {
-    // Avoid double-fire when clicking the inner <input>
-    if (e.target.tagName !== 'INPUT') input.click();
-  });
-
-  ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, (e) => {
-    e.preventDefault(); zone.classList.add('dragover');
-  }));
-  ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, (e) => {
-    e.preventDefault(); zone.classList.remove('dragover');
-  }));
-  zone.addEventListener('drop', (e) => {
-    const file = e.dataTransfer.files[0];
-    if (file) uploadStatement(file);
-  });
-  input.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) uploadStatement(file);
-  });
-}
-
-async function uploadStatement(file) {
-  if (!STATE.currentAcct) {
-    alert('Pick a bank account first.');
-    return;
-  }
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    if (!confirm('File does not end in .pdf — upload anyway?')) return;
-  }
-
-  $('upload-status').textContent = `Uploading ${file.name} (${(file.size/1024).toFixed(0)} KB)…`;
-
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('account_id', STATE.currentAcct.id);
-
+async function selectAccount(id) {
+  STATE.currentAcct = STATE.accounts.find(a => a.id === id) || null;
+  STATE.currentUpload = null;
+  STATE.currentRec = null;
+  STATE.register = null;
+  STATE.preview = null;
+  renderAccounts();
+  $('body').style.display = 'none';
+  if (!STATE.currentAcct) return;
+  $('period-section').style.display = 'block';
+  $('periods').innerHTML = '<div class="empty">Loading periods…</div>';
   try {
-    const r = await fetch('/api/bank-reconcile/upload', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!r.ok) {
-      $('upload-status').innerHTML = `<span style="color:var(--red)">Error: ${esc(d.error || r.statusText)}</span>`;
-      return;
+    const [ups, recs] = await Promise.all([
+      api('/api/bank-reconcile/uploads?account_id=' + id),
+      api('/api/bank-reconcile/reconciliations?account_id=' + id),
+    ]);
+    STATE.uploads = (ups.uploads || []).sort((a, b) => (a.period_start || '').localeCompare(b.period_start || ''));
+    STATE.recs = {};
+    for (const r of (recs.reconciliations || [])) {
+      // key by (period_start, period_end) — statement_upload_id may be stale
+      STATE.recs[r.period_start + ':' + r.period_end] = r;
     }
-    $('upload-status').innerHTML = `<span style="color:var(--green)">Parsed — ${d.parsed.transactions.length} transactions found.</span>`;
-    STATE.upload = d;
-    STATE.selected = new Set();
-    showReview();
-    loadHistory();
-  } catch (e) {
-    $('upload-status').innerHTML = `<span style="color:var(--red)">Upload failed: ${esc(String(e))}</span>`;
-  }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Review render
-// ────────────────────────────────────────────────────────────────────────────
-function showReview() {
-  if (!STATE.upload) return;
-  $('review-section').style.display = '';
-
-  const p = STATE.upload.parsed || {};
-  const matches = STATE.upload.matches || [];
-  const matchByIdx = {};
-  for (const m of matches) matchByIdx[m.parsed_index] = m;
-
-  // Summary cards
-  const period = (p.period_start && p.period_end) ? `${p.period_start} → ${p.period_end}` : '—';
-  $('summary-bar').innerHTML = `
-    <div class="summary-card">
-      <div class="summary-label">Statement Period</div>
-      <div class="summary-value blue" style="font-size:13px">${esc(period)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Beginning</div>
-      <div class="summary-value">${p.beginning_balance != null ? fmtMoney(p.beginning_balance) : '—'}</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Ending</div>
-      <div class="summary-value">${p.ending_balance != null ? fmtMoney(p.ending_balance) : '—'}</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Total Out</div>
-      <div class="summary-value red">${fmtMoney(p.total_debits)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Total In</div>
-      <div class="summary-value green">${fmtMoney(p.total_credits)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Transactions</div>
-      <div class="summary-value">${(p.transactions || []).length}</div>
-    </div>
-  `;
-
-  // Warnings
-  renderAuditResult(null);   // a fresh render clears any prior audit banner
-  const warnings = p.warnings || [];
-  $('warnings').innerHTML = warnings.length
-    ? warnings.map(w => `<div class="warning">⚠ ${esc(w)}</div>`).join('')
-    : '';
-
-  renderTxTable();
-}
-
-function renderTxTable() {
-  if (!STATE.upload) return;
-  const txs = STATE.upload.parsed.transactions || [];
-  const matches = STATE.upload.matches || [];
-  const matchByIdx = {};
-  for (const m of matches) matchByIdx[m.parsed_index] = m;
-
-  const showFlt = $('flt-show').value;
-  const search = ($('flt-search').value || '').toLowerCase().trim();
-
-  const body = $('tx-body');
-  const rows = [];
-
-  for (let i = 0; i < txs.length; i++) {
-    const tx = txs[i];
-    const m = matchByIdx[i] || { match_kind: 'none', register_match: null };
-    const kind = m.match_kind;
-
-    // Filter
-    if (showFlt === 'unmatched' && kind !== 'none') continue;
-    if (showFlt === 'matched' && kind === 'none') continue;
-    if (showFlt === 'checked' && !STATE.selected.has(i)) continue;
-
-    if (search) {
-      const hay = (tx.description + ' ' + (tx.memo||'') + ' ' + (tx.ref||'')).toLowerCase();
-      if (!hay.includes(search)) continue;
-    }
-
-    const checked = STATE.selected.has(i) ? 'checked' : '';
-    const rowCls = kind === 'exact' ? 'row-exact' : (kind === 'likely' ? 'row-likely' : '');
-    const debit = Number(tx.debit || 0);
-    const credit = Number(tx.credit || 0);
-
-    let matchHtml;
-    if (kind === 'none') {
-      matchHtml = `<span class="match-pill match-none">new</span>`;
-    } else {
-      const reg = m.register_match || {};
-      const refStr = reg.ref ? ` #${esc(reg.ref)}` : '';
-      matchHtml = `
-        <span class="match-pill match-${kind}">${kind === 'exact' ? '✓ exact' : '~ likely'}</span>
-        <div class="match-detail">${esc(reg.source||'')} · ${esc(reg.label||'')}${refStr} · ${esc(reg.date||'')}</div>
-      `;
-    }
-
-    rows.push(`
-      <tr class="${rowCls}">
-        <td class="col-chk"><input type="checkbox" data-idx="${i}" ${checked} onchange="toggleSelected(${i}, this.checked)"></td>
-        <td class="col-date">${esc(tx.date || '')}</td>
-        <td>
-          <div>${esc(tx.description || '')}</div>
-          ${tx.memo ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(tx.memo)}</div>` : ''}
-        </td>
-        <td>${matchHtml}</td>
-        <td class="col-amt amt-out">${debit ? fmtMoney(debit) : ''}</td>
-        <td class="col-amt amt-in">${credit ? fmtMoney(credit) : ''}</td>
-        <td class="col-bal">${tx.balance != null ? fmt(tx.balance) : ''}</td>
-      </tr>
-    `);
-  }
-
-  body.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="7" class="empty">No rows match the current filter.</td></tr>';
-  updateActionBar();
-}
-
-function toggleSelected(idx, checked) {
-  if (checked) STATE.selected.add(idx);
-  else STATE.selected.delete(idx);
-  updateActionBar();
-}
-
-function updateActionBar() {
-  if (!STATE.upload) return;
-  const txs = STATE.upload.parsed.transactions || [];
-  let net = 0;
-  for (const i of STATE.selected) {
-    const tx = txs[i];
-    if (!tx) continue;
-    net += Number(tx.credit || 0) - Number(tx.debit || 0);
-  }
-  $('sel-count').textContent = STATE.selected.size;
-  $('sel-net').textContent = (net >= 0 ? '+' : '−') + fmtMoney(Math.abs(net));
-  $('btn-import').disabled = STATE.selected.size === 0;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Selection helpers
-// ────────────────────────────────────────────────────────────────────────────
-function selectByPredicate(pred) {
-  if (!STATE.upload) return;
-  const txs = STATE.upload.parsed.transactions || [];
-  const matches = STATE.upload.matches || [];
-  const matchByIdx = {};
-  for (const m of matches) matchByIdx[m.parsed_index] = m;
-  for (let i = 0; i < txs.length; i++) {
-    const m = matchByIdx[i] || { match_kind: 'none' };
-    if (pred(txs[i], m)) STATE.selected.add(i);
-  }
-  renderTxTable();
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Import
-// ────────────────────────────────────────────────────────────────────────────
-// Post-import audit banner. Import codes rows automatically, so import is when
-// the codings get checked — the cross-entity guard existed for months as a test
-// nobody ran. A failure stays on the page; it is not an alert to dismiss.
-// Check OCR coverage. ALWAYS shown after an import, never only on failure —
-// "15 checks, 15 images, 6 payees read, 9 below confidence" is the whole point.
-// A check the OCR could not read is listed by number and amount so it becomes
-// a visible queue rather than a silent gap.
-function renderCheckResult(ck){
-  const el = $('check-result');
-  if (!el) return;
-  if (!ck){ el.innerHTML = ''; return; }
-  if (!ck.ok){
-    el.innerHTML = `<div class="warning">⚠ Check extraction did not run`
-      + (ck.error ? `: ${esc(ck.error)}` : '') + `</div>`;
-    return;
-  }
-  if (!ck.checks_on_statement){
-    el.innerHTML = `<div class="audit-ok">No checks on this statement.</div>`;
-    return;
-  }
-  const held = ck.unread || [];
-  const cls = held.length ? 'warning' : 'audit-ok';
-  el.innerHTML = `<div class="${cls}">
-    <b>${esc(ck.banner)}</b>
-    ${ck.newly_coded ? ` — ${ck.newly_coded} coded from the payee.` : ''}
-    ${held.length ? `<div style="margin-top:6px">Held for review — the payee could
-      not be read with confidence, so these stay uncoded:
-      <ul style="margin:4px 0 0 18px">${held.map(u =>
-        `<li>check ${esc(u.check_number)} — $${Number(u.amount).toLocaleString('en-US',
-          {minimumFractionDigits:2, maximumFractionDigits:2})}
-          ${u.payee ? `(read as “${esc(u.payee)}”)` : '(nothing legible)'}</li>`
-      ).join('')}</ul></div>` : ''}
-  </div>`;
-}
-
-function renderAuditResult(audit){
-  const el = $('audit-result');
-  if (!el) return;
-  if (!audit){ el.innerHTML = ''; return; }
-  if (audit.ok === null || audit.ok === undefined){
-    el.innerHTML = `<div class="warning">⚠ Post-import audit could not run`
-      + (audit.error ? `: ${esc(audit.error)}` : '') + `</div>`;
-    return;
-  }
-  const failed = (audit.checks || []).filter(c => !c.ok);
-  if (!failed.length){
-    el.innerHTML = `<div class="audit-ok">✓ Post-import audit clean —
-      ${(audit.checks || []).length} invariants checked${
-        audit.location ? ` for ${esc(audit.location)}` : ''}.</div>`;
-    return;
-  }
-  el.innerHTML = `<div class="audit-fail">
-    <b>⚠ Post-import audit FAILED — ${failed.length} of
-    ${(audit.checks||[]).length} invariants broken.</b>
-    The rows were imported (they are real transactions), but some codings
-    cannot be correct and need fixing before this period is relied on.
-    <ul>${failed.map(c => `<li><b>${esc(c.name)}</b> — ${c.count}: ${esc(c.summary)}${
-      (c.detail||[]).length
-        ? `<br><span style="color:var(--text3)">e.g. ${esc(
-            c.detail.slice(0,3).map(d =>
-              d.table ? `${d.table}#${d.id} → ${d.gl_name} (${d.problem})`
-                      : (d.journal_name || d.category_type || d.pattern || d.id)
-            ).join('; '))}</span>`
-        : ''}</li>`).join('')}</ul></div>`;
-}
-
-
-async function doImport() {
-  if (!STATE.upload || STATE.selected.size === 0) return;
-  const indexes = Array.from(STATE.selected).sort((a,b) => a - b);
-  const alsoClear = $('opt-clear-matches').checked;
-
-  const confirmMsg = `Import ${indexes.length} transactions into the register?` +
-    (alsoClear ? `\n\nAlso mark matched register rows as cleared.` : '');
-  if (!confirm(confirmMsg)) return;
-
-  $('btn-import').disabled = true;
-  $('btn-import').textContent = 'Importing…';
-
-  try {
-    const r = await fetch('/api/bank-reconcile/import', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        upload_id: STATE.upload.upload_id || STATE.upload.id,
-        indexes: indexes,
-        also_clear_matches: alsoClear,
-      }),
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      alert('Import failed: ' + (d.error || r.statusText));
-      $('btn-import').disabled = false;
-      $('btn-import').textContent = 'Import selected';
-      return;
-    }
-    renderAuditResult(d.audit);
-    renderCheckResult(d.checks);
-    alert(`Imported ${d.inserted} entries${alsoClear ? `, cleared ${d.cleared} register rows` : ''}.`
-      + (d.audit && d.audit.ok === false
-         ? '\n\n⚠ POST-IMPORT AUDIT FAILED — see the red banner above the summary.'
-         : ''));
-    // Reload the upload to refresh match status
-    if (STATE.upload.upload_id) {
-      const r2 = await fetch('/api/bank-reconcile/uploads/' + STATE.upload.upload_id);
-      const d2 = await r2.json();
-      if (r2.ok) {
-        STATE.upload = d2;
-        STATE.upload.upload_id = d2.id;
-        STATE.selected = new Set();
-        showReview();
+    renderPeriods();
+    // Auto-pick from query string: upload_id > rec_id > (nothing)
+    const q = new URLSearchParams(window.location.search);
+    const wantUp = q.get('upload_id');
+    const wantRec = q.get('rec_id');
+    if (wantUp) {
+      const up = STATE.uploads.find(u => String(u.id) === wantUp);
+      if (up) selectPeriod(up.id);
+    } else if (wantRec) {
+      // Find the rec, then find its statement upload by (period_start, period_end).
+      const rec = Object.values(STATE.recs).find(r => String(r.id) === wantRec);
+      if (rec) {
+        const up = STATE.uploads.find(u =>
+          u.period_start === rec.period_start && u.period_end === rec.period_end);
+        if (up) selectPeriod(up.id);
       }
     }
-    loadHistory();
-  } catch (e) {
-    alert('Import failed: ' + e);
-  } finally {
-    $('btn-import').disabled = false;
-    $('btn-import').textContent = 'Import selected';
-  }
+  } catch (e) { showErr('Could not load periods: ' + e.message); }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// History
-// ────────────────────────────────────────────────────────────────────────────
-async function loadHistory() {
-  if (!STATE.currentAcct) return;
-  $('history-wrap').innerHTML = '<div class="loading">Loading…</div>';
-  try {
-    const r = await fetch('/api/bank-reconcile/uploads?account_id=' + STATE.currentAcct.id);
-    const d = await r.json();
-    if (!r.ok) {
-      $('history-wrap').innerHTML = `<div class="empty">${esc(d.error || r.statusText)}</div>`;
-      return;
-    }
-    if (!d.uploads || !d.uploads.length) {
-      $('history-wrap').innerHTML = '<div class="empty">No statements uploaded yet for this account.</div>';
-      return;
-    }
-    const rows = d.uploads.map(u => `
-      <tr>
-        <td><span class="clickable" onclick="reopenUpload(${u.id})">#${u.id}</span></td>
-        <td>${esc(u.uploaded_at || '')}</td>
-        <td>${esc(u.filename || '')}</td>
-        <td>${esc(u.period_start || '?')} → ${esc(u.period_end || '?')}</td>
-        <td class="right">${u.beginning_balance != null ? fmtMoney(u.beginning_balance) : '—'}</td>
-        <td class="right">${u.ending_balance != null ? fmtMoney(u.ending_balance) : '—'}</td>
-        <td class="right">${u.transaction_count || 0}</td>
-        <td class="right">${u.imported_count || 0}</td>
-      </tr>
-    `).join('');
-    $('history-wrap').innerHTML = `
-      <table class="history-table">
-        <thead><tr>
-          <th>ID</th><th>Uploaded</th><th>File</th><th>Period</th>
-          <th class="right">Begin</th><th class="right">End</th>
-          <th class="right">Txns</th><th class="right">Imported</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  } catch (e) {
-    $('history-wrap').innerHTML = `<div class="empty">Failed: ${esc(String(e))}</div>`;
-  }
+function periodRec(u) {
+  return STATE.recs[u.period_start + ':' + u.period_end] || null;
 }
 
-async function reopenUpload(id) {
-  try {
-    const r = await fetch('/api/bank-reconcile/uploads/' + id);
-    const d = await r.json();
-    if (!r.ok) { alert(d.error || r.statusText); return; }
-    STATE.upload = d;
-    STATE.upload.upload_id = d.id;
-    STATE.selected = new Set();
-    showReview();
-    window.scrollTo({top: $('review-section').offsetTop, behavior: 'smooth'});
-  } catch (e) { alert(String(e)); }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Dedupe modal
-// ────────────────────────────────────────────────────────────────────────────
-const DEDUPE = {lastPreview: null};
-
-function openDedupeModal() {
-  // Populate the account dropdown from STATE.accounts
-  const sel = document.getElementById('dd-account');
-  sel.innerHTML = STATE.accounts.map(a =>
-    `<option value="${a.id}" ${STATE.currentAcct && STATE.currentAcct.id === a.id ? 'selected' : ''}>${esc(a.short_name || a.name)} ••• ${esc(a.account_last4 || '----')}</option>`
-  ).join('');
-  document.getElementById('dd-results').innerHTML = '';
-  document.getElementById('dd-summary').textContent = '';
-  document.getElementById('dd-apply').disabled = true;
-  document.getElementById('dd-apply').style.opacity = '0.5';
-  DEDUPE.lastPreview = null;
-  document.getElementById('dedupe-overlay').style.display = 'flex';
-}
-
-function closeDedupeModal() {
-  document.getElementById('dedupe-overlay').style.display = 'none';
-}
-
-function dedupeBody(commit) {
-  return JSON.stringify({
-    account_id: parseInt(document.getElementById('dd-account').value, 10),
-    start_date: document.getElementById('dd-start').value,
-    end_date: document.getElementById('dd-end').value,
-    date_tolerance_days: parseInt(document.getElementById('dd-tol').value || '5', 10),
-    match_vendor_payments: document.getElementById('dd-bp').checked,
-    match_payroll_manual: document.getElementById('dd-pr').checked,
-    commit: !!commit,
-  });
-}
-
-async function previewDedupe() {
-  const sumEl = document.getElementById('dd-summary');
-  const resEl = document.getElementById('dd-results');
-  sumEl.textContent = 'Scanning…';
-  resEl.innerHTML = '';
-  document.getElementById('dd-apply').disabled = true;
-  document.getElementById('dd-apply').style.opacity = '0.5';
-  try {
-    const r = await fetch('/api/bank-reconcile/dedupe', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: dedupeBody(false),
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      sumEl.textContent = 'Error: ' + (d.error || r.status);
-      return;
-    }
-    DEDUPE.lastPreview = d;
-    renderDedupePreview(d);
-  } catch (e) {
-    sumEl.textContent = 'Failed: ' + e;
-  }
-}
-
-function renderDedupePreview(d) {
-  const s = d.summary;
-  document.getElementById('dd-summary').innerHTML =
-    `Scanned <b>${s.manual_entries_scanned}</b> manual_bank_entries (outflows) in ${esc(d.start)} → ${esc(d.end)} for account ${esc(d.account_last4)}. ` +
-    `<span style="color:var(--green)">Matched: ${s.matched}</span> · ` +
-    `<span style="color:var(--amber)">Ambiguous: ${s.ambiguous}</span> · ` +
-    `<span style="color:var(--text3)">Unmatched: ${s.unmatched}</span>. ` +
-    `Would merge total <b>$${(s.would_merge_amount || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</b>.`;
-
-  if (!d.candidates.length) {
-    document.getElementById('dd-results').innerHTML = '<div style="padding:20px;color:var(--text3);text-align:center;font-size:13px">No outflow manual_bank_entries in range.</div>';
+function renderPeriods() {
+  const el = $('periods');
+  if (!STATE.uploads.length) {
+    el.innerHTML = '<div class="empty">No statements uploaded for this account yet. Upload one on <a href="/import-statement" style="color:var(--blue)">Import Statement</a>.</div>';
+    $('period-hint').textContent = '';
     return;
   }
-
-  const rows = d.candidates.map(c => {
-    let rowColor = '';
-    if (c.match) rowColor = 'background: rgba(34,197,94,0.06);';
-    else if (c.skip_reason === 'ambiguous') rowColor = 'background: rgba(245,158,11,0.08);';
-    const matchCell = c.match
-      ? `<td style="font-size:11px"><div><b>${esc(c.match.source)}</b> #${c.match.id} · ${esc(c.match.date)} · $${c.match.amount.toFixed(2)}</div><div style="color:var(--text3)">${esc(c.match.label)} · ±${c.match.date_diff_days}d ${c.match.currently_cleared ? '· already cleared' : ''}</div></td>`
-      : `<td style="font-size:11px;color:var(--text3)">${esc(c.skip_reason)}${c.ambiguous_count > 1 ? ' (' + c.ambiguous_count + ' candidates)' : ''}</td>`;
+  el.innerHTML = STATE.uploads.map(u => {
+    const rec = periodRec(u);
+    const isClosed = rec && rec.status === 'reconciled';
+    const active = STATE.currentUpload && STATE.currentUpload.id === u.id;
     return `
-      <tr style="${rowColor}">
-        <td style="padding:6px 8px;font-size:11px;font-family:var(--mono)">${esc(c.manual_entry_date)}</td>
-        <td style="padding:6px 8px;font-size:11px;color:var(--red);text-align:right;font-family:var(--mono)">${c.manual_entry_amount.toFixed(2)}</td>
-        <td style="padding:6px 8px;font-size:11px">${esc(c.manual_entry_payee || '—')}<div style="color:var(--text3);font-size:10px">${esc((c.manual_entry_memo||'').slice(0,60))}</div></td>
-        ${matchCell}
-      </tr>`;
+      <div class="pill ${isClosed ? 'closed' : ''} ${active ? 'active' : ''}"
+           title="${esc(u.period_start)} – ${esc(u.period_end)}"
+           onclick="selectPeriod(${u.id})">
+        <span>${esc(u.period_start)} – ${esc(u.period_end)}</span>
+        <span class="sub">${isClosed ? '✓ closed' : 'open'}</span>
+      </div>
+    `;
   }).join('');
+  $('period-hint').textContent =
+    'Cape Cod Five closes on the last business day, not the calendar month-end. '
+    + 'Each period above is the one on the statement PDF — this list is the source of truth.';
+}
 
-  document.getElementById('dd-results').innerHTML = `
-    <table style="width:100%;border-collapse:collapse">
-      <thead style="background:var(--bg-elevated);position:sticky;top:0">
-        <tr>
-          <th style="padding:8px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left">Date</th>
-          <th style="padding:8px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:right">Amount</th>
-          <th style="padding:8px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left">Statement Payee</th>
-          <th style="padding:8px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left">Match / Reason</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
+async function selectPeriod(upload_id) {
+  const up = STATE.uploads.find(u => u.id === upload_id);
+  if (!up) return;
+  STATE.currentUpload = up;
+  STATE.currentRec = periodRec(up);
+  renderPeriods();
+  hideErr();
+  await refresh();
+}
+
+async function refresh() {
+  const up = STATE.currentUpload;
+  if (!up) return;
+  $('body').style.display = 'block';
+  try {
+    const [preview, register] = await Promise.all([
+      api('/api/bank-reconcile/reconciliation/preview?upload_id=' + up.id),
+      api(`/api/register/${up.bank_account_id}?start=${up.period_start}&end=${up.period_end}`),
+    ]);
+    STATE.preview = preview;
+    STATE.register = register;
+    render();
+  } catch (e) { showErr('Preview failed: ' + e.message); }
+}
+
+function render() {
+  const up = STATE.currentUpload;
+  const p = STATE.preview;
+  const r = STATE.register;
+  if (!up || !p || !r) return;
+
+  // Closed / discrepancy banners
+  const bannerEl = $('closed-banner-slot');
+  const q = new URLSearchParams(window.location.search);
+  const disc = q.get('discrepancy');
+  let banner = '';
+  if (STATE.currentRec && STATE.currentRec.status === 'reconciled') {
+    banner += `
+      <div class="closed-banner">
+        <b>This period is closed.</b> Signed off by <b>${esc(STATE.currentRec.closed_by)}</b>
+        on <b>${esc(String(STATE.currentRec.closed_at).replace('T', ' ').slice(0, 19))}</b>.
+        The rows below already read R. Editing them requires the discrepancy flow.
+      </div>`;
+  }
+  if (disc) {
+    const [dsrc, did] = disc.split(':');
+    const target = (r.rows || []).find(x => x.source === dsrc && String(x.source_id) === did);
+    banner += `
+      <div class="closed-banner" style="border-color:var(--amber);background:var(--amber-soft);color:var(--amber)">
+        <b>Discrepancy view.</b> You arrived here from the register asking to edit
+        <span style="font-family:var(--mono);color:var(--text)">${esc(dsrc)}#${esc(did)}</span>
+        ${target ? `— <b>${esc(target.payee)}</b>, ${fmt((target.outflow || target.inflow) * (target.outflow ? -1 : 1))}` : ''}.
+        Click the R row below to force-untick it; the delta will move away from zero and this period
+        will need to be re-closed after you fix the underlying transaction.
+      </div>`;
+  }
+  bannerEl.innerHTML = banner;
+
+  // Anchors
+  $('tiles-anchors').innerHTML = `
+    <div class="tile"><div class="lbl">Period start</div><div class="val">${esc(up.period_start)}</div></div>
+    <div class="tile"><div class="lbl">Period end</div><div class="val">${esc(up.period_end)}</div></div>
+    <div class="tile"><div class="lbl">Beginning balance</div><div class="val">${fmt(up.beginning_balance)}</div><div class="subtle">upload #${up.id}</div></div>
+    <div class="tile"><div class="lbl">Ending balance</div><div class="val">${fmt(up.ending_balance)}</div><div class="subtle">upload #${up.id}</div></div>
   `;
 
-  if (s.matched > 0) {
-    document.getElementById('dd-apply').disabled = false;
-    document.getElementById('dd-apply').style.opacity = '1';
+  // Reconciliation figures — recompute delta client-side so ticking is live
+  // without a round-trip. The server verifies again on close.
+  const rows = r.rows || [];
+  let clrIn = 0, clrOut = 0, allIn = 0, allOut = 0;
+  for (const row of rows) {
+    allIn += cents(row.inflow); allOut += cents(row.outflow);
+    if (row.cleared) { clrIn += cents(row.inflow); clrOut += cents(row.outflow); }
   }
+  const beginC = cents(up.beginning_balance);
+  const endC   = cents(up.ending_balance);
+  const bankC  = beginC + clrIn - clrOut;
+  const bookC  = beginC + allIn - allOut;
+  const outstandingC = bookC - bankC;
+  const deltaC = bankC - endC;
+  const ties = deltaC === 0;
+
+  $('tiles-recon').innerHTML = `
+    <div class="tile"><div class="lbl">Bank balance (cleared)</div><div class="val">${fmt(bankC/100)}</div><div class="subtle">begin + cleared in − cleared out</div></div>
+    <div class="tile"><div class="lbl">Book balance (all)</div><div class="val">${fmt(bookC/100)}</div><div class="subtle">what our books say</div></div>
+    <div class="tile"><div class="lbl">Outstanding</div><div class="val">${fmt(outstandingC/100)}</div><div class="subtle">book − bank (timing)</div></div>
+    <div class="tile delta ${ties ? 'ties' : 'off'}">
+      <div class="lbl">Delta vs statement ending</div>
+      <div class="val">${fmt(deltaC/100)}</div>
+      <div class="subtle">${ties ? '✓ ties exactly' : 'needs to tie before sign-off'}</div>
+    </div>
+  `;
+  $('delta-hint').innerHTML = ties
+    ? 'Cleared rows tie to the statement to the penny. Outstanding items are itemized below and are fine to leave.'
+    : `The bank column is off from the statement by <b>${fmt(deltaC/100)}</b>. `
+      + 'Tick any missing cleared rows, or un-tick anything that shouldn\'t be cleared. '
+      + 'A signature is not the fix for an unexplained delta.';
+
+  // Two columns — outflows and inflows.
+  const outflows = rows.filter(x => x.outflow > 0);
+  const inflows  = rows.filter(x => x.inflow  > 0);
+  $('list-out').innerHTML = outflows.length
+    ? outflows.map(renderTxRow).join('')
+    : '<div class="empty-list">No outflows in this period.</div>';
+  $('list-in').innerHTML = inflows.length
+    ? inflows.map(renderTxRow).join('')
+    : '<div class="empty-list">No inflows in this period.</div>';
+  $('cnt-out').textContent = outflows.length + ' items';
+  $('cnt-in').textContent  = inflows.length + ' items';
+
+  // Outstanding
+  const outstanding = rows.filter(x => !x.cleared);
+  $('list-outstanding').innerHTML = outstanding.length
+    ? outstanding.map(renderTxRow).join('')
+    : '<div class="empty-list">Nothing outstanding — the period ties on all rows.</div>';
+
+  // Close button state
+  const closed = STATE.currentRec && STATE.currentRec.status === 'reconciled';
+  $('btn-close').disabled = !ties || closed;
+  $('btn-close').textContent = closed ? 'Already signed off' : (ties ? 'Sign off period' : `Off by ${fmt(deltaC/100)}`);
 }
 
-async function applyDedupe() {
-  if (!DEDUPE.lastPreview || !DEDUPE.lastPreview.summary.matched) {
-    alert('Run Preview first');
-    return;
-  }
-  if (!confirm(`Apply merge for ${DEDUPE.lastPreview.summary.matched} matches? This will UPDATE the dashboard rows (set bank_account_id + cleared) and DELETE the duplicate manual_bank_entries. Cannot be undone without a DB restore.`)) {
-    return;
-  }
-  const btn = document.getElementById('dd-apply');
-  btn.disabled = true;
-  btn.textContent = 'Applying…';
+function renderTxRow(r) {
+  const kind = r.outflow > 0 ? 'out' : 'in';
+  const amt = r.outflow > 0 ? r.outflow : r.inflow;
+  const isR = r.recon_status === 'R';
+  const isC = r.cleared;
+  const cls = 'txrow ' + kind + (isR ? ' locked' : (isC ? ' checked' : ''));
+  const chk = isR ? 'R' : (isC ? 'C' : '·');
+  const label = esc((r.payee || '') + (r.ref ? ' · ' + r.ref : ''));
+  const click = isR
+    ? `warnR('${r.source}', ${r.source_id}, ${r.reconciliation_id || 'null'})`
+    : `toggle('${r.source}', ${r.source_id}, ${isC ? 'false' : 'true'})`;
+  return `
+    <div class="${cls}" onclick="${click}" title="${esc(r.date)} · ${esc(r.type_label || r.source)}">
+      <span></span>
+      <span class="date">${esc(r.date)}</span>
+      <span class="payee">${label}</span>
+      <span class="amt">${fmt(amt)}</span>
+      <span class="chk">${chk}</span>
+    </div>`;
+}
+
+async function toggle(source, id, next) {
   try {
-    const r = await fetch('/api/bank-reconcile/dedupe', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: dedupeBody(true),
+    await api('/api/register/row/cleared', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({source, id, cleared: next === true || next === 'true'}),
     });
-    const d = await r.json();
+    // Optimistic update: flip the row locally, re-render.
+    for (const row of (STATE.register.rows || [])) {
+      if (row.source === source && row.source_id === id) {
+        row.cleared = (next === true || next === 'true') ? 1 : 0;
+        row.recon_status = row.cleared ? 'C' : '';
+        break;
+      }
+    }
+    render();
+  } catch (e) { showErr('Could not update row: ' + e.message); }
+}
+
+function warnR(source, id, recId) {
+  const q = new URLSearchParams(window.location.search);
+  const cameFromDiscrepancy = q.get('discrepancy') === `${source}:${id}`;
+  const target = Object.values(STATE.recs).find(r => r.id === recId);
+  const label = target ? `${target.period_start} – ${target.period_end}` : `rec #${recId}`;
+  const msg =
+    (cameFromDiscrepancy
+      ? `You navigated here to edit this reconciled row.\n\n`
+      : `This row is reconciled and locked into ${label}.\n\n`)
+    + `Choose one:\n`
+    + `  • CANCEL — leave it alone.\n`
+    + `  • OK — un-tick this row (force=true). The tie-out for ${label} will break; you\n`
+    + `    are responsible for re-closing the period after fixing the source of the discrepancy.`;
+  if (!confirm(msg)) return;
+  // Force-untick via the register PUT with force=true.
+  fetch('/api/register/row/cleared', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({source, id, cleared: false, force: true}),
+  }).then(async (r) => {
     if (!r.ok) {
-      alert('Apply failed: ' + (d.error || r.status));
-      btn.disabled = false;
-      btn.textContent = 'Apply Merge';
+      const j = await r.json().catch(() => ({}));
+      showErr('Force-untick failed: ' + (j.error || r.statusText));
       return;
     }
-    alert(`Merged ${d.merged_count} rows. Deleted ${d.deleted_manual_entries} duplicate manual entries.`);
-    closeDedupeModal();
-  } catch (e) {
-    alert('Apply failed: ' + e);
-    btn.disabled = false;
-    btn.textContent = 'Apply Merge';
-  }
+    // If we're on that rec's period, refresh to show the broken delta.
+    if (STATE.currentUpload && target
+        && STATE.currentUpload.period_start === target.period_start
+        && STATE.currentUpload.period_end === target.period_end) {
+      await refresh();
+    } else if (target) {
+      const up = STATE.uploads.find(u =>
+        u.period_start === target.period_start && u.period_end === target.period_end);
+      if (up) selectPeriod(up.id);
+    }
+  }).catch(e => showErr('Force-untick error: ' + e));
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Wire up
-// ────────────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  setupUploadZone();
-  loadAccounts();
-
-  $('flt-show').addEventListener('change', renderTxTable);
-  $('flt-search').addEventListener('input', renderTxTable);
-  $('btn-import').addEventListener('click', doImport);
-  $('btn-select-unmatched').addEventListener('click', () => {
-    selectByPredicate((tx, m) => m.match_kind === 'none');
-  });
-  $('btn-select-all').addEventListener('click', () => {
-    selectByPredicate(() => true);
-  });
-  $('btn-clear-selection').addEventListener('click', () => {
-    STATE.selected = new Set();
-    renderTxTable();
-  });
-  $('chk-all').addEventListener('change', (e) => {
-    if (e.target.checked) selectByPredicate(() => true);
-    else { STATE.selected = new Set(); renderTxTable(); }
-  });
-
-  // Dedupe modal wiring
-  document.getElementById('btn-dedupe').addEventListener('click', openDedupeModal);
-  document.getElementById('dd-cancel').addEventListener('click', closeDedupeModal);
-  document.getElementById('dd-preview').addEventListener('click', previewDedupe);
-  document.getElementById('dd-apply').addEventListener('click', applyDedupe);
-  // Click outside modal closes it
-  document.getElementById('dedupe-overlay').addEventListener('click', (e) => {
-    if (e.target.id === 'dedupe-overlay') closeDedupeModal();
-  });
+$('btn-close').addEventListener('click', async () => {
+  const up = STATE.currentUpload;
+  if (!up) return;
+  if (!confirm(`Sign off ${up.period_start} to ${up.period_end}? All cleared rows in this period will be locked into R.`)) return;
+  try {
+    const j = await api('/api/bank-reconcile/reconciliation/close', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({upload_id: up.id, notes: $('notes').value || null}),
+    });
+    // Refresh — the closed banner will now show and R stamps will render.
+    // Also reload reconciliations so the pill turns green.
+    const recs = await api('/api/bank-reconcile/reconciliations?account_id=' + up.bank_account_id);
+    STATE.recs = {};
+    for (const r of (recs.reconciliations || [])) STATE.recs[r.period_start + ':' + r.period_end] = r;
+    STATE.currentRec = periodRec(up);
+    renderPeriods();
+    await refresh();
+    alert(`Signed off. rec #${j.reconciliation_id}, ${j.stamped_reconciled || 0} rows locked as R, ${j.outstanding_count || 0} outstanding items recorded.`);
+  } catch (e) { showErr('Close failed: ' + e.message); }
 });
+
+loadAccounts();
 </script>
-<script src="/static/sidebar.js"></script>
 </body>
 </html>

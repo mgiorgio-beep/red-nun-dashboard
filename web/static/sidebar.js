@@ -74,6 +74,7 @@ var sections=[
   {id:'nav-acct-reports',label:'Reports',page:'/reports'},
   {id:'nav-acct-entries',label:'Sales Entries',page:'/sales-journal'},
   {id:'nav-acct-registers',label:'Registers',page:'/registers'},
+  {id:'nav-acct-import',label:'Import Statement',page:'/import-statement'},
   {id:'nav-acct-bankrec',label:'Bank Reconcile',page:'/bank-reconcile'},
   {id:'nav-acct-openbal',label:'Opening Balances',page:'/opening-balances'},
   {id:'nav-acct-export',label:'Export',page:'/sales-journal?tab=export'},
@@ -121,6 +122,7 @@ if(path==='/specials-admin')return 'nav-specials';
 if(path==='/payments')return 'nav-payments';
 if(path==='/print-checks')return 'nav-bp-printchecks';
 if(path==='/registers')return 'nav-acct-registers';
+if(path==='/import-statement')return 'nav-acct-import';
 if(path==='/bank-reconcile')return 'nav-acct-bankrec';
 if(path==='/opening-balances')return 'nav-acct-openbal';
 if(path==='/sales-journal'){var sp=new URLSearchParams(window.location.search);return sp.get('tab')==='export'?'nav-acct-export':'nav-acct-entries';}

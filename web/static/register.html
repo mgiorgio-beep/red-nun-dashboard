@@ -979,16 +979,21 @@ async function cyclePill(source, id, cur) {
   loadRegister();
 }
 
-// Editing an R row breaks the period tie-out. Route to a discrepancy report
-// (Part 3c). For now, show the warning and let the user open the reconcile
-// page's discrepancy view — the reconcile page is where you clear it up.
+// Editing an R row breaks the period tie-out. Warn and route to the
+// reconcile page's discrepancy view, which shows the tie for the affected
+// period, highlights the offending row, and lets the user force-break it.
 function warnReconciled(source, id, recId, intendedCleared) {
+  const acctId = (STATE.currentAcct && STATE.currentAcct.id) || '';
   const msg = `This row is locked into a signed-off reconciliation (rec #${recId}).\n\n` +
-    `Editing it will break the period tie-out and needs to be handled through the ` +
-    `reconcile page's discrepancy flow.\n\n` +
-    `Open the reconcile page for that period?`;
-  if (confirm(msg)) {
-    window.location.href = `/bank-reconcile?rec=${recId}&highlight=${source}:${id}`;
+    `Editing it will break the period tie-out. Open the reconcile page for that ` +
+    `period — it shows the impact and lets you force the change if you're sure.`;
+  if (confirm(msg + '\n\nOpen the reconcile page?')) {
+    const qs = new URLSearchParams({
+      account_id: acctId,
+      rec_id: recId,
+      discrepancy: `${source}:${id}`,
+    });
+    window.location.href = '/bank-reconcile?' + qs.toString();
   }
 }
 

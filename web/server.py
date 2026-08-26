@@ -313,10 +313,23 @@ def reconcile_page():
     return send_from_directory("static", "reconcile.html")
 
 
+@app.route("/import-statement")
+@login_required
+def import_statement_page():
+    """Serve the Import Statement page — PDF upload + parse + dedupe + import.
+
+    This is what /bank-reconcile used to serve. Its only reconciliation-flavored
+    action is the "mark matched register rows as cleared" checkbox, which sets
+    C (not R). Signing off a statement period lives on /bank-reconcile.
+    """
+    return send_from_directory("static", "import_statement.html")
+
+
 @app.route("/bank-reconcile")
 @login_required
 def bank_reconcile_page():
-    """Serve the bank statement reconcile page (PDF upload + dedupe + import)."""
+    """Serve the Bank Reconcile page — statement sign-off (tick uncleared,
+    accept itemized delta, flip rows to R, write bank_reconciliations)."""
     return send_from_directory("static", "bank_reconcile.html")
 
 
