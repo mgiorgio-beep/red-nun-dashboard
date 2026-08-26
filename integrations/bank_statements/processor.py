@@ -152,6 +152,15 @@ _RE_TOT_CREDITS = re.compile(
     r"[\s:\.]*\$?\s*([\d,]+\.\d{2})",
     re.IGNORECASE,
 )
+# Declared line counts from the summary header, e.g.
+#   "49 Deposits/Credits 148,535.89"
+#   "152 Checks/Debits   183,136.93"
+# Their SUM is the only honest completeness check: total_debits /
+# total_credits below are read from this same header, so comparing those
+# can never reveal a dropped row.
+_RE_CNT_CREDITS = re.compile(r"(\d+)\s+(?:Deposits/Credits|Credits/Deposits)", re.IGNORECASE)
+_RE_CNT_DEBITS = re.compile(r"(\d+)\s+(?:Checks/Debits|Debits/Checks)", re.IGNORECASE)
+
 _RE_ACCT_LAST4 = re.compile(
     r"Account[^\d]{0,30}(\d{4})\b|"
     r"\*+\s*(\d{4})\b|"
@@ -171,7 +180,7 @@ _RE_TX_LINE = re.compile(
     r"^\s*(?P<date>\d{1,2}/\d{1,2})"          # M/DD or MM/DD
     r"\s+(?P<desc>.+?)"                        # non-greedy desc
     r"\s+(?P<amt>[\d,]*\.\d{2})(?P<sign>-?)"   # amount (incl. sub-dollar) + optional debit marker
-    r"\s+(?P<bal>[\d,]+\.\d{2})\s*$",          # running balance (always >= $1.00 in practice)
+    r"\s+(?P<bal>[\d,]+\.\d{2})(?P<balsign>-?)\s*$",   # running balance; trailing '-' = overdrawn
 )
 
 # Some statements split debit/credit into two columns. Handle that as a
@@ -235,6 +244,8 @@ def _parse_cape_cod_five(full_text: str, page_texts: list[str], hint_year: int |
     end_bal = _extract_money(_RE_END_BAL, full_text)
     tot_debits_stmt = _extract_money(_RE_TOT_DEBITS, full_text)
     tot_credits_stmt = _extract_money(_RE_TOT_CREDITS, full_text)
+    cnt_credits_stmt = _extract_int(_RE_CNT_CREDITS, full_text)
+    cnt_debits_stmt = _extract_int(_RE_CNT_DEBITS, full_text)
 
     # 2. Walk lines, in/out of activity section -------------------------------
     transactions: list[dict] = []
@@ -284,6 +295,12 @@ def _parse_cape_cod_five(full_text: str, page_texts: list[str], hint_year: int |
 
             amount = _money(amt_str)
             balance = _money(bal_str)
+            # Cape Cod Five prints an OVERDRAWN running balance with a
+            # trailing '-' (e.g. "5/29 Deposit 606.00 721.75-"). Before this
+            # was handled the entire line failed to match and the
+            # transaction was dropped silently.
+            if m.group("balsign") == "-":
+                balance = -balance
             debit = amount if sign == "-" else 0.0
             credit = amount if sign != "-" else 0.0
 
@@ -336,6 +353,15 @@ def _parse_cape_cod_five(full_text: str, page_texts: list[str], hint_year: int |
         if abs(expected_end - end_bal) > 0.05:
             warnings.append(
                 f"ending balance mismatch: parsed→{expected_end:.2f} vs statement {end_bal:.2f}"
+            )
+
+    if cnt_debits_stmt is not None and cnt_credits_stmt is not None:
+        declared = cnt_debits_stmt + cnt_credits_stmt
+        if len(transactions) != declared:
+            warnings.append(
+                f"line count mismatch: parsed {len(transactions)} transactions vs "
+                f"{declared} declared on statement ({cnt_credits_stmt} credits + "
+                f"{cnt_debits_stmt} debits) — {declared - len(transactions)} row(s) missing"
             )
 
     return {
@@ -392,6 +418,16 @@ def _to_iso_date(mmdd: str, year: int) -> str:
 
 def _money(s: str) -> float:
     return float(s.replace(",", "")) if s else 0.0
+
+
+def _extract_int(pattern: re.Pattern, text: str) -> int | None:
+    m = pattern.search(text)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except (TypeError, ValueError):
+        return None
 
 
 def _extract_money(pattern: re.Pattern, text: str) -> float | None:

@@ -529,6 +529,15 @@ function importSyncItems() {
   var checkboxes = modal.querySelectorAll('input[type=checkbox]');
   readFromDom();
 
+  // If any SPECIAL items are being imported, replace the existing list —
+  // otherwise stale specials from the previous sync linger and have to be
+  // deleted by hand.
+  var importingItems = false;
+  checkboxes.forEach(function(cb) {
+    if (cb.checked && cb.getAttribute('data-type') === 'item') importingItems = true;
+  });
+  if (importingItems) items = [];
+
   checkboxes.forEach(function(cb) {
     if (!cb.checked) return;
     var type = cb.getAttribute('data-type');
