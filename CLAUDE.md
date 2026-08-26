@@ -393,13 +393,13 @@ Dev flow matches the dashboard repo: edit locally in Drive, `git commit`, `git p
 | US Foods | `~/vendor-scrapers/usfoods/` (symlinked from `~/usfoods-scraper/usfoods_invoice_scraper.py`) | CSV | Chatham, Dennis | order.usfoods.com |
 | PFG | `~/vendor-scrapers/pfg/` | CSV | Chatham, Dennis | customerfirstsolutions.com |
 | VTInfo (Colonial only) | `~/vendor-scrapers/vtinfo/` | CSV | Chatham, Dennis | apps.vtinfo.com |
-| L. Knife (Connect) | `~/vendor-scrapers/lknife/` | PDF | Chatham (AR034), Dennis (AR035) | connect.vtinfo.com |
+| L. Knife | **RETIRED 2026-08-26** — invoices arrive by EMAIL (noreply@vtinfo.com), ingested by the email poller | PDF | Chatham (AR034), Dennis (AR035) | — |
 | Southern Glazer's | `~/vendor-scrapers/southern-glazers/` | PDF | Chatham, Dennis (separate logins) | portal2.ftnirdc.com |
 | Martignetti | `~/vendor-scrapers/martignetti/` | PDF | Both (single login) | martignettiexchange.com |
 | Craft Collective | `~/vendor-scrapers/craft-collective/` | PDF | Dennis only | termsync.com |
 
 ### Key Implementation Details
-- **L. Knife (Connect) migration (May 2026):** L Knife moved from `apps.vtinfo.com` to `connect.vtinfo.com` (VIP's "Connect" platform). Auth is shared — logging into apps.vtinfo.com leaves cookies that connect.vtinfo.com honors, so `lknife/scraper.py` reuses `vtinfo/storage_state.json` and does not do its own login. Each invoice is a 3-page PDF; line items with negative quantities are keg/cooperage returns (credits). Use the "Invoice Total" at the bottom of page 1 as the net `total_amount` — not "Total Sales". AR034 = Chatham, AR035 = Dennis Port. L. Knife OCR guidance lives in `integrations/invoices/processor.py` (search for "L. KNIFE & SON (NEW CONNECT-PORTAL PDFs)").
+- **L. Knife (scraper RETIRED 2026-08-26):** the Connect-portal scraper is deleted from vendor-scrapers (archived at `~/vendor-scrapers/lknife_retired_20260826.tar.gz`); L. Knife emails all invoices for both locations and `email_invoice_poller.py` picks them up every 5 min. PDF facts still apply to the emailed invoices: each invoice is a 3-page PDF; line items with negative quantities are keg/cooperage returns (credits). Use the "Invoice Total" at the bottom of page 1 as the net `total_amount` — not "Total Sales". AR034 = Chatham, AR035 = Dennis Port. L. Knife OCR guidance lives in `integrations/invoices/processor.py` (search for "L. KNIFE & SON (NEW CONNECT-PORTAL PDFs)").
 - **SG PDF download:** AngularJS portal — extract `InvoiceId` from `angular.element(link).scope().row.entity.InvoiceId` + JWT from sessionStorage, call `/api/GetExternalInvoice` directly via `requests`. Popup URL is always `:` (about:blank), don't use it.
 - **Craft Collective PDF:** Download directly from listing URL (`/payments/{id}/download_invoice_pdf`) via `requests` with browser cookies. Invoices showing "Request" instead of "View" have no PDF — skip.
 - **VTInfo CSV filenames:** Metadata encoded as `vtinfo_{vendor}_{location}_{invoicenum}_{YYYYMMDD}.csv`. Parser extracts via regex.

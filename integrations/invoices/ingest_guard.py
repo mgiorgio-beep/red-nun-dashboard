@@ -24,12 +24,15 @@ Rules (same vendor, case-insensitive; same location unless noted):
      digit anywhere but the tail produces a numeric delta far above 10.
   3. Exact duplicate shape: same vendor + location + amount + invoice date
      under a different number.
-  4. Egregious foot-check failure: line items + tax off from the stated total
-     by more than max($100, 5% of total). Deliberately loose — US Foods CSVs
-     routinely carry $2-$90 gaps from non-itemized fee lines (46 of the last
-     90 days' imports), and the OCR path already blocks auto-confirm at a
-     $0.05 gap via validate_extraction(). This rule only catches a parser
-     meltdown (e.g. two invoices' items merged).
+  4. Foot-check failure: line items + tax off from the stated total by more
+     than $0.05. Originally shipped as max($100, 5%) because US Foods CSVs
+     carried $2-$90 gaps from fee lines absent from the CSV export; since
+     2026-08-26 the USF parser synthesizes a "Fees & tax (unitemized)" line
+     for that residual, and re-measurement showed 0 gapped CSV invoices in
+     90 days. Tightened to $0.05 (matching the OCR path's validate_extraction
+     gate) — on 90 days of data this holds exactly one invoice, a genuine
+     Sprague OCR error ($24.68) that validation's best-of-pretax/posttax
+     comparison had let through.
 
 Tuning was validated against the last 90 days of confirmed invoices
 (401 invoices, all vendors, both locations): 0 false positives, and a
@@ -45,9 +48,10 @@ logger = logging.getLogger(__name__)
 # re-keyed from an invoice older than this is out of AP's active window anyway.
 CANDIDATE_WINDOW_DAYS = 400
 
-# Rule 4 thresholds — see module docstring.
-FOOT_GAP_ABS = 100.0
-FOOT_GAP_PCT = 0.05
+# Rule 4 thresholds — see module docstring. Tightened 2026-08-26 from
+# max($100, 5%) after the USF fee-residual fix zeroed all CSV foot gaps.
+FOOT_GAP_ABS = 0.05
+FOOT_GAP_PCT = 0.0
 
 
 def _osa_leq1(a, b):

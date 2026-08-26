@@ -407,7 +407,11 @@ def main():
             headers_list = hdr_msg.get('payload', {}).get('headers', [])
             headers_dict = {h['name']: h['value'] for h in headers_list}
 
-            location = detect_location(headers_list) or 'dennis'  # hint only; AR034/AR035 in the PDF is authoritative downstream
+            # 'auto' = let the scan route detect from the document (AR034/AR035,
+            # ship-to); undetectable invoices are held for review as 'unknown'.
+            # Was `or 'dennis'` — the silent default that stamped ~100 Chatham
+            # invoices' files with a dennis_ prefix (fixed 2026-08-26).
+            location = detect_location(headers_list) or 'auto'
             sender   = headers_dict.get('From', 'unknown')
             subject  = decode_mime_header(headers_dict.get('Subject', ''))
 

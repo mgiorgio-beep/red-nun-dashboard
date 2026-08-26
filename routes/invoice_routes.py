@@ -156,9 +156,20 @@ def api_scan_invoice():
         - OR JSON with 'image' as base64 string
 
     Query params:
-        - location: 'dennis' or 'chatham' (required)
+        - location: 'dennis', 'chatham', or 'auto' (required). 'auto' means
+          detect from the document (AR034/AR035, ship-to); if undetectable the
+          invoice is held for review instead of being filed anywhere.
     """
-    location = request.args.get("location") or request.form.get("location", "dennis")
+    # NO SILENT DEFAULT. This used to fall back to 'dennis', which stamped
+    # ~100 Chatham invoices' files with a dennis_ prefix and is the same
+    # default-to-dennis disease the bot's ingest_bill had (and the payroll
+    # dennisport/dennis mismatch). Callers must say where the bill belongs —
+    # or explicitly say 'auto' to delegate to document detection.
+    location = (request.args.get("location") or request.form.get("location") or "").strip().lower()
+    if location not in ("dennis", "chatham", "auto"):
+        return jsonify({"error": "location required: 'dennis', 'chatham', or 'auto' "
+                        "(auto = detect from the document, held for review if "
+                        "undetectable). Refusing to default silently."}), 400
 
     try:
         image_b64 = None
@@ -192,7 +203,8 @@ def api_scan_invoice():
                 vendor_hint = (request.args.get("vendor") or v_hint).lower()
                 # For VTInfo, let the (normalized) filename drive the location
                 # so AR034/AR035 wins over whatever location the UI is showing.
-                csv_location = None if vendor_hint.startswith("vtinfo") else location
+                # 'auto' likewise delegates to the CSV's own ship-to detection.
+                csv_location = None if (vendor_hint.startswith("vtinfo") or location == "auto") else location
                 logger.info(
                     f"CSV detected in scan upload '{fname}' → CSV import "
                     f"(vendor='{vendor_hint or 'usfoods'}', norm='{norm_name}')"
@@ -524,6 +536,16 @@ def api_scan_invoice():
         if loc_source:
             logger.info(f"Auto-detected {location} location (from {loc_source})")
 
+        # location='auto' with no detection: never guess. File under 'unknown'
+        # and force manual review — the reviewer picks Chatham or Dennis.
+        if location == "auto" and not loc_source:
+            location = "unknown"
+            validation_result["auto_confirm"] = False
+            validation_result.setdefault("issues", []).append(
+                "Location could not be determined from the document — pick "
+                "Chatham or Dennis Port before confirming.")
+            logger.warning("Scan location undetermined (auto) — held for review as 'unknown'")
+
         # Safety net: an L. Knife invoice whose location could NOT be pinned from the
         # account number or city text must not be silently filed under the email
         # default location — flag it for manual review instead.
@@ -669,7 +691,13 @@ def api_import_iif():
     try:
         data = request.get_json(silent=True) or {}
         iif_text = data.get("iif_data")
-        location = data.get("location", "dennis")
+        # No silent default (2026-08-26): IIF imports auto-confirm straight into
+        # AP, so a guessed location mis-files a live payable. The email poller
+        # detects it from the US Foods customer number; if it can't, fail loudly.
+        location = (data.get("location") or "").strip().lower()
+        if location not in ("dennis", "chatham"):
+            return jsonify({"error": f"location required: 'dennis' or 'chatham' "
+                            f"(got {location!r}). Refusing to default silently."}), 400
 
         if not iif_text:
             return jsonify({"error": "No iif_data provided"}), 400

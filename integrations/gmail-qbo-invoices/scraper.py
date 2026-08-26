@@ -144,8 +144,9 @@ def process_message(service, msg_meta, dry_run=False):
         return "dry_run"
 
     url = SCAN_ENDPOINT
-    if location:
-        url += f"?location={location}"
+    # The scan route requires an explicit location (no silent default since
+    # 2026-08-26); 'auto' delegates to document detection with review fallback.
+    url += f"?location={location or 'auto'}"
 
     try:
         files = {"file": (filename, pdf_bytes, "application/pdf")}

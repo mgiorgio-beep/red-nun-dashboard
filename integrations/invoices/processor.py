@@ -1589,7 +1589,12 @@ def parse_csv_invoice(csv_data, location=None):
             'vendor_item_code': product_number,
         })
 
-    # Add delivery adjustment as a NON_COGS line item if nonzero
+    # Add delivery adjustment as a NON_COGS line item if nonzero.
+    # SIGN: USF's header always satisfies NetAmountAfter = NetAmountBefore -
+    # DeliveryAdjustment (verified on all 11 adjusted invoices, 2026-08-26),
+    # i.e. a positive DeliveryAdjustment is a DISCOUNT off the bill. Book it
+    # negated so the line reads as the credit it is. (Before 2026-08-26 it was
+    # booked positive, inflating item detail by 2x the adjustment.)
     try:
         delivery_adj = float(delivery_adj_str) if delivery_adj_str else 0
     except ValueError:
@@ -1597,11 +1602,11 @@ def parse_csv_invoice(csv_data, location=None):
     if delivery_adj != 0:
         line_items.append({
             'product_name': 'Delivery Adjustment',
-            'description': 'US Foods delivery adjustment',
+            'description': 'US Foods delivery adjustment (credit)',
             'quantity': 1,
             'unit': 'charge',
-            'unit_price': delivery_adj,
-            'total_price': delivery_adj,
+            'unit_price': -delivery_adj,
+            'total_price': -delivery_adj,
             'pack_size': None,
             'category': 'NON_COGS',
             'vendor_item_code': None,
@@ -1614,6 +1619,32 @@ def parse_csv_invoice(csv_data, location=None):
     except ValueError:
         header_total = 0
     total = header_total if header_total else items_total
+
+    # US Foods' "CSV Full" export has no fee or tax columns: the billed
+    # NetAmount routinely exceeds the sum of line rows by a flat fuel/delivery
+    # surcharge ($7-11 per delivery, 2026 rates) plus sales tax on taxable
+    # supplies; occasionally an invoice-level allowance makes it NEGATIVE
+    # (a credit). Verified across 120 archived CSVs 2026-08-26. Synthesize
+    # one NON_COGS line for the residual so line items foot to the billed
+    # total — delivery expense/tax, deliberately NOT food COGS.
+    if header_total:
+        residual = round(total - items_total, 2)
+        if abs(residual) >= 0.02:
+            line_items.append({
+                'product_name': 'Fees & tax (unitemized)',
+                'description': ('US Foods fuel/delivery surcharge + sales tax '
+                                '(not itemized in CSV export)' if residual > 0 else
+                                'US Foods invoice-level credit/allowance '
+                                '(not itemized in CSV export)'),
+                'quantity': 1,
+                'unit': 'charge',
+                'unit_price': residual,
+                'total_price': residual,
+                'pack_size': None,
+                'category': 'NON_COGS',
+                'vendor_item_code': None,
+            })
+            items_total = round(items_total + residual, 2)
 
     logger.info(f"CSV parsed: {'credit' if is_credit else 'invoice'} #{invoice_number}, "
                 f"{len(line_items)} items, ${total:.2f} ({customer_name})")
@@ -2341,6 +2372,10 @@ def confirm_invoice(invoice_id, updated_data=None, actor="auto"):
             return {"confirmed": False, "held": True, "reasons": reasons}
 
     if updated_data:
+        # Capture pre-update state for the location-prefix file rename below.
+        _pre = cursor.execute(
+            "SELECT location, image_path, thumbnail_path FROM scanned_invoices WHERE id = ?",
+            (invoice_id,)).fetchone()
         # Update the invoice with corrections
         cursor.execute("""
             UPDATE scanned_invoices
@@ -2394,6 +2429,32 @@ def confirm_invoice(invoice_id, updated_data=None, actor="auto"):
                     item.get("pack_size"),
                     item.get("vendor_item_code"),
                 ))
+
+        # If review corrected the location, rename the stored image/thumbnail
+        # so the filename prefix stops contradicting the invoice's location
+        # (the prefix is stamped from the upload-time param, before OCR — see
+        # api_scan_invoice). Never let a rename failure break the confirm.
+        try:
+            _new_loc = (updated_data.get("location") or "").strip().lower()
+            if (_pre and _new_loc in ("dennis", "chatham")
+                    and _new_loc != (_pre["location"] or "")):
+                for _col in ("image_path", "thumbnail_path"):
+                    _path = _pre[_col]
+                    if not _path or "_" not in os.path.basename(_path):
+                        continue
+                    _dir, _base = os.path.split(_path)
+                    _prefix, _rest = _base.split("_", 1)
+                    if _prefix in ("dennis", "chatham", "auto", "unknown") and _prefix != _new_loc:
+                        _newpath = os.path.join(_dir, f"{_new_loc}_{_rest}")
+                        if os.path.exists(_path) and not os.path.exists(_newpath):
+                            os.rename(_path, _newpath)
+                            cursor.execute(
+                                f"UPDATE scanned_invoices SET {_col} = ? WHERE id = ?",
+                                (_newpath, invoice_id))
+                            logger.info(f"Invoice #{invoice_id}: renamed {_base} -> "
+                                        f"{_new_loc}_{_rest} after location correction")
+        except Exception as e:
+            logger.warning(f"Location-prefix rename failed for invoice #{invoice_id}: {e}")
     else:
         cursor.execute("""
             UPDATE scanned_invoices
