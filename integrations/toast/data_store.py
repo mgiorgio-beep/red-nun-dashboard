@@ -19,7 +19,11 @@ DB_PATH = os.getenv("DB_PATH", "toast_data.db")
 
 def get_connection():
     """Get a SQLite connection with WAL mode for better concurrency."""
-    conn = sqlite3.connect(DB_PATH)
+    # timeout is SQLite's busy_timeout: how long a writer waits on a lock
+    # before raising "database is locked". The 5s default turned one wedged
+    # connection into an app-wide write outage (2026-08-26); waiting out a
+    # slow writer beats failing every caller.
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     return conn
