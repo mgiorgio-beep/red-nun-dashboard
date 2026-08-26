@@ -171,6 +171,43 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   width: 16px; height: 16px; cursor: pointer; accent-color: var(--green);
 }
 
+/* Three-state reconciliation pill: blank / C / R.
+ * blank (not cleared)          — a faint dot the user can click to move to C
+ * C     (cleared)               — hit the bank; not yet locked into a signed-off period
+ * R     (reconciled)            — locked in; editing routes through the discrepancy flow
+ * QBO calls this column ✓ and shows the same three states — we copy it. */
+.recon-pill {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  user-select: none;
+  font-family: var(--mono);
+}
+.recon-pill.recon-blank {
+  color: var(--text3);
+  border-color: var(--border);
+  background: transparent;
+}
+.recon-pill.recon-blank:hover { border-color: var(--text3); color: var(--text2); }
+.recon-pill.recon-C {
+  color: var(--blue);
+  border-color: rgba(56,189,248,0.4);
+  background: rgba(56,189,248,0.08);
+}
+.recon-pill.recon-C:hover { background: rgba(56,189,248,0.16); }
+.recon-pill.recon-R {
+  color: var(--green);
+  border-color: rgba(34,197,94,0.4);
+  background: rgba(34,197,94,0.12);
+  cursor: help;   /* clickable, but the click warns rather than toggles */
+}
+
 /* Detail row */
 .detail-row { display: none; }
 .detail-row.open { display: table-row; }
@@ -704,7 +741,7 @@ function renderSummary(s) {
     <div class="summary-card">
       <div class="summary-label">Ending Balance</div>
       <div class="summary-value ${s.ending_balance < 0 ? 'red' : 'blue'}">${fmtBal(s.ending_balance)}</div>
-      <div class="summary-sub">${s.row_count || 0} transactions · ${s.uncleared_count || 0} uncleared${s.unassigned_count ? ' · ' + s.unassigned_count + ' unassigned' : ''}</div>
+      <div class="summary-sub">${s.row_count || 0} transactions · ${s.uncleared_count || 0} uncleared${s.reconciled_count ? ' · ' + s.reconciled_count + ' R' : ''}${s.unassigned_count ? ' · ' + s.unassigned_count + ' unassigned' : ''}</div>
     </div>
   `;
 }
@@ -732,8 +769,7 @@ function renderRows() {
         <td class="col-amt amt-in">${fmt(r.inflow)}</td>
         <td class="col-bal ${r.balance < 0 ? 'bal-neg' : ''}">${fmtBal(r.balance)}</td>
         <td class="col-chk" onclick="event.stopPropagation()">
-          <input type="checkbox" class="clear-chk" ${r.cleared ? 'checked' : ''}
-                 onchange="toggleCleared('${r.source}', ${r.source_id}, this.checked)">
+          ${renderReconPill(r)}
         </td>
       </tr>
       <tr class="detail-row" id="detail-${idx}">
@@ -903,15 +939,62 @@ function toggleDetail(idx) {
   if (row) row.classList.toggle('open');
 }
 
-async function toggleCleared(source, id, cleared) {
+// Three-state reconciliation pill.
+//   blank  = not cleared           → click sets C
+//   C      = cleared, not locked   → click sets blank
+//   R      = reconciled + locked   → click warns and offers the break-tie flow
+// R comes from a completed reconciliation on /bank-reconcile; you don't set
+// it here.
+function renderReconPill(r) {
+  const st = r.recon_status || (r.cleared ? 'C' : '');
+  if (st === 'R') {
+    return `<span class="recon-pill recon-R" title="Reconciled — locked in on rec #${r.reconciliation_id}. Editing routes through the discrepancy flow." onclick="warnReconciled('${r.source}', ${r.source_id}, ${r.reconciliation_id || 'null'})">R</span>`;
+  }
+  if (st === 'C') {
+    return `<span class="recon-pill recon-C" title="Cleared (hit the bank). Click to uncheck." onclick="cyclePill('${r.source}', ${r.source_id}, 'C')">C</span>`;
+  }
+  return `<span class="recon-pill recon-blank" title="Not cleared. Click to mark cleared." onclick="cyclePill('${r.source}', ${r.source_id}, '')">·</span>`;
+}
+
+async function cyclePill(source, id, cur) {
+  const next = (cur === 'C') ? false : true;   // blank → C ; C → blank
   const r = await fetch('/api/register/row/cleared', {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({source, id, cleared}),
+    body: JSON.stringify({source, id, cleared: next}),
   });
-  if (!r.ok) { alert('Failed to update cleared state'); return; }
-  // Refresh so the summary (uncleared count) updates
+  if (!r.ok) {
+    // 409 = row is R (reconciled). Fall through to the warn flow.
+    let msg = 'Failed to update cleared state';
+    try {
+      const j = await r.json();
+      if (j.error) msg = j.error;
+      if (r.status === 409 && j.recon_status === 'R') {
+        return warnReconciled(source, id, j.reconciliation_id, next);
+      }
+    } catch (e) {}
+    alert(msg);
+    return;
+  }
   loadRegister();
+}
+
+// Editing an R row breaks the period tie-out. Route to a discrepancy report
+// (Part 3c). For now, show the warning and let the user open the reconcile
+// page's discrepancy view — the reconcile page is where you clear it up.
+function warnReconciled(source, id, recId, intendedCleared) {
+  const msg = `This row is locked into a signed-off reconciliation (rec #${recId}).\n\n` +
+    `Editing it will break the period tie-out and needs to be handled through the ` +
+    `reconcile page's discrepancy flow.\n\n` +
+    `Open the reconcile page for that period?`;
+  if (confirm(msg)) {
+    window.location.href = `/bank-reconcile?rec=${recId}&highlight=${source}:${id}`;
+  }
+}
+
+// Kept as the underlying API — cyclePill is the user-facing entry point.
+async function toggleCleared(source, id, cleared) {
+  return cyclePill(source, id, cleared ? '' : 'C');
 }
 
 // ────────────────────────────────────────────────────────────────────────────

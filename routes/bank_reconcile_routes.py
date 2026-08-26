@@ -279,9 +279,78 @@ def init_bank_reconcile_tables():
         except Exception:
             pass  # already exists
 
+        # Backfill reconciliation_id on cleared rows inside every already-closed
+        # period. Runs once. Idempotent: guarded on reconciliation_id IS NULL so
+        # a re-run doesn't touch rows that already carry a stamp. Without this,
+        # the four periods that were signed off before the R column existed
+        # would render as C forever.
+        for rec in conn.execute(
+            "SELECT id, bank_account_id, period_start, period_end "
+            "FROM bank_reconciliations WHERE status = 'reconciled'"
+        ).fetchall():
+            _backfill_reconciled_stamps(
+                conn, rec["bank_account_id"],
+                rec["period_start"], rec["period_end"], rec["id"],
+            )
+
         conn.commit()
     finally:
         conn.close()
+
+
+def _backfill_reconciled_stamps(conn, account_id, period_start, period_end, rec_id):
+    """One-time stamp of reconciliation_id on cleared rows in a pre-existing
+    reconciliation. Same filter shape as _stamp_reconciled_rows, plus an
+    `AND reconciliation_id IS NULL` guard so it is safe to re-run on init.
+    """
+    acct = conn.execute(
+        "SELECT account_last4 FROM bank_accounts WHERE id = ?", (account_id,)
+    ).fetchone()
+    is_default_account = acct and acct["account_last4"] == "5975"
+
+    bp_where = (
+        "reconciliation_id IS NULL AND cleared = 1 "
+        "AND payment_date >= ? AND payment_date <= ? "
+        "AND (status IS NULL OR status NOT IN ('void', 'failed')) AND ("
+        "bank_account_id = ?"
+        + (" OR bank_account_id IS NULL" if is_default_account else "")
+        + ")"
+    )
+    conn.execute(
+        f"UPDATE vendor_payments SET reconciliation_id = ? WHERE {bp_where}",
+        (rec_id, period_start, period_end, account_id),
+    )
+
+    try:
+        conn.execute(
+            "UPDATE payroll_checks SET reconciliation_id = ? WHERE id IN ("
+            "  SELECT pc.id FROM payroll_checks pc "
+            "  LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
+            "  WHERE pc.reconciliation_id IS NULL AND pc.cleared = 1 "
+            "  AND COALESCE(pr.pay_date, pc.pay_period_end) >= ? "
+            "  AND COALESCE(pr.pay_date, pc.pay_period_end) <= ? "
+            "  AND (pc.voided IS NULL OR pc.voided = 0) "
+            "  AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit') "
+            "  AND pc.bank_account_id = ?"
+            ")",
+            (rec_id, period_start, period_end, account_id),
+        )
+    except Exception as e:
+        logger.warning(f"backfill payroll R stamps failed for rec {rec_id}: {e}")
+
+    conn.execute(
+        "UPDATE bank_deposits SET reconciliation_id = ? "
+        "WHERE reconciliation_id IS NULL AND cleared = 1 AND bank_account_id = ? "
+        "AND deposit_date >= ? AND deposit_date <= ?",
+        (rec_id, account_id, period_start, period_end),
+    )
+
+    conn.execute(
+        "UPDATE manual_bank_entries SET reconciliation_id = ? "
+        "WHERE reconciliation_id IS NULL AND cleared = 1 AND bank_account_id = ? "
+        "AND entry_date >= ? AND entry_date <= ?",
+        (rec_id, account_id, period_start, period_end),
+    )
 
 
 # ─── UPLOAD + PARSE ──────────────────────────────────────────────────────────
@@ -1508,6 +1577,17 @@ def close_reconciliation():
             (upload["bank_account_id"], upload["period_start"]),
         ).fetchone()
 
+        # Re-close support: capture the OLD rec id for this exact period (if
+        # any) so we can unstamp the rows it previously locked. Without this,
+        # a re-close would orphan reconciliation_id references pointing at a
+        # deleted bank_reconciliations row.
+        old_rec = conn.execute(
+            "SELECT id FROM bank_reconciliations WHERE bank_account_id = ? "
+            "AND period_start = ? AND period_end = ?",
+            (upload["bank_account_id"], upload["period_start"], upload["period_end"]),
+        ).fetchone()
+        old_rec_id = old_rec["id"] if old_rec else None
+
         conn.execute("DELETE FROM bank_reconciliation_items WHERE reconciliation_id IN "
                      "(SELECT id FROM bank_reconciliations WHERE bank_account_id = ? "
                      " AND period_start = ? AND period_end = ?)",
@@ -1515,6 +1595,14 @@ def close_reconciliation():
         conn.execute("DELETE FROM bank_reconciliations WHERE bank_account_id = ? "
                      "AND period_start = ? AND period_end = ?",
                      (upload["bank_account_id"], upload["period_start"], upload["period_end"]))
+        if old_rec_id:
+            for _tbl in ("vendor_payments", "payroll_checks",
+                         "bank_deposits", "manual_bank_entries"):
+                conn.execute(
+                    f"UPDATE {_tbl} SET reconciliation_id = NULL "
+                    f"WHERE reconciliation_id = ?", (old_rec_id,)
+                )
+
         cur = conn.execute(
             """INSERT INTO bank_reconciliations
                (bank_account_id, statement_upload_id, period_start, period_end,
@@ -1527,6 +1615,16 @@ def close_reconciliation():
              state["delta"], who, data.get("notes")),
         )
         rec_id = cur.lastrowid
+
+        # Stamp every CLEARED row in this period with the new reconciliation_id.
+        # From now on those render as R (locked) and PUT /api/register/row/cleared
+        # refuses to touch them unless the discrepancy flow passes force=true.
+        # The scope matches build_register_view()'s date/filter shape so the
+        # tie-out we just checked is exactly the set of rows we lock.
+        stamped = _stamp_reconciled_rows(
+            conn, upload["bank_account_id"],
+            upload["period_start"], upload["period_end"], rec_id,
+        )
 
         carried = 0
         for it in state["outstanding_items"]:
@@ -1558,9 +1656,85 @@ def close_reconciliation():
             "delta": state["delta"],
             "outstanding_count": len(state["outstanding_items"]),
             "carried_forward": carried,
+            "stamped_reconciled": stamped,
         })
     finally:
         conn.close()
+
+
+def _stamp_reconciled_rows(conn, account_id, period_start, period_end, rec_id):
+    """Set reconciliation_id = rec_id on every CLEARED register row in this
+    period across the four source tables. Returns the number of rows stamped.
+
+    Filter shape mirrors build_register_view() so the tie-out that was just
+    verified corresponds row-for-row to what gets locked:
+      - vendor_payments: cleared=1, not void/failed, in period, matching acct
+        (plus NULL bank_account_id if this is the Chatham default)
+      - payroll_checks:  cleared=1, not voided, not Direct Deposit,
+        COALESCE(pay_date, pay_period_end) in period, matching acct
+      - bank_deposits:   cleared=1, in period, matching acct
+      - manual_bank_entries: cleared=1, in period, matching acct
+
+    Chatham's default account (last4=5975) is the catch-all for unassigned
+    bill-pay rows; include those too, matching build_register_view's default
+    (include_unassigned=True).
+    """
+    acct = conn.execute(
+        "SELECT account_last4 FROM bank_accounts WHERE id = ?", (account_id,)
+    ).fetchone()
+    is_default_account = acct and acct["account_last4"] == "5975"
+
+    total = 0
+
+    bp_where = (
+        "cleared = 1 AND payment_date >= ? AND payment_date <= ? "
+        "AND (status IS NULL OR status NOT IN ('void', 'failed')) AND ("
+        "bank_account_id = ?"
+        + (" OR bank_account_id IS NULL" if is_default_account else "")
+        + ")"
+    )
+    cur = conn.execute(
+        f"UPDATE vendor_payments SET reconciliation_id = ? WHERE {bp_where}",
+        (rec_id, period_start, period_end, account_id),
+    )
+    total += cur.rowcount or 0
+
+    try:
+        cur = conn.execute(
+            "UPDATE payroll_checks SET reconciliation_id = ? "
+            "WHERE id IN ("
+            "  SELECT pc.id FROM payroll_checks pc "
+            "  LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
+            "  WHERE pc.cleared = 1 "
+            "  AND COALESCE(pr.pay_date, pc.pay_period_end) >= ? "
+            "  AND COALESCE(pr.pay_date, pc.pay_period_end) <= ? "
+            "  AND (pc.voided IS NULL OR pc.voided = 0) "
+            "  AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit') "
+            "  AND pc.bank_account_id = ?"
+            ")",
+            (rec_id, period_start, period_end, account_id),
+        )
+        total += cur.rowcount or 0
+    except Exception as e:
+        logger.warning(f"stamp payroll failed for account {account_id}: {e}")
+
+    cur = conn.execute(
+        "UPDATE bank_deposits SET reconciliation_id = ? "
+        "WHERE cleared = 1 AND bank_account_id = ? "
+        "AND deposit_date >= ? AND deposit_date <= ?",
+        (rec_id, account_id, period_start, period_end),
+    )
+    total += cur.rowcount or 0
+
+    cur = conn.execute(
+        "UPDATE manual_bank_entries SET reconciliation_id = ? "
+        "WHERE cleared = 1 AND bank_account_id = ? "
+        "AND entry_date >= ? AND entry_date <= ?",
+        (rec_id, account_id, period_start, period_end),
+    )
+    total += cur.rowcount or 0
+
+    return total
 
 
 @bank_reconcile_bp.route("/api/bank-reconcile/reconciliations", methods=["GET"])

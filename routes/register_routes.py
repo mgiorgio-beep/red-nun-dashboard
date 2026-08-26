@@ -131,6 +131,17 @@ def init_register_tables():
         "ALTER TABLE bank_deposits ADD COLUMN gl_status TEXT",
         "ALTER TABLE manual_bank_entries ADD COLUMN gl_source TEXT",
         "ALTER TABLE manual_bank_entries ADD COLUMN gl_status TEXT",
+        # Third status: R (reconciled). A row is R when it was cleared inside
+        # a completed bank reconciliation — locked in as part of a signed-off
+        # period. Semantics: reconciliation_id NULL + cleared=0 => blank;
+        # NULL + cleared=1 => C; NOT NULL (always with cleared=1) => R.
+        # The R state is stamped by close_reconciliation (bank_reconcile_routes)
+        # and cleared by nothing except a deliberate discrepancy flow — the
+        # PUT /api/register/row/cleared endpoint refuses to touch R rows.
+        "ALTER TABLE vendor_payments ADD COLUMN reconciliation_id INTEGER",
+        "ALTER TABLE payroll_checks  ADD COLUMN reconciliation_id INTEGER",
+        "ALTER TABLE bank_deposits   ADD COLUMN reconciliation_id INTEGER",
+        "ALTER TABLE manual_bank_entries ADD COLUMN reconciliation_id INTEGER",
     ]
     for sql in migrations:
         try:
@@ -2161,6 +2172,13 @@ def _normalize_row(source, r, bank_account_id):
             out[_col] = r[_col]
         except (IndexError, KeyError):
             out[_col] = None
+    # Reconciliation link. Set when this row was included in a signed-off
+    # bank reconciliation; the UI renders R (locked) instead of C for those.
+    try:
+        recon_id = r["reconciliation_id"]
+    except (IndexError, KeyError):
+        recon_id = None
+    out["reconciliation_id"] = recon_id
     if source == "bill_pay":
         # vendor_payments
         ref = r["payment_ref"] or (f"CHK-{r['check_number']}" if r["check_number"] else "")
@@ -2233,6 +2251,16 @@ def _normalize_row(source, r, bank_account_id):
             "cleared": int(r["cleared"] or 0),
             "source_id": r["id"],
         })
+    # Three-state reconciliation status, derived so the UI never has to
+    # reproduce the rule. Invariant: a row with reconciliation_id set is also
+    # cleared. If close_reconciliation ever stamps without also setting
+    # cleared=1 (it should not), this is where you'd see it drift.
+    if out.get("reconciliation_id"):
+        out["recon_status"] = "R"
+    elif out.get("cleared"):
+        out["recon_status"] = "C"
+    else:
+        out["recon_status"] = ""
     return out
 
 
@@ -2385,7 +2413,8 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     bp_query = (
         "SELECT id, vendor, location, payment_date, payment_ref, payment_method, "
         "payment_total, check_number, memo, status, ap_payment_id, "
-        "bank_account_id, cleared, cleared_date, gl_account_id, gl_source, gl_status "
+        "bank_account_id, cleared, cleared_date, reconciliation_id, "
+        "gl_account_id, gl_source, gl_status "
         "FROM vendor_payments WHERE payment_date >= ? AND payment_date <= ? AND "
         # Exclude void AND failed: void = manually canceled before send, failed =
         # ACH/check rejected by the bank. In both cases no money left the account,
@@ -2407,7 +2436,8 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
         "SELECT pc.id, pc.employee_name, pc.check_number, pc.net_pay, pc.gross_pay, "
         "       pc.location, pc.payroll_run_id, pc.pay_period_start, pc.pay_period_end, "
         "       pc.payment_method, pc.status, pc.voided, pc.bank_account_id, "
-        "       pc.cleared, pc.cleared_date, pc.gl_account_id, pc.gl_source, pc.gl_status, "
+        "       pc.cleared, pc.cleared_date, pc.reconciliation_id, "
+        "       pc.gl_account_id, pc.gl_source, pc.gl_status, "
         "       COALESCE(pr.pay_date, pc.pay_period_end) AS pay_date "
         "FROM payroll_checks pc "
         "LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
@@ -2433,7 +2463,8 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     # ── deposits ──
     dep_query = (
         "SELECT id, bank_account_id, deposit_date, amount, description, memo, "
-        "source, qbo_txn_id, qbo_txn_type, cleared, cleared_date, gl_account_id, gl_source, gl_status "
+        "source, qbo_txn_id, qbo_txn_type, cleared, cleared_date, reconciliation_id, "
+        "gl_account_id, gl_source, gl_status "
         "FROM bank_deposits WHERE bank_account_id = ? AND "
         "deposit_date >= ? AND deposit_date <= ?"
     )
@@ -2443,7 +2474,8 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     # ── manual ──
     man_query = (
         "SELECT id, bank_account_id, entry_date, entry_type, payee, memo, "
-        "ref_number, amount, cleared, cleared_date, gl_account_id, gl_source, gl_status "
+        "ref_number, amount, cleared, cleared_date, reconciliation_id, "
+        "gl_account_id, gl_source, gl_status "
         "FROM manual_bank_entries WHERE bank_account_id = ? AND "
         "entry_date >= ? AND entry_date <= ?"
     )
@@ -2543,6 +2575,7 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     total_out = sum(r["outflow"] for r in rows)
     unassigned_count = sum(1 for r in rows if r.get("unassigned"))
     uncleared_count = sum(1 for r in rows if not r["cleared"])
+    reconciled_count = sum(1 for r in rows if r.get("reconciliation_id"))
 
     return {
         "account": dict(account),
@@ -2558,6 +2591,7 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
             "row_count": len(rows),
             "unassigned_count": unassigned_count,
             "uncleared_count": uncleared_count,
+            "reconciled_count": reconciled_count,
             # Reconciliation figures — independent of the cleared filter.
             "book_balance": round(book_balance, 2),
             "bank_balance": round(bank_balance, 2),
@@ -2645,19 +2679,44 @@ _TABLE_BY_SOURCE = {
 def set_cleared():
     """Toggle the cleared flag on a single register row.
 
-    Body: {"source": "bill_pay|payroll|deposit|manual", "id": 123, "cleared": true}
+    Body: {"source": "bill_pay|payroll|deposit|manual", "id": 123,
+           "cleared": true, "force": false}
+
+    A row locked into a signed-off reconciliation (reconciliation_id NOT NULL,
+    i.e. status R) is refused with 409. Editing an R row breaks the tie-out
+    of the period it belongs to, so the reconcile page's discrepancy flow is
+    the correct place to do it — not this endpoint. Pass force=true to
+    override (used by that flow after the human accepts the consequences).
     """
     data = request.get_json() or {}
     source = data.get("source")
     row_id = data.get("id")
     cleared = 1 if data.get("cleared") else 0
+    force = bool(data.get("force"))
 
     if source not in _TABLE_BY_SOURCE or not isinstance(row_id, int):
         return jsonify({"error": "Bad source or id"}), 400
 
     table = _TABLE_BY_SOURCE[source]
-    cleared_date = datetime.now().strftime("%Y-%m-%d") if cleared else None
     conn = get_connection()
+    existing = conn.execute(
+        f"SELECT reconciliation_id FROM {table} WHERE id = ?", (row_id,)
+    ).fetchone()
+    if existing is None:
+        conn.close()
+        return jsonify({"error": "Row not found"}), 404
+    rec_id = existing["reconciliation_id"]
+    if rec_id and not force:
+        conn.close()
+        return jsonify({
+            "error": "This row is reconciled (R). Editing it will break the "
+                     "period tie-out. Use the reconcile page's discrepancy "
+                     "flow, or resend with force=true to accept the break.",
+            "reconciliation_id": rec_id,
+            "recon_status": "R",
+        }), 409
+
+    cleared_date = datetime.now().strftime("%Y-%m-%d") if cleared else None
     cur = conn.execute(
         f"UPDATE {table} SET cleared = ?, cleared_date = ? WHERE id = ?",
         (cleared, cleared_date, row_id),
@@ -2666,7 +2725,8 @@ def set_cleared():
     conn.close()
     if cur.rowcount == 0:
         return jsonify({"error": "Row not found"}), 404
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok",
+                    "forced": force and bool(rec_id)})
 
 
 # ─── REASSIGN BILL PAY ROW TO AN ACCOUNT ─────────────────────────────────────
