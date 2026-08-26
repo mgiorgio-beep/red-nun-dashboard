@@ -130,8 +130,11 @@ def process_file(filepath, filename_location):
     # Auto-confirm if validation passed
     if validation_result.get('auto_confirm'):
         try:
-            confirm_invoice(invoice_id)
-            logger.info(f"  -> Auto-confirmed: {items} items, total ")
+            _cres = confirm_invoice(invoice_id)
+            if isinstance(_cres, dict) and _cres.get('held'):
+                logger.warning(f"  -> HELD by ingest guard: {'; '.join(_cres['reasons'])}")
+            else:
+                logger.info(f"  -> Auto-confirmed: {items} items, total ")
         except Exception as e:
             logger.warning(f"  -> Auto-confirm failed: {e}")
     else:

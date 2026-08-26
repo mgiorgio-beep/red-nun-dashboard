@@ -1284,6 +1284,43 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
   </div>
 </div>
 
+<!-- Portal Tie-Out Modal (Bill Pay) -->
+<div class="modal" id="modal-tieout">
+  <div class="modal-content" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title">Portal Tie-Out</div>
+      <button class="modal-close" onclick="closeModal('modal-tieout')">&times;</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">
+      Enter the open balance shown on the vendor's portal. The dashboard compares its
+      open AP for that vendor + location and shows a per-invoice breakdown when it doesn't tie.
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Vendor</label>
+        <select class="form-select" id="tieout-vendor"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <select class="form-select" id="tieout-location">
+          <option value="chatham">Chatham</option>
+          <option value="dennis">Dennis Port</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Portal Open Balance ($)</label>
+        <input class="form-input" id="tieout-balance" inputmode="decimal" placeholder="10412.50">
+      </div>
+      <div class="form-group">
+        <label class="form-label">As of</label>
+        <input class="form-input" id="tieout-date" type="date">
+      </div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:14px;width:100%" onclick="bpRunTieout()">Run Tie-Out</button>
+    <div id="tieout-result" style="margin-top:14px"></div>
+  </div>
+</div>
+
 <!-- Inventory Count Modal -->
 <div class="modal" id="modal-inventory">
   <div class="modal-content">
@@ -1751,6 +1788,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
                 </select>
               </div>
               <div style="margin-left:auto;display:flex;gap:8px">
+                <button onclick="bpOpenTieout()" title="Check dashboard open AP against a vendor portal balance" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">Portal Tie-Out</button>
                 <button onclick="bpExportCSV()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">Export CSV</button>
               </div>
             </div>
@@ -5751,6 +5789,77 @@ async function bpLoadInvoices() {
     bpUpdateActionBar();
     bpRenderSorted();
   } catch(e) { console.error('BP invoices error:', e); }
+}
+
+// ── Portal Tie-Out ──
+function bpOpenTieout() {
+  var sel = document.getElementById('tieout-vendor');
+  var vf = document.getElementById('bp-vendor-filter');
+  sel.innerHTML = '<option value="">— pick a vendor —</option>';
+  if (vf) {
+    for (var i = 0; i < vf.options.length; i++) {
+      if (!vf.options[i].value) continue;
+      var o = document.createElement('option');
+      o.value = vf.options[i].value; o.textContent = vf.options[i].textContent;
+      sel.appendChild(o);
+    }
+  }
+  if (vf && vf.value) sel.value = vf.value;
+  document.getElementById('tieout-location').value =
+    window.currentLocation || localStorage.getItem('globalLocation') || 'chatham';
+  document.getElementById('tieout-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('tieout-result').innerHTML = '';
+  document.getElementById('modal-tieout').classList.add('active');
+}
+
+async function bpRunTieout() {
+  var vendor = document.getElementById('tieout-vendor').value;
+  var bal = parseFloat(String(document.getElementById('tieout-balance').value).replace(/[$,]/g, ''));
+  var out = document.getElementById('tieout-result');
+  if (!vendor) { out.innerHTML = '<div style="color:#ef4444;font-size:13px">Pick a vendor.</div>'; return; }
+  if (isNaN(bal)) { out.innerHTML = '<div style="color:#ef4444;font-size:13px">Enter the portal balance.</div>'; return; }
+  out.innerHTML = '<div style="color:var(--text3);font-size:13px">Tying…</div>';
+  try {
+    var r = await fetch('/api/invoices/portal-tieout', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vendor_name: vendor,
+        location: document.getElementById('tieout-location').value,
+        portal_balance: bal,
+        as_of_date: document.getElementById('tieout-date').value,
+      }),
+    });
+    var d = await r.json();
+    if (d.error) { out.innerHTML = '<div style="color:#ef4444;font-size:13px">' + d.error + '</div>'; return; }
+    var html = '<div style="padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;' +
+      (d.ties ? 'background:rgba(34,197,94,.12);color:#15803d' : 'background:rgba(239,68,68,.1);color:#b91c1c') +
+      '">' + d.message + '</div>';
+    if (!d.ties && d.analysis && d.analysis.length) {
+      html += '<ul style="margin:10px 0 0;padding-left:18px;font-size:12px;color:var(--text2)">';
+      d.analysis.forEach(function (a) { html += '<li style="margin-bottom:4px">' + a + '</li>'; });
+      html += '</ul>';
+    }
+    if (d.invoices && d.invoices.length) {
+      html += '<div style="max-height:260px;overflow-y:auto;margin-top:10px;border:1px solid var(--border);border-radius:8px">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+        '<thead><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid var(--border)">Invoice</th>' +
+        '<th style="text-align:left;padding:6px 10px;border-bottom:1px solid var(--border)">Date</th>' +
+        '<th style="text-align:right;padding:6px 10px;border-bottom:1px solid var(--border)">Total</th>' +
+        '<th style="text-align:right;padding:6px 10px;border-bottom:1px solid var(--border)">Balance</th>' +
+        '<th style="text-align:left;padding:6px 10px;border-bottom:1px solid var(--border)">Due</th></tr></thead><tbody>';
+      d.invoices.forEach(function (i) {
+        html += '<tr><td style="padding:5px 10px">#' + (i.invoice_number || i.id) + '</td>' +
+          '<td style="padding:5px 10px">' + (i.invoice_date || '') + '</td>' +
+          '<td style="padding:5px 10px;text-align:right">$' + Number(i.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) + '</td>' +
+          '<td style="padding:5px 10px;text-align:right">$' + Number(i.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) + '</td>' +
+          '<td style="padding:5px 10px">' + (i.due_date || '') + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    out.innerHTML = html;
+  } catch (e) {
+    out.innerHTML = '<div style="color:#ef4444;font-size:13px">Tie-out failed: ' + e + '</div>';
+  }
 }
 
 function bpSortBy(col) {

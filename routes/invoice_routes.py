@@ -569,7 +569,24 @@ def api_scan_invoice():
         # Auto-confirm if validation passed
         if validation_result.get("auto_confirm"):
             try:
-                confirm_invoice(invoice_id)
+                _cres = confirm_invoice(invoice_id)
+                if isinstance(_cres, dict) and _cres.get("held"):
+                    # Ingest guard held it (near-duplicate / transposition /
+                    # foot-check hit) — route to manual review with reasons.
+                    validation_result["auto_confirm"] = False
+                    validation_result.setdefault("issues", []).extend(_cres["reasons"])
+                    logger.warning(f"Invoice #{invoice_id} held by ingest guard — routed to manual review")
+                    invoice = get_invoice(invoice_id)
+                    if extracted.get("detected_location"):
+                        invoice["detected_location"] = extracted["detected_location"]
+                    invoice["validation"] = validation_result
+                    return jsonify({
+                        "status": "needs_review",
+                        "invoice_id": invoice_id,
+                        "data": invoice,
+                        "message": "⚠️ Held by ingest guard: " + " • ".join(_cres["reasons"]) + " — Please review and confirm.",
+                        "validation": validation_result,
+                    })
                 logger.info(f"Invoice #{invoice_id} auto-confirmed: {validation_result['item_count_extracted']} items, total ${validation_result['total_extracted']:.2f}")
                 
                 # Build success message
@@ -680,24 +697,29 @@ def api_import_iif():
 
         # Auto-confirm immediately — IIF data is perfect
         confirmed = False
+        held_reasons = None
         try:
-            confirm_invoice(invoice_id)
-            confirmed = True
-            logger.info(f"IIF invoice #{invoice_id} auto-confirmed: {extracted['vendor_name']} "
-                        f"#{extracted.get('invoice_number')} — {len(extracted['line_items'])} items, "
-                        f"${extracted.get('total', 0):.2f}")
+            _cres = confirm_invoice(invoice_id)
+            if isinstance(_cres, dict) and _cres.get("held"):
+                held_reasons = _cres["reasons"]
+                logger.warning(f"IIF invoice #{invoice_id} held by ingest guard: {'; '.join(held_reasons)}")
+            else:
+                confirmed = True
+                logger.info(f"IIF invoice #{invoice_id} auto-confirmed: {extracted['vendor_name']} "
+                            f"#{extracted.get('invoice_number')} — {len(extracted['line_items'])} items, "
+                            f"${extracted.get('total', 0):.2f}")
 
-            # Run vendor item matching + anomaly detection
-            try:
-                conn = get_connection()
-                process_invoice_items(invoice_id, conn)
-                analyze_invoice_for_anomalies(invoice_id, conn)
-                conn.close()
-            except Exception as me:
-                logger.error(f"Post-IIF-confirm processing error: {me}", exc_info=True)
+                # Run vendor item matching + anomaly detection
+                try:
+                    conn = get_connection()
+                    process_invoice_items(invoice_id, conn)
+                    analyze_invoice_for_anomalies(invoice_id, conn)
+                    conn.close()
+                except Exception as me:
+                    logger.error(f"Post-IIF-confirm processing error: {me}", exc_info=True)
 
-            # Recalculate recipe costs in background
-            threading.Thread(target=_run_cost_all, daemon=True).start()
+                # Recalculate recipe costs in background
+                threading.Thread(target=_run_cost_all, daemon=True).start()
         except Exception as e:
             logger.error(f"IIF auto-confirm failed for #{invoice_id}: {e}")
 
@@ -712,7 +734,10 @@ def api_import_iif():
             "total": total_val,
             "item_count": item_count,
             "source": "iif",
-            "message": f"IIF invoice imported and {'auto-confirmed' if confirmed else 'saved (confirm failed)'}: {item_count} items, ${total_val:.2f}",
+            "held_reasons": held_reasons,
+            "message": ("⚠️ IIF invoice held by ingest guard — " + " • ".join(held_reasons)
+                        if held_reasons else
+                        f"IIF invoice imported and {'auto-confirmed' if confirmed else 'saved (confirm failed)'}: {item_count} items, ${total_val:.2f}"),
         })
 
     except ValueError as e:
@@ -851,16 +876,19 @@ def _dispatch_csv_invoice(csv_text, vendor_hint, location, orig_filename):
             confirmed = False
             if _reconciles:
                 try:
-                    confirm_invoice(invoice_id)
-                    confirmed = True
-                    try:
-                        conn = get_connection()
-                        process_invoice_items(invoice_id, conn)
-                        analyze_invoice_for_anomalies(invoice_id, conn)
-                        conn.close()
-                    except Exception as me:
-                        logger.error(f"Post-VTInfo-confirm processing error: {me}", exc_info=True)
-                    threading.Thread(target=_run_cost_all, daemon=True).start()
+                    _cres = confirm_invoice(invoice_id)
+                    if isinstance(_cres, dict) and _cres.get("held"):
+                        logger.warning(f"VTInfo CSV #{invoice_id} held by ingest guard: {'; '.join(_cres['reasons'])}")
+                    else:
+                        confirmed = True
+                        try:
+                            conn = get_connection()
+                            process_invoice_items(invoice_id, conn)
+                            analyze_invoice_for_anomalies(invoice_id, conn)
+                            conn.close()
+                        except Exception as me:
+                            logger.error(f"Post-VTInfo-confirm processing error: {me}", exc_info=True)
+                        threading.Thread(target=_run_cost_all, daemon=True).start()
                 except Exception as e:
                     logger.error(f"VTInfo CSV auto-confirm failed for #{invoice_id}: {e}")
             else:
@@ -915,16 +943,19 @@ def _dispatch_csv_invoice(csv_text, vendor_hint, location, orig_filename):
                 invoice_id = result
                 confirmed = False
                 try:
-                    confirm_invoice(invoice_id)
-                    confirmed = True
-                    try:
-                        conn = get_connection()
-                        process_invoice_items(invoice_id, conn)
-                        analyze_invoice_for_anomalies(invoice_id, conn)
-                        conn.close()
-                    except Exception as me:
-                        logger.error(f"Post-PFG-confirm processing error: {me}", exc_info=True)
-                    threading.Thread(target=_run_cost_all, daemon=True).start()
+                    _cres = confirm_invoice(invoice_id)
+                    if isinstance(_cres, dict) and _cres.get("held"):
+                        logger.warning(f"PFG CSV #{invoice_id} held by ingest guard: {'; '.join(_cres['reasons'])}")
+                    else:
+                        confirmed = True
+                        try:
+                            conn = get_connection()
+                            process_invoice_items(invoice_id, conn)
+                            analyze_invoice_for_anomalies(invoice_id, conn)
+                            conn.close()
+                        except Exception as me:
+                            logger.error(f"Post-PFG-confirm processing error: {me}", exc_info=True)
+                        threading.Thread(target=_run_cost_all, daemon=True).start()
                 except Exception as e:
                     logger.error(f"PFG CSV auto-confirm failed for #{invoice_id}: {e}")
 
@@ -992,23 +1023,26 @@ def _dispatch_csv_invoice(csv_text, vendor_hint, location, orig_filename):
         # Auto-confirm immediately — CSV data is perfect structured data
         confirmed = False
         try:
-            confirm_invoice(invoice_id)
-            confirmed = True
-            logger.info(f"CSV invoice #{invoice_id} auto-confirmed: {extracted['vendor_name']} "
-                        f"#{extracted.get('invoice_number')} — {len(extracted['line_items'])} items, "
-                        f"${extracted.get('total', 0):.2f}")
+            _cres = confirm_invoice(invoice_id)
+            if isinstance(_cres, dict) and _cres.get("held"):
+                logger.warning(f"CSV invoice #{invoice_id} held by ingest guard: {'; '.join(_cres['reasons'])}")
+            else:
+                confirmed = True
+                logger.info(f"CSV invoice #{invoice_id} auto-confirmed: {extracted['vendor_name']} "
+                            f"#{extracted.get('invoice_number')} — {len(extracted['line_items'])} items, "
+                            f"${extracted.get('total', 0):.2f}")
 
-            # Run vendor item matching + anomaly detection
-            try:
-                conn = get_connection()
-                process_invoice_items(invoice_id, conn)
-                analyze_invoice_for_anomalies(invoice_id, conn)
-                conn.close()
-            except Exception as me:
-                logger.error(f"Post-CSV-confirm processing error: {me}", exc_info=True)
+                # Run vendor item matching + anomaly detection
+                try:
+                    conn = get_connection()
+                    process_invoice_items(invoice_id, conn)
+                    analyze_invoice_for_anomalies(invoice_id, conn)
+                    conn.close()
+                except Exception as me:
+                    logger.error(f"Post-CSV-confirm processing error: {me}", exc_info=True)
 
-            # Recalculate recipe costs in background
-            threading.Thread(target=_run_cost_all, daemon=True).start()
+                # Recalculate recipe costs in background
+                threading.Thread(target=_run_cost_all, daemon=True).start()
         except Exception as e:
             logger.error(f"CSV auto-confirm failed for #{invoice_id}: {e}")
 
@@ -1067,7 +1101,7 @@ def api_confirm_invoice(invoice_id):
                     "error": f"Line items + tax (${computed:.2f}) do not match invoice total (${stated_total:.2f})",
                     "discrepancy": round(stated_total - computed, 2)
                 }), 422
-        confirm_invoice(invoice_id, updated_data=data)
+        confirm_invoice(invoice_id, updated_data=data, actor="human")
         invoice = get_invoice(invoice_id)
 
         # Run vendor item matching + anomaly detection
@@ -1157,7 +1191,7 @@ def api_edit_invoice(invoice_id):
         merged["total"] = round(float(data.get("total", current.get("total") or 0) or 0), 2)
 
     try:
-        confirm_invoice(invoice_id, updated_data=merged)
+        confirm_invoice(invoice_id, updated_data=merged, actor="human")
         conn = get_connection()
         try:
             row = conn.execute(
@@ -1301,15 +1335,39 @@ def api_create_manual_invoice():
         cur = conn.cursor()
         now = datetime.now().isoformat()
 
+        # Ingest guard — a manually keyed invoice is exactly how the 081876
+        # phantom payable was born. Any hit → create as 'pending' (review
+        # queue) instead of a live payable, with the reasons in notes.
+        held_reasons = None
+        try:
+            from integrations.invoices.ingest_guard import check_invoice, format_hold_reasons
+            _hits = check_invoice(conn, {
+                "vendor_name": vendor_name, "location": location,
+                "invoice_number": invoice_number, "invoice_date": invoice_date,
+                "total": total, "subtotal": subtotal, "tax": tax,
+                "items_sum": subtotal,
+            })
+            if _hits:
+                held_reasons = format_hold_reasons(_hits)
+        except Exception as e:
+            logger.error(f"Ingest guard failed on create-manual: {e}")
+
+        _status = "pending" if held_reasons else "confirmed"
+        _notes = (" | [INGEST GUARD HOLD " + now[:10] + ": " + " || ".join(held_reasons) + "]"
+                  if held_reasons else None)
         cur.execute("""
             INSERT INTO scanned_invoices
             (location, vendor_name, invoice_number, invoice_date, subtotal, tax, total,
              category, status, source, auto_confirmed, confirmed_at, created_at,
              invoice_type, recurring_frequency, recurring_day,
-             needs_reconciliation, discrepancy)
-            VALUES (?,?,?,?,?,?,?,?,'confirmed','manual',1,?,?,?,?,?,0,0.0)
+             needs_reconciliation, discrepancy, notes, validation_json)
+            VALUES (?,?,?,?,?,?,?,?,?,'manual',?,?,?,?,?,?,0,0.0,?,?)
         """, (location, vendor_name, invoice_number, invoice_date, subtotal, tax, total,
-              category, now, now, invoice_type, recurring_frequency, recurring_day))
+              category, _status, 0 if held_reasons else 1,
+              None if held_reasons else now, now,
+              invoice_type, recurring_frequency, recurring_day, _notes,
+              json.dumps({"auto_confirm": False, "issues": held_reasons,
+                          "ingest_guard_hold": True}) if held_reasons else None))
         invoice_id = cur.lastrowid
 
         for it in items:
@@ -1323,18 +1381,25 @@ def api_create_manual_invoice():
 
         conn.commit()
 
-        # Post-confirm processing for line-item invoices
-        if detail_level == "line_item" and items:
+        # Post-confirm processing for line-item invoices (skip when held)
+        if detail_level == "line_item" and items and not held_reasons:
             try:
                 process_invoice_items(invoice_id, conn)
             except Exception as e:
                 logger.warning(f"Post-confirm processing error on manual invoice: {e}")
 
         # Recalculate recipe costs in background
-        threading.Thread(target=_run_cost_all, daemon=True).start()
+        if not held_reasons:
+            threading.Thread(target=_run_cost_all, daemon=True).start()
 
         conn.close()
 
+        if held_reasons:
+            logger.warning(f"Manual invoice #{invoice_id} held by ingest guard: {'; '.join(held_reasons)}")
+            return jsonify({"status": "needs_review", "invoice_id": invoice_id,
+                            "held_reasons": held_reasons,
+                            "message": ("⚠️ Invoice saved to the review queue, NOT confirmed — "
+                                        + " • ".join(held_reasons))})
         return jsonify({"status": "ok", "invoice_id": invoice_id,
                         "message": f"Invoice created for {vendor_name}"})
     except Exception as e:
@@ -1981,6 +2046,200 @@ def reconcile_manifest():
 
     result["telegram_sent"] = _send_telegram_summary(verdict_text)
     return jsonify(result)
+
+
+@invoice_bp.route("/api/invoices/portal-tieout", methods=["POST"])
+def portal_tieout():
+    """Manual portal tie-out: compare dashboard open AP for one vendor+location
+    against the portal's open balance, entered by hand.
+
+    Born from the 2026-08-26 L. Knife reconciliation ($2,625.40 of silent
+    drift). The automated completeness ledger (reconcile-manifest) checks
+    invoice EXISTENCE and per-invoice amounts for vendors with live scrapers;
+    this endpoint checks the OPEN BALANCE for any vendor, scraper or not —
+    the operator reads the number off the portal, the system does the tying.
+
+    Body:
+        vendor_key:      key from _MANIFEST_VENDOR_PATTERNS (e.g. 'lknife'), OR
+        vendor_name:     raw vendor name substring (fallback match)
+        location:        'chatham' | 'dennis'
+        portal_balance:  the portal's open/AR balance (number or "$1,234.56")
+        as_of_date:      optional, defaults to today
+        portal_invoices: optional [{invoice_number, balance}] for a true
+                         row-by-row diff (paste from the portal's AR table)
+        notify:          optional, default true — send Telegram on drift
+
+    Returns ties/difference, the full per-invoice dashboard open list, and a
+    diff analysis. Persists every tie-out to portal_tieouts for history.
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    vkey = str(body.get("vendor_key") or "").lower().strip()
+    vname = str(body.get("vendor_name") or "").strip()
+    location = str(body.get("location") or "").lower().strip()
+    as_of = str(body.get("as_of_date") or datetime.now().date().isoformat())
+    portal_balance = _parse_manifest_amount(body.get("portal_balance"))
+    portal_invoices = body.get("portal_invoices") or []
+    notify = body.get("notify", True)
+
+    if portal_balance is None:
+        return jsonify({"error": "portal_balance required (number)"}), 400
+    if location not in ("chatham", "dennis"):
+        return jsonify({"error": "location must be 'chatham' or 'dennis'"}), 400
+    patterns = _MANIFEST_VENDOR_PATTERNS.get(vkey) if vkey else None
+    if not patterns:
+        if not vname:
+            return jsonify({"error": "vendor_key or vendor_name required",
+                            "known_vendor_keys": sorted(_MANIFEST_VENDOR_PATTERNS)}), 400
+        patterns = [f"%{vname}%"]
+
+    conn = get_connection()
+    try:
+        where = " OR ".join(["vendor_name LIKE ?"] * len(patterns))
+        rows = conn.execute(
+            f"""SELECT id, vendor_name, invoice_number, invoice_date, due_date,
+                       total, COALESCE(amount_paid, 0) AS amount_paid,
+                       COALESCE(balance, total) AS balance, payment_status
+                FROM scanned_invoices
+                WHERE ({where}) AND location = ? AND status = 'confirmed'
+                  AND COALESCE(balance, total) != 0
+                  AND (payment_status != 'paid' OR payment_status IS NULL)
+                ORDER BY invoice_date""",
+            patterns + [location],
+        ).fetchall()
+
+        invoices, dashboard_total = [], 0.0
+        for r in rows:
+            bal = float(r["balance"] or 0)
+            # Credit guard (see billpay_routes): a negative-total credit must
+            # never count as positive outstanding.
+            if (r["total"] or 0) < 0 and bal > 0:
+                bal = float(r["total"])
+            dashboard_total += bal
+            invoices.append({
+                "id": r["id"], "invoice_number": r["invoice_number"],
+                "invoice_date": r["invoice_date"], "due_date": r["due_date"],
+                "total": r["total"], "amount_paid": r["amount_paid"],
+                "balance": round(bal, 2), "payment_status": r["payment_status"],
+            })
+        dashboard_total = round(dashboard_total, 2)
+        difference = round(dashboard_total - portal_balance, 2)
+        ties = abs(difference) <= 0.01
+
+        # Diff analysis — make a no-tie actionable in one look.
+        analysis = []
+        if not ties:
+            if portal_invoices:
+                # True row-by-row diff against pasted portal rows.
+                portal_idx = {}
+                for p in portal_invoices:
+                    k = _norm_invnum(p.get("invoice_number"))
+                    if k:
+                        portal_idx[k] = _parse_manifest_amount(p.get("balance"))
+                db_idx = {_norm_invnum(i["invoice_number"]): i for i in invoices
+                          if _norm_invnum(i["invoice_number"])}
+                for k, i in db_idx.items():
+                    if k not in portal_idx:
+                        analysis.append(f"Dashboard has open #{i['invoice_number']} "
+                                        f"(${i['balance']:,.2f}) — not open on the portal")
+                    elif portal_idx[k] is not None and abs(portal_idx[k] - i["balance"]) > 0.01:
+                        analysis.append(f"#{i['invoice_number']}: dashboard balance "
+                                        f"${i['balance']:,.2f} vs portal ${portal_idx[k]:,.2f}")
+                for k, pbal in portal_idx.items():
+                    if k not in db_idx:
+                        analysis.append(f"Portal has open invoice not open in dashboard "
+                                        f"(portal balance ${pbal:,.2f})" if pbal is not None
+                                        else "Portal has an open invoice not open in dashboard")
+            # Heuristics that found all four defects on 8/26:
+            for i in invoices:
+                bal_gap = abs(i["balance"] - abs(difference))
+                if bal_gap <= 0.01:
+                    analysis.append(f"Difference equals the open balance of "
+                                    f"#{i['invoice_number']} (${i['balance']:,.2f}) — "
+                                    f"possibly settled on the portal or a phantom here")
+                elif bal_gap <= 1.00:
+                    analysis.append(f"Difference is within $1 of the open balance of "
+                                    f"#{i['invoice_number']} (${i['balance']:,.2f}) — "
+                                    f"check that invoice's amount first")
+                if i["balance"] < 0:
+                    analysis.append(f"Unused credit #{i['invoice_number']} "
+                                    f"(${i['balance']:,.2f}) is netted into the dashboard "
+                                    f"total — check whether the portal already applied it")
+                if i["amount_paid"] and abs(float(i["amount_paid"]) - abs(difference)) <= 0.01:
+                    analysis.append(f"Difference equals the partial payment on "
+                                    f"#{i['invoice_number']} (${i['amount_paid']:,.2f})")
+            if not analysis:
+                analysis.append(f"No single-invoice explanation found — compare the "
+                                f"{len(invoices)} open invoices in this result against "
+                                f"the portal's AR detail row by row (or paste the "
+                                f"portal rows into portal_invoices for an exact diff)")
+
+        # Persist tie-out history.
+        conn.execute("""CREATE TABLE IF NOT EXISTS portal_tieouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_key TEXT, vendor_pattern TEXT, location TEXT,
+            as_of_date TEXT, portal_balance REAL, dashboard_total REAL,
+            difference REAL, ties INTEGER, invoice_count INTEGER,
+            detail_json TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+        conn.execute(
+            """INSERT INTO portal_tieouts
+               (vendor_key, vendor_pattern, location, as_of_date, portal_balance,
+                dashboard_total, difference, ties, invoice_count, detail_json)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (vkey or None, json.dumps(patterns), location, as_of, portal_balance,
+             dashboard_total, difference, 1 if ties else 0, len(invoices),
+             json.dumps({"invoices": invoices, "analysis": analysis})),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    label = vkey or vname
+    if not ties and notify:
+        lines = [f"⚠️ Portal tie-out DRIFT — {label}/{location} ({as_of})",
+                 f"Portal ${portal_balance:,.2f} vs dashboard ${dashboard_total:,.2f} "
+                 f"(diff ${difference:+,.2f}, {len(invoices)} open invoices)"]
+        lines += [f"  • {a}" for a in analysis[:8]]
+        _send_telegram_summary("\n".join(lines))
+
+    return jsonify({
+        "ties": ties,
+        "vendor": label, "location": location, "as_of_date": as_of,
+        "portal_balance": portal_balance,
+        "dashboard_total": dashboard_total,
+        "difference": difference,
+        "invoice_count": len(invoices),
+        "invoices": invoices,
+        "analysis": analysis,
+        "message": (f"✅ Ties to the penny — ${dashboard_total:,.2f}, "
+                    f"{len(invoices)} open invoices" if ties else
+                    f"⚠️ Does NOT tie: portal ${portal_balance:,.2f} vs "
+                    f"dashboard ${dashboard_total:,.2f} (difference ${difference:+,.2f})"),
+    })
+
+
+@invoice_bp.route("/api/invoices/portal-tieout/history", methods=["GET"])
+def portal_tieout_history():
+    """Recent tie-outs, newest first. Optional ?vendor_key= and ?location= filters."""
+    vkey = request.args.get("vendor_key", "").lower().strip()
+    location = request.args.get("location", "").lower().strip()
+    conn = get_connection()
+    try:
+        where, params = ["1=1"], []
+        if vkey:
+            where.append("vendor_key = ?"); params.append(vkey)
+        if location:
+            where.append("location = ?"); params.append(location)
+        try:
+            rows = conn.execute(
+                f"""SELECT id, vendor_key, location, as_of_date, portal_balance,
+                           dashboard_total, difference, ties, invoice_count, created_at
+                    FROM portal_tieouts WHERE {' AND '.join(where)}
+                    ORDER BY id DESC LIMIT 50""", params).fetchall()
+        except Exception:
+            return jsonify({"tieouts": []})  # table not created yet
+        return jsonify({"tieouts": [dict(r) for r in rows]})
+    finally:
+        conn.close()
 
 
 @invoice_bp.route("/api/invoices/reconcile-verdict", methods=["GET"])

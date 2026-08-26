@@ -2283,13 +2283,62 @@ def save_invoice(location, data, image_path=None, raw_json=None, validation_data
     return invoice_id
 
 
-def confirm_invoice(invoice_id, updated_data=None):
+def confirm_invoice(invoice_id, updated_data=None, actor="auto"):
     """
     Confirm an invoice after review. Optionally update with corrected data.
     Also updates product price history.
+
+    actor: 'auto' for automated confirmation (scan auto-confirm, CSV import,
+    watchers) — the ingest guard runs and can HOLD the invoice in Pending
+    Review instead of confirming (see integrations/invoices/ingest_guard.py).
+    'human' for explicit review-queue confirmation — the guard is skipped;
+    a person resolving a held invoice IS the override.
+
+    Returns {"confirmed": True} on success, or
+    {"confirmed": False, "held": True, "reasons": [...]} when the guard held it.
     """
     conn = get_connection()
     cursor = conn.cursor()
+
+    if actor != "human":
+        try:
+            from integrations.invoices.ingest_guard import check_invoice, format_hold_reasons
+            row = cursor.execute(
+                "SELECT id, vendor_name, location, invoice_number, invoice_date, "
+                "total, subtotal, tax, notes, validation_json "
+                "FROM scanned_invoices WHERE id = ?", (invoice_id,)
+            ).fetchone()
+            hits = check_invoice(conn, dict(row)) if row else []
+        except Exception as e:
+            # The guard must never break confirmation outright — log and proceed.
+            logger.error(f"Ingest guard failed for invoice #{invoice_id}: {e}")
+            hits = []
+        if hits:
+            reasons = format_hold_reasons(hits)
+            # Surface reasons in the review UI banner (validation_json.issues)
+            # and permanently in notes; leave status = 'pending'.
+            try:
+                vj = json.loads(row["validation_json"]) if row["validation_json"] else {}
+            except (ValueError, TypeError):
+                vj = {}
+            vj["auto_confirm"] = False
+            vj.setdefault("issues", []).extend(reasons)
+            vj["ingest_guard_hold"] = True
+            cursor.execute(
+                """UPDATE scanned_invoices
+                   SET status = 'pending', auto_confirmed = 0,
+                       validation_json = ?,
+                       notes = COALESCE(notes, '') || ?
+                   WHERE id = ?""",
+                (json.dumps(vj),
+                 " | [INGEST GUARD HOLD " + datetime.now().date().isoformat() + ": "
+                 + " || ".join(reasons) + "]",
+                 invoice_id),
+            )
+            conn.commit()
+            conn.close()
+            logger.warning(f"Invoice #{invoice_id} HELD by ingest guard: {'; '.join(reasons)}")
+            return {"confirmed": False, "held": True, "reasons": reasons}
 
     if updated_data:
         # Update the invoice with corrections

@@ -681,6 +681,22 @@ def create_payment():
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Ingest-guard backstop: only CONFIRMED invoices are payable. The UI only
+    # lists confirmed ones, but nothing stopped a pending/held invoice id from
+    # being paid if passed directly (the 081876 phantom near-miss, 2026-08-26).
+    if invoice_ids:
+        placeholders = ",".join(["?"] * len(invoice_ids))
+        bad = cursor.execute(
+            f"SELECT id, invoice_number, status FROM scanned_invoices "
+            f"WHERE id IN ({placeholders}) AND status != 'confirmed'",
+            invoice_ids,
+        ).fetchall()
+        if bad:
+            conn.close()
+            return jsonify({"error": "Refusing to pay unconfirmed invoice(s): "
+                            + ", ".join(f"#{b['invoice_number'] or b['id']} (status={b['status']})"
+                                        for b in bad)}), 400
+
     # Create payment record
     cursor.execute("""
         INSERT INTO ap_payments (vendor_name, payment_date, amount, payment_method,
@@ -882,12 +898,17 @@ def mark_invoice_paid_external(invoice_id):
 
     inv = cursor.execute(
         "SELECT id, vendor_name, total, COALESCE(balance, total) AS balance, "
-        "payment_status, location FROM scanned_invoices WHERE id = ?",
+        "payment_status, status, location FROM scanned_invoices WHERE id = ?",
         (invoice_id,),
     ).fetchone()
     if not inv:
         conn.close()
         return jsonify({"error": "Invoice not found"}), 404
+    if inv["status"] != "confirmed":
+        # Ingest-guard backstop — a pending/held invoice is not payable.
+        conn.close()
+        return jsonify({"error": f"Invoice is not confirmed (status={inv['status']}) — "
+                        "resolve it in the review queue before marking paid"}), 400
     if inv["payment_status"] == "paid":
         conn.close()
         return jsonify({"error": "Invoice already marked paid"}), 400
