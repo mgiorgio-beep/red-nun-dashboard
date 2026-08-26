@@ -2270,6 +2270,96 @@ def get_register(account_id):
     return jsonify(view)
 
 
+def _pre_period_net(conn, account, period_start, include_unassigned=True):
+    """Net cleared inflow − outflow for every register row in [opening_date, period_start).
+
+    Added to bank_accounts.opening_balance, this is the BANK balance on the
+    morning of `period_start` — the roll-forward that lets any period be
+    viewed correctly without dragging January's beginning balance across the
+    year. The anchor is a statement beginning balance (a bank number), so
+    rolling it forward must use bank movements: cleared rows only. An
+    uncleared check written in a prior period does not appear on any bank
+    statement until it clears, so it does not change the pre-period bank
+    base. When it finally clears in a later period, its cleared_date lands
+    inside that period's window and the reconcile picks it up there.
+
+    Verified against Dennis 2026-Q1: this gives 32,162.19 as the April 1
+    opening, matching the March statement ending. The 3 uncleared March
+    payroll checks totalling $57.46 stay outstanding on the ledger — they
+    are the -57.46 outstanding_net on bank_reconciliations id=4.
+
+    Filters mirror build_register_view() exactly, including the
+    include_unassigned toggle on the Chatham default account. Two views of
+    the same period should never disagree on the pre-period base.
+
+    Returns 0.0 if opening_date is unset, or if it is not strictly before
+    period_start (the requested period is at or predates the anchor —
+    nothing to roll forward). Uses aggregate SUMs rather than materializing
+    rows; this runs on every /api/register/<id> call.
+    """
+    opening_date = account["opening_date"]
+    if not opening_date or opening_date >= period_start:
+        return 0.0
+
+    account_id = account["id"]
+    is_default_account = account["account_last4"] == "5975"
+
+    # bill pay — payment_total is always an outflow. Cleared only.
+    bp_where = (
+        "payment_date >= ? AND payment_date < ? "
+        "AND cleared = 1 "
+        "AND (status IS NULL OR status NOT IN ('void', 'failed')) AND ("
+        "bank_account_id = ?"
+        + (" OR bank_account_id IS NULL"
+           if (is_default_account and include_unassigned) else "")
+        + ")"
+    )
+    bp_out = conn.execute(
+        f"SELECT COALESCE(SUM(payment_total), 0) FROM vendor_payments WHERE {bp_where}",
+        (opening_date, period_start, account_id),
+    ).fetchone()[0] or 0.0
+
+    # payroll — net_pay outflow, pay_date via payroll_runs join with
+    # pay_period_end fallback. Direct Deposit rows excluded (rolled up into
+    # the 7shifts ACH manual entry — including them here double-counts).
+    # Cleared only.
+    pr_out = 0.0
+    try:
+        pr_out = conn.execute(
+            "SELECT COALESCE(SUM(pc.net_pay), 0) FROM payroll_checks pc "
+            "LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
+            "WHERE COALESCE(pr.pay_date, pc.pay_period_end) >= ? "
+            "AND COALESCE(pr.pay_date, pc.pay_period_end) < ? "
+            "AND pc.cleared = 1 "
+            "AND (pc.voided IS NULL OR pc.voided = 0) "
+            "AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit') "
+            "AND pc.bank_account_id = ?",
+            (opening_date, period_start, account_id),
+        ).fetchone()[0] or 0.0
+    except Exception as e:
+        logger.warning(f"pre-period payroll sum failed for account {account_id}: {e}")
+
+    # deposits — amount is always positive inflow. Cleared only (deposits
+    # default to cleared=1 in schema, but be explicit).
+    dep_in = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM bank_deposits "
+        "WHERE bank_account_id = ? AND cleared = 1 "
+        "AND deposit_date >= ? AND deposit_date < ?",
+        (account_id, opening_date, period_start),
+    ).fetchone()[0] or 0.0
+
+    # manual — amount is signed: positive = deposit, negative = payment.
+    # Cleared only.
+    man_signed = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM manual_bank_entries "
+        "WHERE bank_account_id = ? AND cleared = 1 "
+        "AND entry_date >= ? AND entry_date < ?",
+        (account_id, opening_date, period_start),
+    ).fetchone()[0] or 0.0
+
+    return float(dep_in) + float(man_signed) - float(bp_out) - float(pr_out)
+
+
 def build_register_view(conn, account_id, start, end, cleared_filter="all",
                         include_unassigned=True):
     """The unified register for one account over one date range.
@@ -2397,7 +2487,22 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     # book - bank == outstanding, always. An outstanding check is NOT an error;
     # it is why a period with legitimate timing differences can never satisfy a
     # strict `delta == 0` pass condition.
-    opening_bal = float(account["opening_balance"] or 0)
+    #
+    # `opening_bal` here is the PERIOD opening — the BANK balance on the
+    # morning of `start`. It is the anchored opening_balance rolled forward
+    # by every CLEARED register row between opening_date and period_start
+    # (see _pre_period_net). Reading bank_accounts.opening_balance verbatim
+    # (as this file did before) meant January's beginning balance stood in
+    # for every later period's opening, and every running balance and ending
+    # balance downstream inherited the wrong base.
+    #
+    # Do NOT "fix" a wrong opening by editing the anchor: that value doubles
+    # as the GL-balance cutoff and moving it silently truncates every
+    # balance report.
+    opening_bal_anchor = float(account["opening_balance"] or 0)
+    pre_period_net = _pre_period_net(conn, account, start,
+                                     include_unassigned=include_unassigned)
+    opening_bal = opening_bal_anchor + pre_period_net
     _all_in = sum(r["inflow"] for r in rows)
     _all_out = sum(r["outflow"] for r in rows)
     _clr_in = sum(r["inflow"] for r in rows if r["cleared"])
@@ -2414,13 +2519,17 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     elif cleared_filter == "uncleared":
         rows = [r for r in rows if not r["cleared"]]
 
-    # Sort ascending by date to compute running balance, then reverse for display
+    # Sort ascending by (date, source, source_id) to compute running balance,
+    # then reverse for display. The tie-break is deterministic: two register
+    # views of the same period must render identical balance columns, and
+    # `date` alone is not unique.
     rows.sort(key=lambda r: (r["date"] or "", r["source"], r["source_id"]))
 
-    # Running balance: starts from opening_balance at opening_date (or 0 if unset).
-    # Anything dated before opening_date is ignored for balance purposes.
-    # NOTE: this runs over the FILTERED rows, so it is a display balance. The
-    # book / bank / outstanding figures computed above are the reconciliation.
+    # Running balance: starts from the PERIOD opening (opening_bal, computed
+    # above via anchor + pre-period roll-forward) and accumulates over the
+    # rows the user is actually looking at. This runs over the FILTERED rows,
+    # so it is a display balance. The book / bank / outstanding figures
+    # computed above are the reconciliation and are independent of the filter.
     running = opening_bal
     for r in rows:
         running += r["inflow"] - r["outflow"]
