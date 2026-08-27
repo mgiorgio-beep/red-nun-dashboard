@@ -121,6 +121,59 @@ def main():
                 return rid
         return None
 
+    # ── BANK EVIDENCE, which outranks `location` ──────────────────────────
+    # `location` says where the EXPENSE belongs. `bank_account_id` must say
+    # which bank actually paid. For an intercompany payment those differ, and
+    # only the statement can tell them apart.
+    #
+    # Proven case: vendor_payments #27/#28/#29 are location='dennis' but appear
+    # as "AR PAYMENT PERFORMANCEBOS" debits on CHATHAM's January statement at
+    # exactly their amounts. That cash left Chatham. Assigning them to Dennis
+    # by location would have moved 8,163.13 out of Chatham January and
+    # destroyed a reconciliation that ties to the penny.
+    #
+    # Evidence is read from bank_statement_uploads.parsed_json, NOT from
+    # surviving manual_bank_entries: dedupe DELETES the statement line once it
+    # is matched to a book row, so 22 of Chatham January's 218 lines no longer
+    # exist as manual entries. parsed_json still holds all of them.
+    import json as _json
+    from datetime import date as _date
+
+    evidence = defaultdict(list)   # cents -> [(acct_id, tx_date)]
+    for u in conn.execute("SELECT bank_account_id, parsed_json "
+                          "FROM bank_statement_uploads "
+                          "WHERE parsed_json IS NOT NULL"):
+        try:
+            txs = (_json.loads(u["parsed_json"]) or {}).get("transactions", []) or []
+        except Exception:
+            continue
+        for t in txs:
+            d = float(t.get("debit") or 0)
+            if d > 0:
+                evidence[int(round(d * 100))].append(
+                    (u["bank_account_id"], t.get("date")))
+
+    def evid_accounts(amount, pay_date, window=45):
+        """Accounts whose statement shows a debit at this amount near this date."""
+        out = set()
+        pd = None
+        try:
+            pd = _date.fromisoformat(pay_date) if pay_date else None
+        except (TypeError, ValueError):
+            pass
+        for acct, tdate in evidence.get(int(round(float(amount or 0) * 100)), []):
+            if pd is None or not tdate:
+                out.add(acct)
+                continue
+            try:
+                lag = (_date.fromisoformat(tdate) - pd).days
+            except (TypeError, ValueError):
+                out.add(acct)
+                continue
+            if -7 <= lag <= window:
+                out.add(acct)
+        return out
+
     rows = [dict(r) for r in conn.execute("""
         SELECT id, vendor, location, payment_date, payment_total,
                bank_account_id, status, reconciliation_id, cleared
@@ -129,15 +182,33 @@ def main():
     """)]
 
     to_move, skipped_null_loc, already_ok, disturbs = [], [], [], []
+    intercompany, no_evidence = [], []
     for r in rows:
         loc = (r["location"] or "").strip().lower()
         if loc not in target_acct:
             skipped_null_loc.append(r)
             continue
-        want = target_acct[loc]
+        by_loc = target_acct[loc]
+
+        ev = evid_accounts(r["payment_total"], r["payment_date"])
+        if len(ev) == 1:
+            want = next(iter(ev))
+            if want != by_loc:
+                # The bank disagrees with the location. Trust the bank for the
+                # cash side and record it as intercompany -- do NOT "fix" it.
+                intercompany.append((r, by_loc, want))
+        elif not ev:
+            want = by_loc
+            no_evidence.append(r)
+        else:
+            # Both statements show this amount; cannot attribute. Leave alone.
+            intercompany.append((r, by_loc, None))
+            continue
+
         if r["bank_account_id"] == want:
             already_ok.append(r)
             continue
+
         # Which closed period does it sit in TODAY (under its current account)?
         cur_acct = r["bank_account_id"]
         if cur_acct is None:
@@ -157,11 +228,27 @@ def main():
     print(f"  already on the right account        : {len(already_ok)}")
     print(f"  location NULL, cannot derive        : {len(skipped_null_loc)} "
           f"({money(skipped_null_loc):,.2f})")
+    print(f"  bank evidence contradicts location  : {len(intercompany)} "
+          f"(INTERCOMPANY — bank wins, reported not forced)")
+    print(f"  no bank evidence, location used     : {len(no_evidence)} "
+          f"({money(no_evidence):,.2f})")
     print(f"  will move                           : {len(to_move)} "
           f"({money([r for r, _ in to_move]):,.2f})")
     print(f"  of which sit in a CLOSED period     : {len(disturbs)} "
           f"({money([r for r, _, _ in disturbs]):,.2f})"
           f"{'  <-- INCLUDED' if args.include_closed else '  <-- skipped'}")
+
+    if intercompany:
+        print("\n  --- INTERCOMPANY / unattributable (bank disagrees with location) ---")
+        for r, by_loc, ev_acct in intercompany:
+            where = f"acct {ev_acct}" if ev_acct else "BOTH statements (ambiguous)"
+            print(f"    #{r['id']:<5d} {r['payment_date']} loc={r['location']:8s} "
+                  f"{float(r['payment_total'] or 0):>10,.2f} "
+                  f"location implies acct {by_loc}, bank says {where}  "
+                  f"{(r['vendor'] or '')[:20]}")
+        print("    The expense belongs to `location`; the CASH left the account the")
+        print("    bank shows. Both facts are correct — this needs an intercompany")
+        print("    due-to/due-from entry, not a reassignment.")
 
     if disturbs:
         print("\n  --- rows inside a signed-off period ---")
