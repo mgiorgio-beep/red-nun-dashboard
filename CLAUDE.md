@@ -68,7 +68,14 @@ Two locations: Dennis Port & Chatham, Cape Cod, MA.
 - **Server:** Beelink SER5, Chatham. SSH: `ssh -p 2222 rednun@ssh.rednun.com`. Local: 10.1.10.83.
 - **Backend:** Python / Flask / Gunicorn (port 8080, workers=2) / Nginx. Service: `rednun.service` runs `gunicorn -w 2 -b 0.0.0.0:8080 web.server:app`.
 - **Bot service:** `rednun-agent.service` runs `python bot/bot.py` (Telegram bot using Anthropic SDK).
-- **Database:** SQLite WAL mode. Path: `/var/lib/rednun/toast_data.db` (set via `TOAST_DB_PATH` in `.env`). ~1.1GB.
+- **Database:** SQLite WAL mode. Path: `/var/lib/rednun/toast_data.db`. ~1.8GB.
+  - ⚠️ **The env var is `DB_PATH`, NOT `TOAST_DB_PATH`.** `integrations/toast/data_store.py`
+    reads `os.getenv("DB_PATH", "toast_data.db")`. This file previously documented
+    `TOAST_DB_PATH`; setting that name is silently ignored, which on 2026-08-27 sent a
+    test run's writes straight into the live database (repaired from backup).
+  - ⚠️ **Never `cp` the live DB.** It is 1.8GB in WAL mode and actively written, so `cp`
+    yields a TORN snapshot that silently disagrees with live. Use
+    `sqlite3 /var/lib/rednun/toast_data.db ".backup /tmp/x.db"`.
 - **Frontend:** Vanilla HTML/JS/CSS, dark theme (#020617 bg).
 - **AI/OCR:** Anthropic Claude API (claude-sonnet-4, max_tokens 16384). Used for invoice OCR and inventory vision.
 - **Data Sources:** Toast POS, 7shifts, QuickBooks Online, Honeywell.
@@ -203,23 +210,40 @@ Pattern:
 - `sync_log` — 3,526 rows
 
 ### Invoice System
-- `scanned_invoices` — 131 invoices (OCR + CSV + manual). Columns: invoice_type (one_time/recurring/credit), recurring_frequency, recurring_day, source (scanned/manual/csv), payment_status, needs_reconciliation, discrepancy. Vendor breakdown: US Foods 31, PFG 34, Martignetti 18, SG 11, Craft Collective 20, Colonial 8, L. Knife 5, others 4.
+- `scanned_invoices` — **884 invoices, all confirmed** (2019-03-22 .. 2026-08-31), with
+  **8,994 line items, every one carrying a `category_type`** (verified live 2026-08-27;
+  this said 131 for a long time). (OCR + CSV + manual). Columns: invoice_type (one_time/recurring/credit), recurring_frequency, recurring_day, source (scanned/manual/csv), payment_status, needs_reconciliation, discrepancy. Vendor breakdown: US Foods 31, PFG 34, Martignetti 18, SG 11, Craft Collective 20, Colonial 8, L. Knife 5, others 4.
 - `scanned_invoice_items` — Line items (product_name, quantity, unit, unit_price, total_price, category_type, pack_size, canonical_product_name, auto_linked)
 
 ### Product & Inventory (existing manual system)
-- `product_inventory_settings` — 0 rows (wiped). Rebuilds from confirmed invoices via auto-populate.
-- `products` — 0 rows (wiped)
-- `product_name_map` — 0 rows (wiped)
-- `vendors` — 51 rows (**PRESERVED**)
+- `product_inventory_settings` — **360 rows**
+- `products` — **1,767 rows**
+- `product_name_map` — **1,468 rows**
+- `vendors` — 52 rows (**PRESERVED**)
 - `storage_locations` — 11 rows (Walk-in, Dry Storage, Bar, Freezer, Front Line per location + shed) (**PRESERVED**)
 - `storage_sections` — 1 row
-- `count_sessions` — 0 rows (wiped)
-- `count_items` — 0 rows (wiped)
+- `count_sessions` — **51 rows**
+- `count_items` — **194 rows**
 - `inventory_counts` — 0 rows (wiped)
 - `product_storage_locations` — 83 rows
 - `bottle_weights` — 151 rows (liquor tare weights) (**PRESERVED**)
-- `recipes` — 3 rows (**PRESERVED**)
-- `recipe_ingredients` — 14 rows (**PRESERVED**, orphaned product_id refs — resolve when products rebuild)
+- `recipes` — **345 rows** (**PRESERVED**)
+- `recipe_ingredients` — **1,482 rows** (**PRESERVED**)
+- `gl_accounts` — **541 rows** (chatham 284, dennis 257; **524 carry a `qbo_id`**)
+- `qb_journal_entries` — **896 rows**, `qb_journal_line_items` — **13,766 rows**.
+  Sales JEs are BUILT DAILY AND BALANCED, all `status='ready'`, and **not one has ever
+  been posted to QBO**. `reports/sales_journal.py::push_to_qbo()` is the only push path
+  in the codebase and has never run. So redoing any close is free — there is no QBO
+  cleanup behind it.
+
+> ⚠️ **Row counts in this file go stale fast and have been badly wrong before.** The
+> numbers above were read live on 2026-08-27; the previous set described a wiped state
+> and understated the build by ~50x, which made the project look far less finished than
+> it was. Re-read the DB before trusting any count here.
+
+**Accounting work: see `docs/ACCOUNTING_FINISH_LINE.md`** — the plan of record for the
+QBO deliverable and the bank-reconciliation path. Update that file rather than writing
+a new brief.
 
 ### AI Inventory
 - `ai_inventory_sessions` — draft/review/confirmed

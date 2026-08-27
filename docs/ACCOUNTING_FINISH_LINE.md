@@ -43,11 +43,11 @@ new systems.
 |---|---|---|
 | **0** | Toast sync alive | 🟢 **FIXED 2026-08-27** (credential rotated; sync_log 32 complete / 0 error) |
 | **1** | Sales → QBO | 🟢 ~90% (built, running daily, **never switched on**) |
-| **2** | AP / invoices → QBO | 🟡 ~40% |
+| **2** | AP / invoices → QBO | 🟡 ~55% (attribution + settlement coding fixed 08-27) |
 | **3** | Payroll → QBO | 🟡 ~30% |
 | **4** | Bank reconciliation | 🟡 Dennis ~70%, Chatham ~15% |
 | **5** | Business targets (labor/food/prime) | 🟡 ~60%, gated on Gate 0 |
-| **6** | Checks that can go red | 🟡 ~30% |
+| **6** | Checks that can go red | 🟡 ~45% |
 
 ### Gate 0 — FIXED 2026-08-27
 
@@ -145,6 +145,39 @@ surviving `manual_bank_entries` — dedupe DELETES a statement line once it is
 matched to a book row. 22 of Chatham January's 218 lines no longer exist as
 manual entries; `parsed_json` still holds all 218.
 
+#### Settlements no longer hit the P&L — DONE 2026-08-27
+
+`audit_settlement_codings` went **43 → 0**. Recoded to Accounts Payable:
+chatham 5 rows / $8,036.67, dennis 38 rows / $69,677.65 — **$77,714.32 of
+double-counted expense out of the P&L.** Script:
+`scripts/fix_settlement_codings.py`.
+
+The rule: cost is recognised at INVOICE date from the invoice line items, so the
+bank row that pays it is `Dr Accounts Payable / Cr Bank`. Coding it to Food COGS
+as well books the cost twice. Biggest hits were Dennis Apr/May — Food COGS
+$15,777 + $13,746, Food Costs-F&B $12,200, Beer COGS $4,620 — so food cost %
+for those months was materially overstated.
+
+Pre-existing, not caused by the attribution backfill (the same test fails on the
+older code). The backfill just gave vendor_payments a `bank_account_id`, which is
+what lets `settlement_evidence()` pair a statement line to the payment behind it.
+The double counts were always there, undetectable while 470 of 477 payments had a
+NULL account.
+
+`settlement_evidence()` had the same weakness as the statement matcher — amount
++ <=5 days, `LIMIT 1`, no payee test — so it called a $400 "Bands" row a Colonial
+Wholesale beer settlement. It now walks candidates by date proximity and rejects
+payee conflicts. The script also carries a **capacity guard**: group by
+(account, amount) and require at least as many invoice-carrying payments as rows
+claiming them, because forcing a non-settlement onto AP strips a real expense —
+the same error inverted. Three $23.90 Cozzini rows against five $23.90 Cozzini
+payments are three genuine settlements.
+
+Provenance is `gl_source='accrual'`, `gl_status='suggested'`. Suggested is
+deliberate: `_may_learn_rule_from()` gates purely on status, so 'confirmed' would
+let a rule rebuild learn "US FOODSERVICE -> Accounts Payable" and miscode that
+vendor non-settlement charges.
+
 **Still open here:** 147 rows carry a NULL `location` and were left alone.
 And Dennis's outstanding is now large and honest instead of artificially zero
 (May −70,026.22 across 60 book-side rows) because the newly-attributed bill_pay
@@ -174,9 +207,16 @@ The machinery works and is verified. The data is thin.
 
 - Roll-forward correct on all 6 statement periods, `opening_drift = 0.00` on every one
 - `C` / `R` states live; `R` rows locked, force-untick marks the period stale
-- Statement coverage: **Chatham 1 statement** (January only). **Dennis 5** (Jan–May).
-- **Missing: Chatham Feb–Jul (6), Dennis Jun–Jul (2).** Chatham has had no
-  balance anchor since February.
+- Statement coverage: **ALL 14 UPLOADED 2026-08-27** — Chatham and Dennis both
+  Jan → Aug 2. Every one foots its parsed rows to its own stated ending balance to
+  the penny, and both chains link with no date gaps:
+  - Chatham 34,013.57 → 25,785.04 → 17,235.02 → 9,865.21 → 8,969.03 → 14,026.59 → 34,649.29 → **101,902.38**
+  - Dennis 9,495.35 → 24,280.14 → 35,746.63 → 32,162.19 → 37,795.39 → 3,194.35 → 11,090.70 → **51,035.55**
+- Note July period is **07-01..08-02** — CCF closed on Aug 2, not the 31st. This is
+  exactly why the period selector reads uploads and not calendar months.
+- **Not yet imported.** Import per statement, oldest first: *Select unmatched → Import
+  selected*, with *Mark matched register rows as cleared* ticked. Expect ~200 unmatched
+  lines per statement (Toast deposits, card settlements, fees) — that is normal.
 - Dennis Jan and Feb "tie" but the tie is **hollow** — all 175/166 rows came
   from the imported statement with zero book-side rows, so the delta compares
   the statement against itself and cannot come out non-zero. The page now says
@@ -220,6 +260,48 @@ scraper-alert machinery already exists to route it into.
 
 ---
 
+### Statement matching now reads the payee — DONE 2026-08-27
+
+`_match_transactions` scored on direction + amount +-0.005 + date proximity only,
+ties broken by iteration order. That paired a `$260.00 SALE FORE & AFT INC.`
+statement line with a `$260.00 The Caron Group` bill. Chatham June alone had 14
+matches choosing among 5-7 identical-amount candidates.
+
+Now: `match` / `conflict` / `unknown` from `_payee_agreement`, and a named-payee
+**conflict vetoes the pairing**. Vetoing rather than down-ranking because the
+failure modes are asymmetric — a missed veto marks the WRONG bill cleared and
+drops the real statement line, so a bill the vendor never cashed reads as paid.
+A false veto merely imports a duplicate, which is visible and mergeable.
+
+`_PAYEE_ALIASES` covers vendors the bank names differently (we store "PFG", the
+statement prints "AR PAYMENT PERFORMANCEBOS"). **If a legitimate vendor starts
+getting vetoed, add it there rather than loosening the rule.** `_payee_tokens` is
+memoised — uncached it pushed the suite past 300s; cached, all 14 statements
+match 3,050 lines in 0.11s.
+
+Result: `exact` roughly doubled, `likely` collapsed, 0 conflicts accepted
+(Chatham Jun 39 → 72 exact, May 23 → 44, Apr 11 → 30).
+
+### Check OCR — DONE 2026-08-27
+
+Chatham February reported "30 checks, 0 payees read, nothing legible" on every
+one. Cause: `rednun.service` sets `Environment=PATH=/opt/red-nun-dashboard/venv/bin`
+— venv only — so `/usr/bin/tesseract` was invisible to gunicorn while resolving
+fine from a shell. **Every "nothing legible" meant no read was attempted.**
+
+`_resolve_tesseract()` now resolves the binary explicitly ($TESSERACT_BIN ->
+`shutil.which` -> /usr/bin, /usr/local/bin, /opt/homebrew/bin, /snap/bin), and a
+missing binary returns `ocr_unavailable` once instead of N illegible checks.
+
+The PATH fix alone read only 1 of 14 — the rest are handwritten payroll checks.
+So `identify_payroll_payee()` names a check from `payroll_checks` when OCR fails:
+exactly one uncleared, unvoided, non-DD check for that entity at that amount
+within 14 days. Two candidates stays unread. Reported separately as
+`payees_from_books`. Chatham Feb went **0 → 18 of 30** named.
+
+Re-run OCR on an upload: `POST /api/bank-reconcile/checks/<upload_id>` with
+`{"force": true}`. Idempotent.
+
 ## 3. Sequence to the finish line
 
 Five blocks. Order matters — each unblocks the next.
@@ -236,9 +318,14 @@ Five blocks. Order matters — each unblocks the next.
 6. Bulk-post the backlog; wire the completeness check.
 
 **Block C — Make AP tie**
-7. Apply the vendor-payment attribution fix; re-close Chatham January.
-8. Resolve the 147 NULL-location payments.
-9. Roll invoice line-item `category_type` up into AP-bill GL coding; emit AP bills to QBO.
+7. ~~Apply the vendor-payment attribution fix~~ DONE 08-27 (Chatham January was not
+   disturbed — 14 of the 15 rows dated inside it are `void` and never render).
+8. ~~Recode settlements off the P&L~~ DONE 08-27 ($77,714.32).
+9. Import the 14 statements, then run a dedupe pass per Dennis period — the
+   newly-attributed bill_pay rows have never been deduped, which is why Dennis
+   outstanding is large (May -70,026.22) but honest.
+10. Resolve the 147 NULL-location payments.
+11. Roll invoice line-item `category_type` up into AP-bill GL coding; emit AP bills.
 
 **Block D — Payroll rail**
 10. Map payroll components to GL; emit a JE per run; reconcile against the bank's check lines.
@@ -254,10 +341,15 @@ Five blocks. Order matters — each unblocks the next.
 
 | # | Item | Blocks |
 |---|---|---|
-| 1 | **Toast credential** fixed in the partner portal | Everything above Gate 0 |
-| 2 | **8 bank statement PDFs** — Chatham Feb–Jul, Dennis Jun–Jul | Gate 4, Block E |
-| 3 | **What the accountant wants**: summary JEs, or full transaction detail (bills/payments/deposits as objects)? | Gate 2 + 3 scope |
-| 4 | **Go/no-go** on the vendor attribution fix (it breaks rec#1 by design) | Block C |
+| 1 | ~~Toast credential~~ **DONE 08-27** — rotated, sync healthy | — |
+| 2 | ~~14 bank statement PDFs~~ **DONE 08-27** — all uploaded and verified | — |
+| 3 | **Accountant format: DECIDED 08-27 — summary JEs now, full detail later.** | — |
+| 4 | ~~Go/no-go on attribution~~ **DONE 08-27** | — |
+| 5 | **Decide on `#244`** — US Foods $2,795.53 pending, NULL account, duplicates the already-cleared `#10`. It inflates Chatham outstanding by exactly that amount. | Chatham Jan close |
+
+**The next move, and the cheapest per dollar: post one month of sales JEs (Gate 1).**
+896 entries are already built and balanced, nothing has ever gone to QBO, so there is
+no cleanup risk. That is what puts a real deliverable in the accountant hands.
 
 ---
 
@@ -265,9 +357,6 @@ Five blocks. Order matters — each unblocks the next.
 
 - `#244` looks like a duplicate payment: US Foods, 2026-01-30, $2,795.53,
   pending, NULL account — against `#10`, same vendor/date/amount, cleared, acct 1.
-- `_match_transactions` ignores payee text entirely — scores on direction +
-  amount ±0.005 + date proximity, ties broken by iteration order. Now that `R`
-  makes a match sticky, a wrong match costs more.
 - GL provenance (`coded_by` / `coded_via`) still not done; blocks a safe rule rebuild.
 - 11 Dennis payroll rows carry Chatham's check series — detected, reported, not
   auto-corrected (overwriting would discard the number printed on the paper check).
