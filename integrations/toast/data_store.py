@@ -173,7 +173,12 @@ def init_db():
             started_at TEXT,
             completed_at TEXT,
             record_count INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'pending'
+            status TEXT DEFAULT 'pending',
+            -- Exception text on failure. status='error' alone could not
+            -- distinguish a dead credential from a bad date range; the
+            -- 2026-08-26 outage cost a full diagnostic session that this
+            -- column answers in one line.
+            message TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_sync_log
@@ -196,6 +201,16 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);
         CREATE INDEX IF NOT EXISTS idx_invites_email ON invites(email);
     """)
+
+    # Additive migrations. CREATE TABLE IF NOT EXISTS above does not add columns
+    # to a table that already exists, so anything new needs an ALTER here too.
+    for _sql in (
+        "ALTER TABLE sync_log ADD COLUMN message TEXT",
+    ):
+        try:
+            conn.execute(_sql)
+        except Exception:
+            pass  # column already exists
 
     conn.commit()
     conn.close()

@@ -163,13 +163,14 @@ class ToastAPIClient:
         
         chunk_hours = 6
         current = base_start
-        
+        failures = []
+
         while current < base_end:
             chunk_end = min(current + timedelta(hours=chunk_hours), base_end)
-            
+
             start_iso = current.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
             end_iso = chunk_end.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
-            
+
             page = 1
             while True:
                 try:
@@ -186,14 +187,31 @@ class ToastAPIClient:
                     time.sleep(0.3)
                 except Exception as e:
                     logger.error(f"Error fetching orders chunk {start_iso}-{end_iso} page {page}: {e}")
+                    failures.append(f"{start_iso[:16]} p{page}: {e}")
                     break
-            
+
             current = chunk_end
             time.sleep(0.3)
 
         logger.info(
             f"Fetched {len(all_orders)} orders for {location} on {date_obj.strftime('%Y-%m-%d')}"
         )
+
+        # A swallowed chunk failure used to make this return whatever it had —
+        # often [] — and the caller then wrote sync_log status='complete' with 0
+        # rows. Orders looked healthy for five days (2026-08-22..26) while a dead
+        # credential stored nothing at all. An incomplete fetch must not be
+        # allowed to report success, so raise and let the caller log an error and
+        # retry on the next run. `_get` has already retried each page 3x with
+        # backoff by this point, so anything still failing here is real.
+        if failures:
+            raise RuntimeError(
+                f"incomplete orders fetch for {location} on "
+                f"{date_obj.strftime('%Y-%m-%d')}: {len(failures)} of "
+                f"{len(failures) + (24 // chunk_hours)} chunk-reads failed "
+                f"({len(all_orders)} orders retrieved before the gap) — "
+                + "; ".join(failures[:3])
+            )
         return all_orders
 
     # ------------------------------------------------------------------

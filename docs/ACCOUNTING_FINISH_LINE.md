@@ -102,11 +102,38 @@ But:
   never tie. `build_register_view` folds NULL-account rows into a register only
   for the catch-all keyed on `account_last4 == '5975'` (Chatham); Dennis is 2757.
 
-Ready to run: `scripts/backfill_vendor_payment_bank_account.py` — dry run shows
-307 rows to move (160 → Chatham, 147 → Dennis). **Not yet applied**: 19 of them
-sit inside Chatham January (rec#1), including 3 Dennis PFG payments worth
-8,163.13, so applying it breaks the one reconciliation whose tie is currently
-meaningful. That is the correct consequence; re-close afterwards.
+**DONE 2026-08-27** — `scripts/backfill_vendor_payment_bank_account.py` applied,
+323 rows moved. Dennis now has bill_pay rows in every month from February on
+(Feb 9, Mar 14, Apr 19, May 49, Jun 20, Jul 13). Chatham January untouched:
+delta 0.00, outstanding −5,151.48, book_side 31, identical to before.
+
+The important lesson from doing it: **`location` does not determine
+`bank_account_id`.** `location` is where the expense belongs; `bank_account_id`
+is which bank paid. For intercompany they differ, and only the statement can
+tell them apart. The first version of the script keyed on `location` and would
+have moved 3 provably-Chatham-paid Dennis payments (#27/#28/#29, 8,163.13,
+visible as `AR PAYMENT PERFORMANCEBOS` debits on Chatham's January statement)
+out of the one period that ties to the penny.
+
+Six intercompany pairs found and deliberately left alone — they need a
+due-to/due-from entry, not a reassignment:
+
+| vendor_payment | expense loc | cash left |
+|---|---|---|
+| #27, #28, #29 (PFG, Jan) | dennis | Chatham |
+| #235, #295, #304 (May) | chatham | Dennis |
+
+Evidence must be read from `bank_statement_uploads.parsed_json`, not from
+surviving `manual_bank_entries` — dedupe DELETES a statement line once it is
+matched to a book row. 22 of Chatham January's 218 lines no longer exist as
+manual entries; `parsed_json` still holds all 218.
+
+**Still open here:** 147 rows carry a NULL `location` and were left alone.
+And Dennis's outstanding is now large and honest instead of artificially zero
+(May −70,026.22 across 60 book-side rows) because the newly-attributed bill_pay
+rows have never been through a dedupe pass. Every delta still ties at 0.00, so
+the statement side is complete — the next step is a dedupe run per Dennis
+period, which is the intended workflow, not a defect.
 
 ### Gate 3 — Payroll
 

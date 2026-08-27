@@ -41,19 +41,41 @@ class DataSync:
         conn.close()
         return row is not None
 
-    def _log_sync(self, location, data_type, business_date, count, status="complete"):
-        """Record a sync event."""
+    def _log_sync(self, location, data_type, business_date, count,
+                  status="complete", message=None):
+        """Record a sync event.
+
+        `message` carries the exception text on failure. Without it the table
+        stored the bare string 'error' and nothing else, so a dead credential
+        was indistinguishable from a bad date range — the 2026-08-26 outage took
+        a full diagnostic session that this column would have answered in a
+        line. Added defensively: if the column does not exist yet, fall back to
+        the original INSERT rather than losing the log row entirely.
+        """
         conn = get_connection()
-        conn.execute("""
-            INSERT INTO sync_log (location, data_type, business_date,
-                                  started_at, completed_at, record_count, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            location, data_type, business_date,
-            datetime.now().isoformat(),
-            datetime.now().isoformat(),
-            count, status,
-        ))
+        try:
+            conn.execute("""
+                INSERT INTO sync_log (location, data_type, business_date,
+                                      started_at, completed_at, record_count,
+                                      status, message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                location, data_type, business_date,
+                datetime.now().isoformat(),
+                datetime.now().isoformat(),
+                count, status, (str(message)[:1000] if message else None),
+            ))
+        except Exception:
+            conn.execute("""
+                INSERT INTO sync_log (location, data_type, business_date,
+                                      started_at, completed_at, record_count, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                location, data_type, business_date,
+                datetime.now().isoformat(),
+                datetime.now().isoformat(),
+                count, status,
+            ))
         conn.commit()
         conn.close()
 
@@ -74,7 +96,7 @@ class DataSync:
             return count
         except Exception as e:
             logger.error(f"Failed to sync employees for {location}: {e}")
-            self._log_sync(location, "employees", "all", 0, "error")
+            self._log_sync(location, "employees", "all", 0, "error", e)
             return 0
 
     def sync_menus(self, location):
@@ -103,7 +125,7 @@ class DataSync:
             return count
         except Exception as e:
             logger.error(f"Failed to sync menus for {location}: {e}")
-            self._log_sync(location, "menus", "all", 0, "error")
+            self._log_sync(location, "menus", "all", 0, "error", e)
             return 0
 
     def sync_orders_for_date(self, location, dt):
@@ -126,7 +148,7 @@ class DataSync:
             return count
         except Exception as e:
             logger.error(f"Failed to sync orders for {location} on {date_str}: {e}")
-            self._log_sync(location, "orders", date_str, 0, "error")
+            self._log_sync(location, "orders", date_str, 0, "error", e)
             return 0
 
     def sync_labor_for_date(self, location, dt):
@@ -169,7 +191,7 @@ class DataSync:
             return count
         except Exception as e:
             logger.error(f"Failed to sync labor for {location} on {date_str}: {e}")
-            self._log_sync(location, "labor", date_str, 0, "error")
+            self._log_sync(location, "labor", date_str, 0, "error", e)
             return 0
 
     # ------------------------------------------------------------------
