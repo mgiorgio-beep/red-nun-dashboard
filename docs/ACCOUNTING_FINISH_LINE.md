@@ -41,7 +41,7 @@ new systems.
 
 | Gate | What | Status |
 |---|---|---|
-| **0** | Toast sync alive | 🔴 **BROKEN — blocks everything** |
+| **0** | Toast sync alive | 🟢 **FIXED 2026-08-27** (credential rotated; sync_log 32 complete / 0 error) |
 | **1** | Sales → QBO | 🟢 ~90% (built, running daily, **never switched on**) |
 | **2** | AP / invoices → QBO | 🟡 ~40% |
 | **3** | Payroll → QBO | 🟡 ~30% |
@@ -49,23 +49,40 @@ new systems.
 | **5** | Business targets (labor/food/prime) | 🟡 ~60%, gated on Gate 0 |
 | **6** | Checks that can go red | 🟡 ~30% |
 
-### Gate 0 — Toast sync is dead. This is the only true blocker.
+### Gate 0 — FIXED 2026-08-27
 
-- Sales stop at **business_date 20260821**. Labor stops at **20260821**. Today is 08-27.
-- Last 24h of `sync_log`: **372 errors, 4 complete.**
-- Root cause (diagnosed 2026-08-26): the Toast credential is rejected at the
-  login endpoint. Deterministic `401 access_denied` on 5 consecutive attempts,
-  no `Retry-After`, no rate-limit headers. Not throttling — the credential
-  itself.
-- **Requires Toast partner-portal access. Only you can do this.** Verify the
-  integration is active and has Labor scope for both restaurant GUIDs.
-- Until this is fixed, every sales and labor number is stale, and nothing above
-  this gate is trustworthy.
+Was the only true blocker; sales and labor had been frozen at business_date
+20260821 with `sync_log` running 372 errors to 4 completes.
 
-Second, separate defect on the same path: `get_all_orders_for_date` swallows
-per-chunk exceptions and returns `[]`, then `sync_orders_for_date` logs
-`status="complete"` with 0 rows. Orders looked healthy for five days while
-storing nothing. Fix that regardless of the credential.
+**Cause: the credential was simply dead.** Mike rotated the client secret and
+everything came back on the first try — login 200, `expiresIn` 86400, and the
+token's own `scope` string contains `labor:read` and `labor.employees:read`,
+which definitively kills the "missing Labor scope" theory the original brief
+floated. Dennis 274 employees / 18 time entries, Chatham 282 / 18, orders OK on
+both. `sync_log` now reads **32 complete, 0 error**.
+
+Gap backfilled. Dennis 08-24 and 08-25 are genuinely near-empty — a direct API
+probe bypassing the exception swallow shows Toast itself reports 1 and 0 orders,
+and the week reads Wed 90 / Thu 96 / Fri 206 / Sat 165 / Sun 100 / Mon ~0 /
+Tue 0 / Wed 88. **Dennis is closed Mondays and Tuesdays.** Do not chase that as
+a sync hole.
+
+Two durable fixes so it cannot hide again:
+
+1. `get_all_orders_for_date` swallowed per-chunk exceptions and returned `[]`;
+   `sync_orders_for_date` then logged `_log_sync(...)` with its **default**
+   `status="complete"`. Five clean-looking days, nothing stored. It now raises,
+   naming how many chunk-reads failed and how many orders arrived before the gap.
+2. `sync_log` gained a **`message`** column, and all four error paths write
+   `str(e)` into it. Verified by pointing the client at a bad secret on a scratch
+   copy: raises `RuntimeError`, logs `status='error'` plus the 401 text. The same
+   input previously produced `status='complete'`.
+
+**Still open on this path** (brief §5): no retry/backoff in `_get_token`; the
+scheduler rebuilds `DataSync` every 10 min so the 23h token cache never
+survives a run; the cadence comment says 30 min while cron says `*/10`; the
+hardcoded `23 * 3600` should use the returned `expiresIn` (86400); sustained
+failure should route into the existing scraper-alert machinery.
 
 ### Gate 1 — Sales → QBO is built and switched off
 
