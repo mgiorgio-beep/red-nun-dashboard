@@ -1474,8 +1474,32 @@ def _reconciliation_state(conn, upload):
     end_c = _c(upload["ending_balance"])
     clr_in = sum(_c(r["inflow"]) for r in rows if r["cleared"])
     clr_out = sum(_c(r["outflow"]) for r in rows if r["cleared"])
+    all_in = sum(_c(r["inflow"]) for r in rows)
+    all_out = sum(_c(r["outflow"]) for r in rows)
+
+    # BOTH balances must sit on the SAME baseline, and that baseline is the
+    # statement's beginning balance — the one number here that we did not
+    # compute ourselves.
+    #
+    # This previously took bank_balance from begin_c (statement-anchored) but
+    # book_balance and outstanding_net from the register summary
+    # (account/roll-forward-anchored). Those baselines differed, so the stored
+    # record could assert book - bank = 26,251.28 while also asserting
+    # outstanding_net = 0.00 — two names for the same quantity, disagreeing.
+    # Dennis Jan (rec#2) and Feb (rec#3) each hold exactly that contradiction
+    # from their 2026-08-23 close, which is where the "+26,251.28 / +11,466.49
+    # unexplained gap" reading came from. It was a baseline artifact, not money.
     bank_c = begin_c + clr_in - clr_out
+    book_c = begin_c + all_in - all_out
+    outstanding_c = book_c - bank_c          # == uncleared net; baseline cancels
     delta_c = bank_c - end_c
+
+    # Independent cross-check: the register's own roll-forward opening should
+    # already equal the statement's beginning balance. If it does not, the
+    # books' history disagrees with the bank's for this period, and that is a
+    # finding in its own right — not something to average away. Reported, never
+    # silently absorbed.
+    opening_drift_c = _c(summary.get("opening_balance")) - begin_c
 
     end_date = date.fromisoformat(end)
     items = []
@@ -1502,11 +1526,24 @@ def _reconciliation_state(conn, upload):
         "beginning_balance": round(begin_c / 100, 2),
         "ending_balance": round(end_c / 100, 2),
         "bank_balance": round(bank_c / 100, 2),
-        "book_balance": summary["book_balance"],
-        "outstanding_net": summary["outstanding_net"],
+        "book_balance": round(book_c / 100, 2),
+        "outstanding_net": round(outstanding_c / 100, 2),
         "delta": round(delta_c / 100, 2),
         "ties": delta_c == 0,
         "outstanding_items": items,
+        # Sanity signals for the UI. `identity_holds` is the arithmetic that
+        # must never fail; if it ever reports False, the numbers above are not
+        # describing one consistent set of rows.
+        "identity_holds": (book_c - bank_c) == outstanding_c,
+        "opening_drift": round(opening_drift_c / 100, 2),
+        "register_opening": summary.get("opening_balance"),
+        # A period whose book side carries ONLY imported statement rows cannot
+        # fail its own tie-out: the statement is being checked against itself.
+        # Report the composition so a hollow tie is visible as one.
+        "row_sources": {
+            k: sum(1 for r in rows if r["source"] == k)
+            for k in ("manual", "bill_pay", "payroll", "deposit")
+        },
     }
 
 

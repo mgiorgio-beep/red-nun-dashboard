@@ -457,11 +457,44 @@ function render() {
       <div class="subtle">${ties ? '✓ ties exactly' : 'needs to tie before sign-off'}</div>
     </div>
   `;
-  $('delta-hint').innerHTML = ties
+  let hint = ties
     ? 'Cleared rows tie to the statement to the penny. Outstanding items are itemized below and are fine to leave.'
     : `The bank column is off from the statement by <b>${fmt(deltaC/100)}</b>. `
       + 'Tick any missing cleared rows, or un-tick anything that shouldn\'t be cleared. '
       + 'A signature is not the fix for an unexplained delta.';
+
+  // A tie is only worth something if it COULD have failed. If every row in the
+  // period came from the imported statement, we are checking the statement
+  // against itself and the delta cannot come out non-zero. Say so.
+  const src = p.row_sources || {};
+  const bookSideRows = (src.bill_pay || 0) + (src.payroll || 0) + (src.deposit || 0);
+  if (ties && bookSideRows === 0 && (src.manual || 0) > 0) {
+    hint += `<div style="margin-top:8px;padding:9px 12px;border-radius:8px;`
+      + `border:1px solid var(--amber);background:var(--amber-soft);color:var(--amber)">`
+      + `<b>This tie cannot fail.</b> All ${src.manual} rows in this period came from the `
+      + `imported statement, and there are no book-side rows (bill pay, payroll, deposits) `
+      + `to disagree with it. The delta is comparing the statement against itself. `
+      + `Signing off records that you looked — it does not establish that the books agree.</div>`;
+  }
+
+  // The roll-forward opening should already equal the statement beginning.
+  if (p.opening_drift && Math.abs(p.opening_drift) >= 0.01) {
+    hint += `<div style="margin-top:8px;padding:9px 12px;border-radius:8px;`
+      + `border:1px solid var(--red);background:var(--red-soft);color:var(--red)">`
+      + `<b>Opening drift ${fmt(p.opening_drift)}.</b> The register rolls forward to `
+      + `${fmt(p.register_opening)} but the statement begins at ${fmt(up.beginning_balance)}. `
+      + `The books' history disagrees with the bank before this period even starts — `
+      + `fix that first; it will move every figure below.</div>`;
+  }
+
+  if (p.identity_holds === false) {
+    hint += `<div style="margin-top:8px;padding:9px 12px;border-radius:8px;`
+      + `border:1px solid var(--red);background:var(--red-soft);color:var(--red)">`
+      + `<b>Arithmetic identity broken.</b> book − bank does not equal outstanding. `
+      + `These figures are not describing one consistent set of rows; do not sign off.</div>`;
+  }
+
+  $('delta-hint').innerHTML = hint;
 
   // Two columns — outflows and inflows.
   const outflows = rows.filter(x => x.outflow > 0);
