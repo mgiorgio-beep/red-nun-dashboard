@@ -667,7 +667,8 @@ def settlement_evidence(conn, table: str, row_id: int) -> dict | None:
 
     if table == "manual_bank_entries":
         me = conn.execute(
-            """SELECT m.bank_account_id, m.entry_date, m.amount, ba.location
+            """SELECT m.bank_account_id, m.entry_date, m.amount, m.payee, m.memo,
+                      ba.location
                FROM manual_bank_entries m
                LEFT JOIN bank_accounts ba ON ba.id = m.bank_account_id
                WHERE m.id = ?""",
@@ -675,7 +676,14 @@ def settlement_evidence(conn, table: str, row_id: int) -> dict | None:
         ).fetchone()
         if not me or me["amount"] is None:
             return None
-        hit = conn.execute(
+        # Candidates, closest date first. Deliberately NOT `LIMIT 1`: this
+        # pairing used to be amount + date only, so it would name the same
+        # payment as the settlement behind several different statement rows
+        # (three $23.90 Cozzini rows all claiming payment #348) and would
+        # cheerfully call a $400 "Bands" row a Colonial Wholesale beer
+        # settlement. Only one row can settle a payment, and an amount alone is
+        # not evidence of who was paid.
+        cands = conn.execute(
             """
             SELECT vp.id, vp.vendor,
                    (SELECT COUNT(*) FROM ap_payment_invoices api
@@ -688,19 +696,36 @@ def settlement_evidence(conn, table: str, row_id: int) -> dict | None:
               AND ABS(JULIANDAY(vp.payment_date) - JULIANDAY(?)) <= ?
               AND (vp.status IS NULL OR vp.status NOT IN ('void', 'failed'))
             ORDER BY ABS(JULIANDAY(vp.payment_date) - JULIANDAY(?))
-            LIMIT 1
             """,
             (me["bank_account_id"], me["amount"], me["entry_date"],
              SETTLEMENT_MATCH_DAYS, me["entry_date"]),
-        ).fetchone()
-        if not hit:
+        ).fetchall()
+        if not cands:
             return None
-        n = (hit["n_ap"] or 0) + (hit["n_vpi"] or 0)
-        if n == 0:
+
+        # Same payee test the statement matcher uses, so "is a settlement" and
+        # "matches a vendor payment" mean the same thing in both places. A
+        # named-payee conflict disqualifies the candidate: forcing a
+        # non-settlement onto Accounts Payable strips a real expense out of the
+        # P&L, which is the same error as double-counting, just inverted.
+        from routes.bank_reconcile_routes import _payee_agreement
+        desc = " ".join(x for x in (me["payee"], me["memo"]) if x)
+
+        hit = None
+        for c in cands:
+            n = (c["n_ap"] or 0) + (c["n_vpi"] or 0)
+            if n == 0:
+                continue
+            if _payee_agreement(desc, c["vendor"] or "") == "conflict":
+                continue
+            hit = (c, n)
+            break
+        if hit is None:
             return None
+        c, n = hit
         return {"kind": "matched", "invoices": n, "location": me["location"],
-                "detail": f"matches vendor payment #{hit['id']} "
-                          f"({hit['vendor']}) carrying {n} invoice(s)"}
+                "detail": f"matches vendor payment #{c['id']} "
+                          f"({c['vendor']}) carrying {n} invoice(s)"}
 
     return None
 
@@ -1272,6 +1297,16 @@ GL_SOURCE_UNKNOWN = "unknown"
 # off a bank description, whereas this is read from the invoice itself, which
 # is the accrual source of truth. The P&L needs to tell those two apart.
 GL_SOURCE_CATEGORY = "category"
+# accrual — forced to Accounts Payable because the row settles an invoice whose
+# cost was already recognised at invoice date. Distinct from 'rule' and
+# 'category' because it is not derived from a description OR from line items:
+# it follows from the accrual invariant plus invoice linkage, and the only valid
+# target is AP. Deliberately written with gl_status='suggested' even though the
+# ACCOUNT is certain — _may_learn_rule_from() gates purely on status, so
+# 'confirmed' would let a rule rebuild learn "US FOODSERVICE -> Accounts
+# Payable" and then miscode that vendor's non-settlement charges. No human has
+# reviewed these rows individually either, so 'suggested' is honest twice over.
+GL_SOURCE_ACCRUAL = "accrual"
 GL_STATUS_CONFIRMED = "confirmed"
 GL_STATUS_SUGGESTED = "suggested"
 
