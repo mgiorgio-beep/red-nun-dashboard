@@ -40,7 +40,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request, session
@@ -980,18 +982,132 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
     return rows
 
 
+# Noise tokens in a Cape Cod Five description that carry no payee information.
+# "SALE FORE & AFT INC." -> {FORE, AFT} once these are stripped.
+_DESC_NOISE = {
+    "SALE", "CHECK", "CHECKS", "DBT", "CRD", "CARD", "DEBIT", "CREDIT",
+    "MEBILLPAY", "BILLPAY", "BILL", "PAY", "PAYMENT", "AR", "ACH", "EFT",
+    "WIRE", "XFER", "TRANSFER", "WITHDRAWAL", "DEPOSIT", "PURCHASE", "POS",
+    "RECURRING", "ONLINE", "MOBILE", "PMT", "INV", "REF", "ID", "CO", "INC",
+    "LLC", "LTD", "CORP", "CORPORATION", "COMPANY", "THE", "OF", "AND",
+    "GROUP", "SYSTEMS", "SERVICE", "SERVICES", "PAYROLL", "VENDOR", "TI",
+}
+
+
+_RE_NON_ALPHA = re.compile(r"[^A-Za-z]+")
+
+
+@lru_cache(maxsize=8192)
+def _payee_tokens_cached(text: str) -> frozenset:
+    words = _RE_NON_ALPHA.split(text.upper())
+    return frozenset(
+        w[:6] for w in words           # stem, so PERFORMANCEBOS ~ PERFORMANCE
+        if len(w) >= 3 and w not in _DESC_NOISE
+    )
+
+
+def _payee_tokens(text: str) -> frozenset:
+    """Informative uppercase word-stems from a payee or statement description.
+
+    Memoised: _match_transactions compares every statement line against every
+    register row, so a 266-line statement against 182 register rows is ~48k
+    calls per period and the same handful of distinct strings recur constantly.
+    Tokenising uncached made the regression suite exceed 300s.
+    """
+    if not text:
+        return frozenset()
+    return _payee_tokens_cached(str(text))
+
+
+# Vendors the bank names differently from the way we store them. Without these
+# the token comparison sees zero overlap and would VETO a correct pairing --
+# e.g. we store "PFG" while Cape Cod Five prints "AR PAYMENT PERFORMANCEBOS"
+# (PFG = Performance Food Group). A false veto is worse than a missed veto: the
+# statement line then imports as a new manual entry and double-counts a bill we
+# already have. Stems are truncated to 6 chars to match _payee_tokens.
+_PAYEE_ALIASES = [
+    {"PFG", "PERFOR"},                    # Performance Foodservice
+    {"USFOOD", "FOODS", "FOODSE"},        # US Foods / US Foodservice
+    {"SOUTHE", "GLAZER", "SGWS"},         # Southern Glazer's
+    {"MARTIG", "ARTIGN"},                 # Martignetti (OCR drops the M)
+    {"KNIFE", "LKNIFE", "VTINFO"},        # L. Knife & Son
+    {"CRAFT", "TERMSY"},                  # Craft Collective via TermSync
+    {"COLONI", "VTINFO"},                 # Colonial Wholesale
+    {"SEVENS", "SHIFTS", "7SHIFT"},       # 7shifts payroll ACH
+    {"TOAST", "TOASTT"},                  # Toast settlement
+    {"DAVO", "DAVOSA"},                   # DAVO sales tax
+]
+
+
+def _alias_linked(a: set[str], b: set[str]) -> bool:
+    """True if any alias group contains a stem from each side."""
+    for grp in _PAYEE_ALIASES:
+        if (a & grp) and (b & grp):
+            return True
+    return False
+
+
+def _payee_agreement(tx_desc: str, reg_label: str) -> str:
+    """'match' | 'conflict' | 'unknown' for a statement description vs a
+    register row's label.
+
+    The matcher used to ignore payee text entirely — direction + amount ±0.005
+    + date proximity only, ties broken by iteration order. On real data that
+    produced provably wrong pairings: statement line
+    'SALE FORE & AFT INC.' $260.00 was matched to a $260.00 'The Caron Group'
+    bill because the amounts were equal and the dates were close. Chatham
+    June alone had 14 matches choosing among 5–7 identical-amount candidates.
+    Now that a completed reconciliation stamps rows R, a wrong match is sticky.
+
+    'conflict' is the valuable verdict: both sides name something identifiable
+    and they share nothing, so this pairing is refused outright rather than
+    merely scored lower.
+    """
+    a = _payee_tokens(tx_desc)
+    b = _payee_tokens(reg_label)
+    if not a or not b:
+        return "unknown"
+    if a & b:
+        return "match"
+    # Catch the substring case ("GLANOLA" inside "GLANOLANORTHAM") that
+    # tokenising on word boundaries misses.
+    ja, jb = "".join(sorted(a)), "".join(sorted(b))
+    if any(t in jb for t in a) or any(t in ja for t in b):
+        return "match"
+    if _alias_linked(a, b):
+        return "match"
+    # Both sides name something identifiable and share nothing, directly or by
+    # alias. Veto.
+    #
+    # Chose to veto rather than merely down-rank, because the two failure modes
+    # are not symmetric. A missed veto marks the WRONG bill cleared and drops
+    # the real statement line from the import, so a bill the vendor never
+    # cashed reads as paid — that corrupts AP and is what the accountant sees.
+    # A false veto imports the line as a new manual entry, which inflates
+    # outstanding, shows up immediately, and can be merged back with
+    # register_merge_audit recording it. Unmatched is the safe direction.
+    #
+    # If a legitimate vendor starts getting vetoed, add it to _PAYEE_ALIASES
+    # rather than loosening this.
+    return "conflict"
+
+
 def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> list[dict]:
     """For each parsed statement row, decide whether the register already
     contains it.
 
-    Strategy:
-      - exact:  same direction + same amount + ref equality (e.g. check #) +
-                date within 7 days → exact
-      - likely: same direction + same amount + date within 4 days → likely
-      - none:   no candidate
+    Strategy (direction + amount to the penny are always required):
+      - exact:  ref equality (check #) and date within 14 days
+      - exact:  payee agreement and date within 7 days
+      - likely: payee agreement and date within 14 days
+      - likely: no payee signal either way, date within 4 or 7 days
+      - none:   no candidate, or payee text CONFLICTS
+
+    A payee conflict vetoes the pairing outright — see _payee_agreement.
 
     Returns a list parallel to parsed_txs:
-        [{ parsed_index: int, register_match: {...}|None, match_kind: str }, …]
+        [{ parsed_index: int, register_match: {...}|None, match_kind: str,
+           payee_check: str }, …]
     """
     results: list[dict] = []
     used_register_ids: set[tuple[str, int]] = set()  # don't re-use a register row
@@ -1013,6 +1129,7 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
         best = None
         best_kind = "none"
         best_score = -1
+        best_payee = None
 
         for reg in register_rows:
             key = (reg["source"], reg["id"])
@@ -1029,17 +1146,31 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
             reg_ref = (reg.get("ref") or "").lstrip("0")
             ref_match = bool(tx_ref) and tx_ref == reg_ref
 
+            payee = _payee_agreement(tx.get("description") or "",
+                                     reg.get("label") or "")
+            # A named-payee disagreement vetoes the pairing. Equal amounts and
+            # nearby dates are not evidence that 'SALE FORE & AFT INC.' is
+            # 'The Caron Group'. Ref equality still wins, since a check number
+            # is harder evidence than a description string.
+            if payee == "conflict" and not ref_match:
+                continue
+
             kind = "none"
             score = -1
             if ref_match and day_diff <= 14:
-                kind, score = "exact", 100 - day_diff
-            elif day_diff <= 4:
+                kind, score = "exact", 200 - day_diff
+            elif payee == "match" and day_diff <= 7:
+                kind, score = "exact", 150 - day_diff
+            elif payee == "match" and day_diff <= 14:
+                kind, score = "likely", 100 - day_diff
+            elif payee == "unknown" and day_diff <= 4:
                 kind, score = "likely", 50 - day_diff
-            elif day_diff <= 7:
+            elif payee == "unknown" and day_diff <= 7:
                 kind, score = "likely", 30 - day_diff
 
             if score > best_score:
                 best, best_kind, best_score = reg, kind, score
+                best_payee = payee
 
         if best and best_kind != "none":
             used_register_ids.add((best["source"], best["id"]))
@@ -1047,12 +1178,14 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
                 "parsed_index": i,
                 "register_match": best,
                 "match_kind": best_kind,
+                "payee_check": best_payee,
             })
         else:
             results.append({
                 "parsed_index": i,
                 "register_match": None,
                 "match_kind": "none",
+                "payee_check": None,
             })
 
     return results
