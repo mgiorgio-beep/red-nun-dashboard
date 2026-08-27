@@ -46,8 +46,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -78,9 +81,59 @@ MIN_PAYEE_SCORE = 55.0
 _PAYROLL_HINT = re.compile(r"pay\s*period", re.I)
 
 
+class TesseractMissing(RuntimeError):
+    """The OCR binary could not be found. Distinct from a bad read."""
+
+
+# Candidate locations, tried after $TESSERACT_BIN and PATH.
+_TESSERACT_CANDIDATES = (
+    "/usr/bin/tesseract",
+    "/usr/local/bin/tesseract",
+    "/opt/homebrew/bin/tesseract",
+    "/snap/bin/tesseract",
+)
+
+
+@lru_cache(maxsize=1)
+def _resolve_tesseract() -> str | None:
+    """Absolute path to the tesseract binary, or None.
+
+    Do NOT rely on bare "tesseract" resolving through PATH. The systemd unit
+    sets `Environment=PATH=/opt/red-nun-dashboard/venv/bin` — venv only — so
+    /usr/bin/tesseract is invisible to gunicorn even though it is installed and
+    resolves fine from an interactive shell. Every check on the Chatham
+    February statement came back "nothing legible" for that reason: 30 reports
+    of an unreadable payee when the truth was that the OCR binary was never
+    found and no read was ever attempted.
+    """
+    env = os.environ.get("TESSERACT_BIN")
+    if env and Path(env).is_file():
+        return env
+    found = shutil.which("tesseract")
+    if found:
+        return found
+    for cand in _TESSERACT_CANDIDATES:
+        if Path(cand).is_file():
+            logger.info("tesseract not on PATH; using %s", cand)
+            return cand
+    return None
+
+
 def _tesseract(image_path: Path, psm: int = 6, tsv: bool = False) -> str:
-    """Run tesseract, returning text or TSV. Empty string on failure."""
-    args = ["tesseract", str(image_path), "stdout", "--psm", str(psm)]
+    """Run tesseract, returning text or TSV. Empty string on a failed read.
+
+    Raises TesseractMissing when the binary itself cannot be found — that is a
+    deployment fault, not an unreadable image, and it must not be reported as
+    30 illegible checks.
+    """
+    exe = _resolve_tesseract()
+    if not exe:
+        raise TesseractMissing(
+            "tesseract binary not found. Install it, or set TESSERACT_BIN to "
+            "its full path. Note the rednun.service unit sets PATH to the venv "
+            "only, so a bare 'tesseract' does not resolve there."
+        )
+    args = [exe, str(image_path), "stdout", "--psm", str(psm)]
     if tsv:
         args.append("tsv")
     try:
@@ -359,6 +412,21 @@ def enrich_upload(conn, upload_id: int, force: bool = False) -> dict:
     if not pdf.exists():
         return {"ok": False, "error": f"statement PDF missing: {up['file_path']}"}
 
+    # Fail fast and say what is actually wrong. Without this the loop below
+    # calls tesseract 4x per check, swallows the "binary not found" each time,
+    # and reports N illegible payees — which is what happened on Chatham
+    # February: 30 checks "nothing legible", 0 reads attempted.
+    if not _resolve_tesseract():
+        return {
+            "ok": False,
+            "ocr_unavailable": True,
+            "error": "tesseract binary not found, so no payee could be read. "
+                     "This is a deployment fault, not an unreadable statement. "
+                     "Install tesseract, or set TESSERACT_BIN to its full path "
+                     "(the rednun.service unit sets PATH to the venv only, so a "
+                     "bare 'tesseract' does not resolve inside the app).",
+        }
+
     account_key = f"acct{up['bank_account_id']}"
     location = up["location"]
 
@@ -376,6 +444,7 @@ def enrich_upload(conn, upload_id: int, force: bool = False) -> dict:
 
     checks = extract_checks(pdf, account_key)
     read, low, unread, coded = 0, 0, [], 0
+    from_books = 0          # payee taken from payroll_checks, not OCR
 
     for ch in checks:
         num = ch["check_number"]
@@ -405,18 +474,39 @@ def enrich_upload(conn, upload_id: int, force: bool = False) -> dict:
 
         row = rows.get(num)
         score = _score(result["payee"], result["confidence"])
-        if score < MIN_PAYEE_SCORE:
-            low += 1
-            unread.append({"check_number": num, "amount": ch["amount"],
-                           "confidence": result["confidence"],
-                           "score": round(score, 1),
-                           "payee": result["payee"], "verified": verified,
-                           "row_id": row["id"] if row else None})
-            continue
+        payee_out = result["payee"]
+        payee_src = "ocr"
 
-        read += 1
+        if score < MIN_PAYEE_SCORE:
+            # OCR could not read it. Before reporting it unreadable, ask the
+            # books: a payroll check's payee is something we already know, and
+            # the amount usually identifies it uniquely. This is what turns
+            # "30 checks, nothing legible" into a named list.
+            book = identify_payroll_payee(
+                conn, location, ch.get("amount"),
+                (row or {}).get("entry_date") or ch.get("date"))
+            if book:
+                payee_out = book["employee_name"]
+                payee_src = "books"
+                from_books += 1
+                conn.execute(
+                    "UPDATE check_ocr SET payee = ?, is_payroll = 1 "
+                    "WHERE account_key = ? AND check_number = ?",
+                    (payee_out, account_key, num))
+            else:
+                low += 1
+                unread.append({"check_number": num, "amount": ch["amount"],
+                               "confidence": result["confidence"],
+                               "score": round(score, 1),
+                               "payee": result["payee"], "verified": verified,
+                               "row_id": row["id"] if row else None})
+                continue
+        else:
+            read += 1
+
         if not row:
             continue
+        result = {**result, "payee": payee_out}
 
         # Replace rather than append, so a re-run does not stack suffixes.
         base = re.sub(r"\s*\|\s*CHK:.*$", "", row["memo"] or "").strip()
@@ -456,17 +546,60 @@ def enrich_upload(conn, upload_id: int, force: bool = False) -> dict:
         "check_rows_in_register": len(rows),
         "images": len(checks),
         "payees_read": read,
+        "payees_from_books": from_books,
         "below_confidence": low,
         "newly_coded": coded,
         "payroll_candidates": payroll_candidates,
         "unread": unread,
         "images_on_disk": images,
         "banner": (f"{len(checks)} check(s) on this statement, {len(checks)} image(s), "
-                   f"{read} payee(s) read, {low} below confidence"
+                   f"{read} payee(s) read"
+                   + (f", {from_books} named from payroll records" if from_books else "")
+                   + f", {low} below confidence"
                    + (f", {coded} newly coded" if coded else "")
                    + (f", {len(payroll_candidates)} payroll match candidate(s)"
                       if payroll_candidates else "")),
     }
+
+
+def identify_payroll_payee(conn, location: str | None, amount: float,
+                           entry_date: str, days: int = 14) -> dict | None:
+    """Name a check from the BOOKS instead of from its handwriting.
+
+    A payroll check's payee is already recorded — we wrote the check. Requiring
+    OCR to read a handwritten name before we will admit who it was paid to is
+    backwards, and it fails in practice: on the Chatham February statement the
+    band crop read 1 of 14 payees, yet the amounts alone identify most of them
+    ($270.96 Zachary Signore, $52.61 Leah Artman, $740.08 Christopher Lubin).
+
+    Held to the same bar as the check-number backfill: EXACTLY ONE uncleared,
+    unvoided payroll check for this entity at this amount to the penny within
+    `days`. Two candidates means ambiguous, and ambiguous is left to a human --
+    naming the wrong employee on a cleared check is worse than leaving it blank.
+
+    Returns {payroll_check_id, employee_name, pay_date} or None.
+    """
+    if amount is None:
+        return None
+    hits = conn.execute(
+        """SELECT pc.id, pc.employee_name,
+                  COALESCE(pr.pay_date, pc.pay_period_end) AS pay_date
+             FROM payroll_checks pc
+             LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id
+            WHERE pc.location = ?
+              AND ROUND(pc.net_pay, 2) = ROUND(?, 2)
+              AND ABS(JULIANDAY(COALESCE(pr.pay_date, pc.pay_period_end))
+                      - JULIANDAY(?)) <= ?
+              AND (pc.voided IS NULL OR pc.voided = 0)
+              AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit')
+              AND pc.employee_name IS NOT NULL AND TRIM(pc.employee_name) <> ''
+            LIMIT 2""",
+        (location, abs(float(amount)), entry_date, days)).fetchall()
+    if len(hits) != 1:
+        return None
+    return {"payroll_check_id": hits[0]["id"],
+            "employee_name": hits[0]["employee_name"],
+            "pay_date": hits[0]["pay_date"]}
 
 
 def match_payroll_checks(conn, upload_id: int, account_key: str,
