@@ -42,6 +42,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .pill.active .sub { color: var(--blue); }
 .pill.closed { border-color: var(--green); color: var(--green); }
 .pill.closed.active { background: var(--green-soft); }
+.pill.stale { border-color: var(--red); color: var(--red); }
+.pill.stale.active { background: var(--red-soft); }
 
 .periods { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .periods .empty { color: var(--text3); font-size: 13px; font-style: italic; }
@@ -337,13 +339,15 @@ function renderPeriods() {
   el.innerHTML = STATE.uploads.map(u => {
     const rec = periodRec(u);
     const isClosed = rec && rec.status === 'reconciled';
+    const isStale  = rec && rec.status === 'stale';
     const active = STATE.currentUpload && STATE.currentUpload.id === u.id;
+    const label = isStale ? '⚠ stale' : (isClosed ? '✓ closed' : 'open');
     return `
-      <div class="pill ${isClosed ? 'closed' : ''} ${active ? 'active' : ''}"
+      <div class="pill ${isClosed ? 'closed' : ''} ${isStale ? 'stale' : ''} ${active ? 'active' : ''}"
            title="${esc(u.period_start)} – ${esc(u.period_end)}"
            onclick="selectPeriod(${u.id})">
         <span>${esc(u.period_start)} – ${esc(u.period_end)}</span>
-        <span class="sub">${isClosed ? '✓ closed' : 'open'}</span>
+        <span class="sub">${label}</span>
       </div>
     `;
   }).join('');
@@ -394,6 +398,15 @@ function render() {
         <b>This period is closed.</b> Signed off by <b>${esc(STATE.currentRec.closed_by)}</b>
         on <b>${esc(String(STATE.currentRec.closed_at).replace('T', ' ').slice(0, 19))}</b>.
         The rows below already read R. Editing them requires the discrepancy flow.
+      </div>`;
+  } else if (STATE.currentRec && STATE.currentRec.status === 'stale') {
+    banner += `
+      <div class="err-banner">
+        <b>This period was signed off, then broken.</b> A row was forced out of it, so the
+        stored figures (delta ${fmt(STATE.currentRec.delta)}, outstanding
+        ${fmt(STATE.currentRec.outstanding_net)}) no longer describe these rows.
+        Re-close it once the underlying transaction is fixed.
+        ${STATE.currentRec.notes ? `<div style="margin-top:6px;font-family:var(--mono);font-size:11px;white-space:pre-wrap;color:var(--text2)">${esc(STATE.currentRec.notes)}</div>` : ''}
       </div>`;
   }
   if (disc) {

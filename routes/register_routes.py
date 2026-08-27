@@ -26,7 +26,7 @@ import re
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 
 from integrations.toast.data_store import get_connection
 from routes.auth_routes import login_required, admin_required
@@ -2388,6 +2388,71 @@ def _pre_period_net(conn, account, period_start, include_unassigned=True):
     return float(dep_in) + float(man_signed) - float(bp_out) - float(pr_out)
 
 
+def _statement_coverage(conn, account_id, start, end):
+    """Do we hold bank statements covering [start, end]?
+
+    A period with no statement has no balance anchor, so it cannot be
+    reconciled at all — that is a different thing from "reconciled and clean",
+    and the register must not let the two look alike. Chatham has held no
+    statement since February; rendering those months with no marker reads as
+    "nothing outstanding" when the truth is "nothing to check against".
+
+    Returns:
+      {"status": "covered" | "partial" | "none",
+       "statements": [{id, period_start, period_end}, ...],
+       "uncovered_days": int,
+       "message": str}
+    """
+    ups = [dict(r) for r in conn.execute(
+        "SELECT id, period_start, period_end FROM bank_statement_uploads "
+        "WHERE bank_account_id = ? AND period_start IS NOT NULL "
+        "AND period_end IS NOT NULL "
+        "AND period_start <= ? AND period_end >= ? "
+        "ORDER BY period_start",
+        (account_id, end, start),
+    )]
+
+    try:
+        want_start = date.fromisoformat(start)
+        want_end = date.fromisoformat(end)
+    except (TypeError, ValueError):
+        return {"status": "none", "statements": [], "uncovered_days": 0,
+                "message": "Unparseable period."}
+
+    # Walk the requested window and subtract each statement's coverage.
+    covered = set()
+    for u in ups:
+        try:
+            ps = max(date.fromisoformat(u["period_start"]), want_start)
+            pe = min(date.fromisoformat(u["period_end"]), want_end)
+        except (TypeError, ValueError):
+            continue
+        d = ps
+        while d <= pe:
+            covered.add(d)
+            d += timedelta(days=1)
+
+    total_days = (want_end - want_start).days + 1
+    uncovered = max(0, total_days - len(covered))
+
+    if not ups or uncovered >= total_days:
+        status = "none"
+        message = ("No bank statement covers this period, so there is no balance "
+                   "anchor and it cannot be reconciled. Upload the statement on "
+                   "Import Statement first.")
+    elif uncovered > 0:
+        status = "partial"
+        message = (f"Statements cover only part of this period — {uncovered} of "
+                   f"{total_days} days have no statement. Reconcile per statement "
+                   f"period, not over this window.")
+    else:
+        status = "covered"
+        message = "A statement covers this period."
+
+    return {"status": status, "statements": ups,
+            "uncovered_days": uncovered, "message": message}
+
+
 def build_register_view(conn, account_id, start, end, cleared_filter="all",
                         include_unassigned=True):
     """The unified register for one account over one date range.
@@ -2577,6 +2642,13 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     uncleared_count = sum(1 for r in rows if not r["cleared"])
     reconciled_count = sum(1 for r in rows if r.get("reconciliation_id"))
 
+    # Statement coverage for the requested window. Without a statement there is
+    # no balance anchor, so the period CANNOT be reconciled — and the register
+    # has to say that out loud rather than just rendering rows that look fine.
+    # Chatham has had no anchor since February; silence there reads as "nothing
+    # to do" when the truth is "no way to check".
+    coverage = _statement_coverage(conn, account_id, start, end)
+
     return {
         "account": dict(account),
         "start": start,
@@ -2592,6 +2664,7 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
             "unassigned_count": unassigned_count,
             "uncleared_count": uncleared_count,
             "reconciled_count": reconciled_count,
+            "statement_coverage": coverage,
             # Reconciliation figures — independent of the cleared filter.
             "book_balance": round(book_balance, 2),
             "bank_balance": round(bank_balance, 2),
@@ -2717,16 +2790,54 @@ def set_cleared():
         }), 409
 
     cleared_date = datetime.now().strftime("%Y-%m-%d") if cleared else None
-    cur = conn.execute(
-        f"UPDATE {table} SET cleared = ?, cleared_date = ? WHERE id = ?",
-        (cleared, cleared_date, row_id),
-    )
+    forced = bool(rec_id) and force
+
+    if forced:
+        # Breaking a row out of a signed-off period. Two things MUST happen
+        # together, or the state lies:
+        #
+        #   1. Drop reconciliation_id. recon_status is derived from that column
+        #      alone, so leaving it set produces a row that renders R while
+        #      being uncleared — and re-ticking it would hit the 409 guard
+        #      again, stranding the row in a state the UI cannot exit.
+        #   2. Mark the period stale. bank_reconciliations still holds
+        #      status='reconciled', delta=0 from the original close; those
+        #      figures no longer describe the rows. A close record that claims
+        #      to tie over rows that no longer tie is exactly the kind of
+        #      status field that cannot detect its own failure.
+        #
+        # The bank_reconciliation_items snapshot is deliberately left intact —
+        # it is the record of what was accepted at sign-off and must survive.
+        cur = conn.execute(
+            f"UPDATE {table} SET cleared = ?, cleared_date = ?, "
+            f"reconciliation_id = NULL WHERE id = ?",
+            (cleared, cleared_date, row_id),
+        )
+        who = session.get("username") or session.get("email") or "unknown"
+        note = (f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] {who} forced "
+                f"{source}#{row_id} to cleared={cleared}, breaking this period's "
+                f"tie-out. Re-close required.")
+        conn.execute(
+            "UPDATE bank_reconciliations "
+            "SET status = 'stale', "
+            "    notes = TRIM(COALESCE(notes || char(10), '') || ?) "
+            "WHERE id = ?",
+            (note, rec_id),
+        )
+        logger.warning("Reconciliation %s marked stale: %s", rec_id, note)
+    else:
+        cur = conn.execute(
+            f"UPDATE {table} SET cleared = ?, cleared_date = ? WHERE id = ?",
+            (cleared, cleared_date, row_id),
+        )
+
     conn.commit()
     conn.close()
     if cur.rowcount == 0:
         return jsonify({"error": "Row not found"}), 404
     return jsonify({"status": "ok",
-                    "forced": force and bool(rec_id)})
+                    "forced": forced,
+                    "reconciliation_marked_stale": rec_id if forced else None})
 
 
 # ─── REASSIGN BILL PAY ROW TO AN ACCOUNT ─────────────────────────────────────

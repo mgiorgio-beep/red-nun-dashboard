@@ -725,6 +725,7 @@ async function loadRegister() {
 }
 
 function renderSummary(s) {
+  renderCoverage(s.statement_coverage);
   $('summary-bar').innerHTML = `
     <div class="summary-card">
       <div class="summary-label">Opening Balance</div>
@@ -744,6 +745,31 @@ function renderSummary(s) {
       <div class="summary-sub">${s.row_count || 0} transactions · ${s.uncleared_count || 0} uncleared${s.reconciled_count ? ' · ' + s.reconciled_count + ' R' : ''}${s.unassigned_count ? ' · ' + s.unassigned_count + ' unassigned' : ''}</div>
     </div>
   `;
+}
+
+// "No statement covers this period" is a different fact from "this period is
+// clean", and the register must not let them look alike. Without an anchor
+// there is nothing to reconcile against, so say so.
+function renderCoverage(cov) {
+  let el = $('coverage-note');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'coverage-note';
+    const bar = $('summary-bar');
+    bar.parentNode.insertBefore(el, bar);
+  }
+  if (!cov || cov.status === 'covered') { el.style.display = 'none'; return; }
+  const isNone = cov.status === 'none';
+  const color = isNone ? 'var(--amber)' : 'var(--blue)';
+  const soft  = isNone ? 'rgba(245,158,11,0.10)' : 'rgba(56,189,248,0.10)';
+  el.style.display = 'block';
+  el.style.cssText += `display:block;margin-bottom:14px;padding:11px 14px;border-radius:9px;
+    border:1px solid ${color};background:${soft};color:${color};font-size:12.5px;line-height:1.45`;
+  el.innerHTML = `<b>${isNone ? 'Not reconcilable' : 'Partial statement coverage'}</b> — ${esc(cov.message)}`
+    + (cov.statements && cov.statements.length
+        ? ` <span style="color:var(--text3)">Held: ${cov.statements.map(u => esc(u.period_start) + '..' + esc(u.period_end)).join(', ')}.</span>`
+        : '')
+    + ` <a href="/import-statement" style="color:${color};text-decoration:underline">Import Statement</a>`;
 }
 
 function renderRows() {
