@@ -201,7 +201,8 @@ function loadFont(name) {
   if (p.get('size')) document.body.classList.add('size-' + p.get('size'));
 })();
 
-// _rv is the board revision (specials.json mtime). The editor's Save and the
+// _rv is the board revision ("<board>:<mtime>"), so it also changes when the
+// Sunday game-day board takes over. The editor's Save and the
 // TV-power RELOAD buttons both bump it; when it changes we full-page reload so
 // the TV picks up new board HTML/CSS/JS (a data-only re-render can't do that).
 var _lastJson = '';

@@ -15,6 +15,8 @@ import base64
 import re
 import requests as http_requests
 import websocket
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import soco
 import xml.etree.ElementTree as ET
 from soco.music_services import MusicService
@@ -183,44 +185,100 @@ def staff_home():
 # ── Specials Board ──
 
 SPECIALS_PATH = os.path.join(DATA_DIR, 'specials.json')
+SUNDAY_SPECIALS_PATH = os.path.join(DATA_DIR, 'specials_sunday.json')
+
+# Whitelist -- the board name arrives from the client and picks a file, so it
+# must never be used to build a path directly.
+BOARD_PATHS = {'regular': SPECIALS_PATH, 'sunday': SUNDAY_SPECIALS_PATH}
+BOARD_TITLES = {'regular': "Today's Specials", 'sunday': 'Sunday Game Day'}
+
+# The Toast menu the Sunday board pulls from. In-house only, so it is a
+# separate menu in Toast rather than a group on the regular one.
+SUNDAY_MENU_NAME = 'Sunday Game Day'
 
 
-def _load_specials():
+def _is_game_day():
+    """True through Sunday's business day: Sun 4AM ET -> Mon 4AM ET.
+
+    Uses the same 4AM ET boundary as the rest of the app, so Sunday-night
+    service running past midnight still shows the game-day menu instead of
+    flipping to Monday's board mid-shift.
+    """
+    now_et = datetime.now(ZoneInfo('America/New_York'))
+    return (now_et - timedelta(hours=4)).weekday() == 6  # Mon=0 .. Sun=6
+
+
+def _active_board():
+    """Which board the TVs should be showing right now.
+
+    Sundays use the game-day menu, but only once it actually exists -- an
+    unconfigured Sunday board falls back to the regular one rather than
+    blanking the TVs.
+    """
+    if _is_game_day() and os.path.exists(SUNDAY_SPECIALS_PATH):
+        return 'sunday'
+    return 'regular'
+
+
+def _resolve_board(name):
+    """Validate a client-supplied board name. None/blank -> whatever is active."""
+    if not name:
+        return _active_board()
+    name = str(name).strip().lower()
+    return name if name in BOARD_PATHS else None
+
+
+def _load_specials(board=None):
+    board = board or _active_board()
     try:
-        with open(SPECIALS_PATH, 'r') as f:
+        with open(BOARD_PATHS[board], 'r') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return {'title': "Today's Specials", 'items': [], 'footer': ''}
+        return {'title': BOARD_TITLES[board], 'items': [], 'footer': ''}
 
 
-def _save_specials(data):
+def _save_specials(data, board='regular'):
     os.makedirs(DATA_DIR, exist_ok=True)
-    with open(SPECIALS_PATH, 'w') as f:
+    with open(BOARD_PATHS[board], 'w') as f:
         json.dump(data, f, indent=2)
 
 
-def _board_rv():
-    """Return specials file mtime as reload version (survives restarts)."""
+def _board_rv(board=None):
+    """Reload version: which board, plus its file mtime (survives restarts).
+
+    The board name is part of it so the Sunday changeover always reads as a new
+    revision -- mtime alone can't distinguish two files written in the same
+    second, and the TVs use this to decide when to pull fresh code.
+    """
+    board = board or _active_board()
     try:
-        return int(os.path.getmtime(os.path.join(DATA_DIR, 'specials.json')))
+        return '{}:{}'.format(board, int(os.path.getmtime(BOARD_PATHS[board])))
     except OSError:
-        return 0
+        return '{}:0'.format(board)
 
 @staff_bp.route('/staff/api/board', methods=['GET'])
 def get_board():
-    data = _load_specials()
-    data['_rv'] = _board_rv()
+    """The board to show. No ?board= -> whatever today calls for (Sunday =
+    game day). The editor passes an explicit board to edit one directly."""
+    board = _resolve_board(request.args.get('board'))
+    if board is None:
+        return jsonify({'error': 'Unknown board'}), 400
+    data = _load_specials(board)
+    data['_board'] = board
+    data['_rv'] = _board_rv(board)
     return jsonify(data)
 
 @staff_bp.route('/staff/api/board/reload', methods=['POST'])
 def trigger_board_reload():
-    """Touch specials file to bump mtime — TVs will full-page reload on next poll."""
-    path = os.path.join(DATA_DIR, 'specials.json')
+    """Touch the board file to bump mtime — TVs full-page reload on next poll."""
+    board = _resolve_board((request.json or {}).get('board') if request.is_json else None)
+    if board is None:
+        board = _active_board()
     try:
-        os.utime(path, None)
+        os.utime(BOARD_PATHS[board], None)
     except OSError:
         pass
-    return jsonify({'ok': True, 'rv': _board_rv()})
+    return jsonify({'ok': True, 'rv': _board_rv(board), 'board': board})
 
 
 @staff_bp.route('/staff/api/board', methods=['POST'])
@@ -228,8 +286,14 @@ def update_board():
     data = request.json
     if not data:
         return jsonify({'error': 'No data'}), 400
-    _save_specials(data)
-    return jsonify({'ok': True})
+    # Defaults to 'regular' rather than the active board: a Sunday save from an
+    # older client must not land on the game-day menu by surprise.
+    board = _resolve_board(request.args.get('board') or 'regular')
+    if board is None:
+        return jsonify({'error': 'Unknown board'}), 400
+    data = {k: v for k, v in data.items() if not k.startswith('_')}
+    _save_specials(data, board)
+    return jsonify({'ok': True, 'board': board})
 
 
 @staff_bp.route('/staff/api/board/sync-toast', methods=['POST'])
@@ -305,6 +369,87 @@ def sync_toast_specials():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+def _norm_menu(name):
+    """Loose menu-name match, so 'Sunday Game Day' finds 'sunday gameday'."""
+    return re.sub(r'[^a-z0-9]', '', (name or '').lower())
+
+
+def _fmt_price(price):
+    """$14 for whole dollars, $12.50 when there are cents.
+
+    The specials sync rounds to whole dollars; a full menu can't, since a
+    rounded price on a customer-facing board is a wrong price.
+    """
+    if not price:
+        return ''
+    try:
+        val = float(price)
+    except (TypeError, ValueError):
+        return ''
+    return '${:.0f}'.format(val) if val == int(val) else '${:.2f}'.format(val)
+
+
+def _collect_menu_items(group, out):
+    """Flatten a Toast menu group into board items, following nested groups."""
+    for item in group.get('menuItems') or []:
+        iname = (item.get('name') or '').strip()
+        if not iname:
+            continue
+        out.append({
+            'name': iname,
+            'desc': (item.get('description') or '').strip(),
+            'price': _fmt_price(item.get('price')),
+            'color': 'white',
+        })
+    for sub_group in group.get('menuGroups') or []:
+        _collect_menu_items(sub_group, out)
+
+
+@staff_bp.route('/staff/api/board/sync-toast-menu', methods=['POST'])
+def sync_toast_menu():
+    """Pull every item from one named Toast menu -- the Sunday game-day menu.
+
+    Deliberately structure-agnostic: the specials sync above knows about the
+    Soups and Specials groups, but a whole menu can be laid out any way, so
+    this flattens all of its groups into a plain item list for the board.
+    """
+    try:
+        from integrations.toast.toast_client import ToastAPIClient
+        client = ToastAPIClient()
+        payload = request.json or {}
+        location = payload.get('location', LOCATION)
+        asked = (payload.get('menu_name') or SUNDAY_MENU_NAME).strip()
+        wanted = _norm_menu(asked)
+
+        menus = client.get_menus(location)
+        available = []
+        items = []
+        matched = ''
+        for menu in menus.get('menus', []):
+            mname = (menu.get('name') or '').strip()
+            if mname:
+                available.append(mname)
+            if _norm_menu(mname) != wanted:
+                continue
+            matched = mname
+            for group in menu.get('menuGroups') or []:
+                _collect_menu_items(group, items)
+
+        if not matched:
+            return jsonify({
+                'ok': False,
+                'error': 'No Toast menu named "{}". Menus found: {}'.format(
+                    asked, ', '.join(available) or 'none'),
+                'available': available,
+            }), 404
+
+        logger.info("Toast menu sync: %s (%s) -> %d items", matched, location, len(items))
+        return jsonify({'ok': True, 'menu': matched, 'items': items})
+    except Exception as e:
+        logger.error("Toast menu sync failed: %s", e)
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @staff_bp.route('/staff/specials')
 def specials_display():
     """Full-screen chalkboard display for portrait TV."""
@@ -332,8 +477,12 @@ def specials_tv():
 @staff_bp.route('/staff/specials/edit')
 def specials_edit():
     """Manager editor — update specials from phone."""
-    data = _load_specials()
-    return render_template('specials_edit.html', data=json.dumps(data))
+    board = _active_board()
+    data = _load_specials(board)
+    return render_template('specials_edit.html',
+                           data=json.dumps(data),
+                           board=board,
+                           sunday_menu_name=SUNDAY_MENU_NAME)
 
 
 # ── TV Config ──

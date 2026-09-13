@@ -379,6 +379,44 @@ Also: back up before any schema change or large migration.
 
 ---
 
+## Specials Boards — Two Boards, Day-Driven
+
+The Staff App serves the chalkboard TVs and keeps **two** separate boards, both
+machine-local and gitignored under `data/`:
+
+| Board | File | Shown |
+|-------|------|-------|
+| Regular specials | `data/specials.json` | Every day except Sunday |
+| Sunday game day | `data/specials_sunday.json` | Sunday's business day |
+
+- **The switch is automatic** — `_active_board()` in `staff/staff.py` picks the
+  board; nobody toggles anything on the day. The Sunday window follows the same
+  **4AM ET business day** as the rest of the app (`_is_game_day()`), so Sunday
+  night service past midnight still shows game day and it reverts Monday 4AM.
+- **Falls back safely:** if `specials_sunday.json` doesn't exist, Sunday shows the
+  regular board. The Sunday board is only live once it has been saved once.
+- **Editor:** `/staff/specials/edit` has a REGULAR / SUNDAY GAME DAY switcher and
+  opens on whichever board is live. It always passes `?board=` explicitly;
+  `POST /staff/api/board` with no `?board=` defaults to **regular**, never the
+  active board, so an old client can't overwrite the game-day menu by surprise.
+- **`GET /staff/api/board`** with no param returns the active board (this is what
+  the TVs poll). `_rv` is `"<board>:<mtime>"` — the board name is in there so the
+  Sunday changeover always registers as a new revision and open TVs reload.
+- **Two Toast syncs, different shapes:**
+  - `POST /staff/api/board/sync-toast` — the regular board. Knows the Soups and
+    Specials groups specifically.
+  - `POST /staff/api/board/sync-toast-menu` — pulls one **named whole menu**
+    (default `SUNDAY_MENU_NAME = 'Sunday Game Day'`, in-house only) and flattens
+    all of its groups, nested ones included, into a flat item list. Prices keep
+    cents when they have them (`$12.50`), unlike the specials sync's whole dollars.
+- Board names are whitelisted in `BOARD_PATHS` — the name selects a file, so it
+  must never be interpolated into a path.
+
+> The Management App also has `web/static/specials_admin.html` on `/api/specials`.
+> That is a **separate, older** system and is NOT what the TVs show.
+
+---
+
 ## TV Control App (`/opt/tv_control/`)
 
 **Separate service from the Staff App.** Controls Roku TVs and DirecTV boxes in Chatham.
