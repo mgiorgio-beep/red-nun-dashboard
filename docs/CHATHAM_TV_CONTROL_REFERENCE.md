@@ -65,6 +65,27 @@ curl -d '' "http://<TV_IP>:8060/launch/tvinput.hdmi1"
 curl -d '' "http://10.1.10.84:8060/launch/tvinput.hdmi1"
 ```
 
+Swap `hdmi1` for `hdmi2`, `hdmi3`, `hdmi4`, or `dtv` (built-in tuner) as needed.
+
+### Which input is the DirecTV box on? (per TV, set in the app)
+
+**The box is NOT on HDMI 1 on every TV.** The staff app used to assume it was,
+which meant the "SWITCH TO DIRECTV" button and the automatic input-switch on
+tune both fired at the wrong (usually empty) input and looked like they did
+nothing.
+
+Each TV now carries its own `dtv_input` in that box's `data/tvs.json`. Set it in
+**`/staff` -> Manage TVs -> DirecTV Input**. Everything that needs the input
+reads it from there:
+
+- the remote's **SWITCH TO DIRECTV** button (labelled with the real input)
+- the auto-switch when you tune a DirecTV channel (game tap or remote keypad)
+- the auto-tune scheduler
+
+A TV with no `dtv_input` saved falls back to HDMI 1, so nothing changes until
+you set it. Confirm a TV's actual input with `/query/apps` (inputs appear as
+`tvinput.hdmi1` ... `tvinput.hdmi4`) or by cycling inputs on the set.
+
 ### Launch an app (id from /query/apps)
 
 ```bash

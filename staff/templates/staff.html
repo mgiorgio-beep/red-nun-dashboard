@@ -223,8 +223,8 @@ tr.game-final td{opacity:0.4}
 .tv-config-card label{font-size:15px;font-weight:600;display:block;margin-bottom:8px}
 .tv-config-card .tv-ip-row{display:flex;gap:8px}
 .tv-config-card .tv-ip-row input{flex:1}
-.tv-config-card input{width:100%;padding:10px 12px;border:1px solid #D1D1D6;border-radius:8px;font-size:14px;font-family:-apple-system,sans-serif;background:#fff;margin-bottom:0}
-.tv-config-card input:focus{outline:2px solid #007AFF;border-color:transparent}
+.tv-config-card input,.tv-config-card select{width:100%;padding:10px 12px;border:1px solid #D1D1D6;border-radius:8px;font-size:14px;font-family:-apple-system,sans-serif;background:#fff;margin-bottom:0}
+.tv-config-card input:focus,.tv-config-card select:focus{outline:2px solid #007AFF;border-color:transparent}
 .tv-config-card input::placeholder{color:#C7C7CC}
 .tv-ip-label{font-size:11px;color:#8E8E93;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;margin-top:8px}
 .tv-config-save{width:100%;padding:14px;background:#9B1B1B;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;margin:12px 0 8px}
@@ -950,7 +950,7 @@ tr.game-final td{opacity:0.4}
                     <button class="roku-btn roku-round" onclick="rokuKey('volmute')" title="Mute">&#128263;</button>
                     <button class="roku-btn roku-vol" onclick="rokuKey('volup')">VOL &#43;</button>
                 </div>
-                <button class="roku-input-btn" onclick="rokuKey('hdmi1')">&#9654; SWITCH TO DIRECTV (HDMI 1)</button>
+                <button class="roku-input-btn" id="roku-input-btn" onclick="rokuInput()">&#9654; SWITCH TO DIRECTV</button>
                 <div class="roku-apps">
                     <button class="roku-app rk-appletv" onclick="rokuApp('551012')">Apple TV+</button>
                     <button class="roku-app rk-yttv" onclick="rokuApp('195316')">YouTube TV</button>
@@ -1303,16 +1303,17 @@ function tuneTV(tv, channelNum, channelName, streaming, silent) {
             if(d.status === 'ok') {
                 tv.channel = channelNum;
                 updateBadges();
-                // Switch to HDMI1 input for DirecTV (Roku or Samsung)
+                // Switch to the DirecTV input (Roku or Samsung) so a TV sitting
+                // on YouTube flips over to the box on its own.
                 if(tv.roku_ip) {
-                    var hdmiCmd = {roku_ip: tv.roku_ip, command: 'hdmi1'};
+                    var hdmiCmd = {roku_ip: tv.roku_ip, command: tvInput(tv)};
                     var hdmiOpts = {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hdmiCmd)};
                     fetch('/staff/api/roku/command', hdmiOpts).catch(function(){});
                     setTimeout(function(){
                         fetch('/staff/api/roku/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hdmiCmd)}).catch(function(){});
                     }, 5000);
                 } else if(tv.samsung_ip) {
-                    var sCmd = {samsung_ip: tv.samsung_ip, command: 'hdmi1'};
+                    var sCmd = {samsung_ip: tv.samsung_ip, command: tvInput(tv)};
                     var sOpts = {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sCmd)};
                     fetch('/staff/api/samsung/command', sOpts).catch(function(){});
                     setTimeout(function(){
@@ -1374,7 +1375,11 @@ function openManageTVs() {
             '<div class="tv-ip-label">Roku TV IP <span style="color:#C7C7CC;font-weight:400">(if Roku)</span></div>' +
             '<input type="text" inputmode="decimal" placeholder="e.g. 192.168.1.201" value="' + (tv.roku_ip || '') + '" data-id="' + tv.id + '" data-field="roku_ip">' +
             '<div class="tv-ip-label">Samsung TV IP <span style="color:#C7C7CC;font-weight:400">(if Samsung)</span></div>' +
-            '<input type="text" inputmode="decimal" placeholder="e.g. 192.168.1.201" value="' + (tv.samsung_ip || '') + '" data-id="' + tv.id + '" data-field="samsung_ip">';
+            '<input type="text" inputmode="decimal" placeholder="e.g. 192.168.1.201" value="' + (tv.samsung_ip || '') + '" data-id="' + tv.id + '" data-field="samsung_ip">' +
+            '<div class="tv-ip-label">DirecTV Input <span style="color:#C7C7CC;font-weight:400">(which input the box is in)</span></div>' +
+            '<select data-id="' + tv.id + '" data-field="dtv_input">' +
+                inputOptions(tvInput(tv)) +
+            '</select>';
         list.appendChild(card);
     });
     var saveBtn = document.createElement('button');
@@ -1385,8 +1390,16 @@ function openManageTVs() {
     openDrawer('drawer-manage-tvs');
 }
 
+function inputOptions(sel) {
+    var opts = [['hdmi1','HDMI 1'],['hdmi2','HDMI 2'],['hdmi3','HDMI 3'],
+                ['hdmi4','HDMI 4'],['dtv','Built-in tuner']];
+    return opts.map(function(o){
+        return '<option value="' + o[0] + '"' + (o[0] === sel ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+}
+
 function saveTVConfig() {
-    var inputs = document.querySelectorAll('#manage-tv-list input');
+    var inputs = document.querySelectorAll('#manage-tv-list input, #manage-tv-list select');
     inputs.forEach(function(inp){
         var id = inp.getAttribute('data-id');
         var field = inp.getAttribute('data-field');
@@ -1565,6 +1578,8 @@ function openDtvRemote(tv) {
     document.getElementById('dtv-remote-name').textContent = tv.name;
     updateDtvDisplay();
     var hasDtv = !!tv.dtv_ip, hasRoku = !!tv.roku_ip;
+    document.getElementById('roku-input-btn').innerHTML =
+        '\u25B6 SWITCH TO DIRECTV (' + inputLabel(tvInput(tv)) + ')';
     document.getElementById('rmt-switch').style.display = (hasDtv && hasRoku) ? 'flex' : 'none';
     switchRemote(hasDtv ? 'dtv' : 'roku');
     document.getElementById('dtv-remote').classList.add('visible');
@@ -1580,8 +1595,27 @@ function switchRemote(which) {
         rokuHealthCheck();
     }
 }
+// Which input a TV's DirecTV box is wired into. Older saved TVs have no
+// dtv_input field, so fall back to HDMI 1 (the previous hardcoded behavior).
+function tvInput(tv) {
+    var v = (tv && tv.dtv_input ? String(tv.dtv_input) : '').trim().toLowerCase();
+    return /^(hdmi[1-4]|dtv)$/.test(v) ? v : 'hdmi1';
+}
+function inputLabel(inp) {
+    return inp === 'dtv' ? 'TUNER' : 'HDMI ' + inp.slice(4);
+}
+// Manual "switch to DirecTV" — targets whatever input this TV is configured for.
+function rokuInput() {
+    if(!dtvRemoteTv) return;
+    rokuKey(tvInput(dtvRemoteTv));
+}
+window.rokuInput = rokuInput;
 function rokuKey(cmd) {
-    if(!dtvRemoteTv || !dtvRemoteTv.roku_ip) return;
+    if(!dtvRemoteTv) return;
+    if(!dtvRemoteTv.roku_ip) {
+        showToast('No Roku IP set for ' + dtvRemoteTv.name + ' — add it in Manage TVs');
+        return;
+    }
     fetch('/staff/api/roku/command', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({roku_ip: dtvRemoteTv.roku_ip, command: cmd})
@@ -1661,13 +1695,13 @@ function dtvEnter() {
             tv.channel = ch;
             updateBadges();
             if(tv.roku_ip) {
-                var hdmiCmd = {roku_ip: tv.roku_ip, command: 'hdmi1'};
+                var hdmiCmd = {roku_ip: tv.roku_ip, command: tvInput(tv)};
                 fetch('/staff/api/roku/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hdmiCmd)}).catch(function(){});
                 setTimeout(function(){
                     fetch('/staff/api/roku/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hdmiCmd)}).catch(function(){});
                 }, 5000);
             } else if(tv.samsung_ip) {
-                var sCmd = {samsung_ip: tv.samsung_ip, command: 'hdmi1'};
+                var sCmd = {samsung_ip: tv.samsung_ip, command: tvInput(tv)};
                 fetch('/staff/api/samsung/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sCmd)}).catch(function(){});
                 setTimeout(function(){
                     fetch('/staff/api/samsung/command', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sCmd)}).catch(function(){});

@@ -62,25 +62,49 @@ ROKU_KEY_MAP = {
     'power_on': 'PowerOn', 'power_off': 'PowerOff', 'power': 'Power',
 }
 
+# Inputs a DirecTV box can be wired into. Roku exposes these as launchable
+# "apps" (tvinput.*); Samsung takes them as remote keys.
+TV_INPUTS = ('hdmi1', 'hdmi2', 'hdmi3', 'hdmi4', 'dtv')
+DEFAULT_DTV_INPUT = 'hdmi1'
+
+# Samsung remote keys for the same inputs ('dtv' = built-in tuner).
+SAMSUNG_INPUT_KEYS = {
+    'hdmi1': 'KEY_HDMI1', 'hdmi2': 'KEY_HDMI2',
+    'hdmi3': 'KEY_HDMI3', 'hdmi4': 'KEY_HDMI4',
+    'dtv': 'KEY_TV',
+}
+
+
+def _dtv_input(tv):
+    """Which input this TV's DirecTV box is plugged into.
+
+    Not every TV has the box on HDMI 1 -- set it per TV under Manage TVs.
+    Falls back to HDMI 1 so TVs saved before this field existed keep their
+    previous behavior.
+    """
+    val = (tv.get('dtv_input') or '').strip().lower()
+    return val if val in TV_INPUTS else DEFAULT_DTV_INPUT
+
+
 DEFAULT_TVS_CHATHAM = [
-    {"id": "bar-left", "name": "Bar Left", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "bar-middle", "name": "Bar Middle", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "bar-right", "name": "Bar Right", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "dr-left", "name": "DR Left", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "dr-middle", "name": "DR Middle", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "dr-right", "name": "DR Right", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "bar-left", "name": "Bar Left", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "bar-middle", "name": "Bar Middle", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "bar-right", "name": "Bar Right", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "dr-left", "name": "DR Left", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "dr-middle", "name": "DR Middle", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "dr-right", "name": "DR Right", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
 ]
 
 DEFAULT_TVS_DENNIS = [
-    {"id": "bar-1", "name": "Bar 1", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "bar-2", "name": "Bar 2", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "bar-3", "name": "Bar 3", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "bar-back", "name": "Bar Back", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "dr-1", "name": "DR 1", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "dr-2", "name": "DR 2", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "dr-3", "name": "DR 3", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "dr-4", "name": "DR 4", "dtv_ip": "", "roku_ip": "", "channel": ""},
-    {"id": "pallet-room", "name": "Pallet Room", "dtv_ip": "", "roku_ip": "", "channel": ""},
+    {"id": "bar-1", "name": "Bar 1", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "bar-2", "name": "Bar 2", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "bar-3", "name": "Bar 3", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "bar-back", "name": "Bar Back", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "dr-1", "name": "DR 1", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "dr-2", "name": "DR 2", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "dr-3", "name": "DR 3", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "dr-4", "name": "DR 4", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
+    {"id": "pallet-room", "name": "Pallet Room", "dtv_ip": "", "roku_ip": "", "dtv_input": "hdmi1", "channel": ""},
 ]
 
 DEFAULT_TVS = DEFAULT_TVS_DENNIS if LOCATION == 'dennis' else DEFAULT_TVS_CHATHAM
@@ -426,12 +450,8 @@ def roku_command():
             url = base + '/keypress/PowerOn'
         elif command == 'power_off':
             url = base + '/keypress/PowerOff'
-        elif command == 'hdmi1':
-            url = base + '/launch/tvinput.hdmi1'
-        elif command == 'hdmi2':
-            url = base + '/launch/tvinput.hdmi2'
-        elif command == 'hdmi3':
-            url = base + '/launch/tvinput.hdmi3'
+        elif command in TV_INPUTS:
+            url = base + '/launch/tvinput.' + command
         elif command == 'launch_app':
             app_id = data.get('app_id', '').strip()
             if not app_id:
@@ -718,11 +738,8 @@ def samsung_command():
             if ok:
                 _update_tv_channel('samsung_ip', samsung_ip, '')
             return jsonify({"status": "ok" if ok else "error", "message": msg})
-        elif command == 'hdmi1':
-            ok, msg = _samsung_send_key(samsung_ip, 'KEY_HDMI1')
-            return jsonify({"status": "ok" if ok else "error", "message": msg})
-        elif command == 'hdmi2':
-            ok, msg = _samsung_send_key(samsung_ip, 'KEY_HDMI2')
+        elif command in TV_INPUTS:
+            ok, msg = _samsung_send_key(samsung_ip, SAMSUNG_INPUT_KEYS[command])
             return jsonify({"status": "ok" if ok else "error", "message": msg})
         elif command == 'source':
             ok, msg = _samsung_send_key(samsung_ip, 'KEY_SOURCE')
@@ -836,15 +853,17 @@ def _execute_autotune(tune):
         try:
             resp = http_requests.get('http://{}:8080/tv/tune?major={}'.format(tv['dtv_ip'], ch), timeout=5)
             logger.info("Autotune: tuned %s to ch %s -> %d", tv['name'], ch, resp.status_code)
+            inp = _dtv_input(tv)
             if tv.get('roku_ip'):
                 try:
-                    http_requests.post('http://{}:8060/launch/tvinput.hdmi1'.format(tv['roku_ip']), timeout=3)
+                    http_requests.post(
+                        'http://{}:8060/launch/tvinput.{}'.format(tv['roku_ip'], inp), timeout=3)
                 except Exception:
                     pass
             elif tv.get('samsung_ip'):
                 try:
                     time.sleep(2)
-                    _samsung_send_key(tv['samsung_ip'], 'KEY_HDMI1')
+                    _samsung_send_key(tv['samsung_ip'], SAMSUNG_INPUT_KEYS[inp])
                 except Exception:
                     pass
             for t in tvs:
