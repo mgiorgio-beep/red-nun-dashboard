@@ -754,14 +754,36 @@ def create_payment():
     ref = (f"{ref_prefix}-{check_number}" if check_number
            else (reference_number if reference_number else f"{ref_prefix}-AP{payment_id}"))
 
+    # 2026-09-21: derive location + bank account from the invoices being paid.
+    # The mirror used to write location=NULL, which dropped every Bill Pay
+    # payment into the Chatham register's unassigned catch-all.
+    _mirror_loc, _mirror_bank = None, None
+    try:
+        if invoice_ids:
+            _ph = ",".join("?" * len(invoice_ids))
+            _locs = {(r[0] or "").strip().lower() for r in cursor.execute(
+                f"SELECT location FROM scanned_invoices WHERE id IN ({_ph})",
+                list(invoice_ids)).fetchall()}
+            _locs.discard("")
+            if len(_locs) == 1:
+                _mirror_loc = _locs.pop()
+                _b = cursor.execute(
+                    "SELECT id FROM bank_accounts WHERE location = ? AND active = 1 "
+                    "ORDER BY sort_order LIMIT 1", (_mirror_loc,)).fetchone()
+                _mirror_bank = _b[0] if _b else None
+            elif len(_locs) > 1:
+                logger.warning(f"Payment #{payment_id} spans locations {_locs}; mirror left unassigned")
+    except Exception as _e:
+        logger.warning(f"Location lookup failed for payment #{payment_id}: {_e}")
+
     try:
         vp_cur = cursor.execute(
             """INSERT INTO vendor_payments
                (vendor, location, payment_date, payment_ref, payment_method,
-                payment_total, check_number, memo, status, source, ap_payment_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
-            (vendor_name, None, payment_date, ref, payment_method,
-             amount, check_number, memo, mirror_source, payment_id),
+                payment_total, check_number, memo, status, source, ap_payment_id, bank_account_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)""",
+            (vendor_name, _mirror_loc, payment_date, ref, payment_method,
+             amount, check_number, memo, mirror_source, payment_id, _mirror_bank),
         )
         vp_id = vp_cur.lastrowid
         # Mirror invoice links

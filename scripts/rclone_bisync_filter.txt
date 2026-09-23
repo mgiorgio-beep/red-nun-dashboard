@@ -16,4 +16,7 @@
 
 # Include everything else
 - vendor-scrapers/**
+- usfoods-scraper/browser_profile/**
+- _backups/*.db
+- _backups/*.db.zst
 + **

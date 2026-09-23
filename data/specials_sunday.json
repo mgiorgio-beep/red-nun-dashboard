@@ -1,0 +1,34 @@
+{
+  "title": "Sunday Game Day",
+  "footer": "",
+  "font": "Fredericka the Great",
+  "titleColor": "white",
+  "soupColor": "white",
+  "appColor": "white",
+  "soup": {
+    "name": "Tomato bisque",
+    "desc": "",
+    "price": "",
+    "eightySixed": false
+  },
+  "appetizer": {
+    "name": "Cheddar, sour cream and Chive Tator tots",
+    "desc": "Served with ranch dressing",
+    "price": "11.99",
+    "eightySixed": false
+  },
+  "items": [
+    {
+      "color": "white",
+      "desc": "Served with coleslaw",
+      "name": "Smoked Boneless Pork Ribs",
+      "price": "15.99"
+    },
+    {
+      "color": "white",
+      "desc": "Prepared per 1/2 pound in your choice of Buffalo, BBQ, Jerk, Garlic Parmesan and Plain",
+      "name": "Boneless wings served by the pound",
+      "price": ""
+    }
+  ]
+}

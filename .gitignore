@@ -87,3 +87,8 @@ web/static/check_images/
 # Gmail sample dumps from one-off investigations: real vendor addresses, real
 # payment amounts, real correspondence snippets. Keep them local.
 scripts/archive/*.json
+
+# editor / job backups — git is the backup
+*.bak
+*.bak.*
+*.bak_*
