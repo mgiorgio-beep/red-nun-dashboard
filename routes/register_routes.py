@@ -1574,13 +1574,11 @@ def classify_venmo(description: str, amount: float):
 # The subscription is identified by 7SHIFTS.COM in the MEMO, not the payee —
 # its payee is an opaque "DBT CRD 1216 03/31/26 064566".
 #
-# KICKFIN FLOAT. Kickfin holds a retainer — Mike's money sitting at Kickfin,
-# an ASSET, not a tip settlement and not an expense. A routine draft settles
-# Tip Bank; the float deposit does not. We do not hard-code the retainer
-# amount: the FIRST Kickfin row for an entity is always flagged for review
-# (the retainer is by definition the first one), and later rows are flagged if
-# they are markedly larger than a few days' tips, which catches a top-up.
-# Flag-and-suggest beats guessing on a one-time event.
+# KICKFIN FLOAT (Mike, 2026-09-23). Kickfin holds a $5K float and every bank
+# draft is a refloat of tips already paid out of it, so every Kickfin row is
+# a Tip Bank settlement — one liability account, debits and credits. The
+# float itself is not tracked as a separate asset; "Kickfin Float Deposit"
+# was retired unused the same day.
 #
 # KICKFIN TIMING. Kickfin pays staff instantly out of the float while card tips
 # settle 1-3 days later, so Tip Bank legitimately dips slightly negative
@@ -1590,8 +1588,8 @@ TIP_CHANNEL_HINTS = ("7SHIFTS TI", "KICKFIN")
 SEVENSHIFTS_SUBSCRIPTION_HINT = "7SHIFTS.COM"
 # Payroll-side 7shifts prefixes that must NOT be claimed as tip settlements.
 SEVENSHIFTS_PAYROLL_PREFIXES = ("PCR ", "COL ", "TAX ")
-# A Kickfin draft above this many days of average tips looks like a float
-# movement rather than a payout.
+# Retained for reference only: the size heuristic it fed was retired on
+# 2026-09-23 (every Kickfin draft is a refloat — see classify_tip_settlement).
 KICKFIN_ROUTINE_DAYS = 3
 
 
@@ -1672,30 +1670,15 @@ def classify_tip_settlement(conn, description: str, amount: float,
         return None, None
 
     # ── Kickfin ──
-    prior = conn.execute(
-        """SELECT COUNT(*) FROM manual_bank_entries m
-           JOIN bank_accounts ba ON ba.id = m.bank_account_id
-           WHERE ba.location = ?
-             AND UPPER(COALESCE(m.payee,'') || ' ' || COALESCE(m.memo,'')) LIKE '%KICKFIN%'
-             AND (? IS NULL OR m.entry_date < ?)""",
-        (location, entry_date, entry_date),
-    ).fetchone()[0]
-    if prior == 0:
-        return None, ("first Kickfin row for this entity — almost certainly the "
-                      "float retainer, not a tip payout. Code to Kickfin Float "
-                      "Deposit if it is the retainer, Tip Bank if it is a payout")
-
-    avg = _avg_daily_tips(conn, location, entry_date)
-    if avg <= 0:
-        return None, ("Kickfin row but no tip history to size it against — "
-                      "review: Tip Bank if a payout, Kickfin Float Deposit if float")
-    ceiling = avg * KICKFIN_ROUTINE_DAYS
-    if abs(amount or 0) > ceiling:
-        return None, (f"Kickfin draft of ${abs(amount or 0):,.2f} exceeds "
-                      f"{KICKFIN_ROUTINE_DAYS} days of tips (${ceiling:,.2f}) — "
-                      f"looks like a float movement; suggest Kickfin Float Deposit")
-    direction = "inflow" if (amount or 0) > 0 else "draft"
-    return "Tip Bank", f"routine Kickfin {direction} = Tip Bank settlement"
+    # Mike, 2026-09-23: Kickfin holds a $5K float and EVERY bank draft is a
+    # refloat — money replacing tips Kickfin already paid to staff out of the
+    # float. So every Kickfin row, first or not, large or small, settles Tip
+    # Bank, and Tip Bank is one liability account on both charts (debits and
+    # credits). The earlier "first row is the retainer" and "bigger than
+    # three days of tips is a float top-up" heuristics flagged 21 rows for a
+    # human; both were wrong for how the account actually runs and are gone.
+    direction = "inflow" if (amount or 0) > 0 else "refloat"
+    return "Tip Bank", f"Kickfin {direction} = Tip Bank settlement (every draft refloats the $5K float)"
 
 
 def suggested_account_for_review(conn, reason: str, location: str | None):

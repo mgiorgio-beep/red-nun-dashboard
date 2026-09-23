@@ -1240,78 +1240,34 @@ class TestTipSettlementChannels:
         assert self._c(conn)("DBT CRD SYSCO", -400.00) == (None, None)
         assert self._c(conn)("PAYMENT VENMO", -400.00) == (None, None)
 
-    def test_first_kickfin_row_is_flagged_not_coded(self, conn):
-        """The retainer is by definition the first Kickfin row, so first-ever
-        is the deterministic catch — no hard-coded $5,000."""
-        loc = "chatham" if not conn.execute(
-            "SELECT 1 FROM manual_bank_entries m JOIN bank_accounts ba "
-            "ON ba.id = m.bank_account_id WHERE ba.location='chatham' AND "
-            "UPPER(COALESCE(m.payee,'')) LIKE '%KICKFIN%' LIMIT 1").fetchone() else None
-        if not loc:
-            pytest.skip("Chatham already has Kickfin rows")
-        name, reason = self._c(conn)("KICKFIN DRAFT", -5000.00, loc)
-        assert name is None, "the first Kickfin row must not be auto-coded"
-        assert "float" in reason.lower() and "Kickfin Float Deposit" in reason
+    def test_every_kickfin_draft_is_a_tip_bank_settlement(self, conn):
+        """Mike, 2026-09-23: Kickfin holds a $5K float and every bank draft
+        is a refloat of tips already paid out of it. First row, big row,
+        small row — all Tip Bank. The retired heuristics (first row = float
+        retainer, over three days of tips = top-up) had flagged 21 rows."""
+        c = self._c(conn)
+        for amt in (-5000.00, -4991.74, -24.04, 312.09):
+            name, reason = c("Retainer Kickfin Inc CCD | Kickfin0706 RECHARGE", amt, "chatham")
+            assert name == "Tip Bank", (amt, name, reason)
+            assert "refloat" in reason.lower() or "inflow" in reason.lower()
+        name, _ = c("Retainer Kickfin Inc CCD | Kickfin0527 RECHARGE", -5000.00, "dennis")
+        assert name == "Tip Bank"
 
-    def test_a_flagged_float_row_suggests_the_float_account(self, conn):
-        from routes.register_routes import suggested_account_for_review
-        _, reason = self._c(conn)("KICKFIN DRAFT", -5000.00, "chatham")
-        if not reason:
-            pytest.skip("Chatham Kickfin history already established")
-        s = suggested_account_for_review(conn, reason, "chatham")
-        assert s and s["name"] == "Kickfin Float Deposit"
-
-    def test_float_account_exists_per_entity_as_an_asset(self, conn):
-        """The retainer is Mike's money held at Kickfin — an asset, not an
-        expense and not a tip settlement."""
+    def test_tip_bank_is_a_liability_on_both_charts(self, conn):
+        """One account, both sides, a liability — the Chatham copy had been
+        imported as an Other Current Asset."""
         for loc in ("chatham", "dennis"):
-            r = conn.execute(
-                "SELECT account_type, active FROM gl_accounts "
-                "WHERE name = 'Kickfin Float Deposit' AND location = ?", (loc,)
-            ).fetchone()
-            assert r, f"{loc} has no Kickfin Float Deposit account"
-            assert r["account_type"] == "Other Current Asset"
-            assert r["active"] == 1
+            t = conn.execute("SELECT account_type FROM gl_accounts WHERE name='Tip Bank' "
+                             "AND location=? AND active=1", (loc,)).fetchone()
+            assert t and "Liability" in t["account_type"], (loc, t and t["account_type"])
 
-    def test_historical_tip_reloads_are_all_on_tip_bank(self, conn):
-        """The recode, asserted. No 7shifts-ti row on a labor account."""
-        from reports.profit_loss import LABOR_ACCOUNT_NAMES
-        ph = ",".join("?" * len(LABOR_ACCOUNT_NAMES))
-        bad = conn.execute(f"""
-            SELECT m.id, ba.location, g.name FROM manual_bank_entries m
-            JOIN bank_accounts ba ON ba.id = m.bank_account_id
-            JOIN gl_accounts g ON g.id = m.gl_account_id
-            WHERE UPPER(COALESCE(m.payee,'')) LIKE '%7SHIFTS TI%'
-              AND g.name IN ({ph})
-        """, tuple(sorted(LABOR_ACCOUNT_NAMES))).fetchall()
-        assert not bad, ("7shifts tip reloads still on labor accounts: "
-                         + "; ".join(f"#{r['id']} {r['location']} {r['name']}" for r in bad))
-
-    def test_audit_fails_on_a_tip_row_moved_back_to_labor(self, conn):
-        """The belt-and-suspenders check must actually fire."""
-        from routes.register_routes import audit_register_invariants
-        row = conn.execute("""
-            SELECT m.id, m.gl_account_id, ba.location FROM manual_bank_entries m
-            JOIN bank_accounts ba ON ba.id = m.bank_account_id
-            WHERE UPPER(COALESCE(m.payee,'')) LIKE '%7SHIFTS TI%' LIMIT 1
-        """).fetchone()
-        if not row:
-            pytest.skip("no 7shifts tip rows present")
-        payroll = conn.execute(
-            "SELECT id FROM gl_accounts WHERE name = 'Payroll Expenses' "
-            "AND location = ? AND active = 1", (row["location"],)).fetchone()["id"]
-        try:
-            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? WHERE id = ?",
-                         (payroll, row["id"]))
-            a = audit_register_invariants(conn)
-            assert not a["ok"]
-            failed = {c["name"] for c in a["checks"] if not c["ok"]}
-            assert "tip_payouts_on_labor" in failed
-        finally:
-            conn.execute("UPDATE manual_bank_entries SET gl_account_id = ? WHERE id = ?",
-                         (row["gl_account_id"], row["id"]))
-            conn.commit()
-
+    def test_no_kickfin_row_is_uncoded_or_on_the_float_account(self, conn):
+        bad = conn.execute("""
+            SELECT m.id, g.name FROM manual_bank_entries m
+            LEFT JOIN gl_accounts g ON g.id = m.gl_account_id
+            WHERE UPPER(COALESCE(m.payee,'') || ' ' || COALESCE(m.memo,'')) LIKE '%KICKFIN%'
+              AND (m.gl_account_id IS NULL OR g.name <> 'Tip Bank')""").fetchall()
+        assert not bad, [tuple(b) for b in bad[:5]]
 
 class TestJuneSwitchAcceptance:
     """The concrete acceptance check for the May/June statements.
