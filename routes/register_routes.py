@@ -2052,11 +2052,19 @@ def set_row_gl_account():
         if source == "manual" and _RE_CHECK_NO.match(desc.strip()):
             hit = _RE_OCR_PAYEE.search(desc)
             name = hit.group(1).strip() if hit else ""
-            if len(re.findall(r"\b[A-Z][a-z]{2,}\b", name)) >= 2:
+            if _readable_check_payee(name):
                 desc = name
             else:
                 logger.info("Not learning a rule from check %s: payee unread", desc.strip()[:30])
                 desc = ""
+        # A card purchase's description is "POS DEB 1221 05/05/26 973969" —
+        # card, date and authorisation code, unique per swipe. The merchant
+        # is the first memo segment; that is the only thing worth learning.
+        elif source == "manual" and _RE_CARD_DATE.match(desc.strip()):
+            seg = [x.strip() for x in (row2["memo"] or "").split("|") if x.strip()]
+            merchant = re.sub(r"\[\s*stmt[^\]]*\]", " ", seg[0] if seg else "")
+            merchant = re.sub(r"[#*]?\d{4,}", " ", merchant).strip()
+            desc = merchant
         rule_pattern = _extract_rule_pattern(desc) if desc else None
         if rule_pattern and re.fullmatch(r"(CHECK|CHK)\s*\d+", rule_pattern):
             rule_pattern = None
@@ -3834,6 +3842,31 @@ _RE_STMT_TAG = re.compile(r"\[\s*stmt\s*#?\s*\d+\s*\]", re.I)
 _RE_CARD_DATE = re.compile(r"(DBT\s+CRD|POS\s+DEB)\s+\d+\s+\d\d/\d\d/\d\d\s*\d*", re.I)
 _RE_CHECK_NO = re.compile(r"^\s*Check\s*#?\s*0*(\d+)", re.I)
 _RE_OCR_PAYEE = re.compile(r"CHK:\s*([^|\[]+)")
+# Words tesseract lifts off a check's amount line ("One Hundred Ninety and
+# 00/100") or its printed boilerplate. A payee containing one is not a payee.
+_CHECK_NOISE_WORDS = {
+    "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN",
+    "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN",
+    "EIGHTEEN", "NINETEEN", "TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY",
+    "EIGHTY", "NINETY", "TEEN", "HUNDRED", "THOUSAND", "DOLLARS", "CENTS", "AND",
+    "ONLY", "PAY", "ORDER", "THE", "MEMO", "DATE", "VOID", "CHECK",
+}
+
+
+def _readable_check_payee(name: str) -> bool:
+    """True when an OCR'd check payee looks like a name a rule could key on:
+    two or more capitalised words, none of them amount-line vocabulary, each
+    with a vowel and more than one distinct letter. "Leticia Nascimento De
+    Paula" passes; "teen and .. 6 6 686", "OPE SR OE WOW", "Anos Seventy" and
+    "EEE EEE" do not."""
+    words = re.findall(r"\b[A-Z][a-z]{2,}\b", name or "")
+    if len(words) < 2:
+        return False
+    for w in words:
+        u = w.upper()
+        if u in _CHECK_NOISE_WORDS or not re.search(r"[AEIOUY]", u) or len(set(u)) < 3:
+            return False
+    return True
 
 
 def _payee_group_key(payee: str, memo: str) -> tuple[str, str]:
