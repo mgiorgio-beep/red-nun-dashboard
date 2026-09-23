@@ -331,9 +331,9 @@ async function postRows(ids, btn) {
   if (backfilled) msg += ` ${backfilled} more line${backfilled === 1 ? '' : 's'} now carry that account as suggested.`;
   toast(msg);
   if (errs.length) toast(errs.slice(0, 3).join(' | '), true);
-  const done = new Set(posted);
-  S.rows = S.rows.filter(r => !done.has(r.id));
-  for (const id of done) { delete S.chosen[id]; delete S.picked[id]; }
+  const gone = new Set(posted);
+  S.rows = S.rows.filter(r => !gone.has(r.id));
+  for (const id of gone) { delete S.chosen[id]; delete S.picked[id]; }
   const y = window.scrollY; render(); window.scrollTo(0, y);
   $('foot').textContent = `${S.rows.length} row${S.rows.length === 1 ? '' : 's'} left.`;
   loadTiles().catch(() => {});
