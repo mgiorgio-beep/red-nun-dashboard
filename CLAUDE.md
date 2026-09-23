@@ -246,6 +246,8 @@ QBO deliverable and the bank-reconciliation path. Update that file rather than w
 a new brief.
 
 ### Bank close (as of 2026-09-23)
+
+- Learner guard: a check row teaches a rule only from a readable OCR'd payee, a card row only from the merchant, and `CHECK nnnn` / OCR garbage never become rules (`_readable_check_payee`, `set_row_gl_account`). 74 such rules were deleted on 2026-09-23 (`gl_repair_log` kind `rule_delete`). If per-transaction rules reappear, the guard regressed.
 - **Tie-out is by cleared date.** A register row counts on the day the bank cleared it
   (`cleared_date` = statement line date), whatever the book date. `register_flow()` in
   `routes/register_routes.py` is the one sum over the four sources; the register's
