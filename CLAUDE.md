@@ -245,6 +245,36 @@ Pattern:
 QBO deliverable and the bank-reconciliation path. Update that file rather than writing
 a new brief.
 
+### Bank close (as of 2026-09-23)
+- **Tie-out is by cleared date.** A register row counts on the day the bank cleared it
+  (`cleared_date` = statement line date), whatever the book date. `register_flow()` in
+  `routes/register_routes.py` is the one sum over the four sources; the register's
+  opening/bank balance, `_reconciliation_state()` (preview + close) and the `R` stamp on
+  sign-off all use it. Outstanding at period end is cumulative (rows dated on or before
+  period end not cleared by then); book = bank + outstanding. All 16 periods Jan–Aug 2026
+  tie; the register opening equals the statement beginning on every one.
+- `POST /api/bank-reconcile/import-all {account_id}` imports every unimported statement in
+  order with the continuity check (balance to the cent, contiguous dates; a break stops the
+  run), one transaction per period, then check OCR, invariant audit and tie-out. The
+  "Import all pending" button on Import Statement calls it. `/import` shares the same loop
+  (`_import_upload_rows`). Never re-import a period that has rows.
+- Dedupe (`/api/bank-reconcile/dedupe`, `all_periods: true`): a statement outflow merges
+  into an **uncleared** Bill Pay row or manual payroll check of the same amount within the
+  tolerance; the book row takes the **statement** date; the deleted row is saved in
+  `register_merge_audit` with `match_rule`. Signed-off periods are skipped unless asked.
+- The matcher never pairs a book row the bank already cleared in another period
+  (`cleared_elsewhere`); `_mark_cleared` keeps the first date unless `force=True`.
+- Zero-net payroll checks are not register rows. Direct Deposit rows never are.
+- GL: machine codings are `gl_status='suggested'`; a rule exists only when Mike confirmed
+  the coding; `needs_review` marks rows the classifier refused (Kickfin float candidates).
+  Venmo is never tips (Bands; $350 = Trivia). PayPal is never ruled — the learner refuses.
+- Job reports (`JOB0NN_*.md`), Mike's coding list, session summaries and the bank-close
+  skill (`skills/rednun-bank-close/SKILL.md`) live in the Drive folder
+  `/home/rednun/cowork/red-nun-dashboard/`. Job scripts queue in its `deploy/queue/`.
+- Tests: `tests/test_bank_close_cleared_date.py` (synthetic fixture, always runnable) and
+  `tests/test_bank_register.py` (live DB; four sales-tax / check-number tests are known
+  data-state failures as of 2026-09-23 — see `SESSION_2026-09-23_SUMMARY.md`).
+
 ### AI Inventory
 - `ai_inventory_sessions` — draft/review/confirmed
 - `ai_inventory_items` — dual-stream confidence data
@@ -361,9 +391,9 @@ Python venv: `/opt/red-nun-dashboard/venv/bin/python3`
 ## Backup Policy
 Every time you back up the DB to `/opt/backups/`, **delete all previous `.db` backups** after confirming the new one exists and is reasonable size. Disk hit 93.5% full when old backups accumulated.
 
-Order:
-1. `cp /var/lib/rednun/toast_data.db /opt/backups/toast_data_$(date +%Y%m%d_%H%M).db`
-2. Verify: `ls -lh /opt/backups/toast_data_*.db`
+Order (use the SQLite backup API — a plain `cp` of the live WAL database gives a torn snapshot):
+1. `sqlite3 /var/lib/rednun/toast_data.db ".backup /opt/backups/toast_data_$(date +%Y%m%d_%H%M).db"`
+2. Verify: `ls -lh /opt/backups/toast_data_*.db` and `sqlite3 <new> "pragma integrity_check"`
 3. Delete older: `find /opt/backups/ -name "*.db" ! -name "toast_data_YYYYMMDD_HHMM.db" -delete`
 4. Confirm: `ls -lh /opt/backups/`
 

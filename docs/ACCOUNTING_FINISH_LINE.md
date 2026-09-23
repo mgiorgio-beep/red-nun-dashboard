@@ -226,6 +226,22 @@ June and July are likely overdrawn months (Dennis ended May at $3,194.35), so
 they exercise the overdraft parser fix on first upload. Check the "line count
 mismatch" warning on every upload.
 
+**Addendum 2026-09-23 — Gate 4 is ~90% and the machinery changed.** All 16
+statements Jan–Aug (both accounts) are imported and tie to the penny; 4 are
+signed off (Chatham Jan, Dennis Jan–Mar), 12 wait on Mike's word. The tie-out is
+now **by cleared date** — a row counts on the day the bank cleared it — and
+outstanding is cumulative (book = bank + outstanding). `register_flow()` is the
+one sum; the register opening equals the statement beginning on every period
+(it drifted from June on before). `POST /api/bank-reconcile/import-all` does the
+import chain with the continuity check; dedupe has `all_periods`. 330 imported
+rows still need a GL account: `GL_CODING_QUESTIONS_2026-09-23.md` in the Drive
+folder is Mike's list. Snapshots of the 4 signed-off periods predate the new
+logic and should be re-closed (Dennis March stored -57.46; the books say
+-23,963.55). Details: `SESSION_2026-09-23_SUMMARY.md`; next steps:
+`BANK_CLOSE_IMPROVEMENTS_2026-09-23.md`. Item 9 of Block C below (import, then
+dedupe) is DONE 09-22/23; item 11 of Block E (upload the missing statements,
+reconcile every month) is done through August pending sign-off.
+
 ### Gate 5 — Business targets
 
 Better than documented. CLAUDE.md is wrong here.
