@@ -7,6 +7,9 @@
 <link rel="stylesheet" href="/static/sidebar.css">
 <style>
 select.gl.chosen { border-color: var(--accent, #2563eb); }
+.btn.busy, button.busy { position: relative; padding-left: 26px !important; opacity: .85; cursor: progress; }
+.btn.busy::before, button.busy::before { content: ""; position: absolute; left: 8px; top: 50%; width: 12px; height: 12px; margin-top: -7px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .col-chk input { width: 16px; height: 16px; cursor: pointer; }
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 :root {
@@ -282,7 +285,7 @@ function render() {
     }
     updateSel();
   }));
-  document.querySelectorAll('button.post').forEach(b => b.addEventListener('click', () => postRows([parseInt(b.dataset.id, 10)])));
+  document.querySelectorAll('button.post').forEach(b => b.addEventListener('click', () => postRows([parseInt(b.dataset.id, 10)], b)));
   document.querySelectorAll('button[data-apply]').forEach(b => b.addEventListener('click', () => {
     const key = b.dataset.apply; const sel = document.querySelector(`select.group-gl[data-key="${CSS.escape(key)}"]`);
     const v = sel && sel.value ? parseInt(sel.value, 10) : null; if (!v) return;
@@ -293,7 +296,7 @@ function render() {
   document.querySelectorAll('button[data-post-group]').forEach(b => b.addEventListener('click', () => {
     const key = b.dataset.postGroup;
     const ids = S.rows.filter(r => r.group_key === key && S.chosen[r.id] && !r.locked).map(r => r.id);
-    if (ids.length) postRows(ids);
+    if (ids.length) postRows(ids, b);
   }));
   updateSel();
 }
@@ -306,9 +309,13 @@ function updateSel() {
   $('post-selected').disabled = !ids.length;
 }
 
-async function postRows(ids) {
+async function postRows(ids, btn) {
   let ok = 0, learned = new Set(), backfilled = 0, errs = [], posted = [];
-  const btns = [...document.querySelectorAll('button.post'), $('post-selected')]; btns.forEach(b => b.disabled = true);
+  const btns = [...document.querySelectorAll('button.post, button.group-post'), $('post-selected')]; btns.forEach(b => b.disabled = true);
+  const total = ids.filter(id => S.chosen[id]).length; let done = 0;
+  const label = btn ? btn.textContent : '';
+  const tick = () => { if (btn) { btn.classList.add('busy'); btn.textContent = total > 1 ? `Posting ${done}/${total}` : 'Posting…'; } };
+  tick();
   for (const id of ids) {
     const gl = S.chosen[id]; if (!gl) continue;
     try {
@@ -316,7 +323,9 @@ async function postRows(ids) {
         body: JSON.stringify({source: 'manual', id, gl_account_id: gl, create_rule: true})});
       ok++; posted.push(id); if (d.rule_pattern) learned.add(d.rule_pattern); backfilled += d.backfilled || 0;
     } catch (e) { errs.push(`#${id}: ${e.message}`); }
+    done++; tick();
   }
+  if (btn) { btn.classList.remove('busy'); btn.textContent = label; }
   let msg = `Posted ${ok} line${ok === 1 ? '' : 's'}.`;
   if (learned.size) msg += ` Learned rule${learned.size === 1 ? '' : 's'}: ${[...learned].join(', ')}.`;
   if (backfilled) msg += ` ${backfilled} more line${backfilled === 1 ? '' : 's'} now carry that account as suggested.`;
@@ -343,7 +352,7 @@ $('post-selected').addEventListener('click', () => {
   const ids = [...document.querySelectorAll('.rowchk:checked')].map(c => parseInt(c.dataset.id, 10)).filter(id => S.chosen[id]);
   if (!ids.length) return;
   if (!confirm(`Post ${ids.length} line${ids.length === 1 ? '' : 's'} to the chosen accounts? Each one becomes a confirmed coding and teaches a rule for its payee.`)) return;
-  postRows(ids);
+  postRows(ids, $('post-selected'));
 });
 
 loadTiles().catch(e => { $('tiles').innerHTML = '<div class="hint">Could not load accounts: ' + esc(e.message) + '</div>'; });
