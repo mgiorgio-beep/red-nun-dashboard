@@ -6,10 +6,17 @@ That is deliberate: the whole point is to replay the real statements Cape Cod
 Five actually issued and assert the tie-outs to the penny. A synthetic fixture
 would only prove the arithmetic, not that *these books* still balance.
 
-THE PASS CONDITION IS CLEARED-ONLY: a statement reflects only what the bank has
-processed, so the tie-out is
+THE PASS CONDITION IS CLEARED-ONLY, BY CLEARED DATE: a statement reflects only
+what the bank has processed, on the day it processed it, so the tie-out is
 
-    statement.beginning + cleared inflows - cleared outflows == statement.ending
+    statement.beginning + inflows cleared in period - outflows cleared in period
+        == statement.ending
+
+where "in period" means cleared_date, not the date on the check. A check cut
+7/28 that clears 8/03 is July's outstanding item and August's bank movement.
+Summing cleared rows by book date (this file's tie_out until 2026-09-23)
+produced the alternating +/- deltas of 2026-09-22 once Bill Pay and payroll
+rows started straddling statement boundaries.
 
 All four covered statements satisfy this exactly. Uncleared rows are outstanding
 items — checks written but not yet cashed — and are asserted separately, at
@@ -81,28 +88,42 @@ def register(client, upload):
     return r.get_json()
 
 
+def preview(client, upload):
+    r = client.get(f"/api/bank-reconcile/reconciliation/preview?upload_id={upload['id']}")
+    assert r.status_code == 200, f"preview failed: {r.status_code}"
+    return r.get_json()
+
+
 def tie_out(client, upload):
-    """(computed, stated, delta) in integer cents for one statement period.
+    """(computed, stated, delta) in integer cents for one statement period,
+    from the SAME code path the sign-off uses (_reconciliation_state via the
+    preview endpoint), so this test can never pass on arithmetic the close
+    would refuse.
 
-    THE PASS CONDITION IS CLEARED-ONLY:
+    THE PASS CONDITION IS CLEARED-ONLY, BY CLEARED DATE:
 
-        statement.beginning_balance + cleared inflows - cleared outflows
+        statement.beginning_balance
+            + inflows the bank cleared inside the period
+            - outflows the bank cleared inside the period
             == statement.ending_balance
 
     A bank statement only ever reflects transactions the bank has processed.
     Summing ALL register rows counts checks that were written but had not
     cleared by the period end, and reports a break that is really just timing.
+    Summing CLEARED rows by their book date (this helper until 2026-09-23)
+    is the subtler version of the same mistake: it moves a check cleared
+    8/03 into July because it was cut 7/28.
 
-    The handover brief's §10 health-check snippet makes exactly that mistake —
+    The handover brief's §10 health-check snippet makes the first mistake —
     it uses summary.total_inflow/total_outflow over every row — which is why
     Chatham January looked like an unexplained -5,151.48 shortfall. It is 9
     outstanding items, and the account ties to the penny.
     """
-    j = register(client, upload)
-    clr_in = sum(r["inflow"] for r in j["rows"] if r["cleared"])
-    clr_out = sum(r["outflow"] for r in j["rows"] if r["cleared"])
-    computed = cents(upload["beginning_balance"]) + cents(clr_in) - cents(clr_out)
-    stated = cents(upload["ending_balance"])
+    j = preview(client, upload)
+    computed = cents(j["bank_balance"])
+    stated = cents(j["ending_balance"])
+    assert cents(upload["beginning_balance"]) == cents(j["beginning_balance"])
+    assert stated == cents(upload["ending_balance"])
     return computed, stated, computed - stated
 
 
@@ -251,13 +272,24 @@ class TestOutstandingItems:
                 base = trio
             assert trio == base, f"cleared={f} moved the reconciliation figures"
 
-    def test_dennis_march_has_one_outstanding_check(self, client, uploads):
-        """-57.46 is Maya Jones, written in March, uncleared at 03/31. This is
-        THE worked example for why `delta == 0` is the wrong pass condition."""
+    def test_dennis_march_outstanding_by_cleared_date(self, client, uploads):
+        """At 03/31 Dennis had 18 open items netting -23,963.55: 8 carried in
+        from February and 10 of March's own, mostly Bill Pay rows the bank
+        drafted in early April. The signed-off snapshot (rec 4, closed
+        2026-08-23 under book-date logic) recorded only Maya Jones -57.46 —
+        see test_march_outstanding_is_maya_jones, which asserts the snapshot,
+        not the books. This is THE worked example for why `delta == 0` is
+        the wrong pass condition: the statement ties exactly AND there is
+        -23,963.55 outstanding."""
         u = _upload(uploads, DENNIS, "2026-03-02")
         s = register(client, u)["summary"]
-        assert cents(s["outstanding_net"]) == -5746
-        assert s["outstanding_count"] == 3
+        assert cents(s["outstanding_net"]) == -2396355
+        assert s["outstanding_count"] == 10          # March's own rows still open at 3/31
+        p = preview(client, u)
+        assert len(p["outstanding_items"]) == 18
+        assert p["outstanding_prior_count"] == 8
+        assert cents(sum(i["amount"] for i in p["outstanding_items"])) == -2396355
+        assert p["ties"]
 
     def test_chatham_january_outstanding(self, client, uploads):
         """Previously mis-reported as an unexplained -5,151.48 break. It is 9
@@ -268,6 +300,66 @@ class TestOutstandingItems:
         assert s["outstanding_count"] == 9
         _, _, delta = tie_out(client, u)
         assert delta == 0, "Chatham January must tie on cleared rows"
+
+
+class TestClearedDateSemantics:
+    """The four sums that make up a reconciliation — register opening, bank
+    balance, outstanding, locked rows — are all by cleared_date now, and they
+    are all computed by register_flow(). These assert that on every
+    statement held."""
+
+    def test_register_opening_equals_statement_beginning(self, client, uploads):
+        """The register's roll-forward opening for a period must be the
+        statement's beginning balance. Until 2026-09-23 it drifted from June
+        on (-8,808.60 Chatham June, -5,558.27 Dennis June): the roll-forward
+        counted a July-dated check as July's money although the bank paid
+        it in August."""
+        drift = [(u["bank_account_id"], u["period_start"], preview(client, u)["opening_drift"])
+                 for u in uploads]
+        assert all(d == 0 for _, _, d in drift), f"register opening drifts: {drift}"
+
+    def test_register_bank_balance_equals_statement_ending(self, client, uploads):
+        for u in uploads:
+            s = register(client, u)["summary"]
+            assert cents(s["bank_balance"]) == cents(u["ending_balance"]), (
+                f"account {u['bank_account_id']} {u['period_start']}: register bank "
+                f"{s['bank_balance']} vs statement {u['ending_balance']}")
+
+    def test_outstanding_is_itemized_and_the_identity_holds(self, client, uploads):
+        for u in uploads:
+            p = preview(client, u)
+            items = cents(sum(i["amount"] for i in p["outstanding_items"]))
+            assert items == cents(p["outstanding_net"]), (
+                f"{u['period_start']}: items {items} vs outstanding {p['outstanding_net']}")
+            assert cents(p["book_balance"]) - cents(p["bank_balance"]) == items
+            assert p["identity_holds"], (
+                f"{u['period_start']}: book-by-date {p['book_balance_by_date']} does not "
+                f"explain bank {p['bank_balance']} + outstanding {p['outstanding_net']} "
+                f"+ off-period {p['off_period_cleared']['net']}")
+
+    def test_no_zero_net_payroll_row_is_in_the_register(self, client, uploads):
+        for u in uploads:
+            zero = [r for r in register(client, u)["rows"]
+                    if r["source"] == "payroll" and cents(r["outflow"]) == 0]
+            assert not zero, f"{u['period_start']}: zero-net payroll rows in register: {zero[:3]}"
+
+    def test_no_cleared_row_lacks_a_cleared_date(self, conn):
+        for table in ("manual_bank_entries", "vendor_payments", "payroll_checks", "bank_deposits"):
+            n = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE cleared = 1 AND cleared_date IS NULL").fetchone()[0]
+            assert n == 0, f"{n} cleared rows in {table} have no cleared_date"
+
+    def test_locked_rows_were_cleared_inside_their_period(self, conn):
+        """A row stamped with a reconciliation_id must have been cleared
+        inside that reconciliation's period — the lock follows the tie-out."""
+        for table, dcol in (("vendor_payments", "payment_date"),
+                            ("payroll_checks", "pay_period_end"),
+                            ("manual_bank_entries", "entry_date"),
+                            ("bank_deposits", "deposit_date")):
+            bad = conn.execute(
+                f"SELECT t.id FROM {table} t JOIN bank_reconciliations r ON r.id = t.reconciliation_id "
+                f"WHERE COALESCE(t.cleared_date, t.{dcol}) < r.period_start "
+                f"OR COALESCE(t.cleared_date, t.{dcol}) > r.period_end").fetchall()
+            assert not bad, f"{table}: locked outside their period: {[b[0] for b in bad][:10]}"
 
 
 class TestMarchMerges:
@@ -462,18 +554,27 @@ class TestProvenanceInvariant:
             assert n == 0, f"{t}: {n} coded rows carry no provenance"
 
     def test_no_provenance_without_a_coding(self, conn):
+        """The one exception is needs_review: a row the classifier refused to
+        code and flagged for a human (the Kickfin float candidates). It is
+        provenance for the ABSENCE of a coding, so it must sit on an uncoded
+        row — and nowhere else."""
         for t in self.TABLES:
             n = conn.execute(
                 f"SELECT COUNT(*) FROM {t} WHERE gl_status IS NOT NULL "
-                f"AND gl_account_id IS NULL"
+                f"AND gl_status <> 'needs_review' AND gl_account_id IS NULL"
             ).fetchone()[0]
             assert n == 0, f"{t}: {n} rows carry provenance but no GL account"
+            m = conn.execute(
+                f"SELECT COUNT(*) FROM {t} WHERE gl_status = 'needs_review' "
+                f"AND gl_account_id IS NOT NULL"
+            ).fetchone()[0]
+            assert m == 0, f"{t}: {m} rows are coded yet flagged needs_review"
 
     def test_gl_status_values_are_known(self, conn):
         for t in self.TABLES:
             bad = conn.execute(
                 f"SELECT DISTINCT gl_status FROM {t} WHERE gl_status IS NOT NULL "
-                f"AND gl_status NOT IN ('confirmed','suggested')"
+                f"AND gl_status NOT IN ('confirmed','suggested','needs_review')"
             ).fetchall()
             assert not bad, f"{t}: unexpected gl_status values {[b[0] for b in bad]}"
 

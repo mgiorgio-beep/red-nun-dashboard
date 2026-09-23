@@ -17,6 +17,29 @@ Endpoints:
         also_clear_matches=true, marks the matched register rows as cleared.
         Returns: { inserted: N, cleared: M }
 
+    POST /api/bank-reconcile/import-all
+        json: { account_id, dry_run: bool }
+        Imports every parsed-but-unimported statement for the account in
+        period order: continuity check against the previous statement
+        (beginning == previous ending to the cent, dates contiguous), then
+        match + auto-clear, import the unmatched lines, check OCR, invariant
+        audit, tie-out. One transaction per period; stops at the first period
+        that breaks continuity or fails. This is what job 062 (2026-09-22)
+        did by hand outside Flask; it belongs here.
+
+    POST /api/bank-reconcile/dedupe
+        json: { account_id, start_date, end_date | all_periods: true, … }
+        Merges statement-imported manual rows into the uncleared book row
+        (vendor payment / manual payroll check) they duplicate; the book row
+        takes the STATEMENT date as its cleared_date. all_periods runs every
+        open statement period for the account, one transaction each.
+
+    TIE-OUT IS BY CLEARED DATE. A period's bank side is the statement's
+    beginning balance plus every register row the bank cleared inside the
+    period (cleared_date), whatever the book date. Outstanding at period end
+    is every row dated on or before period end that the bank had not cleared
+    by then. See _reconciliation_state.
+
     GET  /api/bank-reconcile/uploads?account_id=<int>
         Lists past uploads for an account.
 
@@ -301,58 +324,13 @@ def init_bank_reconcile_tables():
 
 
 def _backfill_reconciled_stamps(conn, account_id, period_start, period_end, rec_id):
-    """One-time stamp of reconciliation_id on cleared rows in a pre-existing
-    reconciliation. Same filter shape as _stamp_reconciled_rows, plus an
-    `AND reconciliation_id IS NULL` guard so it is safe to re-run on init.
+    """One-time stamp of reconciliation_id on rows cleared inside a
+    pre-existing reconciliation. Same filter shape as _stamp_reconciled_rows,
+    plus an `AND reconciliation_id IS NULL` guard so it is safe to re-run on
+    init.
     """
-    acct = conn.execute(
-        "SELECT account_last4 FROM bank_accounts WHERE id = ?", (account_id,)
-    ).fetchone()
-    is_default_account = acct and acct["account_last4"] == "5975"
-
-    bp_where = (
-        "reconciliation_id IS NULL AND cleared = 1 "
-        "AND payment_date >= ? AND payment_date <= ? "
-        "AND (status IS NULL OR status NOT IN ('void', 'failed')) AND ("
-        "bank_account_id = ?"
-        + (" OR bank_account_id IS NULL" if is_default_account else "")
-        + ")"
-    )
-    conn.execute(
-        f"UPDATE vendor_payments SET reconciliation_id = ? WHERE {bp_where}",
-        (rec_id, period_start, period_end, account_id),
-    )
-
-    try:
-        conn.execute(
-            "UPDATE payroll_checks SET reconciliation_id = ? WHERE id IN ("
-            "  SELECT pc.id FROM payroll_checks pc "
-            "  LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
-            "  WHERE pc.reconciliation_id IS NULL AND pc.cleared = 1 "
-            "  AND COALESCE(pr.pay_date, pc.pay_period_end) >= ? "
-            "  AND COALESCE(pr.pay_date, pc.pay_period_end) <= ? "
-            "  AND (pc.voided IS NULL OR pc.voided = 0) "
-            "  AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit') "
-            "  AND pc.bank_account_id = ?"
-            ")",
-            (rec_id, period_start, period_end, account_id),
-        )
-    except Exception as e:
-        logger.warning(f"backfill payroll R stamps failed for rec {rec_id}: {e}")
-
-    conn.execute(
-        "UPDATE bank_deposits SET reconciliation_id = ? "
-        "WHERE reconciliation_id IS NULL AND cleared = 1 AND bank_account_id = ? "
-        "AND deposit_date >= ? AND deposit_date <= ?",
-        (rec_id, account_id, period_start, period_end),
-    )
-
-    conn.execute(
-        "UPDATE manual_bank_entries SET reconciliation_id = ? "
-        "WHERE reconciliation_id IS NULL AND cleared = 1 AND bank_account_id = ? "
-        "AND entry_date >= ? AND entry_date <= ?",
-        (rec_id, account_id, period_start, period_end),
-    )
+    _stamp_reconciled_rows(conn, account_id, period_start, period_end, rec_id,
+                           only_unstamped=True)
 
 
 # ─── UPLOAD + PARSE ──────────────────────────────────────────────────────────
@@ -543,6 +521,175 @@ def upload_statement():
 
 # ─── IMPORT SELECTED ROWS ────────────────────────────────────────────────────
 
+def _import_upload_rows(conn, upload, indexes=None, also_clear=False,
+                        created_by="statement-import"):
+    """Import parsed statement lines from one upload into manual_bank_entries.
+
+    THE ONE IMPORT LOOP. /import (the review screen) and /import-all both
+    run this; job 062 re-implemented it in a shell script because the
+    endpoint needed a login session, and that copy is what stamped ~410
+    cleared_dates with the book date instead of the statement date (job 064
+    repaired them). Nothing writes statement rows except this function.
+
+    indexes     0-based positions into parsed.transactions to insert. None
+                means "every line the matcher did not pair with an existing
+                register row" — the import-all rule.
+    also_clear  stamp the register rows the matcher paired as cleared, on the
+                STATEMENT line's date (the day the bank cleared them).
+
+    Does not commit. Returns counts; the caller owns the transaction.
+    """
+    upload_id = upload["id"]
+    parsed = json.loads(upload["parsed_json"]) if upload["parsed_json"] else {}
+    transactions = parsed.get("transactions", [])
+    account_id = upload["bank_account_id"]
+
+    # Re-run match so we know which rows are dupes (in case register changed
+    # between upload and import).
+    register_rows = _load_register_rows_for_period(conn, account_id, parsed)
+    matches = _match_transactions(transactions, register_rows)
+    matched = {m["parsed_index"]: m for m in matches
+               if m.get("register_match") and m.get("match_kind") != "none"}
+    kinds = {"exact": 0, "likely": 0, "none": 0}
+    for m in matches:
+        kinds[m.get("match_kind") or "none"] = kinds.get(m.get("match_kind") or "none", 0) + 1
+
+    if indexes is None:
+        indexes = [i for i in range(len(transactions)) if i not in matched]
+
+    # Needed by the transfer classifier: which account is "this" one, and which
+    # entity's chart of accounts to resolve names against.
+    _acct = conn.execute(
+        "SELECT account_last4, location FROM bank_accounts WHERE id = ?", (account_id,)
+    ).fetchone()
+    acct_last4 = (_acct["account_last4"] if _acct else "") or ""
+    acct_location = _acct["location"] if _acct else None
+
+    inserted = uncoded = skipped_zero = 0
+    for idx in indexes:
+        if not isinstance(idx, int) or idx < 0 or idx >= len(transactions):
+            continue
+        tx = transactions[idx]
+
+        # Signed amount: positive = inflow, negative = outflow
+        debit = float(tx.get("debit") or 0)
+        credit = float(tx.get("credit") or 0)
+        signed = credit - debit
+        if signed == 0:
+            skipped_zero += 1
+            continue
+
+        entry_type = _entry_type_from_tx(tx)
+        memo_parts = []
+        if tx.get("memo"):
+            memo_parts.append(tx["memo"])
+        memo_parts.append(f"[stmt #{upload_id}]")
+        memo = " ".join(memo_parts).strip()
+
+        # Pre-fill the GL account so freshly imported rows aren't all blank.
+        gl_id = resolve_import_gl(conn, tx, signed, acct_location, acct_last4)
+        if not gl_id:
+            uncoded += 1
+
+        # Any coding applied here is machine-derived, so it is suggested, never
+        # confirmed — nothing may learn a rule from it (see GL_PROVENANCE).
+        # A statement row is cleared on its own date by definition.
+        cur = conn.execute(
+            """INSERT INTO manual_bank_entries
+               (bank_account_id, entry_date, entry_type, payee, memo,
+                ref_number, amount, cleared, cleared_date, created_by,
+                statement_upload_id, gl_account_id, gl_source, gl_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
+            (
+                account_id,
+                tx.get("date"),
+                entry_type,
+                tx.get("description") or "",
+                memo,
+                tx.get("ref") or None,
+                round(signed, 2),
+                tx.get("date"),
+                created_by,
+                upload_id,
+                gl_id,
+                ("rule" if gl_id else None),
+                ("suggested" if gl_id else None),
+            ),
+        )
+        if cur.rowcount:
+            inserted += 1
+
+    cleared_total = 0
+    if also_clear:
+        for i, m in matched.items():
+            reg = m["register_match"]
+            # Stamp the day the BANK cleared it (the statement line), not the
+            # day the check was cut — the tie-out counts by clearing date.
+            line = transactions[i] if 0 <= i < len(transactions) else {}
+            cleared_total += _mark_cleared(conn, reg["source"], reg["id"],
+                                           line.get("date") or reg.get("date"))
+
+    conn.execute(
+        "UPDATE bank_statement_uploads SET imported_count = imported_count + ? WHERE id = ?",
+        (inserted, upload_id),
+    )
+    return {
+        "upload_id": upload_id,
+        "lines": len(transactions),
+        "inserted": inserted,
+        "cleared": cleared_total,
+        "uncoded": uncoded,
+        "skipped_zero": skipped_zero,
+        "match_kinds": kinds,
+    }
+
+
+def _ocr_checks(conn, upload_id):
+    """Check images are ALWAYS extracted and OCR'd after an import.
+
+    Extraction used to be a separate job, so April imported 15 check rows
+    reading "Check 9698" with no payee and no image. OCR is local (tesseract),
+    so this is not metered API spend. It never blocks the import: the rows
+    are real transactions either way."""
+    try:
+        from integrations.bank_statements.check_ocr import enrich_upload
+        checks = enrich_upload(conn, upload_id)
+        logger.info("Check OCR for upload %s: %s", upload_id,
+                    checks.get("banner") or checks.get("error"))
+        return checks
+    except Exception as e:
+        logger.exception("Check extraction failed for upload %s", upload_id)
+        return {"ok": False, "error": str(e)}
+
+
+def _post_import_audit(conn, acct_location, upload_id):
+    """Import is the moment rows get coded automatically, so it is the moment
+    to check the codings. The guard that would have caught the 114
+    cross-entity codings already existed — as a pytest assertion nobody ran
+    between the April import and someone spotting the wrong accounts on
+    screen. It runs here now.
+
+    The audit NEVER blocks or rolls back the import: the rows are real bank
+    transactions and belong in the register either way. It reports."""
+    try:
+        from routes.register_routes import audit_register_invariants
+        audit = audit_register_invariants(conn, location=acct_location)
+        if not audit["ok"]:
+            logger.error(
+                "POST-IMPORT AUDIT FAILED after upload %s (%s): %s",
+                upload_id, acct_location,
+                "; ".join(f"{c['name']}={c['count']}"
+                          for c in audit["checks"] if not c["ok"]),
+            )
+        else:
+            logger.info("Post-import audit clean for upload %s (%s)",
+                        upload_id, acct_location)
+        return audit
+    except Exception as e:
+        logger.exception("Post-import audit could not run")
+        return {"ok": None, "error": str(e), "checks": []}
+
+
 @bank_reconcile_bp.route("/api/bank-reconcile/import", methods=["POST"])
 @login_required
 def import_selected():
@@ -569,149 +716,161 @@ def import_selected():
             "SELECT * FROM bank_statement_uploads WHERE id = ?", (upload_id,)
         ).fetchone()
         if not upload:
-            conn.close()
             return jsonify({"error": "Upload not found"}), 404
-
-        parsed = json.loads(upload["parsed_json"]) if upload["parsed_json"] else {}
-        transactions = parsed.get("transactions", [])
-        account_id = upload["bank_account_id"]
-
-        # Re-run match so we know which rows are dupes (in case register changed
-        # between upload and import).
-        register_rows = _load_register_rows_for_period(conn, account_id, parsed)
-        matches = _match_transactions(transactions, register_rows)
-        match_by_index = {m["parsed_index"]: m for m in matches}
-
-        created_by = session.get("username") or session.get("email") or "statement-import"
-
-        # Needed by the transfer classifier: which account is "this" one, and which
-        # entity's chart of accounts to resolve names against.
         _acct = conn.execute(
-            "SELECT account_last4, location FROM bank_accounts WHERE id = ?", (account_id,)
+            "SELECT location FROM bank_accounts WHERE id = ?", (upload["bank_account_id"],)
         ).fetchone()
-        acct_last4 = (_acct["account_last4"] if _acct else "") or ""
         acct_location = _acct["location"] if _acct else None
 
-        inserted = 0
-        cleared_total = 0
-        for idx in indexes:
-            if not isinstance(idx, int) or idx < 0 or idx >= len(transactions):
-                continue
-            tx = transactions[idx]
-
-            # Signed amount: positive = inflow, negative = outflow
-            debit = float(tx.get("debit") or 0)
-            credit = float(tx.get("credit") or 0)
-            signed = credit - debit
-            if signed == 0:
-                continue
-
-            entry_type = _entry_type_from_tx(tx)
-            memo_parts = []
-            if tx.get("memo"):
-                memo_parts.append(tx["memo"])
-            memo_parts.append(f"[stmt #{upload_id}]")
-            memo = " ".join(memo_parts).strip()
-
-            # Pre-fill the GL account so freshly imported rows aren't all blank.
-            gl_id = resolve_import_gl(conn, tx, signed, acct_location, acct_last4)
-
-            # Any coding applied here is machine-derived, so it is suggested, never
-            # confirmed — nothing may learn a rule from it (see GL_PROVENANCE).
-            cur = conn.execute(
-                """INSERT INTO manual_bank_entries
-                   (bank_account_id, entry_date, entry_type, payee, memo,
-                    ref_number, amount, cleared, cleared_date, created_by,
-                    statement_upload_id, gl_account_id, gl_source, gl_status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
-                (
-                    account_id,
-                    tx.get("date"),
-                    entry_type,
-                    tx.get("description") or "",
-                    memo,
-                    tx.get("ref") or None,
-                    round(signed, 2),
-                    tx.get("date"),
-                    created_by,
-                    upload_id,
-                    gl_id,
-                    ("rule" if gl_id else None),
-                    ("suggested" if gl_id else None),
-                ),
-            )
-            if cur.rowcount:
-                inserted += 1
-
-        # Optionally clear the register rows that matched parsed transactions.
-        if also_clear:
-            for m in matches:
-                reg = m.get("register_match")
-                if not reg:
-                    continue
-                if m.get("match_kind") == "none":
-                    continue
-                cleared_total += _mark_cleared(conn, reg["source"], reg["id"], reg.get("date"))
-
-        conn.execute(
-            "UPDATE bank_statement_uploads SET imported_count = imported_count + ? WHERE id = ?",
-            (inserted, upload_id),
-        )
-        conn.commit()
-
-        # ── CHECKS ARE ALWAYS OCR'D ──────────────────────────────────────────
-        # Extraction used to be a separate job, so April imported 15 check rows
-        # reading "Check 9698" with no payee and no image. It runs here now, on
-        # every import, and its coverage rides back in the response.
-        #
-        # OCR is local (tesseract), so this is not metered API spend. It never
-        # blocks the import: the rows are real transactions either way.
-        checks = None
+        created_by = session.get("username") or session.get("email") or "statement-import"
         try:
-            from integrations.bank_statements.check_ocr import enrich_upload
-            checks = enrich_upload(conn, upload_id)
-            logger.info("Check OCR for upload %s: %s", upload_id,
-                        checks.get("banner") or checks.get("error"))
-        except Exception as e:
-            logger.exception("Check extraction failed for upload %s", upload_id)
-            checks = {"ok": False, "error": str(e)}
+            res = _import_upload_rows(conn, upload, indexes, also_clear, created_by)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
-        # ── POST-IMPORT AUDIT ────────────────────────────────────────────────
-        # Import is the moment rows get coded automatically, so it is the moment
-        # to check the codings. The guard that would have caught the 114
-        # cross-entity codings already existed — as a pytest assertion nobody ran
-        # between the April import and someone spotting the wrong accounts on
-        # screen. It runs here now, and its result rides back in the same response
-        # as the import summary so a failure is impossible to miss.
-        #
-        # The audit NEVER blocks or rolls back the import: the rows are real bank
-        # transactions and belong in the register either way. It reports.
-        audit = None
-        try:
-            from routes.register_routes import audit_register_invariants
-            audit = audit_register_invariants(conn, location=acct_location)
-            if not audit["ok"]:
-                logger.error(
-                    "POST-IMPORT AUDIT FAILED after upload %s (%s): %s",
-                    upload_id, acct_location,
-                    "; ".join(f"{c['name']}={c['count']}"
-                              for c in audit["checks"] if not c["ok"]),
-                )
-            else:
-                logger.info("Post-import audit clean for upload %s (%s)",
-                            upload_id, acct_location)
-        except Exception as e:
-            logger.exception("Post-import audit could not run")
-            audit = {"ok": None, "error": str(e), "checks": []}
-
-        conn.close()
+        checks = _ocr_checks(conn, upload_id)
+        audit = _post_import_audit(conn, acct_location, upload_id)
 
         return jsonify({
             "status": "ok",
-            "inserted": inserted,
-            "cleared": cleared_total,
+            "inserted": res["inserted"],
+            "cleared": res["cleared"],
+            "uncoded": res["uncoded"],
             "audit": audit,
             "checks": checks,
+        })
+    finally:
+        conn.close()
+
+
+@bank_reconcile_bp.route("/api/bank-reconcile/import-all", methods=["POST"])
+@login_required
+def import_all_pending():
+    """Import every parsed-but-unimported statement for one account, in
+    period order, with the continuity check job 062 applied by hand.
+
+    Body: { "account_id": int, "dry_run": bool }
+
+    Per period, in order of period_start:
+      1. continuity — beginning_balance must equal the previous statement's
+         ending_balance to the cent and the periods must be contiguous
+         (previous end + 1 day == start). A break means a statement is
+         missing or mis-parsed; importing past it would stamp the wrong
+         period's rows, so the run STOPS there and says so.
+      2. already imported (imported_count > 0) — skipped, never re-imported.
+      3. match against the register, insert the unmatched lines, clear the
+         matched book rows on the statement line's date — one transaction,
+         rolled back whole on any error (which also stops the run).
+      4. check OCR, invariant audit, tie-out — reported per period.
+
+    Returns { status: ok|stopped, periods: [ {period, action, …} ] }.
+    """
+    data = request.get_json(silent=True) or {}
+    account_id = data.get("account_id")
+    dry_run = bool(data.get("dry_run"))
+    if not isinstance(account_id, int):
+        return jsonify({"error": "account_id (int) is required"}), 400
+
+    conn = get_connection()
+    try:
+        acct = conn.execute(
+            "SELECT * FROM bank_accounts WHERE id = ?", (account_id,)
+        ).fetchone()
+        if not acct:
+            return jsonify({"error": f"bank_account {account_id} not found"}), 404
+        created_by = session.get("username") or session.get("email") or "statement-import"
+
+        uploads = conn.execute(
+            "SELECT * FROM bank_statement_uploads WHERE bank_account_id = ? "
+            "AND period_start IS NOT NULL ORDER BY period_start", (account_id,)
+        ).fetchall()
+
+        results = []
+        stopped_at = None
+        prev = None
+        for up in uploads:
+            tag = f"{up['period_start']}..{up['period_end']}"
+            entry = {"upload_id": up["id"], "period": tag,
+                     "lines": up["transaction_count"]}
+
+            if prev is not None:
+                reasons = []
+                if _c(up["beginning_balance"]) != _c(prev["ending_balance"]):
+                    reasons.append(
+                        f"beginning {up['beginning_balance']} != previous ending "
+                        f"{prev['ending_balance']} ({prev['period_end']})")
+                try:
+                    if (date.fromisoformat(prev["period_end"]) + timedelta(days=1)
+                            != date.fromisoformat(up["period_start"])):
+                        reasons.append(
+                            f"gap or overlap between {prev['period_end']} and "
+                            f"{up['period_start']}")
+                except (TypeError, ValueError):
+                    reasons.append("unparseable period dates")
+                if reasons:
+                    entry.update({"action": "stopped",
+                                  "reason": "continuity: " + "; ".join(reasons)})
+                    results.append(entry)
+                    stopped_at = tag
+                    break
+            prev = up
+
+            if (up["imported_count"] or 0) > 0:
+                entry.update({"action": "already_imported",
+                              "imported_count": up["imported_count"]})
+                results.append(entry)
+                continue
+
+            if dry_run:
+                entry.update({"action": "would_import"})
+                results.append(entry)
+                continue
+
+            try:
+                res = _import_upload_rows(conn, up, None, True, created_by)
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                logger.exception("import-all failed on upload %s", up["id"])
+                entry.update({"action": "failed", "error": str(e)})
+                results.append(entry)
+                stopped_at = tag
+                break
+
+            checks = _ocr_checks(conn, up["id"])
+            audit = _post_import_audit(conn, acct["location"], up["id"])
+            try:
+                # Re-read: imported_count changed.
+                up2 = conn.execute("SELECT * FROM bank_statement_uploads WHERE id = ?",
+                                   (up["id"],)).fetchone()
+                state = _reconciliation_state(conn, up2)
+                tie = {"ties": state["ties"], "delta": state["delta"],
+                       "outstanding_count": len(state["outstanding_items"])}
+            except Exception as e:
+                tie = {"ties": None, "error": str(e)}
+            entry.update({
+                "action": "imported",
+                "inserted": res["inserted"],
+                "cleared": res["cleared"],
+                "uncoded": res["uncoded"],
+                "match_kinds": res["match_kinds"],
+                "checks": (checks or {}).get("banner") or (checks or {}).get("error"),
+                "audit_ok": (audit or {}).get("ok"),
+                "audit_failures": [c["name"] for c in (audit or {}).get("checks", [])
+                                   if not c.get("ok")],
+                **tie,
+            })
+            results.append(entry)
+
+        return jsonify({
+            "status": "stopped" if stopped_at else "ok",
+            "account_id": account_id,
+            "dry_run": dry_run,
+            "stopped_at": stopped_at,
+            "periods": results,
+            "imported_periods": sum(1 for r in results if r["action"] == "imported"),
         })
     finally:
         conn.close()
@@ -871,6 +1030,18 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
         start = (today - timedelta(days=120)).strftime("%Y-%m-%d")
     if not end:
         end = today.strftime("%Y-%m-%d")
+    period_start, period_end = start, end   # the statement's own window
+
+    def _cleared_elsewhere(cleared, cleared_date):
+        """A book row the bank ALREADY cleared on a date outside this
+        statement's period belongs to another statement. It must not be
+        paired with a line here — that is how a February PFG payment came to
+        carry an August cleared_date (job 063). Rows cleared inside this
+        period stay matchable so a re-preview of an imported period still
+        shows its lines as matched."""
+        if not cleared or not cleared_date:
+            return False
+        return not (period_start <= cleared_date <= period_end)
 
     # Widen window by 7 days on each side — checks often clear before/after
     # the statement boundary.
@@ -894,7 +1065,8 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
     bp_clause = "(bank_account_id = ?" + (" OR bank_account_id IS NULL" if is_default else "") + ")"
     for r in conn.execute(
         f"""SELECT id, vendor, payment_date AS date, payment_total AS amount,
-                  check_number, payment_method, payment_ref, memo, status
+                  check_number, payment_method, payment_ref, memo, status,
+                  cleared, cleared_date
             FROM vendor_payments
             WHERE payment_date >= ? AND payment_date <= ?
               AND (status IS NULL OR status NOT IN ('void', 'failed'))
@@ -909,6 +1081,9 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
             "direction": "out",
             "ref": str(r["check_number"]) if r["check_number"] else (r["payment_ref"] or ""),
             "label": f"{r['vendor']} ({r['payment_method'] or 'check'})",
+            "cleared": int(r["cleared"] or 0),
+            "cleared_date": r["cleared_date"],
+            "cleared_elsewhere": _cleared_elsewhere(r["cleared"], r["cleared_date"]),
         })
 
     # Payroll — pay_date is on payroll_runs (parent), joined via payroll_run_id.
@@ -920,13 +1095,14 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
         for r in conn.execute(
             """SELECT pc.id, pc.employee_name, pc.check_number,
                       COALESCE(pr.pay_date, pc.pay_period_end) AS date,
-                      pc.net_pay AS amount
+                      pc.net_pay AS amount, pc.cleared, pc.cleared_date
                FROM payroll_checks pc
                LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id
                WHERE COALESCE(pr.pay_date, pc.pay_period_end) >= ?
                  AND COALESCE(pr.pay_date, pc.pay_period_end) <= ?
                  AND (pc.voided IS NULL OR pc.voided = 0)
                  AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit')
+                 AND COALESCE(pc.net_pay, 0) <> 0
                  AND pc.bank_account_id = ?""",
             (start, end, account_id),
         ).fetchall():
@@ -938,13 +1114,16 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
                 "direction": "out",
                 "ref": str(r["check_number"]) if r["check_number"] else "",
                 "label": f"Payroll: {r['employee_name']}",
+                "cleared": int(r["cleared"] or 0),
+                "cleared_date": r["cleared_date"],
+                "cleared_elsewhere": _cleared_elsewhere(r["cleared"], r["cleared_date"]),
             })
     except Exception as e:
         logger.warning(f"payroll match query failed: {e}")
 
     # Deposits
     for r in conn.execute(
-        """SELECT id, deposit_date AS date, amount, description
+        """SELECT id, deposit_date AS date, amount, description, cleared, cleared_date
            FROM bank_deposits
            WHERE bank_account_id = ? AND deposit_date >= ? AND deposit_date <= ?""",
         (account_id, start, end),
@@ -957,6 +1136,9 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
             "direction": "in",
             "ref": "",
             "label": r["description"] or "Deposit",
+            "cleared": int(r["cleared"] or 0),
+            "cleared_date": r["cleared_date"],
+            "cleared_elsewhere": _cleared_elsewhere(r["cleared"], r["cleared_date"]),
         })
 
     # Manual entries (already in register)
@@ -1097,6 +1279,9 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
     contains it.
 
     Strategy (direction + amount to the penny are always required):
+      - a register row the bank already cleared OUTSIDE this statement's
+        period is never a candidate (cleared_elsewhere) — see
+        _load_register_rows_for_period
       - exact:  ref equality (check #) and date within 14 days
       - exact:  payee agreement and date within 7 days
       - likely: payee agreement and date within 14 days
@@ -1134,6 +1319,8 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
         for reg in register_rows:
             key = (reg["source"], reg["id"])
             if key in used_register_ids:
+                continue
+            if reg.get("cleared_elsewhere"):
                 continue
             if reg["direction"] != direction:
                 continue
@@ -1211,7 +1398,22 @@ def _entry_type_from_tx(tx: dict) -> str:
     return "other"
 
 
-def _mark_cleared(conn, source: str, row_id: int, when: str | None) -> int:
+def _mark_cleared(conn, source: str, row_id: int, when: str | None,
+                  force: bool = False) -> int:
+    """Stamp one register row cleared on `when` — the date the BANK cleared
+    it, i.e. the statement line's date. Callers must not pass the book date.
+
+    FIRST CLEARING WINS. A row that already carries a cleared_date keeps it
+    (COALESCE): that date came from the statement line that first cleared
+    the row, possibly in a period since signed off, and a later match must
+    not drag the row into another period. The matcher already refuses to
+    pair a row cleared outside the current period (cleared_elsewhere), so in
+    practice the only rows that reach here with a date are re-runs on the
+    same period, where the existing date is the right one.
+
+    `force=True` overwrites — for a deliberate repair (job 064's kind), never
+    for an import.
+    """
     table_by_source = {
         "bill_pay": "vendor_payments",
         "payroll": "payroll_checks",
@@ -1222,10 +1424,16 @@ def _mark_cleared(conn, source: str, row_id: int, when: str | None) -> int:
     if not table:
         return 0
     when = when or datetime.now().strftime("%Y-%m-%d")
-    cur = conn.execute(
-        f"UPDATE {table} SET cleared = 1, cleared_date = COALESCE(cleared_date, ?) WHERE id = ?",
-        (when, row_id),
-    )
+    if force:
+        cur = conn.execute(
+            f"UPDATE {table} SET cleared = 1, cleared_date = ? WHERE id = ?",
+            (when, row_id),
+        )
+    else:
+        cur = conn.execute(
+            f"UPDATE {table} SET cleared = 1, cleared_date = COALESCE(cleared_date, ?) WHERE id = ?",
+            (when, row_id),
+        )
     return cur.rowcount or 0
 
 
@@ -1245,334 +1453,346 @@ def _mark_cleared(conn, source: str, row_id: int, when: str | None) -> int:
 # dashboard side (bank_deposits) is populated from QBO sync — if we later
 # add deposit dedup the same pattern applies.
 
+DEDUPE_MATCH_RULE = ("exact_amount;date_within_tolerance;closest_date_wins;"
+                     "payroll_preferred_on_tie;ambiguous_skipped;"
+                     "book_row_uncleared_only;cleared_date=statement_date")
+
+
+def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who):
+    """The dedupe rule for one account and one date window. See
+    dedupe_register for the contract; this does the work and returns
+    {candidates, summary, merged_count, deleted_count}. Does not commit."""
+    account_id = bank["id"]
+    is_default = bank["account_last4"] == "5975"
+
+    # 1. Statement-imported outflows in range. Only statement rows are
+    #    candidates: a hand-entered manual row is not a duplicate of anything.
+    me_rows = conn.execute(
+        """SELECT id, entry_date, entry_type, payee, memo, amount, ref_number,
+                  cleared, statement_upload_id
+           FROM manual_bank_entries
+           WHERE bank_account_id = ?
+             AND entry_date >= ? AND entry_date <= ?
+             AND amount < 0
+             AND statement_upload_id IS NOT NULL
+           ORDER BY entry_date, amount""",
+        (account_id, start, end),
+    ).fetchall()
+
+    # 2. Book-side candidates in a wider window (range ± tolerance). Only rows
+    #    the bank has NOT cleared: a row already carrying a cleared_date was
+    #    matched to some other statement line, and merging a second line into
+    #    it would delete a real transaction.
+    from datetime import datetime as _dt, timedelta as _td
+
+    def _shift(iso, days):
+        return (_dt.strptime(iso, "%Y-%m-%d") + _td(days=days)).strftime("%Y-%m-%d")
+
+    wide_start, wide_end = _shift(start, -tol), _shift(end, tol)
+
+    bp_rows = []
+    if match_bp:
+        bp_clause = "(bank_account_id = ?" + (" OR bank_account_id IS NULL" if is_default else "") + ")"
+        bp_rows = conn.execute(
+            f"""SELECT id, payment_date, vendor, payment_total, payment_method,
+                       payment_ref, check_number, status, bank_account_id,
+                       cleared, ap_payment_id
+               FROM vendor_payments
+               WHERE payment_date >= ? AND payment_date <= ?
+                 AND (status IS NULL OR status NOT IN ('void', 'failed'))
+                 AND COALESCE(cleared, 0) = 0
+                 AND reconciliation_id IS NULL
+                 AND {bp_clause}""",
+            (wide_start, wide_end, account_id),
+        ).fetchall()
+
+    pr_rows = []
+    if match_pr:
+        pr_rows = conn.execute(
+            """SELECT pc.id, pc.employee_name, pc.check_number, pc.net_pay,
+                      pc.payment_method, pc.bank_account_id, pc.cleared,
+                      COALESCE(pr.pay_date, pc.pay_period_end) AS pay_date
+               FROM payroll_checks pc
+               LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id
+               WHERE COALESCE(pr.pay_date, pc.pay_period_end) >= ?
+                 AND COALESCE(pr.pay_date, pc.pay_period_end) <= ?
+                 AND (pc.voided IS NULL OR pc.voided = 0)
+                 AND pc.payment_method = 'Manual'
+                 AND COALESCE(pc.net_pay, 0) <> 0
+                 AND COALESCE(pc.cleared, 0) = 0
+                 AND pc.reconciliation_id IS NULL
+                 AND pc.bank_account_id = ?""",
+            (wide_start, wide_end, account_id),
+        ).fetchall()
+
+    from collections import defaultdict
+    bp_by_amount = defaultdict(list)
+    for r in bp_rows:
+        bp_by_amount[round(float(r["payment_total"] or 0), 2)].append(dict(r))
+    pr_by_amount = defaultdict(list)
+    for r in pr_rows:
+        pr_by_amount[round(float(r["net_pay"] or 0), 2)].append(dict(r))
+
+    used_bp_ids, used_pr_ids = set(), set()
+
+    def _date_diff(a_iso, b_iso):
+        return abs((_dt.strptime(a_iso, "%Y-%m-%d") - _dt.strptime(b_iso, "%Y-%m-%d")).days)
+
+    candidates = []
+    for me in me_rows:
+        me = dict(me)
+        target_amt = round(abs(float(me["amount"] or 0)), 2)
+        me_date = me["entry_date"]
+
+        cands = []
+        for cand in bp_by_amount.get(target_amt, []):
+            if cand["id"] in used_bp_ids:
+                continue
+            dd = _date_diff(me_date, cand["payment_date"])
+            if dd > tol:
+                continue
+            cands.append({
+                "source": "vendor_payment", "id": cand["id"],
+                "date": cand["payment_date"],
+                "amount": float(cand["payment_total"] or 0),
+                "label": cand["vendor"] or "(no vendor)",
+                "date_diff_days": dd,
+                "current_bank_account_id": cand["bank_account_id"],
+                "currently_cleared": bool(cand["cleared"]),
+            })
+        for cand in pr_by_amount.get(target_amt, []):
+            if cand["id"] in used_pr_ids:
+                continue
+            dd = _date_diff(me_date, cand["pay_date"])
+            if dd > tol:
+                continue
+            cands.append({
+                "source": "payroll_check", "id": cand["id"],
+                "date": cand["pay_date"],
+                "amount": float(cand["net_pay"] or 0),
+                "label": f"Payroll: {cand['employee_name']}",
+                "date_diff_days": dd,
+                "current_bank_account_id": cand["bank_account_id"],
+                "currently_cleared": bool(cand["cleared"]),
+            })
+
+        # Closest date wins; payroll_check preferred on a tie (more specific).
+        # Two candidates from the same source at the same distance are
+        # ambiguous and left alone for a human (the three Cozzini $23.90
+        # drafts of 2026-05-29 were exactly this).
+        chosen, skip_reason, ambiguous_count = None, None, 0
+        if not cands:
+            skip_reason = "no_match"
+        else:
+            cands.sort(key=lambda c: (c["date_diff_days"],
+                                      0 if c["source"] == "payroll_check" else 1))
+            best = cands[0]
+            same = [c for c in cands if c["date_diff_days"] == best["date_diff_days"]
+                    and c["source"] == best["source"]]
+            if len(same) > 1:
+                skip_reason, ambiguous_count = "ambiguous", len(same)
+            else:
+                chosen = best
+        if chosen:
+            (used_bp_ids if chosen["source"] == "vendor_payment" else used_pr_ids).add(chosen["id"])
+
+        candidates.append({
+            "manual_entry_id": me["id"],
+            "manual_entry_date": me["entry_date"],
+            "manual_entry_amount": float(me["amount"] or 0),
+            "manual_entry_payee": me["payee"],
+            "manual_entry_memo": me["memo"],
+            "manual_entry_ref": me["ref_number"],
+            "match": chosen,
+            "skip_reason": skip_reason,
+            "ambiguous_count": ambiguous_count,
+        })
+
+    merged_count = deleted_count = 0
+    if commit:
+        for c in candidates:
+            m = c["match"]
+            if not m:
+                continue
+            entry_date = c["manual_entry_date"]
+            # The book row takes the STATEMENT date: that is the day the bank
+            # cleared it. The candidate query guarantees it carried no date.
+            if m["source"] == "vendor_payment":
+                conn.execute(
+                    """UPDATE vendor_payments
+                       SET bank_account_id = COALESCE(bank_account_id, ?),
+                           cleared = 1, cleared_date = ?
+                       WHERE id = ?""",
+                    (account_id, entry_date, m["id"]),
+                )
+            else:
+                conn.execute(
+                    "UPDATE payroll_checks SET cleared = 1, cleared_date = ? WHERE id = ?",
+                    (entry_date, m["id"]),
+                )
+            # Record the merge BEFORE deleting anything. Capture the full row
+            # so this is reversible; a wrong match is otherwise invisible once
+            # the statement line is gone.
+            full = conn.execute(
+                "SELECT * FROM manual_bank_entries WHERE id = ?", (c["manual_entry_id"],)
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO register_merge_audit
+                   (merged_by, bank_account_id, target_source, target_id,
+                    target_label, target_cleared_date, deleted_entry_id,
+                    deleted_entry_date, deleted_entry_amount, deleted_entry_json,
+                    match_amount, match_date_diff_days, match_tolerance_days,
+                    match_rule)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (who, account_id, m["source"], m["id"], m.get("label"), entry_date,
+                 c["manual_entry_id"], c["manual_entry_date"], c["manual_entry_amount"],
+                 json.dumps(dict(full)) if full else None,
+                 m.get("amount"), m.get("date_diff_days"), tol, DEDUPE_MATCH_RULE),
+            )
+            conn.execute("DELETE FROM manual_bank_entries WHERE id = ?",
+                         (c["manual_entry_id"],))
+            merged_count += 1
+            deleted_count += 1
+
+    return {
+        "start": start, "end": end,
+        "candidates": candidates,
+        "summary": {
+            "manual_entries_scanned": len(me_rows),
+            "matched": sum(1 for c in candidates if c["match"]),
+            "ambiguous": sum(1 for c in candidates if c["skip_reason"] == "ambiguous"),
+            "unmatched": sum(1 for c in candidates if c["skip_reason"] == "no_match"),
+            "would_merge_amount": round(
+                sum(abs(c["manual_entry_amount"]) for c in candidates if c["match"]), 2),
+        },
+        "merged_count": merged_count,
+        "deleted_count": deleted_count,
+    }
+
+
 @bank_reconcile_bp.route("/api/bank-reconcile/dedupe", methods=["POST"])
 @admin_required
 def dedupe_register():
-    """Find and (optionally) merge duplicates between manual_bank_entries
-    (statement-imported) and dashboard-side vendor_payments / payroll_checks.
+    """Find and (optionally) merge duplicates between statement-imported
+    manual_bank_entries and the uncleared vendor_payments / manual
+    payroll_checks they duplicate.
+
+    The rule (job 066's, now the endpoint's): a statement outflow pairs with
+    an UNCLEARED book row of exactly the same amount within
+    date_tolerance_days; closest date wins, payroll preferred on a tie,
+    ambiguous (two equal candidates from the same source) is skipped. On
+    commit the book row is stamped cleared ON THE STATEMENT DATE and the
+    statement row is deleted, with the full row saved in register_merge_audit.
 
     Body (JSON):
-        account_id:           int, required
-        start_date:           "YYYY-MM-DD", required
-        end_date:             "YYYY-MM-DD", required
-        date_tolerance_days:  int, default 5
+        account_id:            int, required
+        start_date, end_date:  "YYYY-MM-DD" — one window, or
+        all_periods:           true — every statement period held for the
+                               account, one transaction per period; periods
+                               already signed off are skipped unless
+                               include_reconciled is true
+        date_tolerance_days:   int, default 5 (job 066 used 7)
         match_vendor_payments: bool, default true
         match_payroll_manual:  bool, default true
-        commit:               bool, default false (preview only)
+        commit:                bool, default false (preview only)
 
-    Response:
-        {
-            "account_id": ..., "start": ..., "end": ...,
-            "candidates": [ {
-                "manual_entry_id": ..., "manual_entry_date": ...,
-                "manual_entry_amount": ...,        // signed (negative for outflow)
-                "manual_entry_payee": ...,
-                "manual_entry_memo": ...,
-                "match": {
-                    "source": "vendor_payment" | "payroll_check",
-                    "id": ..., "date": ..., "amount": ..., "label": ...,
-                    "date_diff_days": ...,
-                    "current_bank_account_id": ...,
-                    "currently_cleared": bool,
-                } or null,
-                "skip_reason": null | "no_match" | "ambiguous" | "no_amount_match",
-                "ambiguous_count": 0
-            } ],
-            "summary": {
-                "manual_entries_scanned": ...,
-                "matched": ..., "ambiguous": ..., "unmatched": ...,
-                "would_merge_amount": ...
-            },
-            "applied": bool,
-            "merged_count": int,
-            "deleted_manual_entries": int,
-        }
+    Response: the single-window shape (candidates, summary, applied,
+    merged_count, deleted_manual_entries) plus `periods`, one entry per
+    window run, each with its own counts and any error.
     """
     data = request.get_json(silent=True) or {}
     account_id = data.get("account_id")
-    start = (data.get("start_date") or "").strip()
-    end = (data.get("end_date") or "").strip()
     if not isinstance(account_id, int):
         return jsonify({"error": "account_id (int) is required"}), 400
+    all_periods = bool(data.get("all_periods"))
+    include_reconciled = bool(data.get("include_reconciled"))
     import re as _re
-    if not _re.match(r"^\d{4}-\d{2}-\d{2}$", start) or not _re.match(r"^\d{4}-\d{2}-\d{2}$", end):
-        return jsonify({"error": "start_date and end_date must be YYYY-MM-DD"}), 400
+    start = (data.get("start_date") or "").strip()
+    end = (data.get("end_date") or "").strip()
+    if not all_periods and (not _re.match(r"^\d{4}-\d{2}-\d{2}$", start)
+                            or not _re.match(r"^\d{4}-\d{2}-\d{2}$", end)):
+        return jsonify({"error": "start_date and end_date must be YYYY-MM-DD "
+                                 "(or pass all_periods: true)"}), 400
     try:
         tol = int(data.get("date_tolerance_days", 5))
     except (TypeError, ValueError):
         tol = 5
-    tol = max(0, min(60, tol))  # clamp
+    tol = max(0, min(60, tol))
     match_bp = bool(data.get("match_vendor_payments", True))
     match_pr = bool(data.get("match_payroll_manual", True))
     commit = bool(data.get("commit", False))
+    who = session.get("username") or session.get("email") or "unknown"
 
     conn = get_connection()
     try:
-
-        # 0. Sanity check: account exists
         bank = conn.execute(
             "SELECT id, name, account_last4 FROM bank_accounts WHERE id = ?",
             (account_id,),
         ).fetchone()
         if not bank:
-            conn.close()
             return jsonify({"error": f"bank_account {account_id} not found"}), 404
-        is_default = bank["account_last4"] == "5975"
 
-        # 1. Pull all candidate manual_bank_entries (outflows) in range, sorted by
-        #    date then amount for stable iteration.
-        me_rows = conn.execute(
-            """SELECT id, entry_date, entry_type, payee, memo, amount, ref_number,
-                      cleared, statement_upload_id
-               FROM manual_bank_entries
-               WHERE bank_account_id = ?
-                 AND entry_date >= ? AND entry_date <= ?
-                 AND amount < 0
-               ORDER BY entry_date, amount""",
-            (account_id, start, end),
-        ).fetchall()
-
-        # 2. Preload candidate vendor_payments + payroll_checks in a wider window
-        #    (range ± tolerance) so we can match across small date drifts.
-        from datetime import datetime as _dt, timedelta as _td
-
-        def _shift(iso, days):
-            d = _dt.strptime(iso, "%Y-%m-%d") + _td(days=days)
-            return d.strftime("%Y-%m-%d")
-
-        wide_start = _shift(start, -tol)
-        wide_end = _shift(end, tol)
-
-        bp_rows = []
-        if match_bp:
-            # Include bank_account_id IS NULL when this is the catch-all account
-            bp_clause = "(bank_account_id = ?" + (" OR bank_account_id IS NULL" if is_default else "") + ")"
-            bp_rows = conn.execute(
-                f"""SELECT id, payment_date, vendor, payment_total, payment_method,
-                           payment_ref, check_number, status, bank_account_id,
-                           cleared, ap_payment_id
-                   FROM vendor_payments
-                   WHERE payment_date >= ? AND payment_date <= ?
-                     AND (status IS NULL OR status NOT IN ('void', 'failed'))
-                     AND {bp_clause}""",
-                (wide_start, wide_end, account_id),
-            ).fetchall()
-
-        pr_rows = []
-        if match_pr:
-            pr_rows = conn.execute(
-                """SELECT pc.id, pc.employee_name, pc.check_number, pc.net_pay,
-                          pc.payment_method, pc.bank_account_id, pc.cleared,
-                          COALESCE(pr.pay_date, pc.pay_period_end) AS pay_date
-                   FROM payroll_checks pc
-                   LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id
-                   WHERE COALESCE(pr.pay_date, pc.pay_period_end) >= ?
-                     AND COALESCE(pr.pay_date, pc.pay_period_end) <= ?
-                     AND (pc.voided IS NULL OR pc.voided = 0)
-                     AND pc.payment_method = 'Manual'
-                     AND pc.bank_account_id = ?""",
-                (wide_start, wide_end, account_id),
-            ).fetchall()
-
-        # 3. Build lookup tables keyed on rounded amount → list of candidates
-        from collections import defaultdict
-        bp_by_amount = defaultdict(list)
-        for r in bp_rows:
-            amt = round(float(r["payment_total"] or 0), 2)
-            bp_by_amount[amt].append(dict(r))
-
-        pr_by_amount = defaultdict(list)
-        for r in pr_rows:
-            amt = round(float(r["net_pay"] or 0), 2)
-            pr_by_amount[amt].append(dict(r))
-
-        # Avoid claiming the same dashboard row twice across different manual_entries
-        used_bp_ids = set()
-        used_pr_ids = set()
-
-        def _date_diff(a_iso, b_iso):
-            a = _dt.strptime(a_iso, "%Y-%m-%d")
-            b = _dt.strptime(b_iso, "%Y-%m-%d")
-            return abs((a - b).days)
-
-        candidates = []
-        for me in me_rows:
-            me = dict(me)
-            target_amt = round(abs(float(me["amount"] or 0)), 2)
-            me_date = me["entry_date"]
-
-            cands = []
-            # Vendor payments candidates
-            for cand in bp_by_amount.get(target_amt, []):
-                if cand["id"] in used_bp_ids:
+        windows = []
+        skipped_periods = []
+        if all_periods:
+            closed = {(r["period_start"], r["period_end"]) for r in conn.execute(
+                "SELECT period_start, period_end FROM bank_reconciliations "
+                "WHERE bank_account_id = ? AND status = 'reconciled'", (account_id,))}
+            for u in conn.execute(
+                "SELECT period_start, period_end FROM bank_statement_uploads "
+                "WHERE bank_account_id = ? AND period_start IS NOT NULL "
+                "ORDER BY period_start", (account_id,)):
+                w = (u["period_start"], u["period_end"])
+                if w in closed and not include_reconciled:
+                    skipped_periods.append({"period": f"{w[0]}..{w[1]}",
+                                            "reason": "signed off"})
                     continue
-                dd = _date_diff(me_date, cand["payment_date"])
-                if dd > tol:
-                    continue
-                cands.append({
-                    "source": "vendor_payment",
-                    "id": cand["id"],
-                    "date": cand["payment_date"],
-                    "amount": float(cand["payment_total"] or 0),
-                    "label": cand["vendor"] or "(no vendor)",
-                    "date_diff_days": dd,
-                    "current_bank_account_id": cand["bank_account_id"],
-                    "currently_cleared": bool(cand["cleared"]),
-                    "_raw": cand,
-                })
-            # Payroll Manual candidates
-            for cand in pr_by_amount.get(target_amt, []):
-                if cand["id"] in used_pr_ids:
-                    continue
-                dd = _date_diff(me_date, cand["pay_date"])
-                if dd > tol:
-                    continue
-                cands.append({
-                    "source": "payroll_check",
-                    "id": cand["id"],
-                    "date": cand["pay_date"],
-                    "amount": float(cand["net_pay"] or 0),
-                    "label": f"Payroll: {cand['employee_name']}",
-                    "date_diff_days": dd,
-                    "current_bank_account_id": cand["bank_account_id"],
-                    "currently_cleared": bool(cand["cleared"]),
-                    "_raw": cand,
-                })
+                windows.append(w)
+            if not windows:
+                return jsonify({"error": "no open statement periods for this account",
+                                "skipped": skipped_periods}), 400
+        else:
+            windows.append((start, end))
 
-            # Pick best — closest date wins; tie-break favors payroll_check
-            # (more specific) then lower date_diff. If two best are tied AND from
-            # the same source, mark ambiguous so the user can review.
-            chosen = None
-            skip_reason = None
-            ambiguous_count = 0
-            if not cands:
-                skip_reason = "no_match"
-            else:
-                cands.sort(key=lambda c: (c["date_diff_days"],
-                                          0 if c["source"] == "payroll_check" else 1))
-                best = cands[0]
-                # If multiple cands at the same minimum date_diff with different
-                # ids and the same source, we're ambiguous.
-                same_diff = [c for c in cands if c["date_diff_days"] == best["date_diff_days"]
-                             and c["source"] == best["source"]]
-                if len(same_diff) > 1:
-                    skip_reason = "ambiguous"
-                    ambiguous_count = len(same_diff)
-                else:
-                    chosen = best
-
-            match_obj = None
-            if chosen:
-                match_obj = {k: v for k, v in chosen.items() if k != "_raw"}
-                # Reserve the dashboard row so we don't double-merge
-                if chosen["source"] == "vendor_payment":
-                    used_bp_ids.add(chosen["id"])
-                else:
-                    used_pr_ids.add(chosen["id"])
-
-            candidates.append({
-                "manual_entry_id": me["id"],
-                "manual_entry_date": me["entry_date"],
-                "manual_entry_amount": float(me["amount"] or 0),
-                "manual_entry_payee": me["payee"],
-                "manual_entry_memo": me["memo"],
-                "manual_entry_ref": me["ref_number"],
-                "match": match_obj,
-                "skip_reason": skip_reason,
-                "ambiguous_count": ambiguous_count,
-            })
-
-        matched = sum(1 for c in candidates if c["match"])
-        ambiguous = sum(1 for c in candidates if c["skip_reason"] == "ambiguous")
-        unmatched = sum(1 for c in candidates if c["skip_reason"] == "no_match")
-        would_merge_amount = round(
-            sum(abs(c["manual_entry_amount"]) for c in candidates if c["match"]), 2
-        )
-
-        applied = False
-        merged_count = 0
-        deleted_count = 0
-
-        if commit:
-            for c in candidates:
-                if not c["match"]:
-                    continue
-                m = c["match"]
-                entry_date = c["manual_entry_date"]
-                if m["source"] == "vendor_payment":
-                    # Claim it for this bank account, mark cleared, update cleared_date
-                    conn.execute(
-                        """UPDATE vendor_payments
-                           SET bank_account_id = COALESCE(bank_account_id, ?),
-                               cleared = 1,
-                               cleared_date = COALESCE(cleared_date, ?)
-                           WHERE id = ?""",
-                        (account_id, entry_date, m["id"]),
-                    )
-                else:  # payroll_check
-                    conn.execute(
-                        """UPDATE payroll_checks
-                           SET cleared = 1,
-                               cleared_date = COALESCE(cleared_date, ?)
-                           WHERE id = ?""",
-                        (entry_date, m["id"]),
-                    )
-                # Record the merge BEFORE deleting anything. Capture the full row
-                # so this is reversible; a wrong match is otherwise invisible once
-                # the statement line is gone.
-                full = conn.execute(
-                    "SELECT * FROM manual_bank_entries WHERE id = ?",
-                    (c["manual_entry_id"],),
-                ).fetchone()
-                conn.execute(
-                    """INSERT INTO register_merge_audit
-                       (merged_by, bank_account_id, target_source, target_id,
-                        target_label, target_cleared_date, deleted_entry_id,
-                        deleted_entry_date, deleted_entry_amount, deleted_entry_json,
-                        match_amount, match_date_diff_days, match_tolerance_days,
-                        match_rule)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (
-                        (session.get("username") or session.get("email") or "unknown"),
-                        account_id,
-                        m["source"], m["id"], m.get("label"), entry_date,
-                        c["manual_entry_id"], c["manual_entry_date"],
-                        c["manual_entry_amount"],
-                        json.dumps(dict(full)) if full else None,
-                        m.get("amount"), m.get("date_diff_days"), tol,
-                        "exact_amount+date_within_tolerance;"
-                        "closest_date_wins;payroll_preferred_on_tie",
-                    ),
-                )
-                # Delete the duplicate manual_bank_entry
-                conn.execute(
-                    "DELETE FROM manual_bank_entries WHERE id = ?",
-                    (c["manual_entry_id"],),
-                )
-                merged_count += 1
-                deleted_count += 1
-            conn.commit()
-            applied = True
-
-        conn.close()
+        periods = []
+        all_cands = []
+        totals = {"manual_entries_scanned": 0, "matched": 0, "ambiguous": 0,
+                  "unmatched": 0, "would_merge_amount": 0.0}
+        merged = deleted = 0
+        for (ws, we) in windows:
+            try:
+                r = _dedupe_period(conn, bank, ws, we, tol, match_bp, match_pr, commit, who)
+                if commit:
+                    conn.commit()
+            except Exception as e:
+                conn.rollback()
+                logger.exception("dedupe failed for %s..%s", ws, we)
+                periods.append({"period": f"{ws}..{we}", "error": str(e)})
+                break
+            periods.append({"period": f"{ws}..{we}", **r["summary"],
+                            "merged": r["merged_count"]})
+            all_cands.extend(r["candidates"])
+            for k in totals:
+                totals[k] += r["summary"][k]
+            merged += r["merged_count"]
+            deleted += r["deleted_count"]
+        totals["would_merge_amount"] = round(totals["would_merge_amount"], 2)
 
         return jsonify({
             "account_id": account_id,
             "account_last4": bank["account_last4"],
-            "start": start,
-            "end": end,
+            "start": windows[0][0],
+            "end": windows[-1][1],
+            "all_periods": all_periods,
             "date_tolerance_days": tol,
-            "candidates": candidates,
-            "summary": {
-                "manual_entries_scanned": len(me_rows),
-                "matched": matched,
-                "ambiguous": ambiguous,
-                "unmatched": unmatched,
-                "would_merge_amount": would_merge_amount,
-            },
-            "applied": applied,
-            "merged_count": merged_count,
-            "deleted_manual_entries": deleted_count,
+            "match_rule": DEDUPE_MATCH_RULE,
+            "candidates": all_cands,
+            "summary": totals,
+            "periods": periods,
+            "skipped_periods": skipped_periods,
+            "applied": commit,
+            "merged_count": merged,
+            "deleted_manual_entries": deleted,
         })
     finally:
         conn.close()
@@ -1587,61 +1807,133 @@ def dedupe_register():
 # reconciling item that somebody accepted.
 
 
+
+def _c(x):
+    """Money -> integer cents. The premise is 'ties to the penny'."""
+    return int(round(float(x or 0) * 100))
+
+
+def _bp_account_clause(conn, acct_id):
+    acct = conn.execute("SELECT account_last4 FROM bank_accounts WHERE id = ?", (acct_id,)).fetchone()
+    is_default = bool(acct and acct["account_last4"] == "5975")
+    return "(bank_account_id = ?" + (" OR bank_account_id IS NULL" if is_default else "") + ")"
+
+
+def _cleared_flow_by_date(conn, acct_id, start, end):
+    """(inflow_cents, outflow_cents) of every register row the bank cleared
+    inside [start, end] — by cleared_date, whatever its book date. The sums
+    are register_flow()'s, the register's own, so the two cannot drift."""
+    from routes.register_routes import register_flow
+    acct = conn.execute("SELECT * FROM bank_accounts WHERE id = ?", (acct_id,)).fetchone()
+    if acct is None:
+        raise ValueError(f"bank account {acct_id} not found")
+    inflow, outflow = register_flow(conn, acct, start, end, by="cleared_date")
+    return _c(inflow), _c(outflow)
+
+
 def _reconciliation_state(conn, upload):
     """Compute the closing figures + the outstanding items for one statement
-    period, WITHOUT writing anything. Shared by preview and close."""
+    period, WITHOUT writing anything. Shared by preview, close and import-all.
+
+    THE TIE-OUT IS BY CLEARED DATE. A bank reconciliation counts a row on the
+    day the BANK cleared it. A check cut 7/28 that clears 8/03 is outstanding
+    at 7/31 and cleared in August — regardless of the date on the check.
+    Counting cleared=1 rows by their book date (the behaviour until job 065)
+    produced the alternating negative/positive deltas of 2026-09-22:
+    -13,807 May / +4,878 June etc. Statement-imported rows carry
+    cleared_date == entry_date, so they are unaffected; Bill Pay and payroll
+    rows count in the period whose statement actually shows them.
+
+        bank_balance   = statement beginning + rows cleared in the period
+        outstanding    = every row dated on or before period end that the
+                         bank had NOT cleared by period end — cumulative, so
+                         a check nobody cashes is carried period to period
+                         and bank_reconciliation_items.carry_count can grow
+        book_balance   = bank_balance + outstanding (the standard proof)
+        delta          = bank_balance - statement ending; ties when zero
+
+    Both balances sit on the SAME baseline, the statement's beginning
+    balance — the one number here we did not compute ourselves. The previous
+    mixed baselines (bank from the statement, book from the register roll-
+    forward) are what produced the +26,251.28 / +11,466.49 "unexplained
+    gaps" on Dennis Jan/Feb — baseline artifacts, not money.
+
+    `identity_holds` is an independent check: the book balance rebuilt from
+    BOOK dates (beginning + prior outstanding + this period's rows) must
+    equal bank + outstanding once rows cleared in a different period than
+    they were booked in (`off_period_cleared`) are accounted for. If it is
+    ever False, the four sums are not describing one set of rows.
+    """
+    from routes.register_routes import (build_register_view, register_flow,
+                                        row_cleared_by, _pre_period_net)
     acct_id = upload["bank_account_id"]
     start, end = upload["period_start"], upload["period_end"]
-
-    # Reuse the register's own builder so these figures can never drift from
-    # what the UI renders.
-    from routes.register_routes import build_register_view
-    view = build_register_view(conn, acct_id, start, end)
-    if view is None:
+    account = conn.execute("SELECT * FROM bank_accounts WHERE id = ?", (acct_id,)).fetchone()
+    if account is None:
         raise ValueError(f"bank account {acct_id} not found")
-    rows = view["rows"]
-    summary = view["summary"]
 
-    outstanding = [r for r in rows if not r["cleared"]]
+    # Every row from the anchor through period end, so outstanding can be
+    # cumulative. Reuse the register's own builder so these rows can never
+    # drift from what the UI renders.
+    floor = account["opening_date"] or "1970-01-01"
+    if floor > start:
+        floor = start
+    wide = build_register_view(conn, acct_id, floor, end)
+    if wide is None:
+        raise ValueError(f"bank account {acct_id} not found")
+    all_rows = wide["rows"]
+    rows = [r for r in all_rows if (r["date"] or "") >= start]
+
     begin_c = _c(upload["beginning_balance"])
     end_c = _c(upload["ending_balance"])
-    clr_in = sum(_c(r["inflow"]) for r in rows if r["cleared"])
-    clr_out = sum(_c(r["outflow"]) for r in rows if r["cleared"])
-    all_in = sum(_c(r["inflow"]) for r in rows)
-    all_out = sum(_c(r["outflow"]) for r in rows)
-
-    # BOTH balances must sit on the SAME baseline, and that baseline is the
-    # statement's beginning balance — the one number here that we did not
-    # compute ourselves.
-    #
-    # This previously took bank_balance from begin_c (statement-anchored) but
-    # book_balance and outstanding_net from the register summary
-    # (account/roll-forward-anchored). Those baselines differed, so the stored
-    # record could assert book - bank = 26,251.28 while also asserting
-    # outstanding_net = 0.00 — two names for the same quantity, disagreeing.
-    # Dennis Jan (rec#2) and Feb (rec#3) each hold exactly that contradiction
-    # from their 2026-08-23 close, which is where the "+26,251.28 / +11,466.49
-    # unexplained gap" reading came from. It was a baseline artifact, not money.
+    clr_in, clr_out = _cleared_flow_by_date(conn, acct_id, start, end)
     bank_c = begin_c + clr_in - clr_out
-    book_c = begin_c + all_in - all_out
-    outstanding_c = book_c - bank_c          # == uncleared net; baseline cancels
     delta_c = bank_c - end_c
 
+    def signed(r):
+        return _c(r["inflow"]) - _c(r["outflow"])
+
+    outstanding = [r for r in all_rows if not row_cleared_by(r, end)]
+    outstanding_c = sum(signed(r) for r in outstanding)
+    book_c = bank_c + outstanding_c
+
+    # Independent rebuild of the book balance from BOOK dates.
+    day_before = (date.fromisoformat(start) - timedelta(days=1)).isoformat()
+    prior_open_c = sum(signed(r) for r in all_rows
+                       if (r["date"] or "") < start and not row_cleared_by(r, day_before))
+    all_in = sum(_c(r["inflow"]) for r in rows)
+    all_out = sum(_c(r["outflow"]) for r in rows)
+    book_by_date_c = begin_c + prior_open_c + all_in - all_out
+    # Rows booked in this period but cleared BEFORE it (a Bill Pay entered
+    # after the bank drafted it), and rows cleared IN this period but booked
+    # after it. Both are legitimate; both make book-by-date differ from
+    # bank + outstanding, so they are itemized rather than hidden.
+    early = [r for r in rows if r["cleared"]
+             and (r.get("cleared_date") or r["date"] or "") < start]
+    late_view = build_register_view(conn, acct_id,
+                                    (date.fromisoformat(end) + timedelta(days=1)).isoformat(),
+                                    (date.fromisoformat(end) + timedelta(days=120)).isoformat())
+    late = [r for r in (late_view["rows"] if late_view else []) if r["cleared"]
+            and start <= (r.get("cleared_date") or r["date"] or "") <= end]
+    early_c = sum(signed(r) for r in early)
+    late_c = sum(signed(r) for r in late)
+    identity_holds = (book_by_date_c - bank_c) == (outstanding_c + early_c - late_c)
+
     # Independent cross-check: the register's own roll-forward opening should
-    # already equal the statement's beginning balance. If it does not, the
-    # books' history disagrees with the bank's for this period, and that is a
-    # finding in its own right — not something to average away. Reported, never
-    # silently absorbed.
-    opening_drift_c = _c(summary.get("opening_balance")) - begin_c
+    # equal the statement's beginning balance. If it does not, the books'
+    # history disagrees with the bank's for this period, and that is a
+    # finding in its own right — reported, never silently absorbed.
+    register_opening = float(account["opening_balance"] or 0) + _pre_period_net(conn, account, start)
+    opening_drift_c = _c(register_opening) - begin_c
 
     end_date = date.fromisoformat(end)
-    items = []
-    for r in outstanding:
+
+    def item(r):
         try:
             age = (end_date - date.fromisoformat(r["date"])).days if r["date"] else None
         except ValueError:
             age = None
-        items.append({
+        return {
             "source": r["source"],
             "source_id": r["source_id"],
             "entry_date": r["date"],
@@ -1649,7 +1941,11 @@ def _reconciliation_state(conn, upload):
             "memo": r.get("memo"),
             "amount": round(r["inflow"] - r["outflow"], 2),
             "age_days": age,
-        })
+            "cleared_date": r.get("cleared_date") if r.get("cleared") else None,
+            "carried": (r["date"] or "") < start,
+        }
+
+    items = [item(r) for r in sorted(outstanding, key=lambda r: (r["date"] or "", r["source"], r["source_id"]))]
 
     return {
         "bank_account_id": acct_id,
@@ -1661,15 +1957,19 @@ def _reconciliation_state(conn, upload):
         "bank_balance": round(bank_c / 100, 2),
         "book_balance": round(book_c / 100, 2),
         "outstanding_net": round(outstanding_c / 100, 2),
+        "outstanding_prior_count": sum(1 for i in items if i["carried"]),
         "delta": round(delta_c / 100, 2),
         "ties": delta_c == 0,
         "outstanding_items": items,
-        # Sanity signals for the UI. `identity_holds` is the arithmetic that
-        # must never fail; if it ever reports False, the numbers above are not
-        # describing one consistent set of rows.
-        "identity_holds": (book_c - bank_c) == outstanding_c,
+        "identity_holds": identity_holds,
+        "book_balance_by_date": round(book_by_date_c / 100, 2),
+        "off_period_cleared": {
+            "cleared_before_period": [item(r) for r in early],
+            "cleared_in_period_booked_after": [item(r) for r in late],
+            "net": round((early_c - late_c) / 100, 2),
+        },
         "opening_drift": round(opening_drift_c / 100, 2),
-        "register_opening": summary.get("opening_balance"),
+        "register_opening": round(register_opening, 2),
         # A period whose book side carries ONLY imported statement rows cannot
         # fail its own tie-out: the statement is being checked against itself.
         # Report the composition so a hollow tie is visible as one.
@@ -1678,11 +1978,6 @@ def _reconciliation_state(conn, upload):
             for k in ("manual", "bill_pay", "payroll", "deposit")
         },
     }
-
-
-def _c(x):
-    """Money -> integer cents. The premise is 'ties to the penny'."""
-    return int(round(float(x or 0) * 100))
 
 
 @bank_reconcile_bp.route("/api/bank-reconcile/reconciliation/preview", methods=["GET"])
@@ -1832,32 +2127,39 @@ def close_reconciliation():
         conn.close()
 
 
-def _stamp_reconciled_rows(conn, account_id, period_start, period_end, rec_id):
-    """Set reconciliation_id = rec_id on every CLEARED register row in this
-    period across the four source tables. Returns the number of rows stamped.
+def _stamp_reconciled_rows(conn, account_id, period_start, period_end, rec_id,
+                           only_unstamped=False):
+    """Set reconciliation_id = rec_id on every register row the bank CLEARED
+    inside this period, across the four source tables. Returns the number of
+    rows stamped.
 
-    Filter shape mirrors build_register_view() so the tie-out that was just
-    verified corresponds row-for-row to what gets locked:
-      - vendor_payments: cleared=1, not void/failed, in period, matching acct
-        (plus NULL bank_account_id if this is the Chatham default)
-      - payroll_checks:  cleared=1, not voided, not Direct Deposit,
-        COALESCE(pay_date, pay_period_end) in period, matching acct
-      - bank_deposits:   cleared=1, in period, matching acct
-      - manual_bank_entries: cleared=1, in period, matching acct
+    Filter shape mirrors register_flow(by="cleared_date") — the bank side of
+    the tie-out that was just verified — so the rows locked are exactly the
+    rows that tied:
+      - vendor_payments: cleared=1, cleared_date in period, not void/failed,
+        matching acct (plus NULL bank_account_id if this is the Chatham default)
+      - payroll_checks:  cleared=1, cleared_date in period, not voided, not
+        Direct Deposit, net_pay <> 0, matching acct
+      - bank_deposits:   cleared=1, cleared_date in period, matching acct
+      - manual_bank_entries: cleared=1, cleared_date in period, matching acct
+    A cleared row with no cleared_date falls back to its book date, as
+    everywhere else. Outstanding rows are not locked: they are not yet the
+    bank's.
 
-    Chatham's default account (last4=5975) is the catch-all for unassigned
-    bill-pay rows; include those too, matching build_register_view's default
-    (include_unassigned=True).
+    only_unstamped=True adds `reconciliation_id IS NULL` (init backfill).
     """
     acct = conn.execute(
         "SELECT account_last4 FROM bank_accounts WHERE id = ?", (account_id,)
     ).fetchone()
     is_default_account = acct and acct["account_last4"] == "5975"
+    guard = "reconciliation_id IS NULL AND " if only_unstamped else ""
 
     total = 0
 
     bp_where = (
-        "cleared = 1 AND payment_date >= ? AND payment_date <= ? "
+        f"{guard}cleared = 1 "
+        "AND COALESCE(cleared_date, payment_date) >= ? "
+        "AND COALESCE(cleared_date, payment_date) <= ? "
         "AND (status IS NULL OR status NOT IN ('void', 'failed')) AND ("
         "bank_account_id = ?"
         + (" OR bank_account_id IS NULL" if is_default_account else "")
@@ -1870,16 +2172,18 @@ def _stamp_reconciled_rows(conn, account_id, period_start, period_end, rec_id):
     total += cur.rowcount or 0
 
     try:
+        pr_guard = "pc.reconciliation_id IS NULL AND " if only_unstamped else ""
         cur = conn.execute(
             "UPDATE payroll_checks SET reconciliation_id = ? "
             "WHERE id IN ("
             "  SELECT pc.id FROM payroll_checks pc "
             "  LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
-            "  WHERE pc.cleared = 1 "
-            "  AND COALESCE(pr.pay_date, pc.pay_period_end) >= ? "
-            "  AND COALESCE(pr.pay_date, pc.pay_period_end) <= ? "
+            f"  WHERE {pr_guard}pc.cleared = 1 "
+            "  AND COALESCE(pc.cleared_date, pr.pay_date, pc.pay_period_end) >= ? "
+            "  AND COALESCE(pc.cleared_date, pr.pay_date, pc.pay_period_end) <= ? "
             "  AND (pc.voided IS NULL OR pc.voided = 0) "
             "  AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit') "
+            "  AND COALESCE(pc.net_pay, 0) <> 0 "
             "  AND pc.bank_account_id = ?"
             ")",
             (rec_id, period_start, period_end, account_id),
@@ -1890,16 +2194,18 @@ def _stamp_reconciled_rows(conn, account_id, period_start, period_end, rec_id):
 
     cur = conn.execute(
         "UPDATE bank_deposits SET reconciliation_id = ? "
-        "WHERE cleared = 1 AND bank_account_id = ? "
-        "AND deposit_date >= ? AND deposit_date <= ?",
+        f"WHERE {guard}cleared = 1 AND bank_account_id = ? "
+        "AND COALESCE(cleared_date, deposit_date) >= ? "
+        "AND COALESCE(cleared_date, deposit_date) <= ?",
         (rec_id, account_id, period_start, period_end),
     )
     total += cur.rowcount or 0
 
     cur = conn.execute(
         "UPDATE manual_bank_entries SET reconciliation_id = ? "
-        "WHERE cleared = 1 AND bank_account_id = ? "
-        "AND entry_date >= ? AND entry_date <= ?",
+        f"WHERE {guard}cleared = 1 AND bank_account_id = ? "
+        "AND COALESCE(cleared_date, entry_date) >= ? "
+        "AND COALESCE(cleared_date, entry_date) <= ?",
         (rec_id, account_id, period_start, period_end),
     )
     total += cur.rowcount or 0

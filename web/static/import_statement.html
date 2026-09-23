@@ -172,9 +172,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <div class="page-title">Import Statement</div>
       <div class="page-sub">Upload a Cape Cod Five PDF statement, parse it, and import transactions that aren't in the register. Signing off the period lives on <a href="/bank-reconcile" style="color:var(--blue);text-decoration:none">Bank Reconcile</a>.</div>
     </div>
-    <div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="btn-import-all" title="Import every uploaded-but-unimported statement for the selected account, in order, with the continuity check" style="padding:9px 14px;border-radius:8px;border:1px solid var(--blue);background:var(--bg-card);color:var(--blue);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Import all pending</button>
       <button id="btn-dedupe" style="padding:9px 14px;border-radius:8px;border:1px solid var(--amber);background:var(--bg-card);color:var(--amber);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Dedupe Existing Register</button>
     </div>
+    <div id="import-all-result" style="flex-basis:100%;display:none;font-size:12px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px"></div>
   </div>
 
   <!-- Account picker -->
@@ -289,6 +291,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       </label>
       <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
         <input type="checkbox" id="dd-pr" checked> Match Manual payroll checks
+      </label>
+      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px" title="Every statement period held for this account that is not yet signed off, one transaction each. Ignores the dates above.">
+        <input type="checkbox" id="dd-all"> All open periods
       </label>
     </div>
 
@@ -708,6 +713,61 @@ async function doImport() {
 // ────────────────────────────────────────────────────────────────────────────
 // History
 // ────────────────────────────────────────────────────────────────────────────
+async function importAllPending() {
+  const acct = STATE.currentAcct;
+  if (!acct) { alert('Pick an account first.'); return; }
+  const box = document.getElementById('import-all-result');
+  const btn = document.getElementById('btn-import-all');
+  // Dry run first so the confirmation names exactly what will happen.
+  let plan;
+  try {
+    const r = await fetch('/api/bank-reconcile/import-all', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account_id: acct.id, dry_run: true}),
+    });
+    plan = await r.json();
+    if (!r.ok) { alert('Import-all failed: ' + (plan.error || r.status)); return; }
+  } catch (e) { alert('Import-all failed: ' + e); return; }
+  const pending = plan.periods.filter(p => p.action === 'would_import');
+  const stopped = plan.periods.find(p => p.action === 'stopped');
+  if (!pending.length) {
+    box.style.display = 'block';
+    box.innerHTML = stopped
+      ? `Nothing importable before a continuity break at <b>${esc(stopped.period)}</b>: ${esc(stopped.reason)}`
+      : 'Every uploaded statement for this account is already imported.';
+    return;
+  }
+  const msg = `Import ${pending.length} pending statement(s) for ${acct.name}:\n` +
+    pending.map(p => `  • ${p.period} (${p.lines} lines)`).join('\n') +
+    (stopped ? `\n\nThen STOP at ${stopped.period}: ${stopped.reason}` : '') +
+    `\n\nMatched register rows are cleared on the statement line's date; unmatched lines become register rows; checks are OCR'd; each period is tied out.`;
+  if (!confirm(msg)) return;
+  btn.disabled = true; btn.textContent = 'Importing…';
+  box.style.display = 'block'; box.textContent = 'Importing… this runs OCR on every check image and can take a minute per statement.';
+  try {
+    const r = await fetch('/api/bank-reconcile/import-all', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account_id: acct.id}),
+    });
+    const d = await r.json();
+    if (!r.ok) { box.textContent = 'Import-all failed: ' + (d.error || r.status); return; }
+    const money = (x) => (x == null ? '' : Number(x).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+    box.innerHTML = `<b>${d.status === 'ok' ? 'Done' : 'Stopped'}</b> — ${d.imported_periods} period(s) imported.<table style="margin-top:8px;font-size:12px;border-collapse:collapse">` +
+      `<tr style="color:var(--text3)"><th style="text-align:left;padding:2px 8px">period</th><th style="text-align:left;padding:2px 8px">action</th><th style="text-align:right;padding:2px 8px">inserted</th><th style="text-align:right;padding:2px 8px">cleared</th><th style="text-align:right;padding:2px 8px">uncoded</th><th style="text-align:right;padding:2px 8px">delta</th><th style="text-align:left;padding:2px 8px">ties</th><th style="text-align:left;padding:2px 8px">audit</th></tr>` +
+      d.periods.map(p => `<tr><td style="padding:2px 8px;font-family:var(--mono)">${esc(p.period)}</td><td style="padding:2px 8px">${esc(p.action)}${p.reason ? ' — ' + esc(p.reason) : ''}${p.error ? ' — ' + esc(p.error) : ''}</td>` +
+        `<td style="text-align:right;padding:2px 8px">${p.inserted ?? ''}</td><td style="text-align:right;padding:2px 8px">${p.cleared ?? ''}</td><td style="text-align:right;padding:2px 8px">${p.uncoded ?? ''}</td>` +
+        `<td style="text-align:right;padding:2px 8px;font-family:var(--mono)">${p.delta != null ? money(p.delta) : ''}</td>` +
+        `<td style="padding:2px 8px;color:${p.ties === true ? 'var(--green)' : (p.ties === false ? 'var(--red)' : 'var(--text3)')}">${p.ties === true ? 'yes' : (p.ties === false ? 'NO' : '')}</td>` +
+        `<td style="padding:2px 8px;color:${p.audit_ok === false ? 'var(--red)' : 'var(--text3)'}">${p.audit_ok === false ? 'FAILED ' + esc((p.audit_failures || []).join(', ')) : (p.audit_ok === true ? 'clean' : '')}</td></tr>`).join('') +
+      `</table>`;
+    loadHistory();
+  } catch (e) {
+    box.textContent = 'Import-all failed: ' + e;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Import all pending';
+  }
+}
+
 async function loadHistory() {
   if (!STATE.currentAcct) return;
   $('history-wrap').innerHTML = '<div class="loading">Loading…</div>';
@@ -787,6 +847,7 @@ function closeDedupeModal() {
 function dedupeBody(commit) {
   return JSON.stringify({
     account_id: parseInt(document.getElementById('dd-account').value, 10),
+    all_periods: document.getElementById('dd-all').checked,
     start_date: document.getElementById('dd-start').value,
     end_date: document.getElementById('dd-end').value,
     date_tolerance_days: parseInt(document.getElementById('dd-tol').value || '5', 10),
@@ -925,6 +986,13 @@ document.addEventListener('DOMContentLoaded', () => {
   $('chk-all').addEventListener('change', (e) => {
     if (e.target.checked) selectByPredicate(() => true);
     else { STATE.selected = new Set(); renderTxTable(); }
+  });
+
+  // Import all pending statements for the selected account
+  document.getElementById('btn-import-all').addEventListener('click', importAllPending);
+  document.getElementById('dd-all').addEventListener('change', (e) => {
+    document.getElementById('dd-start').disabled = e.target.checked;
+    document.getElementById('dd-end').disabled = e.target.checked;
   });
 
   // Dedupe modal wiring
