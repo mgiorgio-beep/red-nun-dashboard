@@ -3842,6 +3842,9 @@ _RE_STMT_TAG = re.compile(r"\[\s*stmt\s*#?\s*\d+\s*\]", re.I)
 _RE_CARD_DATE = re.compile(r"(DBT\s+CRD|POS\s+DEB)\s+\d+\s+\d\d/\d\d/\d\d\s*\d*", re.I)
 _RE_CHECK_NO = re.compile(r"^\s*Check\s*#?\s*0*(\d+)", re.I)
 _RE_OCR_PAYEE = re.compile(r"CHK:\s*([^|\[]+)")
+_RE_DESC_DATE = re.compile(
+    r"\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|SEPT|OCT|NOV|DEC)[A-Z]*\.?\s+\d{1,2}(?:\s*,?\s*\d{2,4})?\b"
+    r"|\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b")
 # Words tesseract lifts off a check's amount line ("One Hundred Ninety and
 # 00/100") or its printed boilerplate. A payee containing one is not a payee.
 _CHECK_NOISE_WORDS = {
@@ -3892,9 +3895,22 @@ def _payee_group_key(payee: str, memo: str) -> tuple[str, str]:
         merchant = re.sub(r"\s+", " ", merchant)
         return ("CARD " + merchant.upper()[:40], merchant or "Card purchase")
     s = _RE_STMT_TAG.sub(" ", p).upper()
+    # The bank writes the business date into a deposit's description ("DEP
+    # May 22 TOAST", "TSC Mar 24 TOAST"), which made every day its own group.
+    # The date is not the counterparty; drop it so a month of Toast payouts
+    # is one group with one Post button.
+    dated = _RE_DESC_DATE.search(s) is not None
+    s = _RE_DESC_DATE.sub(" ", s)
     s = re.sub(r"[#*]?\d{4,}", " ", s)
     s = re.sub(r"[^A-Z0-9&. ]+", " ", s)
     s = " ".join(s.split()[:4])
+    if dated:
+        words = s.split()
+        if words and words[0] in ("DEP", "DEPOSIT", "TSC"):
+            label = " ".join(words[1:]).title() + " deposits" if len(words) > 1 else "Deposits"
+        else:
+            label = s.title()
+        return (s, label)
     return (s, p)
 
 
