@@ -2042,7 +2042,24 @@ def set_row_gl_account():
             if ba:
                 loc = ba["location"]
 
-        rule_pattern = _extract_rule_pattern(desc)
+        # A CHECK teaches a rule only from a readable OCR'd payee. The bank's
+        # description of a check is "Check 10006" — a number that never
+        # recurs — and tesseract's failures read like "OPE SR OE WOW". Both
+        # became rules on 2026-09-23 the moment Mike posted checks from the
+        # Bank Transactions page; 29 older "CHECK nnnn" rules said the same.
+        # Neither can ever match a future transaction; the garbage ones could
+        # match the wrong one.
+        if source == "manual" and _RE_CHECK_NO.match(desc.strip()):
+            hit = _RE_OCR_PAYEE.search(desc)
+            name = hit.group(1).strip() if hit else ""
+            if len(re.findall(r"\b[A-Z][a-z]{2,}\b", name)) >= 2:
+                desc = name
+            else:
+                logger.info("Not learning a rule from check %s: payee unread", desc.strip()[:30])
+                desc = ""
+        rule_pattern = _extract_rule_pattern(desc) if desc else None
+        if rule_pattern and re.fullmatch(r"(CHECK|CHK)\s*\d+", rule_pattern):
+            rule_pattern = None
         if rule_pattern:
             # "PAYPAL", "PURCHASE PAYPAL", "INST XFER PAYPAL" all name the
             # channel and nothing else; "PAYPAL UBER" names a merchant.

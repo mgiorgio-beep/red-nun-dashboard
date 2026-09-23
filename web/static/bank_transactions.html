@@ -6,6 +6,8 @@
 <title>Bank Transactions — Red Nun</title>
 <link rel="stylesheet" href="/static/sidebar.css">
 <style>
+select.gl.chosen { border-color: var(--accent, #2563eb); }
+.col-chk input { width: 16px; height: 16px; cursor: pointer; }
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 :root {
   --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
@@ -96,7 +98,7 @@ select.gl.review { border-color: var(--amber); }
   tr.group td { padding: 10px 12px; }
   tr.group .apply { float: none; margin-top: 6px; }
   .desc { max-width: none; }
-  .col-chk { display: none; }
+  .col-chk { display: block; padding: 4px 12px; }
 }
 </style>
 </head>
@@ -125,7 +127,7 @@ select.gl.review { border-color: var(--amber); }
     <input type="search" id="q" placeholder="Search description, memo, payee…">
     <label class="hint"><input type="checkbox" id="group-toggle" checked> group by payee</label>
     <span class="spacer"></span>
-    <span class="hint" id="sel-hint"></span>
+    <span class="hint" id="sel-hint">Choose an account on each line, then post them all at once.</span>
     <button class="btn btn-primary" id="post-selected" disabled>Post selected</button>
   </div>
 
@@ -152,7 +154,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = x => (x == null ? '' : Number(x).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
 
-const S = { accounts: [], acct: null, tab: 'pending', rows: [], gl: [], glLoadedFor: null, chosen: {} };
+const S = { accounts: [], acct: null, tab: 'pending', rows: [], gl: [], glLoadedFor: null, chosen: {}, picked: {} };
 
 function toast(msg, err) {
   const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg;
@@ -204,7 +206,7 @@ function glOptions(selectedId) {
 }
 
 async function selectAccount(id) {
-  S.acct = S.accounts.find(a => a.id === id); S.chosen = {};
+  S.acct = S.accounts.find(a => a.id === id); S.chosen = {}; S.picked = {};
   document.querySelectorAll('.tile').forEach(t => t.classList.toggle('active', parseInt(t.dataset.id, 10) === id));
   $('n-pending').textContent = '(' + S.acct.pending_count + ')';
   $('n-suggested').textContent = '(' + S.acct.suggested_count + ')';
@@ -217,7 +219,7 @@ async function loadRows() {
   $('rows').innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
   const d = await api(`/api/bank-transactions?account_id=${S.acct.id}&tab=${S.tab}&limit=800`);
   S.rows = d.rows;
-  for (const r of S.rows) if (r.suggestion && r.suggestion.gl_account_id) S.chosen[r.id] = r.suggestion.gl_account_id;
+  for (const r of S.rows) if (S.chosen[r.id] === undefined && r.suggestion && r.suggestion.gl_account_id) S.chosen[r.id] = r.suggestion.gl_account_id;
   $('foot').textContent = d.truncated ? `Showing ${d.rows.length} of ${d.total} — post some and reload for the rest.` : `${d.total} row${d.total === 1 ? '' : 's'}.`;
   render();
 }
@@ -236,7 +238,7 @@ function render() {
     const s = r.suggestion; const editable = S.tab !== 'posted' && !r.locked;
     const cls = s ? (s.badge === 'REVIEW' ? 'review' : 'suggested') : '';
     h += `<tr data-id="${r.id}">
-      <td class="col-chk">${editable ? `<input type="checkbox" class="rowchk" data-id="${r.id}">` : ''}</td>
+      <td class="col-chk">${editable ? `<input type="checkbox" class="rowchk" data-id="${r.id}" ${S.picked[r.id] ? 'checked' : ''}>` : ''}</td>
       <td class="date">${esc(r.date)}</td>
       <td class="desc"><div>${esc(r.payee)}</div>${r.ocr_payee ? `<div class="ocr">✎ ${esc(r.ocr_payee)}</div>` : ''}${r.memo ? `<div class="memo">${esc(r.memo)}</div>` : ''}</td>
       <td class="num" data-label="Spent">${money(r.spent)}</td>
@@ -244,7 +246,7 @@ function render() {
       <td>${r.check_image ? `<img class="thumb" src="${r.check_image}" loading="lazy" onclick="zoom('${r.check_image}')">` : ''}</td>
       <td>${S.tab === 'posted'
             ? `<span class="badge POSTED">POSTED</span>${esc(r.gl_name || '')}`
-            : `${s ? `<span class="badge ${esc(s.badge)}">${esc(s.badge)}</span>` : ''}<select class="gl ${cls}" data-id="${r.id}" ${editable ? '' : 'disabled'}>${glOptions(S.chosen[r.id] || null)}</select>${s && s.reason ? `<div class="reason">${esc(s.reason)}</div>` : ''}${r.locked ? '<div class="reason">locked by a signed-off period</div>' : ''}`}</td>
+            : `${s ? `<span class="badge ${esc(s.badge)}">${esc(s.badge)}</span>` : ''}<select class="gl ${cls} ${S.chosen[r.id] ? 'chosen' : ''}" data-id="${r.id}" ${editable ? '' : 'disabled'}>${glOptions(S.chosen[r.id] || null)}</select>${s && s.reason ? `<div class="reason">${esc(s.reason)}</div>` : ''}${r.locked ? '<div class="reason">locked by a signed-off period</div>' : ''}`}</td>
       <td>${editable ? `<button class="post" data-id="${r.id}" ${S.chosen[r.id] ? '' : 'disabled'}>Post</button>` : ''}</td>
     </tr>`;
   };
@@ -264,34 +266,40 @@ function render() {
 
   document.querySelectorAll('select.gl[data-id]').forEach(sel => sel.addEventListener('change', () => {
     const id = parseInt(sel.dataset.id, 10); S.chosen[id] = sel.value ? parseInt(sel.value, 10) : null;
+    S.picked[id] = !!S.chosen[id];
     const btn = document.querySelector(`button.post[data-id="${id}"]`); if (btn) btn.disabled = !S.chosen[id];
+    const chk = document.querySelector(`.rowchk[data-id="${id}"]`); if (chk) chk.checked = S.picked[id];
+    sel.classList.toggle('chosen', !!S.chosen[id]);
     updateSel();
   }));
   document.querySelectorAll('button.post').forEach(b => b.addEventListener('click', () => postRows([parseInt(b.dataset.id, 10)])));
   document.querySelectorAll('button[data-apply]').forEach(b => b.addEventListener('click', () => {
     const key = b.dataset.apply; const sel = document.querySelector(`select.group-gl[data-key="${CSS.escape(key)}"]`);
     const v = sel && sel.value ? parseInt(sel.value, 10) : null; if (!v) return;
-    for (const r of S.rows) if (r.group_key === key) S.chosen[r.id] = v;
+    for (const r of S.rows) if (r.group_key === key && !r.locked) { S.chosen[r.id] = v; S.picked[r.id] = true; }
     render();
   }));
-  document.querySelectorAll('.rowchk').forEach(c => c.addEventListener('change', updateSel));
+  document.querySelectorAll('.rowchk').forEach(c => c.addEventListener('change', () => { S.picked[parseInt(c.dataset.id, 10)] = c.checked; updateSel(); }));
   updateSel();
 }
 
 function updateSel() {
   const ids = [...document.querySelectorAll('.rowchk:checked')].map(c => parseInt(c.dataset.id, 10)).filter(id => S.chosen[id]);
-  $('sel-hint').textContent = ids.length ? `${ids.length} selected` : '';
+  const coded = S.rows.filter(r => S.chosen[r.id] && !r.locked).length;
+  $('sel-hint').textContent = ids.length ? `${ids.length} of ${coded} coded line${coded === 1 ? '' : 's'} selected` : (coded ? `${coded} coded, none selected — tick the box on a line or use the header box` : 'Choose an account on each line, then post them all at once.');
+  $('post-selected').textContent = ids.length ? `Post ${ids.length} selected` : 'Post selected';
   $('post-selected').disabled = !ids.length;
 }
 
 async function postRows(ids) {
-  let ok = 0, learned = new Set(), backfilled = 0, errs = [];
+  let ok = 0, learned = new Set(), backfilled = 0, errs = [], posted = [];
+  const btns = [...document.querySelectorAll('button.post'), $('post-selected')]; btns.forEach(b => b.disabled = true);
   for (const id of ids) {
     const gl = S.chosen[id]; if (!gl) continue;
     try {
       const d = await api('/api/register/row/gl-account', {method: 'PUT', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({source: 'manual', id, gl_account_id: gl, create_rule: true})});
-      ok++; if (d.rule_pattern) learned.add(d.rule_pattern); backfilled += d.backfilled || 0;
+      ok++; posted.push(id); if (d.rule_pattern) learned.add(d.rule_pattern); backfilled += d.backfilled || 0;
     } catch (e) { errs.push(`#${id}: ${e.message}`); }
   }
   let msg = `Posted ${ok} line${ok === 1 ? '' : 's'}.`;
@@ -299,18 +307,23 @@ async function postRows(ids) {
   if (backfilled) msg += ` ${backfilled} more line${backfilled === 1 ? '' : 's'} now carry that account as suggested.`;
   toast(msg);
   if (errs.length) toast(errs.slice(0, 3).join(' | '), true);
-  await loadTiles(); await loadRows();
+  const done = new Set(posted);
+  S.rows = S.rows.filter(r => !done.has(r.id));
+  for (const id of done) { delete S.chosen[id]; delete S.picked[id]; }
+  const y = window.scrollY; render(); window.scrollTo(0, y);
+  $('foot').textContent = `${S.rows.length} row${S.rows.length === 1 ? '' : 's'} left.`;
+  loadTiles().catch(() => {});
 }
 
 function zoom(src) { $('lightbox-img').src = src; $('lightbox').style.display = 'flex'; }
 
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', async () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
-  S.tab = t.dataset.tab; S.chosen = {}; await loadRows();
+  S.tab = t.dataset.tab; S.chosen = {}; S.picked = {}; await loadRows();
 }));
 $('q').addEventListener('input', render);
 $('group-toggle').addEventListener('change', render);
-$('chk-all').addEventListener('change', e => { document.querySelectorAll('.rowchk').forEach(c => { c.checked = e.target.checked && !!S.chosen[parseInt(c.dataset.id, 10)]; }); updateSel(); });
+$('chk-all').addEventListener('change', e => { document.querySelectorAll('.rowchk').forEach(c => { const id = parseInt(c.dataset.id, 10); c.checked = e.target.checked && !!S.chosen[id]; S.picked[id] = c.checked; }); updateSel(); });
 $('post-selected').addEventListener('click', () => {
   const ids = [...document.querySelectorAll('.rowchk:checked')].map(c => parseInt(c.dataset.id, 10)).filter(id => S.chosen[id]);
   if (!ids.length) return;

@@ -420,3 +420,57 @@ class TestCloseLocksByClearedDate:
         aug = [x for x in items["reconciliations"] if x["period_start"] == "2026-08-01"][0]
         assert {(i["source"], i["source_id"]) for i in aug["items"]} == {("bill_pay", 2)}
         assert cents(sum(i["amount"] for i in aug["items"])) == cents(aug["outstanding_net"])
+
+
+# ---------------------------------------------------------------------------
+# Learner: a check teaches a rule only from a readable payee
+# ---------------------------------------------------------------------------
+
+def _seed_gl(conn):
+    conn.execute("INSERT OR IGNORE INTO gl_accounts (id, name, account_type, location, active) "
+                 "VALUES (901, 'Daily Cleaning', 'Expense', 'chatham', 1)")
+    # The accrual guard looks for an invoice behind a P&L coding; give it the
+    # (empty) tables it queries.
+    conn.execute("CREATE TABLE IF NOT EXISTS ap_payment_invoices (id INTEGER PRIMARY KEY, "
+                 "payment_id INTEGER, invoice_id INTEGER, amount_applied REAL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS ap_payments (id INTEGER PRIMARY KEY)")
+    conn.execute("CREATE TABLE IF NOT EXISTS scanned_invoices (id INTEGER PRIMARY KEY)")
+    conn.execute("CREATE TABLE IF NOT EXISTS vendor_payment_invoices (id INTEGER PRIMARY KEY, "
+                 "payment_id INTEGER, invoice_number TEXT, amount_paid REAL)")
+    conn.commit()
+
+
+def _post_check(client, conn, payee, memo, gl_id):
+    conn.execute("INSERT OR IGNORE INTO bank_accounts (id, location, name, account_last4, active) VALUES (%d, 'dennis', 'fixture', '0001', 1)" % ACCT)
+    conn.execute(
+        "INSERT INTO manual_bank_entries (bank_account_id, entry_date, entry_type, amount, payee, memo, created_by) "
+        "VALUES (%d, '2026-06-05', 'check', -100.0, ?, ?, 'stmt')" % ACCT, (payee, memo))
+    conn.commit()
+    rid = conn.execute("SELECT max(id) FROM manual_bank_entries").fetchone()[0]
+    conn.close()
+    r = client.put("/api/register/row/gl-account",
+                   json={"source": "manual", "id": rid, "gl_account_id": gl_id, "create_rule": True})
+    assert r.status_code == 200, r.get_json()
+    return r.get_json()
+
+
+def test_check_number_never_becomes_a_rule(client, modules):
+    conn = modules[2]()
+    _seed_gl(conn)
+    gl = 901
+    before = conn.execute("SELECT count(*) FROM gl_account_rules").fetchone()[0]
+    d = _post_check(client, modules[2](), "Check 10006", "[stmt #3]", gl)
+    assert not d.get("rule_pattern")
+    d = _post_check(client, modules[2](), "Check 9710", "CHK: OPE SR OE WOW | [stmt #3]", gl)
+    assert not d.get("rule_pattern")
+    conn = modules[2]()
+    assert conn.execute("SELECT count(*) FROM gl_account_rules").fetchone()[0] == before
+    assert not conn.execute("SELECT 1 FROM gl_account_rules WHERE pattern LIKE 'CHECK %'").fetchall()
+
+
+def test_readable_check_payee_teaches_the_payee(client, modules):
+    conn = modules[2]()
+    _seed_gl(conn)
+    gl = 901
+    d = _post_check(client, modules[2](), "Check 9711", "CHK: Cape Cod Cleaning | [stmt #3]", gl)
+    assert (d.get("rule_pattern") or "").startswith("CAPE COD")
