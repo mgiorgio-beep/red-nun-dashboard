@@ -258,7 +258,11 @@ function render() {
       const tot = rs.reduce((t, r) => t + r.amount, 0);
       const first = rs.find(r => r.suggestion && r.suggestion.gl_account_id);
       h += `<tr class="group"><td colspan="8">${esc(rs[0].group_label)}<span class="meta">${rs.length} line${rs.length === 1 ? '' : 's'} · ${money(tot)}</span>
-        ${S.tab !== 'posted' ? `<span class="apply">apply to all: <select class="gl group-gl" data-key="${esc(key)}" style="min-width:200px">${glOptions(first ? first.suggestion.gl_account_id : null)}</select><button class="btn" data-apply="${esc(key)}">Set</button></span>` : ''}</td></tr>`;
+        ${S.tab !== 'posted' ? (() => {
+          const ready = rs.filter(r => S.chosen[r.id] && !r.locked).length;
+          const gsel = rs.find(r => S.chosen[r.id]);
+          return `<span class="apply">apply to all: <select class="gl group-gl" data-key="${esc(key)}" style="min-width:200px">${glOptions(gsel ? S.chosen[gsel.id] : (first ? first.suggestion.gl_account_id : null))}</select><button class="btn" data-apply="${esc(key)}">Set</button><button class="btn btn-primary group-post" data-post-group="${esc(key)}" ${ready ? '' : 'disabled'} title="post every line in this group that has an account">Post ${ready ? ready : 'all'}</button></span>`;
+        })() : ''}</td></tr>`;
       rs.forEach(emit);
     }
   } else rows.forEach(emit);
@@ -270,6 +274,12 @@ function render() {
     const btn = document.querySelector(`button.post[data-id="${id}"]`); if (btn) btn.disabled = !S.chosen[id];
     const chk = document.querySelector(`.rowchk[data-id="${id}"]`); if (chk) chk.checked = S.picked[id];
     sel.classList.toggle('chosen', !!S.chosen[id]);
+    const row = S.rows.find(r => r.id === id);
+    if (row) {
+      const ready = S.rows.filter(r => r.group_key === row.group_key && S.chosen[r.id] && !r.locked).length;
+      const gb = document.querySelector(`button[data-post-group="${CSS.escape(row.group_key)}"]`);
+      if (gb) { gb.disabled = !ready; gb.textContent = ready ? `Post ${ready}` : 'Post all'; }
+    }
     updateSel();
   }));
   document.querySelectorAll('button.post').forEach(b => b.addEventListener('click', () => postRows([parseInt(b.dataset.id, 10)])));
@@ -280,6 +290,11 @@ function render() {
     render();
   }));
   document.querySelectorAll('.rowchk').forEach(c => c.addEventListener('change', () => { S.picked[parseInt(c.dataset.id, 10)] = c.checked; updateSel(); }));
+  document.querySelectorAll('button[data-post-group]').forEach(b => b.addEventListener('click', () => {
+    const key = b.dataset.postGroup;
+    const ids = S.rows.filter(r => r.group_key === key && S.chosen[r.id] && !r.locked).map(r => r.id);
+    if (ids.length) postRows(ids);
+  }));
   updateSel();
 }
 
