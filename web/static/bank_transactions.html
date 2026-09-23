@@ -65,6 +65,8 @@ tbody td { padding: 9px 12px; border-bottom: 1px solid rgba(30,41,59,.6); vertic
 tbody tr:hover td { background: rgba(56,189,248,.05); }
 tr.group td { background: var(--bg-elevated); font-weight: 600; padding: 8px 12px; color: var(--text); }
 tr.group .meta { color: var(--text3); font-weight: 500; font-size: 12px; margin-left: 8px; }
+tr.group-foot td { text-align: right; padding: 6px 12px 14px; border-bottom: 2px solid var(--border); }
+tr.group-foot .meta { font-size: 12px; color: var(--text3); margin-right: 10px; }
 tr.group .apply { float: right; display: flex; gap: 8px; align-items: center; font-weight: 500; font-size: 12px; color: var(--text2); }
 td.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
 td.date { font-family: var(--mono); white-space: nowrap; color: var(--text2); }
@@ -267,6 +269,10 @@ function render() {
           return `<span class="apply">apply to all: <select class="gl group-gl" data-key="${esc(key)}" style="min-width:200px">${glOptions(gsel ? S.chosen[gsel.id] : (first ? first.suggestion.gl_account_id : null))}</select><button class="btn" data-apply="${esc(key)}">Set</button><button class="btn btn-primary group-post" data-post-group="${esc(key)}" ${ready ? '' : 'disabled'} title="post every line in this group that has an account">Post ${ready ? ready : 'all'}</button></span>`;
         })() : ''}</td></tr>`;
       rs.forEach(emit);
+      if (S.tab !== 'posted' && rs.length > 1) {
+        const ready = rs.filter(r => S.chosen[r.id] && !r.locked).length;
+        h += `<tr class="group-foot"><td colspan="8"><span class="meta">${esc(rs[0].group_label)} · ${rs.length} lines</span><button class="btn btn-primary group-post" data-post-group="${esc(key)}" ${ready ? '' : 'disabled'} title="post every line in this group that has an account">Post ${ready ? ready : 'all'}</button></td></tr>`;
+      }
     }
   } else rows.forEach(emit);
   $('rows').innerHTML = h;
@@ -280,8 +286,7 @@ function render() {
     const row = S.rows.find(r => r.id === id);
     if (row) {
       const ready = S.rows.filter(r => r.group_key === row.group_key && S.chosen[r.id] && !r.locked).length;
-      const gb = document.querySelector(`button[data-post-group="${CSS.escape(row.group_key)}"]`);
-      if (gb) { gb.disabled = !ready; gb.textContent = ready ? `Post ${ready}` : 'Post all'; }
+      document.querySelectorAll(`button[data-post-group="${CSS.escape(row.group_key)}"]`).forEach(gb => { gb.disabled = !ready; gb.textContent = ready ? `Post ${ready}` : 'Post all'; });
     }
     updateSel();
   }));
