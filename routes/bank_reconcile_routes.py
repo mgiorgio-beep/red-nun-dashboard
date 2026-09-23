@@ -85,7 +85,8 @@ STATEMENT_DIR.mkdir(parents=True, exist_ok=True)
 # ─── TABLE INIT ──────────────────────────────────────────────────────────────
 
 def resolve_import_gl(conn, tx: dict, signed: float,
-                      acct_location: str | None, acct_last4: str | None):
+                      acct_location: str | None, acct_last4: str | None,
+                      quiet: bool = False):
     """Decide the GL account for one freshly imported statement row.
 
     Extracted from the import loop so the regression test can drive THIS code
@@ -104,7 +105,12 @@ def resolve_import_gl(conn, tx: dict, signed: float,
       4. Nothing.
 
     Whatever comes out is validated exactly as a human coding would be.
+    `quiet` skips the per-row log lines (the Bank Transactions page asks for
+    hundreds of rows at a time; the import path still logs).
     """
+    log = logger if not quiet else logging.getLogger("routes.bank_reconcile_routes.quiet")
+    if quiet:
+        log.disabled = True
     from routes.register_routes import (
         _find_gl_account_for_description, classify_transfer, classify_venmo,
         classify_tip_settlement, resolve_gl_for_location,
@@ -123,16 +129,16 @@ def resolve_import_gl(conn, tx: dict, signed: float,
         name, tip_reason = classify_tip_settlement(
             conn, desc, signed, acct_location, tx.get("date"))
         if name:
-            logger.info("Tip channel classified: %s — %s", desc.strip()[:60], tip_reason)
+            log.info("Tip channel classified: %s — %s", desc.strip()[:60], tip_reason)
         elif tip_reason:
             reason = tip_reason
-            logger.warning("Tip channel left for review: %s — %s",
+            log.warning("Tip channel left for review: %s — %s",
                            desc.strip()[:70], tip_reason)
 
     if not name and not reason:
         name, venmo_reason = classify_venmo(desc, signed)
         if name:
-            logger.info("Venmo classified: %s — %s", desc.strip()[:60], venmo_reason)
+            log.info("Venmo classified: %s — %s", desc.strip()[:60], venmo_reason)
 
     if name:
         # Prefer this entity's own account; a NULL-location (shared) one is the
@@ -145,10 +151,10 @@ def resolve_import_gl(conn, tx: dict, signed: float,
         if hit:
             gl_id = hit["id"]
         else:
-            logger.warning("No active %r account for %s — leaving row uncoded",
+            log.warning("No active %r account for %s — leaving row uncoded",
                            name, acct_location)
     elif reason:
-        logger.info("Transfer left for review: %s — %s", desc.strip()[:70], reason)
+        log.info("Transfer left for review: %s — %s", desc.strip()[:70], reason)
 
     if gl_id is None and not reason:
         # SCOPE THE LOOKUP TO THIS ENTITY. Omitting the location here is what

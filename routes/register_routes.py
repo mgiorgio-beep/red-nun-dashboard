@@ -1595,10 +1595,29 @@ SEVENSHIFTS_PAYROLL_PREFIXES = ("PCR ", "COL ", "TAX ")
 KICKFIN_ROUTINE_DAYS = 3
 
 
+_AVG_TIPS_CACHE: dict = {}
+_AVG_TIPS_TTL = 600  # seconds; the sales journal changes once a day
+
+
 def _avg_daily_tips(conn, location: str | None, before: str | None = None) -> float:
-    """Average daily tips from the sales journal, for sizing a Kickfin draft."""
+    """Average daily tips from the sales journal, for sizing a Kickfin draft.
+
+    Cached per (location, before) for ten minutes: the Bank Transactions page
+    asks this once per Kickfin row, and the aggregate over qb_journal_line_items
+    costs ~0.4 s each — 21 rows made the page take nine seconds."""
     if not location:
         return 0.0
+    import time as _time
+    key = (location, before)
+    hit = _AVG_TIPS_CACHE.get(key)
+    if hit and _time.monotonic() - hit[0] < _AVG_TIPS_TTL:
+        return hit[1]
+    val = _avg_daily_tips_uncached(conn, location, before)
+    _AVG_TIPS_CACHE[key] = (_time.monotonic(), val)
+    return val
+
+
+def _avg_daily_tips_uncached(conn, location: str | None, before: str | None = None) -> float:
     params = [location]
     date_clause = ""
     if before:
@@ -2759,6 +2778,10 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     _unc_in = sum(r["inflow"] for r in _open_rows)
     _unc_out = sum(r["outflow"] for r in _open_rows)
     outstanding_count = len(_open_rows)
+    # Rows that still need a GL account: manual and deposit rows with no coding.
+    # Bill Pay and payroll rows never need one here (expense booked upstream).
+    uncoded_count = sum(1 for r in rows if r["source"] in ("manual", "deposit")
+                        and not r.get("gl_account_id"))
 
     # book_balance is anchored the same way as bank_balance (the bank
     # balance at opening_date) and then carries EVERY row dated up to `end`,
@@ -2777,6 +2800,9 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
         rows = [r for r in rows if r["cleared"]]
     elif cleared_filter == "uncleared":
         rows = [r for r in rows if not r["cleared"]]
+    elif cleared_filter == "uncoded":
+        rows = [r for r in rows if r["source"] in ("manual", "deposit")
+                and not r.get("gl_account_id")]
 
     # Sort ascending by (date, source, source_id) to compute running balance,
     # then reverse for display. The tie-break is deterministic: two register
@@ -2838,6 +2864,7 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
             "outstanding_outflow": round(_unc_out, 2),
             "outstanding_inflow": round(_unc_in, 2),
             "outstanding_count": outstanding_count,
+            "uncoded_count": uncoded_count,
         },
     }
 
@@ -3791,3 +3818,194 @@ def list_gl_account_balances():
 # The HTML page is served by web/server.py (for consistency with other pages
 # that use send_from_directory). This blueprint only owns the /api/register/*
 # namespace.
+
+
+# ─── BANK TRANSACTIONS — the exceptions queue ───────────────────────────────
+#
+# Modelled on QuickBooks Online's Bank Transactions page (Mike's screenshot,
+# 2026-09-23): one tile per account with a pending count, Pending / Suggested /
+# Posted tabs, one row per statement line with the suggested account carrying
+# a badge that says WHO suggested it, and one Post button. Post goes through
+# PUT /api/register/row/gl-account — the same door every human coding uses —
+# so it validates the account for the entity and teaches a rule only from a
+# confirmed row. Nothing here writes.
+
+_RE_STMT_TAG = re.compile(r"\[\s*stmt\s*#?\s*\d+\s*\]", re.I)
+_RE_CARD_DATE = re.compile(r"(DBT\s+CRD|POS\s+DEB)\s+\d+\s+\d\d/\d\d/\d\d\s*\d*", re.I)
+_RE_CHECK_NO = re.compile(r"^\s*Check\s*#?\s*0*(\d+)", re.I)
+_RE_OCR_PAYEE = re.compile(r"CHK:\s*([^|\[]+)")
+
+
+def _payee_group_key(payee: str, memo: str) -> tuple[str, str]:
+    """(group key, display label) that collapses one counterparty's rows.
+
+    Checks group by the OCR'd payee (or "Check — unread" when the OCR failed),
+    card purchases by the merchant that the bank puts in the memo, everything
+    else by the description with the bank's per-transaction noise removed.
+    Same collapse as GL_CODING_QUESTIONS_2026-09-23.md, so the screen and the
+    sheet agree."""
+    p = (payee or "").strip()
+    m = _RE_STMT_TAG.sub(" ", memo or "")
+    if _RE_CHECK_NO.match(p):
+        hit = _RE_OCR_PAYEE.search(m)
+        name = hit.group(1).strip() if hit else ""
+        words = re.findall(r"\b[A-Z][a-z]{2,}\b", name)
+        if len(words) >= 2:
+            return ("CHECK " + name.upper()[:40], name)
+        return ("CHECK ?", "Check — payee unread")
+    if _RE_CARD_DATE.match(p):
+        seg = [x.strip() for x in m.split("|") if x.strip()]
+        merchant = re.sub(r"[#*]?\d{4,}", " ", seg[0] if seg else "").strip()
+        merchant = re.sub(r"\s+", " ", merchant)
+        return ("CARD " + merchant.upper()[:40], merchant or "Card purchase")
+    s = _RE_STMT_TAG.sub(" ", p).upper()
+    s = re.sub(r"[#*]?\d{4,}", " ", s)
+    s = re.sub(r"[^A-Z0-9&. ]+", " ", s)
+    s = " ".join(s.split()[:4])
+    return (s, p)
+
+
+def _check_image_url(account_id: int, payee: str, ref: str | None) -> str | None:
+    num = None
+    hit = _RE_CHECK_NO.match(payee or "")
+    if hit:
+        num = hit.group(1)
+    elif ref and str(ref).isdigit():
+        num = str(int(ref))
+    if not num:
+        return None
+    root = Path(__file__).resolve().parent.parent / "web" / "static" / "check_images"
+    for cand in (f"acct{account_id}_check_{num}.png", f"acct{account_id}_check_{num.zfill(4)}.png"):
+        if (root / cand).exists():
+            return f"/static/check_images/{cand}"
+    return None
+
+
+@register_bp.route("/api/bank-transactions", methods=["GET"])
+@login_required
+def bank_transactions():
+    """Tiles for every account plus the rows for one tab of one account.
+
+    Query: account_id (omit for tiles only), tab = pending | suggested | posted
+           (default pending), limit (default 500, max 2000).
+
+      pending    statement rows with no GL account — the owner's work. Each
+                 carries a suggestion: the rule engine's answer (badge RULE)
+                 or the classifier's "needs a human" reason (badge REVIEW).
+      suggested  rows a machine coded (gl_status = suggested) that no human
+                 has stood behind yet — one tap confirms.
+      posted     rows a human confirmed.
+    """
+    tab = request.args.get("tab", "pending")
+    if tab not in ("pending", "suggested", "posted"):
+        return jsonify({"error": "tab must be pending, suggested or posted"}), 400
+    account_id = request.args.get("account_id", type=int)
+    limit = max(1, min(request.args.get("limit", 500, type=int), 2000))
+
+    conn = get_connection()
+    try:
+        accounts = [dict(r) for r in conn.execute(
+            "SELECT id, name, short_name, location, account_last4 FROM bank_accounts "
+            "WHERE active = 1 ORDER BY sort_order, id")]
+        for a in accounts:
+            n, tot = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(amount), 0) FROM manual_bank_entries "
+                "WHERE bank_account_id = ? AND gl_account_id IS NULL", (a["id"],)).fetchone()
+            a["pending_count"], a["pending_total"] = n, round(tot, 2)
+            a["needs_review_count"] = conn.execute(
+                "SELECT COUNT(*) FROM manual_bank_entries WHERE bank_account_id = ? "
+                "AND gl_status = ?", (a["id"], GL_STATUS_NEEDS_REVIEW)).fetchone()[0]
+            a["suggested_count"] = conn.execute(
+                "SELECT COUNT(*) FROM manual_bank_entries WHERE bank_account_id = ? "
+                "AND gl_account_id IS NOT NULL AND gl_status = ?",
+                (a["id"], GL_STATUS_SUGGESTED)).fetchone()[0]
+            a["posted_count"] = conn.execute(
+                "SELECT COUNT(*) FROM manual_bank_entries WHERE bank_account_id = ? "
+                "AND gl_status = ?", (a["id"], GL_STATUS_CONFIRMED)).fetchone()[0]
+            latest = conn.execute(
+                "SELECT MAX(period_end) FROM bank_statement_uploads WHERE bank_account_id = ?",
+                (a["id"],)).fetchone()[0]
+            a["last_statement"] = latest
+
+        out = {"accounts": accounts, "tab": tab, "account": None, "rows": [],
+               "total": 0, "truncated": False}
+        if not account_id:
+            return jsonify(out)
+        acct = next((a for a in accounts if a["id"] == account_id), None)
+        if acct is None:
+            return jsonify({"error": "account not found"}), 404
+        out["account"] = acct
+
+        where = {
+            "pending": "gl_account_id IS NULL",
+            "suggested": f"gl_account_id IS NOT NULL AND gl_status = '{GL_STATUS_SUGGESTED}'",
+            "posted": f"gl_status = '{GL_STATUS_CONFIRMED}'",
+        }[tab]
+        out["total"] = conn.execute(
+            f"SELECT COUNT(*) FROM manual_bank_entries WHERE bank_account_id = ? AND {where}",
+            (account_id,)).fetchone()[0]
+        out["truncated"] = out["total"] > limit
+        raw = conn.execute(
+            f"""SELECT id, entry_date, entry_type, payee, memo, ref_number, amount,
+                       gl_account_id, gl_source, gl_status, statement_upload_id,
+                       cleared_date, reconciliation_id
+                FROM manual_bank_entries
+                WHERE bank_account_id = ? AND {where}
+                ORDER BY entry_date DESC, id DESC LIMIT ?""",
+            (account_id, limit)).fetchall()
+
+        gl_names = {r["id"]: (r["name"], r["account_type"]) for r in conn.execute(
+            "SELECT id, name, account_type FROM gl_accounts")}
+        from routes.bank_reconcile_routes import resolve_import_gl  # lazy: avoids a cycle
+
+        rows = []
+        for r in raw:
+            key, label = _payee_group_key(r["payee"], r["memo"])
+            memo = _RE_STMT_TAG.sub("", r["memo"] or "").strip(" |")
+            ocr = _RE_OCR_PAYEE.search(r["memo"] or "")
+            row = {
+                "id": r["id"], "source": "manual",
+                "date": r["entry_date"], "payee": r["payee"], "memo": memo,
+                "ref": r["ref_number"], "amount": r["amount"],
+                "spent": round(-r["amount"], 2) if r["amount"] < 0 else None,
+                "received": round(r["amount"], 2) if r["amount"] > 0 else None,
+                "statement_upload_id": r["statement_upload_id"],
+                "cleared_date": r["cleared_date"],
+                "locked": bool(r["reconciliation_id"]),
+                "gl_account_id": r["gl_account_id"],
+                "gl_name": gl_names.get(r["gl_account_id"], (None, None))[0],
+                "gl_source": r["gl_source"], "gl_status": r["gl_status"],
+                "group_key": key, "group_label": label,
+                "ocr_payee": ocr.group(1).strip() if ocr else None,
+                "check_image": _check_image_url(account_id, r["payee"], r["ref_number"]),
+                "suggestion": None,
+            }
+            if tab == "pending":
+                tx = {"description": r["payee"], "memo": r["memo"], "date": r["entry_date"]}
+                gl_id = resolve_import_gl(conn, tx, float(r["amount"]),
+                                          acct["location"], acct["account_last4"] or "",
+                                          quiet=True)
+                if gl_id:
+                    row["suggestion"] = {"gl_account_id": gl_id,
+                                         "gl_name": gl_names.get(gl_id, ("?", None))[0],
+                                         "badge": "RULE", "reason": "matches a coding rule"}
+                else:
+                    name, reason = classify_tip_settlement(
+                        conn, (r["payee"] or "") + " " + (r["memo"] or ""),
+                        float(r["amount"]), acct["location"], r["entry_date"])
+                    if reason and not name:
+                        offer = suggested_account_for_review(conn, reason, acct["location"])
+                        row["suggestion"] = {
+                            "gl_account_id": offer["id"] if offer else None,
+                            "gl_name": offer["name"] if offer else None,
+                            "badge": "REVIEW", "reason": reason}
+            elif tab == "suggested":
+                row["suggestion"] = {"gl_account_id": r["gl_account_id"],
+                                     "gl_name": row["gl_name"],
+                                     "badge": (r["gl_source"] or "rule").upper(),
+                                     "reason": f"coded by {r['gl_source'] or 'rule'}, not yet confirmed"}
+            rows.append(row)
+        out["rows"] = rows
+        return jsonify(out)
+    finally:
+        conn.close()

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bank Transactions — Red Nun</title>
+<link rel="stylesheet" href="/static/sidebar.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #020617; --bg-card: #0f172a; --bg-elevated: #1e293b;
+  --border: #1e293b; --border-focus: #334155;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #475569;
+  --green: #22c55e; --green-soft: rgba(34,197,94,0.12);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.12);
+  --blue: #38bdf8; --blue-soft: rgba(56,189,248,0.12);
+  --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, monospace;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+.main-content { padding: 24px; overflow-y: auto; }
+.content-wrap { max-width: 1400px; }
+.page-header { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.page-title { font-size: 22px; font-weight: 700; }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+/* Account tiles — one per bank account, pending count in the corner */
+.tiles { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.tile { flex: 1 1 240px; max-width: 320px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: border-color .15s; position: relative; }
+.tile:hover { border-color: var(--border-focus); }
+.tile.active { border-color: var(--blue); background: var(--blue-soft); }
+.tile .name { font-size: 14px; font-weight: 600; }
+.tile .sub { font-size: 12px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+.tile .big { font-size: 20px; font-weight: 700; margin-top: 8px; }
+.tile .count { position: absolute; top: 12px; right: 12px; min-width: 26px; padding: 2px 8px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); font-size: 12px; font-weight: 700; text-align: center; }
+.tile .count.zero { background: var(--green-soft); color: var(--green); }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.tab { padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; }
+.tab.active { color: var(--text); border-bottom-color: var(--blue); }
+.tab .n { color: var(--text3); font-weight: 500; margin-left: 4px; }
+
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.toolbar input[type=search] { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; min-width: 220px; }
+.btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text2); font-size: 13px; font-family: var(--font); cursor: pointer; font-weight: 500; }
+.btn:hover { border-color: var(--blue); color: var(--blue); }
+.btn-primary { border-color: var(--green); color: var(--green); }
+.btn-primary:hover { background: var(--green-soft); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.spacer { flex: 1; }
+.hint { font-size: 12px; color: var(--text3); }
+
+/* Table */
+.wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; background: var(--bg-elevated); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+tbody td { padding: 9px 12px; border-bottom: 1px solid rgba(30,41,59,.6); vertical-align: middle; }
+tbody tr:hover td { background: rgba(56,189,248,.05); }
+tr.group td { background: var(--bg-elevated); font-weight: 600; padding: 8px 12px; color: var(--text); }
+tr.group .meta { color: var(--text3); font-weight: 500; font-size: 12px; margin-left: 8px; }
+tr.group .apply { float: right; display: flex; gap: 8px; align-items: center; font-weight: 500; font-size: 12px; color: var(--text2); }
+td.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+td.date { font-family: var(--mono); white-space: nowrap; color: var(--text2); }
+.desc { max-width: 380px; }
+.desc .memo { color: var(--text3); font-size: 12px; margin-top: 2px; word-break: break-word; }
+.desc .ocr { color: var(--blue); font-size: 12px; }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: .4px; margin-right: 6px; vertical-align: middle; }
+.badge.RULE { background: var(--green-soft); color: var(--green); }
+.badge.REVIEW { background: var(--amber-soft); color: var(--amber); }
+.badge.UNKNOWN, .badge.CATEGORY, .badge.ACCRUAL { background: var(--blue-soft); color: var(--blue); }
+.badge.POSTED { background: var(--green-soft); color: var(--green); }
+select.gl { width: 100%; min-width: 220px; padding: 7px 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+select.gl.suggested { border-color: var(--green); }
+select.gl.review { border-color: var(--amber); }
+.reason { font-size: 11px; color: var(--text3); margin-top: 3px; max-width: 360px; }
+.thumb { width: 96px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: zoom-in; display: block; }
+.post { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--green); background: transparent; color: var(--green); font-weight: 600; font-size: 13px; cursor: pointer; }
+.post:hover { background: var(--green-soft); }
+.post:disabled { opacity: .4; cursor: not-allowed; }
+.empty { padding: 40px; text-align: center; color: var(--text3); }
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--bg-elevated); border: 1px solid var(--border-focus); color: var(--text); padding: 12px 16px; border-radius: 10px; font-size: 13px; max-width: 420px; z-index: 50; box-shadow: 0 8px 30px rgba(0,0,0,.4); }
+.toast.err { border-color: var(--red); }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 60; cursor: zoom-out; }
+.lightbox img { max-width: 94vw; max-height: 90vh; border-radius: 8px; }
+
+@media (max-width: 767px) {
+  .main-content { padding: 12px; }
+  thead { display: none; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  tr { border-bottom: 1px solid var(--border); padding: 8px 0; }
+  tbody td { border: none; padding: 4px 12px; }
+  td.num { text-align: left; }
+  td.num::before { content: attr(data-label) " "; color: var(--text3); font-family: var(--font); font-size: 11px; }
+  tr.group td { padding: 10px 12px; }
+  tr.group .apply { float: none; margin-top: 6px; }
+  .desc { max-width: none; }
+  .col-chk { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="main-content">
+<div class="content-wrap">
+
+  <div class="page-header">
+    <div>
+      <div class="page-title">Bank Transactions</div>
+      <div class="page-sub">Statement lines that still need an account. The machine's guess is marked; nothing is booked until you press Post. Posting a line teaches a rule for that payee.</div>
+    </div>
+    <div class="hint" id="hdr-hint"></div>
+  </div>
+
+  <div class="tiles" id="tiles"><div class="hint">Loading accounts…</div></div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="pending">Pending<span class="n" id="n-pending"></span></div>
+    <div class="tab" data-tab="suggested">Suggested<span class="n" id="n-suggested"></span></div>
+    <div class="tab" data-tab="posted">Posted<span class="n" id="n-posted"></span></div>
+  </div>
+
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Search description, memo, payee…">
+    <label class="hint"><input type="checkbox" id="group-toggle" checked> group by payee</label>
+    <span class="spacer"></span>
+    <span class="hint" id="sel-hint"></span>
+    <button class="btn btn-primary" id="post-selected" disabled>Post selected</button>
+  </div>
+
+  <div class="wrap">
+    <table id="tbl">
+      <thead><tr>
+        <th class="col-chk"><input type="checkbox" id="chk-all" title="select all rows that have an account chosen"></th>
+        <th>Date</th><th>Bank description</th><th style="text-align:right">Spent</th><th style="text-align:right">Received</th>
+        <th>Check</th><th>Account</th><th>Action</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="8" class="empty">Pick an account.</td></tr></tbody>
+    </table>
+  </div>
+  <div class="hint" id="foot" style="margin-top:8px"></div>
+
+</div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="this.style.display='none'"><img id="lightbox-img" alt="check image"></div>
+
+<script src="/static/sidebar.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = x => (x == null ? '' : Number(x).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+
+const S = { accounts: [], acct: null, tab: 'pending', rows: [], gl: [], glLoadedFor: null, chosen: {} };
+
+function toast(msg, err) {
+  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), err ? 7000 : 4000);
+}
+
+async function api(url, opts) {
+  const r = await fetch(url, opts); const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || (r.status + ' ' + r.statusText));
+  return d;
+}
+
+async function loadTiles() {
+  const d = await api('/api/bank-transactions');
+  S.accounts = d.accounts;
+  $('tiles').innerHTML = S.accounts.map(a => `
+    <div class="tile ${S.acct && S.acct.id === a.id ? 'active' : ''}" data-id="${a.id}">
+      <div class="count ${a.pending_count ? '' : 'zero'}">${a.pending_count}</div>
+      <div class="name">${esc(a.short_name || a.name)}</div>
+      <div class="sub">•••${esc(a.account_last4 || '')} · ${esc(a.location || '')} · through ${esc(a.last_statement || '—')}</div>
+      <div class="big">${money(a.pending_total)}</div>
+      <div class="hint">${a.pending_count} pending${a.needs_review_count ? ' · ' + a.needs_review_count + ' flagged' : ''} · ${a.suggested_count} suggested · ${a.posted_count} posted</div>
+    </div>`).join('');
+  document.querySelectorAll('.tile').forEach(t => t.addEventListener('click', () => selectAccount(parseInt(t.dataset.id, 10))));
+  if (!S.acct) {
+    const loc = localStorage.getItem('globalLocation');
+    const pick = S.accounts.find(a => a.location === loc) || S.accounts[0];
+    if (pick) selectAccount(pick.id);
+  } else {
+    const a = S.accounts.find(x => x.id === S.acct.id);
+    if (a) { $('n-pending').textContent = '(' + a.pending_count + ')'; $('n-suggested').textContent = '(' + a.suggested_count + ')'; $('n-posted').textContent = '(' + a.posted_count + ')'; }
+  }
+}
+
+async function loadGl(location) {
+  if (S.glLoadedFor === location) return;
+  const d = await api('/api/gl-accounts?active=1&location=' + encodeURIComponent(location));
+  S.gl = d.accounts; S.glLoadedFor = location;
+}
+
+function glOptions(selectedId) {
+  const byType = {};
+  for (const a of S.gl) (byType[a.account_type || 'Other'] ||= []).push(a);
+  let h = '<option value="">— choose an account —</option>';
+  for (const t of Object.keys(byType).sort()) {
+    h += `<optgroup label="${esc(t)}">` + byType[t].map(a => `<option value="${a.id}" ${a.id === selectedId ? 'selected' : ''}>${esc(a.name)}</option>`).join('') + '</optgroup>';
+  }
+  return h;
+}
+
+async function selectAccount(id) {
+  S.acct = S.accounts.find(a => a.id === id); S.chosen = {};
+  document.querySelectorAll('.tile').forEach(t => t.classList.toggle('active', parseInt(t.dataset.id, 10) === id));
+  $('n-pending').textContent = '(' + S.acct.pending_count + ')';
+  $('n-suggested').textContent = '(' + S.acct.suggested_count + ')';
+  $('n-posted').textContent = '(' + S.acct.posted_count + ')';
+  await loadGl(S.acct.location);
+  await loadRows();
+}
+
+async function loadRows() {
+  $('rows').innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
+  const d = await api(`/api/bank-transactions?account_id=${S.acct.id}&tab=${S.tab}&limit=800`);
+  S.rows = d.rows;
+  for (const r of S.rows) if (r.suggestion && r.suggestion.gl_account_id) S.chosen[r.id] = r.suggestion.gl_account_id;
+  $('foot').textContent = d.truncated ? `Showing ${d.rows.length} of ${d.total} — post some and reload for the rest.` : `${d.total} row${d.total === 1 ? '' : 's'}.`;
+  render();
+}
+
+function visibleRows() {
+  const q = $('q').value.trim().toLowerCase();
+  return S.rows.filter(r => !q || [r.payee, r.memo, r.ocr_payee, r.group_label, r.gl_name].some(s => (s || '').toLowerCase().includes(q)));
+}
+
+function render() {
+  const rows = visibleRows();
+  if (!rows.length) { $('rows').innerHTML = '<tr><td colspan="8" class="empty">Nothing here.</td></tr>'; updateSel(); return; }
+  const grouped = $('group-toggle').checked;
+  let h = '';
+  const emit = r => {
+    const s = r.suggestion; const editable = S.tab !== 'posted' && !r.locked;
+    const cls = s ? (s.badge === 'REVIEW' ? 'review' : 'suggested') : '';
+    h += `<tr data-id="${r.id}">
+      <td class="col-chk">${editable ? `<input type="checkbox" class="rowchk" data-id="${r.id}">` : ''}</td>
+      <td class="date">${esc(r.date)}</td>
+      <td class="desc"><div>${esc(r.payee)}</div>${r.ocr_payee ? `<div class="ocr">✎ ${esc(r.ocr_payee)}</div>` : ''}${r.memo ? `<div class="memo">${esc(r.memo)}</div>` : ''}</td>
+      <td class="num" data-label="Spent">${money(r.spent)}</td>
+      <td class="num" data-label="Received">${money(r.received)}</td>
+      <td>${r.check_image ? `<img class="thumb" src="${r.check_image}" loading="lazy" onclick="zoom('${r.check_image}')">` : ''}</td>
+      <td>${S.tab === 'posted'
+            ? `<span class="badge POSTED">POSTED</span>${esc(r.gl_name || '')}`
+            : `${s ? `<span class="badge ${esc(s.badge)}">${esc(s.badge)}</span>` : ''}<select class="gl ${cls}" data-id="${r.id}" ${editable ? '' : 'disabled'}>${glOptions(S.chosen[r.id] || null)}</select>${s && s.reason ? `<div class="reason">${esc(s.reason)}</div>` : ''}${r.locked ? '<div class="reason">locked by a signed-off period</div>' : ''}`}</td>
+      <td>${editable ? `<button class="post" data-id="${r.id}" ${S.chosen[r.id] ? '' : 'disabled'}>Post</button>` : ''}</td>
+    </tr>`;
+  };
+  if (grouped) {
+    const groups = new Map();
+    for (const r of rows) { if (!groups.has(r.group_key)) groups.set(r.group_key, []); groups.get(r.group_key).push(r); }
+    const order = [...groups.entries()].sort((a, b) => Math.abs(b[1].reduce((t, r) => t + r.amount, 0)) - Math.abs(a[1].reduce((t, r) => t + r.amount, 0)));
+    for (const [key, rs] of order) {
+      const tot = rs.reduce((t, r) => t + r.amount, 0);
+      const first = rs.find(r => r.suggestion && r.suggestion.gl_account_id);
+      h += `<tr class="group"><td colspan="8">${esc(rs[0].group_label)}<span class="meta">${rs.length} line${rs.length === 1 ? '' : 's'} · ${money(tot)}</span>
+        ${S.tab !== 'posted' ? `<span class="apply">apply to all: <select class="gl group-gl" data-key="${esc(key)}" style="min-width:200px">${glOptions(first ? first.suggestion.gl_account_id : null)}</select><button class="btn" data-apply="${esc(key)}">Set</button></span>` : ''}</td></tr>`;
+      rs.forEach(emit);
+    }
+  } else rows.forEach(emit);
+  $('rows').innerHTML = h;
+
+  document.querySelectorAll('select.gl[data-id]').forEach(sel => sel.addEventListener('change', () => {
+    const id = parseInt(sel.dataset.id, 10); S.chosen[id] = sel.value ? parseInt(sel.value, 10) : null;
+    const btn = document.querySelector(`button.post[data-id="${id}"]`); if (btn) btn.disabled = !S.chosen[id];
+    updateSel();
+  }));
+  document.querySelectorAll('button.post').forEach(b => b.addEventListener('click', () => postRows([parseInt(b.dataset.id, 10)])));
+  document.querySelectorAll('button[data-apply]').forEach(b => b.addEventListener('click', () => {
+    const key = b.dataset.apply; const sel = document.querySelector(`select.group-gl[data-key="${CSS.escape(key)}"]`);
+    const v = sel && sel.value ? parseInt(sel.value, 10) : null; if (!v) return;
+    for (const r of S.rows) if (r.group_key === key) S.chosen[r.id] = v;
+    render();
+  }));
+  document.querySelectorAll('.rowchk').forEach(c => c.addEventListener('change', updateSel));
+  updateSel();
+}
+
+function updateSel() {
+  const ids = [...document.querySelectorAll('.rowchk:checked')].map(c => parseInt(c.dataset.id, 10)).filter(id => S.chosen[id]);
+  $('sel-hint').textContent = ids.length ? `${ids.length} selected` : '';
+  $('post-selected').disabled = !ids.length;
+}
+
+async function postRows(ids) {
+  let ok = 0, learned = new Set(), backfilled = 0, errs = [];
+  for (const id of ids) {
+    const gl = S.chosen[id]; if (!gl) continue;
+    try {
+      const d = await api('/api/register/row/gl-account', {method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({source: 'manual', id, gl_account_id: gl, create_rule: true})});
+      ok++; if (d.rule_pattern) learned.add(d.rule_pattern); backfilled += d.backfilled || 0;
+    } catch (e) { errs.push(`#${id}: ${e.message}`); }
+  }
+  let msg = `Posted ${ok} line${ok === 1 ? '' : 's'}.`;
+  if (learned.size) msg += ` Learned rule${learned.size === 1 ? '' : 's'}: ${[...learned].join(', ')}.`;
+  if (backfilled) msg += ` ${backfilled} more line${backfilled === 1 ? '' : 's'} now carry that account as suggested.`;
+  toast(msg);
+  if (errs.length) toast(errs.slice(0, 3).join(' | '), true);
+  await loadTiles(); await loadRows();
+}
+
+function zoom(src) { $('lightbox-img').src = src; $('lightbox').style.display = 'flex'; }
+
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', async () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+  S.tab = t.dataset.tab; S.chosen = {}; await loadRows();
+}));
+$('q').addEventListener('input', render);
+$('group-toggle').addEventListener('change', render);
+$('chk-all').addEventListener('change', e => { document.querySelectorAll('.rowchk').forEach(c => { c.checked = e.target.checked && !!S.chosen[parseInt(c.dataset.id, 10)]; }); updateSel(); });
+$('post-selected').addEventListener('click', () => {
+  const ids = [...document.querySelectorAll('.rowchk:checked')].map(c => parseInt(c.dataset.id, 10)).filter(id => S.chosen[id]);
+  if (!ids.length) return;
+  if (!confirm(`Post ${ids.length} line${ids.length === 1 ? '' : 's'} to the chosen accounts? Each one becomes a confirmed coding and teaches a rule for its payee.`)) return;
+  postRows(ids);
+});
+
+loadTiles().catch(e => { $('tiles').innerHTML = '<div class="hint">Could not load accounts: ' + esc(e.message) + '</div>'; });
+</script>
+</body>
+</html>

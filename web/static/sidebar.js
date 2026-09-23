@@ -70,14 +70,17 @@ var sections=[
 ]}
 ,
 {id:'sec-accounting',label:'Accounting',icon:'accounting',children:[
+  {id:'nav-acct-banktx',label:'Bank Transactions',page:'/bank-transactions'},
+  {id:'nav-acct-import',label:'Statements',page:'/import-statement'},
+  {id:'nav-acct-registers',label:'Register',page:'/registers'},
+  {id:'nav-acct-bankrec',label:'Month-End Close',page:'/bank-reconcile'},
+  {id:'nav-acct-entries',label:'Sales Journal',page:'/sales-journal'},
+  {id:'nav-acct-export',label:'Post to QuickBooks',page:'/sales-journal?tab=export'},
   {id:'nav-acct-pl',label:'Profit & Loss',page:'/profit-loss'},
-  {id:'nav-acct-reports',label:'Reports',page:'/reports'},
-  {id:'nav-acct-entries',label:'Sales Entries',page:'/sales-journal'},
-  {id:'nav-acct-registers',label:'Registers',page:'/registers'},
-  {id:'nav-acct-import',label:'Import Statement',page:'/import-statement'},
-  {id:'nav-acct-bankrec',label:'Bank Reconcile',page:'/bank-reconcile'},
+  {id:'nav-acct-reports',label:'Reports',page:'/reports'}
+]},
+{id:'sec-setup',label:'Setup',icon:'mgmt',children:[
   {id:'nav-acct-openbal',label:'Opening Balances',page:'/opening-balances'},
-  {id:'nav-acct-export',label:'Export',page:'/sales-journal?tab=export'},
   {id:'nav-acct-mapping',label:'Sales Mapping',page:'/sales-mapping'},
   {id:'nav-acct-payaccts',label:'Payment Accounts',page:'/payment-accounts'}
 ]}];
@@ -121,6 +124,7 @@ if(path==='/order-guide')return 'nav-orderguide';
 if(path==='/specials-admin')return 'nav-specials';
 if(path==='/payments')return 'nav-payments';
 if(path==='/print-checks')return 'nav-bp-printchecks';
+if(path==='/bank-transactions')return 'nav-acct-banktx';
 if(path==='/registers')return 'nav-acct-registers';
 if(path==='/import-statement')return 'nav-acct-import';
 if(path==='/bank-reconcile')return 'nav-acct-bankrec';

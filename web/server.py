@@ -333,6 +333,15 @@ def bank_reconcile_page():
     return send_from_directory("static", "bank_reconcile.html")
 
 
+@app.route("/bank-transactions")
+@login_required
+def bank_transactions_page():
+    """Serve the Bank Transactions page — the exceptions queue: statement
+    rows that still need a GL account, with the machine's suggestion and one
+    Post button. Modelled on QuickBooks' Bank Transactions page."""
+    return send_from_directory("static", "bank_transactions.html")
+
+
 @app.route("/specials")
 def specials_page():
     """Serve the chalkboard specials display (no login — for TV/public)."""
