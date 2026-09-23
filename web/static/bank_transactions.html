@@ -249,7 +249,7 @@ function render() {
       <td>${r.check_image ? `<img class="thumb" src="${r.check_image}" loading="lazy" onclick="zoom('${r.check_image}')">` : ''}</td>
       <td>${S.tab === 'posted'
             ? `<span class="badge POSTED">POSTED</span>${esc(r.gl_name || '')}`
-            : `${s ? `<span class="badge ${esc(s.badge)}">${esc(s.badge)}</span>` : ''}<select class="gl ${cls} ${S.chosen[r.id] ? 'chosen' : ''}" data-id="${r.id}" ${editable ? '' : 'disabled'}>${glOptions(S.chosen[r.id] || null)}</select>${s && s.reason ? `<div class="reason">${esc(s.reason)}</div>` : ''}${r.locked ? '<div class="reason">locked by a signed-off period</div>' : ''}`}</td>
+            : `${s ? `<span class="badge ${esc(s.badge)}">${esc(s.badge)}</span>` : ''}<select class="gl ${cls} ${S.chosen[r.id] ? 'chosen' : ''}" data-id="${r.id}" ${editable ? '' : 'disabled'}>${glOptions(S.chosen[r.id] || null)}</select>${s && s.reason ? `<div class="reason">${esc(s.reason)}</div>` : ''}${r.reconciled_period ? '<div class="reason">in a reconciled period — coding it changes that period\'s P&amp;L</div>' : ''}`}</td>
       <td>${editable ? `<button class="post" data-id="${r.id}" ${S.chosen[r.id] ? '' : 'disabled'}>Post</button>` : ''}</td>
     </tr>`;
   };

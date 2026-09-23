@@ -4004,7 +4004,12 @@ def bank_transactions():
                 "received": round(r["amount"], 2) if r["amount"] > 0 else None,
                 "statement_upload_id": r["statement_upload_id"],
                 "cleared_date": r["cleared_date"],
-                "locked": bool(r["reconciliation_id"]),
+                # A signed-off reconciliation freezes the BANK side of a row
+                # (cleared, cleared_date). Its GL coding is book-side and stays
+                # editable: the four early snapshots were signed off with
+                # hundreds of lines still uncoded, and coding them is the work.
+                "locked": False,
+                "reconciled_period": bool(r["reconciliation_id"]),
                 "gl_account_id": r["gl_account_id"],
                 "gl_name": gl_names.get(r["gl_account_id"], (None, None))[0],
                 "gl_source": r["gl_source"], "gl_status": r["gl_status"],
@@ -4033,10 +4038,15 @@ def bank_transactions():
                             "gl_name": offer["name"] if offer else None,
                             "badge": "REVIEW", "reason": reason}
             elif tab == "suggested":
+                src = r["gl_source"] or "rule"
+                badge, reason = {
+                    "rule": ("RULE", "matched a coding rule, not yet confirmed"),
+                    "unknown": ("UNCONFIRMED", "coded before provenance was tracked, never confirmed"),
+                    "category": ("CATEGORY", "coded from the vendor's category, not yet confirmed"),
+                    "accrual": ("ACCRUAL", "coded from the invoice it settles, not yet confirmed"),
+                }.get(src, (src.upper(), f"coded by {src}, not yet confirmed"))
                 row["suggestion"] = {"gl_account_id": r["gl_account_id"],
-                                     "gl_name": row["gl_name"],
-                                     "badge": (r["gl_source"] or "rule").upper(),
-                                     "reason": f"coded by {r['gl_source'] or 'rule'}, not yet confirmed"}
+                                     "gl_name": row["gl_name"], "badge": badge, "reason": reason}
             rows.append(row)
         out["rows"] = rows
         return jsonify(out)
