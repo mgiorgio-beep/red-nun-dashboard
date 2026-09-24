@@ -37,6 +37,10 @@ MAX_PLUG_TO_PUSH = float(os.getenv("QB_MAX_PLUG", "1.00"))
 # pre-check cannot catch it: the two systems number entries differently.
 ME_LAST_JE = {"chatham": "2026-05-07", "dennis": "2026-05-03"}
 
+# QBO requires a customer on journal lines that post to Accounts Receivable.
+# House-account charges go to this one (Mike, 2026-09-24).
+AR_CUSTOMER_NAME = "House Accounts"
+
 # Statuses a rebuild must never overwrite: the day is settled in QBO, by us
 # (posted) or by MarginEdge (superseded_me).
 TERMINAL_STATUSES = ("posted", "superseded_me")
@@ -696,6 +700,25 @@ def push_to_qbo(entry_id: int) -> dict:
             FROM qb_journal_line_items WHERE entry_id=? ORDER BY sort_order
         """, (entry_id,)).fetchall()
 
+        # Guard 1 (Mike, 2026-09-24): each line must still carry the QBO id its
+        # account carries TODAY. Entries are built with the ids of the moment;
+        # Chatham's ids were rebuilt from Red Buoy's own chart, so an entry built
+        # before that points at the wrong accounts. Refuse; rebuild the entry.
+        current = {r["journal_name"]: (r["qbo_id"], r["account_type"]) for r in conn.execute(
+            """SELECT m.journal_name, g.qbo_id, g.account_type FROM qb_line_mapping m
+               JOIN gl_accounts g ON g.id = m.gl_account_id AND g.active = 1 AND g.location = m.location
+               WHERE m.location = ?""", (row["location"],))}
+        stale = [li["journal_name"] for li in lines
+                 if li["journal_name"] in current
+                 and str(current[li["journal_name"]][0] or "") != str(li["qbo_account"] or "")]
+        if stale:
+            return {"success": False,
+                    "error": f"Entry was built with outdated QBO account ids ({', '.join(stale)}); rebuild it first"}
+        # Guard 2: QBO requires a customer on any line that posts to Accounts
+        # Receivable. House-account charges carry the customer "House Accounts".
+        ar_lines = {li["journal_name"] for li in lines
+                    if current.get(li["journal_name"], (None, None))[1] == "Accounts Receivable"}
+
         qbo_lines = []
         for i, li in enumerate(lines, 1):
             amt = li["debit"] or li["credit"]
@@ -813,6 +836,22 @@ def push_to_qbo(entry_id: int) -> dict:
             """, (_txn, entry_id))
             conn.commit()
             return {"success": True, "txn_id": _txn, "adopted_existing": True}
+
+        if ar_lines:
+            _cq = urllib.parse.quote(f"select Id, DisplayName from Customer where DisplayName = '{AR_CUSTOMER_NAME}'")
+            _creq = urllib.request.Request(f"{BASE_URL}/v3/company/{realm_id}/query?query={_cq}&minorversion=75")
+            _creq.add_header("Authorization", f"Bearer {access_token}")
+            _creq.add_header("Accept", "application/json")
+            with urllib.request.urlopen(_creq) as _cresp:
+                _cust = _json.loads(_cresp.read()).get("QueryResponse", {}).get("Customer", [])
+            if not _cust:
+                return {"success": False,
+                        "error": f"QBO has no customer '{AR_CUSTOMER_NAME}'; an Accounts Receivable line "
+                                 f"({', '.join(sorted(ar_lines))}) cannot post without one"}
+            for ql in qbo_lines:
+                if ql["Description"] in ar_lines:
+                    ql["JournalEntryLineDetail"]["Entity"] = {
+                        "Type": "Customer", "EntityRef": {"value": _cust[0]["Id"], "name": AR_CUSTOMER_NAME}}
 
         url = f"{BASE_URL}/v3/company/{realm_id}/journalentry?minorversion=75"
         body_bytes = _json.dumps(payload).encode()

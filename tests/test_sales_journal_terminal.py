@@ -26,6 +26,14 @@ def sj(tmp_path, monkeypatch):
     for k in [k for k in os.environ if k.startswith(("QB_CLIENT", "QB_REALM"))]:
         monkeypatch.delenv(k)
     mod.init_sales_journal_tables()
+    # In production the register's migrations add these; the push reads them.
+    c = conn()
+    c.execute("CREATE TABLE IF NOT EXISTS gl_accounts (id INTEGER PRIMARY KEY, name TEXT, account_type TEXT, "
+              "location TEXT, active INTEGER DEFAULT 1, qbo_id TEXT)")
+    cols = [r[1] for r in c.execute("PRAGMA table_info(qb_line_mapping)")]
+    if "gl_account_id" not in cols:
+        c.execute("ALTER TABLE qb_line_mapping ADD COLUMN gl_account_id INTEGER")
+    c.commit()
     return mod, conn
 
 
@@ -67,3 +75,36 @@ def test_nothing_on_or_before_the_marginedge_cutoff_pushes(sj, loc, day, blocked
     r = mod.push_to_qbo(eid)
     assert r["success"] is False                      # credentials stripped in the fixture
     assert ("MarginEdge" in r["error"]) is blocked
+
+
+def _map(conn, loc, jname, gl_id, qbo_id, atype="Income"):
+    c = conn()
+    c.execute("CREATE TABLE IF NOT EXISTS gl_accounts (id INTEGER PRIMARY KEY, name TEXT, account_type TEXT, "
+              "location TEXT, active INTEGER DEFAULT 1, qbo_id TEXT)")
+    c.execute("INSERT OR REPLACE INTO gl_accounts (id, name, account_type, location, active, qbo_id) VALUES (?,?,?,?,1,?)",
+              (gl_id, jname, atype, loc, qbo_id))
+    c.execute("INSERT INTO qb_line_mapping (location, journal_name, qbo_account, gl_account_id) VALUES (?,?,?,?)",
+              (loc, jname, qbo_id, gl_id))
+    c.commit()
+
+
+def test_an_entry_built_with_outdated_ids_is_refused(sj):
+    """Chatham's QBO ids were rebuilt 2026-09-24; an entry built before that
+    carries the old ids and must be rebuilt, never pushed."""
+    mod, conn = sj
+    e = _entry("dennis", "2026-06-02")
+    e["line_items"][1]["qbo_account"] = "OLD-49"          # built when the account carried an old id
+    eid = mod.persist_journal_entry(e)
+    _map(conn, "dennis", "Gross Sales: Food", 900, "49")
+    r = mod.push_to_qbo(eid)
+    assert r["success"] is False and "outdated QBO account ids" in r["error"]
+
+
+def test_an_entry_with_current_ids_passes_the_guard(sj):
+    mod, conn = sj
+    e = _entry("dennis", "2026-06-03")
+    e["line_items"][1]["qbo_account"] = "49"
+    eid = mod.persist_journal_entry(e)
+    _map(conn, "dennis", "Gross Sales: Food", 901, "49")
+    r = mod.push_to_qbo(eid)
+    assert "outdated" not in r["error"]                    # stops later, at the stripped credentials
