@@ -245,8 +245,16 @@ Pattern:
   - Payroll JEs are NOT pushed by code (the per-run QBO journal is a CSV download).
     Three were keyed into QBO by hand under the old bank-credit method: Chatham
     `PR-12262025`, Dennis `12262025` (both dated 2025-12-26) and Dennis `01092026`
-    (2026-01-09 — the one inside the 2026 books; needs a correcting entry at the
-    Payroll Liabilities switch).
+    (2026-01-09). Mike corrected 01092026 in QBO himself as `01092026-TIP` (tip
+    line only: Dr Tip Bank / Cr Tip Wages 7,799.61); its bank credits ARE Dennis's
+    1/09 bank side in QBO, so the 1/09 impound and checks #9647–9653 must never
+    be pushed again.
+  - **Every write to Red Buoy's (Chatham's) QBO is blocked in code**
+    (`integrations/quickbooks/push_guard.py`, `CHATHAM_QBO_WRITES_BLOCKED`). 197
+    Chatham gl_accounts carried QBO ids copied from Dennis's chart; 132 were
+    rebuilt from Red Buoy's own chart on 2026-09-24 (logged `qbo_id_remap`), the
+    rest await Mike. Lift the block only on his sign-off.
+  - Pending QBO work lives in the Drive folder's `QBO_CATCHUP_LIST.md`.
 
 > ⚠️ **Row counts in this file go stale fast and have been badly wrong before.** The
 > numbers above were read live on 2026-08-27; the previous set described a wiped state

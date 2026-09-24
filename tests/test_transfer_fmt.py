@@ -29,7 +29,8 @@ def test_classifier(desc, amt, last4, name):
 
 def test_intercompany_and_realty_rules_unchanged():
     assert classify_transfer("Transfer from x2757 to x5087", -3000.0, "2757")[0] == "Building Rent"
-    assert classify_transfer("Transfer from x2757 to x5975", -2000.0, "2757")[0] is None
+    assert classify_transfer("Transfer from x2757 to x5975", -2000.0, "2757")[0] == "Loan to Red Buoy Inc."
+    assert classify_transfer("Transfer from x2757 to x5975", 2000.0, "5975")[0] == "Loan to Red Nun Dennisport"
 
 
 def _db():

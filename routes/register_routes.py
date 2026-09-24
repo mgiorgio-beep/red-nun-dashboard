@@ -1561,6 +1561,16 @@ def classify_transfer(description: str, amount: float, this_account_last4: str):
     if ACCT_FMT in (src, dst):
         return None, f"{src or '?'}->{dst or '?'}: FMT Holdings transfer outside the Chatham rule — review"
 
+    # The intercompany loan (Mike, 2026-09-24): every 2757<->5975 transfer is a
+    # loan movement — Dennis repaying Chatham, or Chatham lending to Dennis —
+    # coded on each side to that entity's loan account. Mike settles the 2026
+    # net (21,516.47 through 8/31) this way.
+    if {src, dst} == {ACCT_DENNIS_RESTAURANT, ACCT_CHATHAM_RESTAURANT}:
+        if this_account_last4 == ACCT_DENNIS_RESTAURANT:
+            return "Loan to Red Buoy Inc.", f"{src}->{dst}: intercompany loan (Dennis side)"
+        if this_account_last4 == ACCT_CHATHAM_RESTAURANT:
+            return "Loan to Red Nun Dennisport", f"{src}->{dst}: intercompany loan (Chatham side)"
+
     if ACCT_CHATHAM_RESTAURANT in (src, dst):
         return None, (f"{src or '?'}->{dst or '?'}: counterparty is Chatham's "
                       f"5975, this is the intercompany loan, not rent")

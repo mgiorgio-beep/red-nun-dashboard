@@ -656,11 +656,13 @@ class TestTransferClassifier:
             assert gl == "Building Rent", f"{amt} should still be rent"
 
     def test_transfer_to_chatham_is_not_rent(self):
-        """5975 is the other restaurant — this is the intercompany loan."""
+        """5975 is the other restaurant — this is the intercompany loan, coded
+        on each side to that entity's loan account (Mike, 2026-09-24)."""
         gl, reason = self._c()(
             "Transfer from x2757 to x5975 Loan repayment", -2000.00, "2757")
-        assert gl is None
-        assert "5975" in reason
+        assert gl == "Loan to Red Buoy Inc." and "5975" in reason
+        gl, _ = self._c()("Transfer from x2757 to x5975", 21516.47, "5975")
+        assert gl == "Loan to Red Nun Dennisport"
 
     def test_inflow_from_realty_is_not_rent(self):
         """Rent does not flow backward."""
