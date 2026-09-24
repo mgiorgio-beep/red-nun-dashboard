@@ -876,8 +876,16 @@ def audit_settlement_codings(conn=None) -> list[dict]:
                     JOIN gl_accounts g ON g.id = t.gl_account_id
                     WHERE t.gl_account_id IS NOT NULL"""
             ).fetchall()
+            # A row locked into a signed-off period cannot be recoded; its fix
+            # is a reclass posted in the current open period, recorded as a
+            # gl_repair_log 'reclass_adjustment'. Such a row is handled.
+            reclassed = {x[0] for x in conn.execute(
+                "SELECT target_id FROM gl_repair_log WHERE kind = 'reclass_adjustment' AND target_table = ?",
+                (table,))}
             for r in rows:
                 if r["account_type"] not in _PL_ACCOUNT_TYPES:
+                    continue
+                if r["id"] in reclassed:
                     continue
                 ev = settlement_evidence(conn, table, r["id"])
                 if ev:
@@ -2180,10 +2188,19 @@ def _backfill_unassigned_for_pattern(conn, pattern: str, gl_id: int, location: s
     # Backfilled rows are MACHINE codings: rule/suggested, never confirmed.
     # They are exactly the rows a later bulk rebuild must not learn from.
     _prov = (GL_SOURCE_RULE, GL_STATUS_SUGGESTED)
+    # A vendor payment with invoices attached SETTLES them: its account is
+    # Accounts Payable (the accrual path codes it), never the vendor's expense
+    # account. 2026-09-23 evening, ten vendor rules created on Bank
+    # Transactions backfilled 93 such payments onto Daily Cleaning, Linens,
+    # Beer COGS... — the cost counted at invoice date AND at payment. So the
+    # backfill skips them, whatever the rule's account.
     queries = [
         ("vendor_payments",
          f"UPDATE vendor_payments SET gl_account_id = ?, gl_source = ?, gl_status = ? "
-         f"WHERE gl_account_id IS NULL AND UPPER(vendor) LIKE ?{loc_clause}",
+         f"WHERE gl_account_id IS NULL AND UPPER(vendor) LIKE ?{loc_clause} "
+         f"AND NOT EXISTS (SELECT 1 FROM vendor_payment_invoices vpi WHERE vpi.payment_id = vendor_payments.id) "
+         f"AND NOT EXISTS (SELECT 1 FROM ap_payment_invoices api WHERE api.payment_id = vendor_payments.ap_payment_id "
+         f"AND vendor_payments.ap_payment_id IS NOT NULL)",
          (gl_id,) + _prov + (upper_like,) + loc_params),
         ("payroll_checks",
          f"UPDATE payroll_checks SET gl_account_id = ?, gl_source = ?, gl_status = ? "

@@ -1403,10 +1403,12 @@ class TestJuneSwitchAcceptance:
         assert self._name(conn, gl) == "Dues & Subscriptions"
 
     def test_payroll_drafts_are_unaffected(self, conn):
+        # Since the 2026-09-24 switch a 7shifts impound SETTLES a payroll run:
+        # labor comes from the runs, the draft goes to Payroll Liabilities.
         gl = self._code(conn, "PCR 7shifts CCD | Red Nun Public House",
                         -13500.00, "2026-06-12")
-        assert self._name(conn, gl) in ("Payroll Expenses", "Wages"), \
-            "payroll drafts must keep going to payroll accounts"
+        assert self._name(conn, gl) == "Payroll Liabilities", \
+            "payroll impounds settle Payroll Liabilities, never a labor or tip account"
 
 
 class TestTipBankRollsForward:
@@ -2427,9 +2429,13 @@ class TestSettlementIsNotAnExpense:
         """The guard blocks P&L accounts, not all coding. Re-applying the AP
         account a settlement already carries must succeed."""
         from routes.register_routes import _resolve_ap_account
+        # Same-entity rows only: an intercompany payment (Dennis's cost paid
+        # from Chatham's bank) codes on the PAYING bank's chart, so the AP of
+        # its `location` is correctly refused there.
         row = conn.execute("""
             SELECT vp.id, vp.location, vp.gl_account_id FROM vendor_payments vp
             JOIN ap_payment_invoices api ON api.payment_id = vp.ap_payment_id
+            JOIN bank_accounts ba ON ba.id = vp.bank_account_id AND ba.location = vp.location
             WHERE vp.location IS NOT NULL AND vp.gl_account_id IS NOT NULL LIMIT 1
         """).fetchone()
         if not row:
