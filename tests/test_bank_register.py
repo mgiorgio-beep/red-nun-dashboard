@@ -670,7 +670,9 @@ class TestTransferClassifier:
         assert "backward" in reason
 
     def test_unknown_counterparty_is_not_rent(self):
-        gl, reason = self._c()("Transfer from x5975 to x1239", -1500.00, "5975")
+        # x1239 used to be the unknown example; it is FMT Holdings now, with a
+        # standing rule (tests/test_transfer_fmt.py).
+        gl, reason = self._c()("Transfer from x5975 to x4242", -1500.00, "5975")
         assert gl is None and reason
 
     def test_non_transfers_are_ignored_entirely(self):

@@ -1492,6 +1492,13 @@ def resolve_gl_for_location(conn, gl_id, location: str | None, *, context: str =
 ACCT_DENNIS_RESTAURANT = "2757"
 ACCT_CHATHAM_RESTAURANT = "5975"
 ACCT_DENNIS_REALTY = "5087"
+# FMT Holdings LLC (Mike's; owns 746 Main St Chatham and the cottage at 15
+# Veterans Field Rd). Standing rule, Mike 2026-09-24: Chatham OUT to 1239 is
+# rent; IN from 1239 is FMT covering a Red Buoy shortfall (FMT Loan).
+ACCT_FMT = "1239"
+# A Chatham outflow to FMT of exactly this amount is Mike repaying the FMT loan,
+# not rent: held uncoded for his confirmation rather than ruled either way.
+FMT_REPAYMENT_HOLD = 8000.00
 
 
 def _parse_transfer(description: str):
@@ -1542,6 +1549,17 @@ def classify_transfer(description: str, amount: float, this_account_last4: str):
 
     if (src == ACCT_DENNIS_RESTAURANT and dst == ACCT_DENNIS_REALTY and outflow):
         return "Building Rent", f"{src}->{dst} outflow: restaurant to realty = rent"
+
+    if src == ACCT_CHATHAM_RESTAURANT and dst == ACCT_FMT:
+        if outflow and abs(abs(amount or 0) - FMT_REPAYMENT_HOLD) < 0.005:
+            return None, (f"{src}->{dst} {abs(amount):,.2f}: Mike's FMT loan repayment — "
+                          f"held for his confirmation (FMT Loan, not rent)")
+        if outflow:
+            return "Building Rent", f"{src}->{dst} outflow: Red Buoy to FMT Holdings = rent"
+    if src == ACCT_FMT and dst == ACCT_CHATHAM_RESTAURANT and not outflow:
+        return "FMT Loan", f"{src}->{dst} inflow: FMT Holdings covering a Red Buoy shortfall"
+    if ACCT_FMT in (src, dst):
+        return None, f"{src or '?'}->{dst or '?'}: FMT Holdings transfer outside the Chatham rule — review"
 
     if ACCT_CHATHAM_RESTAURANT in (src, dst):
         return None, (f"{src or '?'}->{dst or '?'}: counterparty is Chatham's "
