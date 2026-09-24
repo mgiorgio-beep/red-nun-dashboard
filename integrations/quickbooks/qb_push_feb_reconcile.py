@@ -24,6 +24,8 @@ from qb_push import (
 )
 
 def qbo_post(path, payload, realm_id, token):
+    from integrations.quickbooks.push_guard import check_write
+    check_write(realm_id, f"POST {path}")
     url = f"{BASE_URL}/v3/company/{realm_id}/{path}?minorversion=65"
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, method="POST")

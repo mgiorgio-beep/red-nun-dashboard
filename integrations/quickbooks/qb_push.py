@@ -25,6 +25,8 @@ export QB_CLIENT_ID=your_client_id
 export QB_CLIENT_SECRET=your_client_secret
 export QB_REALM_ID=your_realm_id   # found in QBO URL: /app/homepage?... realmId=XXXXXXX
 """
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
 import os, sys, csv, json, argparse, webbrowser, time, base64
 import urllib.request, urllib.parse, urllib.error
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -159,6 +161,9 @@ def get_valid_token(client_id, client_secret):
     return tokens["access_token"]
 # ── QBO API ───────────────────────────────────────────────────────────────────
 def qbo_request(method, path, realm_id, access_token, payload=None):
+    if method.upper() != "GET":
+        from integrations.quickbooks.push_guard import check_write
+        check_write(realm_id, f"{method} {path}")
     url = f"{BASE_URL}/v3/company/{realm_id}/{path}?minorversion=65"
     data = json.dumps(payload).encode() if payload else None
     req = urllib.request.Request(url, data=data, method=method)

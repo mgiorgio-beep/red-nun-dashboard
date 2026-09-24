@@ -120,6 +120,23 @@ def resolve_import_gl(conn, tx: dict, signed: float,
 
     name, reason = classify_transfer(desc, signed, acct_last4 or "")
 
+    # FMT rent reversal (Mike, 2026-09-24): an inflow from 1239 is coded as a
+    # reversal of Building Rent only when it pairs with rent actually sent —
+    # a same-amount outflow to 1239 on or up to FMT_REVERSAL_WINDOW_DAYS before
+    # this date. Anything else stays uncoded for Mike to look at.
+    if name == "Building Rent" and (signed or 0) > 0 and "1239" in desc:
+        from routes.register_routes import FMT_REVERSAL_WINDOW_DAYS
+        paired = tx.get("date") and conn.execute(
+            """SELECT 1 FROM manual_bank_entries m JOIN bank_accounts b ON b.id = m.bank_account_id
+               WHERE b.account_last4 = ? AND ABS(m.amount + ?) < 0.005
+                 AND UPPER(COALESCE(m.payee,'') || ' ' || COALESCE(m.memo,'')) LIKE '%TO X1239%'
+                 AND m.entry_date BETWEEN date(?, ?) AND ?""",
+            (acct_last4 or "", float(signed), tx["date"], f"-{FMT_REVERSAL_WINDOW_DAYS} day", tx["date"]),
+        ).fetchone()
+        if not paired:
+            name, reason = None, (f"FMT inflow {signed:,.2f} on {tx.get('date')} pairs with no rent sent to "
+                                  f"1239 in the prior {FMT_REVERSAL_WINDOW_DAYS} days — Mike to review")
+
     # Tip settlement channels (7shifts tip service, Kickfin). Runs before the
     # rules because a bare "7SHIFTS" rule cannot tell a tip reload from a
     # payroll draft from the SaaS bill — that is what put tip reloads on

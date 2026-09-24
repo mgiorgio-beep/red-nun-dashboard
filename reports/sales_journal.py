@@ -758,6 +758,11 @@ def push_to_qbo(entry_id: int) -> dict:
         if not realm_id:
             return {"success": False,
                     "error": f"No QBO realm configured for location '{_loc}' (set QB_REALM_ID_{_loc.upper()})"}
+        from integrations.quickbooks.push_guard import check_write, QboWriteBlocked
+        try:
+            check_write(realm_id, f"sales journal {row['je_name']}")
+        except QboWriteBlocked as e:
+            return {"success": False, "error": str(e)}
 
         if not TOKEN_FILE.exists():
             return {"success": False, "error": "No QB tokens file. Run qb_push.py --auth first."}

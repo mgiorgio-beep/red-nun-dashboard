@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Delete a QBO journal entry by DocNumber."""
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
 import json, os, sys, requests
 
 REALM_ID = os.environ.get("QB_REALM_ID", "123146237986854")
@@ -36,6 +38,8 @@ def api_get(tokens, url, params=None):
     return resp.json(), tokens
 
 def api_post(tokens, url, payload):
+    from integrations.quickbooks.push_guard import check_write
+    check_write(REALM_ID, f"POST {url}")
     headers = {"Authorization": f"Bearer {tokens['access_token']}", "Content-Type": "application/json", "Accept": "application/json"}
     resp = requests.post(url, headers=headers, json=payload)
     if resp.status_code == 401:

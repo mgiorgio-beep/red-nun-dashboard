@@ -5,6 +5,8 @@ Cape Cod Five (5975) → Daily Sales:Cash Sales
 Source: Jan 2025 bank statement for Red Nun Chatham
 """
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
 import json, os, sys, time, base64
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
@@ -55,6 +57,8 @@ def get_valid_token():
     return tokens["access_token"], tokens
 
 def qbo_post(path, payload, tokens):
+    from integrations.quickbooks.push_guard import check_write
+    check_write(REALM_ID, f"POST {path}")
     url = f"{BASE_URL}/v3/company/{REALM_ID}/{path}?minorversion=65"
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, method="POST")
