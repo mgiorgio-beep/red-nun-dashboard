@@ -1463,11 +1463,56 @@ DEDUPE_MATCH_RULE = ("exact_amount;date_within_tolerance;closest_date_wins;"
                      "payroll_preferred_on_tie;ambiguous_skipped;"
                      "book_row_uncleared_only;cleared_date=statement_date")
 
+# Payroll mode (Mike, 2026-09-24). Employees cash paper checks weeks late, so
+# the symmetric few-day window misses them; widening it naively lets
+# closest-date-wins pick between two same-amount paychecks. Payroll mode:
+# the check clears on or after its pay date (PAYROLL_EARLY_DAYS of slack for a
+# run dated after its checks were handed out) and within PAYROLL_LATE_DAYS;
+# where the check image's OCR names a payee it must name the employee; and
+# more than one candidate is ambiguous, never a tie-break. check_number is the
+# dashboard's own sequence, not the bank's (TestCheckNumberIsNotAKey), so it
+# is reported, never matched on.
+PAYROLL_LATE_DAYS = 60
+PAYROLL_EARLY_DAYS = 3
+PAYROLL_MATCH_RULE = ("payroll_mode;exact_amount;cleared_on_or_after_pay_date_within_60d;"
+                      "ocr_payee_names_employee_when_present;unique_candidate_only;"
+                      "book_row_uncleared_only;cleared_date=statement_date")
+_RE_CHK_PAYEE = re.compile(r"CHK:\s*([^|\[]+)")
 
-def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who):
+
+def _ocr_names_employee(memo, employee_name):
+    """'match' / 'mismatch' / None (no readable OCR payee on the line).
+
+    Unreadable OCR ('teen and .. 6 6 686') is no name at all: the learner's
+    guard decides readability. A readable name must carry every token of the
+    employee's name (fuzzy per token, so 'NASCIMENT0' reads as NASCIMENTO)."""
+    from difflib import SequenceMatcher
+    from routes.register_routes import _readable_check_payee  # lazy: avoids a cycle
+    m = _RE_CHK_PAYEE.search(memo or "")
+    if not m or not _readable_check_payee(m.group(1).strip()):
+        return None
+    ocr = re.findall(r"[A-Z]{2,}", m.group(1).upper())
+    if not ocr:
+        return None
+    want = re.findall(r"[A-Z]{2,}", (employee_name or "").upper())
+    if not want:
+        return None
+
+    def seen(tok):
+        return any(SequenceMatcher(None, tok, o).ratio() >= 0.8 for o in ocr)
+    return "match" if all(seen(t) for t in want) else "mismatch"
+
+
+def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who,
+                   payroll_mode=False):
     """The dedupe rule for one account and one date window. See
     dedupe_register for the contract; this does the work and returns
-    {candidates, summary, merged_count, deleted_count}. Does not commit."""
+    {candidates, summary, merged_count, deleted_count}. Does not commit.
+
+    payroll_mode: payroll checks only, under PAYROLL_MATCH_RULE (tol is
+    ignored for them)."""
+    if payroll_mode:
+        match_bp, match_pr = False, True
     account_id = bank["id"]
     is_default = bank["account_last4"] == "5975"
 
@@ -1513,6 +1558,8 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who)
         ).fetchall()
 
     pr_rows = []
+    if payroll_mode:
+        wide_start, wide_end = _shift(start, -PAYROLL_LATE_DAYS), _shift(end, PAYROLL_EARLY_DAYS)
     if match_pr:
         pr_rows = conn.execute(
             """SELECT pc.id, pc.employee_name, pc.check_number, pc.net_pay,
@@ -1566,13 +1613,26 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who)
                 "current_bank_account_id": cand["bank_account_id"],
                 "currently_cleared": bool(cand["cleared"]),
             })
+        name_mismatches = []
         for cand in pr_by_amount.get(target_amt, []):
-            if cand["id"] in used_pr_ids:
+            if cand["id"] in used_pr_ids and not payroll_mode:
                 continue
             dd = _date_diff(me_date, cand["pay_date"])
-            if dd > tol:
+            name_status = None
+            if payroll_mode:
+                late = (_dt.strptime(me_date, "%Y-%m-%d") - _dt.strptime(cand["pay_date"], "%Y-%m-%d")).days
+                if not (-PAYROLL_EARLY_DAYS <= late <= PAYROLL_LATE_DAYS):
+                    continue
+                name_status = _ocr_names_employee(me["memo"], cand["employee_name"])
+                if name_status == "mismatch":
+                    name_mismatches.append(cand["employee_name"])
+                    continue
+            elif dd > tol:
                 continue
             cands.append({
+                "name_check": name_status,
+                "check_number_agrees": (str(cand["check_number"] or "") != ""
+                                        and str(cand["check_number"]) == str(me["ref_number"] or "")),
                 "source": "payroll_check", "id": cand["id"],
                 "date": cand["pay_date"],
                 "amount": float(cand["net_pay"] or 0),
@@ -1588,7 +1648,13 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who)
         # drafts of 2026-05-29 were exactly this).
         chosen, skip_reason, ambiguous_count = None, None, 0
         if not cands:
-            skip_reason = "no_match"
+            skip_reason = "name_mismatch" if name_mismatches else "no_match"
+        elif payroll_mode:
+            # No tie-break: one candidate or a human decides.
+            if len(cands) > 1:
+                skip_reason, ambiguous_count = "ambiguous", len(cands)
+            else:
+                chosen = cands[0]
         else:
             cands.sort(key=lambda c: (c["date_diff_days"],
                                       0 if c["source"] == "payroll_check" else 1))
@@ -1612,7 +1678,19 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who)
             "match": chosen,
             "skip_reason": skip_reason,
             "ambiguous_count": ambiguous_count,
+            "options": cands if skip_reason == "ambiguous" else None,
         })
+
+    if payroll_mode:
+        # A paycheck that is the only candidate for two statement lines is
+        # not a match for either.
+        from collections import Counter
+        claims = Counter(c["match"]["id"] for c in candidates if c["match"])
+        for c in candidates:
+            if c["match"] and claims[c["match"]["id"]] > 1:
+                c["skip_reason"], c["ambiguous_count"] = "ambiguous", claims[c["match"]["id"]]
+                c["contested"] = c["match"]
+                c["match"] = None
 
     merged_count = deleted_count = 0
     if commit:
@@ -1653,7 +1731,9 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who)
                 (who, account_id, m["source"], m["id"], m.get("label"), entry_date,
                  c["manual_entry_id"], c["manual_entry_date"], c["manual_entry_amount"],
                  json.dumps(dict(full)) if full else None,
-                 m.get("amount"), m.get("date_diff_days"), tol, DEDUPE_MATCH_RULE),
+                 m.get("amount"), m.get("date_diff_days"),
+                 PAYROLL_LATE_DAYS if payroll_mode else tol,
+                 PAYROLL_MATCH_RULE if payroll_mode else DEDUPE_MATCH_RULE),
             )
             conn.execute("DELETE FROM manual_bank_entries WHERE id = ?",
                          (c["manual_entry_id"],))
@@ -1667,6 +1747,7 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who)
             "manual_entries_scanned": len(me_rows),
             "matched": sum(1 for c in candidates if c["match"]),
             "ambiguous": sum(1 for c in candidates if c["skip_reason"] == "ambiguous"),
+            "name_mismatch": sum(1 for c in candidates if c["skip_reason"] == "name_mismatch"),
             "unmatched": sum(1 for c in candidates if c["skip_reason"] == "no_match"),
             "would_merge_amount": round(
                 sum(abs(c["manual_entry_amount"]) for c in candidates if c["match"]), 2),
