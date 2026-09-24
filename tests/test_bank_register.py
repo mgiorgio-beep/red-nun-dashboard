@@ -412,32 +412,60 @@ class TestCheckNumberIsNotAKey:
     the reliable signal here; the check number is actively misleading.
     """
 
-    def test_no_statement_check_line_agrees_with_payroll_check_number(self, conn):
-        """Documents the scale of the mismatch. If this ever starts finding
-        agreements, the numbering has been reconciled and check-number matching
-        can be reconsidered — deliberately, not by accident."""
-        import re
-        rows = conn.execute(
-            "SELECT payee, amount FROM manual_bank_entries "
-            "WHERE bank_account_id = ? AND payee LIKE 'Check %'", (DENNIS,)
-        ).fetchall()
-        assert rows, "no statement check lines found for Dennis"
-        agree = 0
-        for r in rows:
-            num = re.sub(r"[^0-9]", "", r["payee"] or "")
-            if not num:
+    # Re-evaluated 2026-09-24 (Mike asked for it; this test said to). Once the
+    # dashboard began printing the paychecks, its number IS the one the bank
+    # prints. Evidence: every cleared manual paycheck, looked up on its
+    # statement by (account, cleared date, amount). Pay date on or after the
+    # cutoff: 107/107 Chatham and 34/34 Dennis agree. Before it: Chatham 0/38,
+    # Dennis 3/12 (the 4/17 run had three that happened to agree). So the
+    # number corroborates a pair after the cutoff and means nothing before it.
+    # (Before the cutoff Chatham paychecks carry no number at all: 38/38 NULL.)
+    NUMBER_CUTOFF = {"chatham": "2026-04-03", "dennis": "2026-05-29"}
+
+    def _number_evidence(self, conn):
+        tx = {}
+        for u in conn.execute("SELECT bank_account_id, parsed_json FROM bank_statement_uploads "
+                              "WHERE parsed_json IS NOT NULL"):
+            for t in (json.loads(u["parsed_json"]) or {}).get("transactions", []) or []:
+                if float(t.get("debit") or 0) > 0:
+                    tx.setdefault((u["bank_account_id"], t.get("date"), cents(t["debit"])), []).append(t)
+        out = {}
+        for p in conn.execute(
+                "SELECT pc.location, pc.bank_account_id, pc.check_number, pc.net_pay, pc.cleared_date, "
+                "       COALESCE(pr.pay_date, pc.pay_period_end) AS pay_date "
+                "FROM payroll_checks pc LEFT JOIN payroll_runs pr ON pr.id = pc.payroll_run_id "
+                "WHERE pc.cleared = 1 AND pc.payment_method = 'Manual' AND COALESCE(pc.voided, 0) = 0 "
+                "  AND pc.net_pay > 0"):
+            ts = tx.get((p["bank_account_id"], p["cleared_date"], cents(p["net_pay"])), [])
+            if len(ts) != 1:
                 continue
-            p = conn.execute(
-                "SELECT net_pay FROM payroll_checks WHERE check_number = ?", (num,)
-            ).fetchone()
-            if p and cents(p["net_pay"]) == abs(cents(r["amount"])):
-                agree += 1
-        assert agree == 0, (
-            f"{agree} of {len(rows)} statement check lines now agree with "
-            f"payroll_checks.check_number on both number and amount. That is a "
-            f"CHANGE from the documented 0 — re-evaluate whether check-number "
-            f"matching is safe before relying on it."
-        )
+            blob = " ".join(str(ts[0].get(k) or "") for k in ("description", "ref", "memo"))
+            after = p["pay_date"] >= self.NUMBER_CUTOFF[p["location"]]
+            k = (p["location"], "after" if after else "before")
+            agree, disagree = out.get(k, (0, 0))
+            # a missing number counts against: it cannot corroborate anything
+            if p["check_number"] and str(p["check_number"]) in re.findall(r"\d{3,7}", blob):
+                out[k] = (agree + 1, disagree)
+            else:
+                out[k] = (agree, disagree + 1)
+        return out
+
+    def test_numbers_agree_without_exception_after_the_cutoff(self, conn):
+        ev = self._number_evidence(conn)
+        for loc in ("chatham", "dennis"):
+            agree, disagree = ev.get((loc, "after"), (0, 0))
+            assert agree > 0, f"{loc}: no cleared paycheck after the cutoff to test"
+            assert disagree == 0, (
+                f"{loc}: {disagree} paycheck(s) dated on/after {self.NUMBER_CUTOFF[loc]} cleared under "
+                f"a different bank check number. Check-number corroboration is no longer safe.")
+
+    def test_numbers_do_not_identify_checks_before_the_cutoff(self, conn):
+        ev = self._number_evidence(conn)
+        for loc in ("chatham", "dennis"):
+            agree, disagree = ev.get((loc, "before"), (0, 0))
+            assert disagree > agree, (
+                f"{loc}: before {self.NUMBER_CUTOFF[loc]} the dashboard number (absent or not) mostly agrees "
+                f"({agree} vs {disagree}) — the documented finding changed; re-evaluate the cutoff.")
 
     def test_the_969x_rows_are_a_later_pay_period(self, conn):
         """The specific collision, pinned so it can't be silently 'fixed' by
