@@ -806,14 +806,17 @@ class TestReconciliationSignOff:
         ).fetchone()[0]
         assert n == 0, f"{n} snapshot items are missing their frozen values"
 
-    def test_march_outstanding_is_maya_jones(self, client):
+    def test_march_outstanding_is_liadis_and_maya_jones(self, client):
+        """Dennis March was re-signed 2026-09-24 by cleared date (Mike). The
+        8/23 snapshot, closed under book-date logic, held Maya Jones alone; the
+        re-sign holds both paychecks still uncashed at 3/31."""
         j = client.get("/api/bank-reconcile/reconciliations?account_id=2").get_json()
         march = [r for r in j["reconciliations"] if r["period_start"] == "2026-03-02"]
         assert march, "Dennis March is not reconciled"
-        nonzero = [i for i in march[0]["items"] if cents(i["amount"]) != 0]
-        assert len(nonzero) == 1, f"expected one nonzero outstanding item, got {nonzero}"
-        assert cents(nonzero[0]["amount"]) == -5746
-        assert "Maya" in (nonzero[0]["payee"] or "")
+        nonzero = sorted((i for i in march[0]["items"] if cents(i["amount"]) != 0),
+                         key=lambda i: cents(i["amount"]))
+        assert [cents(i["amount"]) for i in nonzero] == [-24274, -5746], nonzero
+        assert "Liadis" in (nonzero[0]["payee"] or "") and "Maya" in (nonzero[1]["payee"] or "")
 
     def test_close_refuses_a_period_that_does_not_tie(self, client, monkeypatch):
         """A signature must never paper over an unexplained delta."""
