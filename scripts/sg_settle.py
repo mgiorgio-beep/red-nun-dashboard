@@ -24,9 +24,12 @@ from the same screenshots at 2026-09-23 22:34 but made no payments. Here:
     one new invoice inside the books, +513.24 Dennis January liquor cost.
   * Settlements coded Accounts Payable (the invoice is the cost).
 
-Not settled, no statement for them: Chatham 2/10 573.99 (ref 415313953),
-3/04 1,208.10 (418169082), 3/11 545.84 (419251664), 7/23 2,278.59 (#514,
-invoice 685460 = 2,521.59; 243.00 short).
+Four more statements arrived 2026-09-24 08:48 (Chatham 2/10, 3/04, 3/11,
+7/23). The 7/23 draft paid invoice 685460 in full at 2,278.59; the scan on
+file says 2,521.59. The paper invoice shows why: on the Mezzacorona Pinot
+Grigio line the driver cut 5 cases to 2 and marked 3 returned (3 x 81.00 =
+243.00). The line and the invoice are corrected to what was delivered
+(June Chatham wine cost -243.00).
 
     python scripts/sg_settle.py            # dry run
     python scripts/sg_settle.py --apply
@@ -63,11 +66,29 @@ PLAN = [
     (993, 114, "418169032", "2026-03-03", [("619239", 517.70, "2025-12-29"), ("621792", 484.08, "2026-01-06"),
                                            ("74065", -8.10, "2025-12-31"), ("625837", 512.43, "2026-01-20")]),
     (1037, None, "419251686", "2026-03-10", [("627964", 329.57, "2026-01-27")]),
+    (1655, 106, "415313953", "2026-02-09", [("617200", 619.43, "2025-12-22"), ("73547", -9.71, "2025-12-31"),
+                                            ("73857", -11.43, "2025-12-31"), ("74046", -24.30, "2025-12-31")]),
+    (1843, 107, "418169082", "2026-03-03", [("619197", 649.97, "2025-12-29"), ("621766", 558.13, "2026-01-06")]),
+    (1885, 108, "419251664", "2026-03-10", [("625810", 545.84, "2026-01-20")]),
+    (2768, 514, "436521322", "2026-07-22", [("685460", 2278.59, "2026-06-30")]),
     (1268, 200, "424139668", "2026-04-15", [("637058", 25.19, "2026-02-25"), ("637059", 465.92, "2026-02-25")]),
     (1465, 276, "427545314", "2026-05-11", [("645368", 723.96, "2026-03-17")]),
     (1556, 325, "429066864", "2026-05-26", [("650698", 566.15, "2026-03-31"), ("653270", 554.50, "2026-04-07"),
                                            ("656730", 673.65, "2026-04-16")]),
 ]
+
+
+def correct_685460(conn, now):
+    inv = conn.execute("SELECT * FROM scanned_invoices WHERE id=100796").fetchone()
+    assert inv["invoice_number"] == "685460" and abs(inv["total"] - 2521.59) < 0.005
+    item = conn.execute("SELECT * FROM scanned_invoice_items WHERE id=1008271").fetchone()
+    assert item["invoice_id"] == 100796 and item["product_name"].startswith("Mezzacorona") and item["total_price"] == 405.0
+    conn.execute("UPDATE scanned_invoice_items SET quantity=2.0, unit='case', unit_price=81.0, total_price=162.0 WHERE id=1008271")
+    conn.execute("UPDATE scanned_invoices SET subtotal=2278.59, total=2278.59, notes=TRIM(COALESCE(notes,'') || ' | ' || ?, ' |') "
+                 "WHERE id=100796",
+                 (f"{WHO}: driver returned 3 of 5 cases Mezzacorona Pinot Grigio (handwritten on the invoice, 3 x 81.00); "
+                  f"total 2521.59 -> 2278.59, the amount SG drew (FinTech 436521322)",))
+    print("invoice 685460: Mezzacorona 5 -> 2 cases, total 2521.59 -> 2278.59")
 
 
 def state(conn, uid):
@@ -164,7 +185,14 @@ def main():
         uploads = [r[0] for r in conn.execute("SELECT id FROM bank_statement_uploads WHERE bank_account_id IN (1,2) ORDER BY id")]
         before = {u: state(conn, u) for u in uploads}
         created = []
+        correct_685460(conn, now)
         for line, pid, ref, paid, spec in PLAN:
+            if not conn.execute("SELECT 1 FROM manual_bank_entries WHERE id=?", (line,)).fetchone():
+                # applied 2026-09-24 12:46 (first 15 lines); skip only with the audit row to prove it
+                assert conn.execute("SELECT 1 FROM register_merge_audit WHERE deleted_entry_id=? AND merged_by=?",
+                                    (line, WHO)).fetchone(), f"line {line} gone with no audit row"
+                print(f"line {line:>4} already settled")
+                continue
             print(settle(conn, now, line, pid, ref, paid, spec, created))
         for loc, num, d, amt in created:
             print(f"invoice created: {loc} {num} {d} {amt:.2f}")
