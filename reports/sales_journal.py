@@ -31,6 +31,16 @@ DASHBOARD_URL = os.getenv("DASHBOARD_URL", "https://dashboard.rednun.com")
 # actually reconcile and the entry must not be posted. See push_to_qbo().
 MAX_PLUG_TO_PUSH = float(os.getenv("QB_MAX_PLUG", "1.00"))
 
+# MarginEdge posted the daily sales journals to QBO through these dates
+# (last MJ…ME entry, read from each company 2026-09-24). A dashboard journal
+# on or before them would double that day's sales, and QBO's DocNumber
+# pre-check cannot catch it: the two systems number entries differently.
+ME_LAST_JE = {"chatham": "2026-05-07", "dennis": "2026-05-03"}
+
+# Statuses a rebuild must never overwrite: the day is settled in QBO, by us
+# (posted) or by MarginEdge (superseded_me).
+TERMINAL_STATUSES = ("posted", "superseded_me")
+
 # QBO refresh tokens die after ~101 days of disuse. Treat anything near that as
 # already dead so a stale-but-present token file can't defeat the fallback.
 QB_TOKEN_MAX_AGE_DAYS = 90
@@ -521,6 +531,15 @@ def persist_journal_entry(entry: dict) -> int:
     conn = get_connection()
     try:
         now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        held = conn.execute(
+            "SELECT id, status FROM qb_journal_entries WHERE location=? AND entry_date=? AND entry_type=?",
+            (entry["location"], entry["entry_date"], entry["entry_type"])).fetchone()
+        if held and held["status"] in TERMINAL_STATUSES:
+            # Rebuilding would flip it back to 'ready' and rewrite its lines
+            # out from under what QBO holds. Leave it exactly as it is.
+            logger.info("[sales_journal] %s %s is %s — rebuild skipped",
+                        entry["location"], entry["entry_date"], held["status"])
+            return held["id"]
         conn.execute("""
             INSERT INTO qb_journal_entries
                 (entry_type, location, entry_date, je_name, total_debits,
@@ -632,6 +651,11 @@ def push_to_qbo(entry_id: int) -> dict:
         if row["status"] != "ready":
             return {"success": False,
                     "error": f"Refusing to push entry with status '{row['status']}'"}
+        _me_last = ME_LAST_JE.get(row["location"])
+        if _me_last and row["entry_date"] <= _me_last:
+            return {"success": False,
+                    "error": f"{row['entry_date']} is on or before MarginEdge's last journal "
+                             f"({_me_last}); that day is already in QBO"}
         if not row["balanced"]:
             return {"success": False, "error": "Entry is not balanced"}
 

@@ -95,9 +95,13 @@ This is the big surprise, and the best news in the file.
   pre-check that adopts an existing QBO txn rather than double-posting
 - There is even a weekly "unposted entries" emailer
 
-Nothing has ever been pushed to QBO — verified: zero `qbo_txn_id`, zero
-`posted`. **So there is no QBO cleanup behind any of this, and redoing any
-close or repost is free.**
+~~Nothing has ever been pushed to QBO~~ — **superseded 2026-09-24:** one sales
+JE is posted (Dennis 2026-08-20, `RNDP08202026`, QBO id 29599, clean — no line
+on a labor account), and MarginEdge posted daily sales JEs to both companies
+through Chatham 5/07 / Dennis 5/03, so every dashboard JE on or before those
+dates is `superseded_me` and refused by `push_to_qbo` (`ME_LAST_JE`). Redoing a
+close is free only for days after the cutoff that are not `posted`. See
+CLAUDE.md, `qb_journal_entries`.
 
 Remaining: pick a start month, post it, have the accountant confirm the JE shape
 before bulk-posting the backlog.

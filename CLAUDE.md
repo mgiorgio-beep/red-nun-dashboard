@@ -231,10 +231,22 @@ Pattern:
 - `recipe_ingredients` — **1,482 rows** (**PRESERVED**)
 - `gl_accounts` — **541 rows** (chatham 284, dennis 257; **524 carry a `qbo_id`**)
 - `qb_journal_entries` — **896 rows**, `qb_journal_line_items` — **13,766 rows**.
-  Sales JEs are BUILT DAILY AND BALANCED, all `status='ready'`, and **not one has ever
-  been posted to QBO**. `reports/sales_journal.py::push_to_qbo()` is the only push path
-  in the codebase and has never run. So redoing any close is free — there is no QBO
-  cleanup behind it.
+  Sales JEs are BUILT DAILY AND BALANCED. **Exactly one has been posted to QBO:**
+  Dennis 2026-08-20, `RNDP08202026` (QBO id 29599, entered 2026-08-22, $8,053.82;
+  checked line by line 2026-09-24 — every line on a sales, tender, tax, discount or
+  Tip Bank account, none on labor). `reports/sales_journal.py::push_to_qbo()` is the
+  only push path in the codebase.
+  - **MarginEdge already posted the daily sales JEs** (`MJ…ME`) to both QBO companies
+    through **Chatham 2026-05-07 / Dennis 2026-05-03** (read from QBO 2026-09-24).
+    Every dashboard JE on or before those dates is `superseded_me`; `ME_LAST_JE` in
+    `sales_journal.py` also refuses to push them, and a rebuild never overwrites a
+    `posted` or `superseded_me` day (`TERMINAL_STATUSES`). Pushable days start
+    Chatham 5/08, Dennis 5/04.
+  - Payroll JEs are NOT pushed by code (the per-run QBO journal is a CSV download).
+    Three were keyed into QBO by hand under the old bank-credit method: Chatham
+    `PR-12262025`, Dennis `12262025` (both dated 2025-12-26) and Dennis `01092026`
+    (2026-01-09 — the one inside the 2026 books; needs a correcting entry at the
+    Payroll Liabilities switch).
 
 > ⚠️ **Row counts in this file go stale fast and have been badly wrong before.** The
 > numbers above were read live on 2026-08-27; the previous set described a wiped state
