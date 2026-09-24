@@ -184,6 +184,28 @@ def init_register_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_gl_rules_pattern ON gl_account_rules(location, pattern);
 
+        -- A bank row that buys more than one month (an annual subscription):
+        -- the row is coded to a prepaid account (balance sheet) and the P&L
+        -- releases `amount` into the expense account evenly over `months`
+        -- from `start_month`. Mike, 2026-09-24 (7shifts annual, Chatham 5/26).
+        CREATE TABLE IF NOT EXISTS expense_amortization (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location TEXT NOT NULL,
+            source_table TEXT NOT NULL,
+            source_id INTEGER NOT NULL,
+            prepaid_gl_account_id INTEGER NOT NULL,
+            expense_gl_account_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            start_month TEXT NOT NULL,      -- YYYY-MM
+            months INTEGER NOT NULL,
+            memo TEXT,
+            created_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(source_table, source_id),
+            FOREIGN KEY (prepaid_gl_account_id) REFERENCES gl_accounts(id),
+            FOREIGN KEY (expense_gl_account_id) REFERENCES gl_accounts(id)
+        );
+
         -- Invoice category_type → GL account, per entity.
         --
         -- The OCR pipeline tags every invoice line with a category_type
@@ -3547,7 +3569,9 @@ def import_balance_sheet():
                      AND id NOT IN (SELECT gl_account_id FROM gl_category_mapping
                                     WHERE gl_account_id IS NOT NULL)
                      AND id NOT IN (SELECT gl_account_id FROM qb_line_mapping
-                                    WHERE gl_account_id IS NOT NULL)""",
+                                    WHERE gl_account_id IS NOT NULL)
+                     AND id NOT IN (SELECT prepaid_gl_account_id FROM expense_amortization)
+                     AND id NOT IN (SELECT expense_gl_account_id FROM expense_amortization)""",
                 (location,),
             )
             deactivated_count = cur.rowcount or 0

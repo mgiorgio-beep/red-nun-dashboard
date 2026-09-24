@@ -282,20 +282,22 @@ class TestOutstandingItems:
         the wrong pass condition: the statement ties exactly AND there is
         money outstanding.
 
-        2026-09-24: -23,963.55 / 18 became -14,488.12 / 8. The Martignetti and
-        Southern Glazer's settlements corrected the 3/26 import's placeholder
-        payments (real FinTech/Exchange refs, made-up amounts) and cleared them
-        with their drafts, and the payroll switch merged the paper checks
-        cashed weeks late. Left open at 3/31: six PFG Bill Pay rows
-        (14,187.92), James Liadis 3/06 (242.74), Maya Jones 3/20 (57.46)."""
+        2026-09-24: -23,963.55 / 18 became -300.20 / 2. The 3/26 import's
+        placeholder Martignetti/SG payments were corrected and cleared by their
+        drafts; paper checks cashed weeks late were merged into their
+        paychecks; and six Dennis PFG payments (14,187.92) turned out to have
+        cleared the same day on CHATHAM's statement (intercompany, now paired
+        there). Left open at 3/31, both cleared later: James Liadis 3/06
+        paycheck (242.74, check 9676, cleared 4/14) and Maya Jones 3/20
+        (57.46, check 9690, cleared 6/18)."""
         u = _upload(uploads, DENNIS, "2026-03-02")
         s = register(client, u)["summary"]
-        assert cents(s["outstanding_net"]) == -1448812
-        assert s["outstanding_count"] == 5           # March's own rows still open at 3/31
+        assert cents(s["outstanding_net"]) == -30020
+        assert s["outstanding_count"] == 2           # March's own rows still open at 3/31
         p = preview(client, u)
-        assert len(p["outstanding_items"]) == 8
-        assert p["outstanding_prior_count"] == 3
-        assert cents(sum(i["amount"] for i in p["outstanding_items"])) == -1448812
+        assert len(p["outstanding_items"]) == 2
+        assert p["outstanding_prior_count"] == 0
+        assert cents(sum(i["amount"] for i in p["outstanding_items"])) == -30020
         assert p["ties"]
 
     def test_chatham_january_outstanding(self, client, uploads):
@@ -910,6 +912,19 @@ class TestNoOrphanedGlReferences:
         ("payroll_checks", "bank_account_id"),
         ("bank_deposits", "bank_account_id"),
     ]
+
+    def test_no_amortization_schedule_points_at_an_invalid_account(self, conn):
+        try:
+            rows = conn.execute("SELECT * FROM expense_amortization").fetchall()
+        except Exception:
+            pytest.skip("no expense_amortization table")
+        bad = []
+        for r in rows:
+            for col in ("prepaid_gl_account_id", "expense_gl_account_id"):
+                g = conn.execute("SELECT active, location FROM gl_accounts WHERE id = ?", (r[col],)).fetchone()
+                if not g or not g["active"] or (g["location"] and g["location"] != r["location"]):
+                    bad.append(f"expense_amortization#{r['id']}.{col} -> {r[col]}")
+        assert not bad, bad
 
     def test_no_row_points_at_an_invalid_account(self, conn):
         bad = []

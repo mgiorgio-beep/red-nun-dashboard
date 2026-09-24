@@ -719,6 +719,41 @@ def cogs(conn, location: str, start: str, end: str) -> dict:
             "approximate": approximate}
 
 
+def amortized_rows(conn, location: str, start: str, end: str) -> list[dict]:
+    """The monthly releases of expense_amortization schedules that fall in
+    [start, end]. Each month carries amount/months (the last month takes the
+    rounding remainder); a month only partly in range counts pro rata by day.
+    One row per (schedule, month) so the drill can list them."""
+    import calendar
+    out = []
+    try:
+        scheds = conn.execute(
+            """SELECT a.*, g.name AS gl_name, g.account_type
+               FROM expense_amortization a
+               JOIN gl_accounts g ON g.id = a.expense_gl_account_id AND g.active = 1
+               WHERE a.location = ?""", (location,)).fetchall()
+    except Exception:      # table not created yet on this database
+        return out
+    d0, d1 = date.fromisoformat(start), date.fromisoformat(end)
+    for a in scheds:
+        y, m = map(int, a["start_month"].split("-"))
+        each = round(a["amount"] / a["months"], 2)
+        for i in range(a["months"]):
+            yy, mm = y + (m - 1 + i) // 12, (m - 1 + i) % 12 + 1
+            last = calendar.monthrange(yy, mm)[1]
+            ms, me = date(yy, mm, 1), date(yy, mm, last)
+            lo, hi = max(ms, d0), min(me, d1)
+            if lo > hi:
+                continue
+            amt = each if i < a["months"] - 1 else round(a["amount"] - each * (a["months"] - 1), 2)
+            out.append({"gl_name": a["gl_name"], "account_type": a["account_type"],
+                        "date": f"{yy}-{mm:02d}-01",
+                        "detail": f"{a['memo'] or 'amortized'} — month {i + 1} of {a['months']}",
+                        "source": f"{a['source_table']}#{a['source_id']}",
+                        "amount": _r2(amt * ((hi - lo).days + 1) / last)})
+    return out
+
+
 def operating_expenses(conn, location: str, start: str, end: str) -> dict:
     """Operating expense from two disjoint sources, kept visibly separate.
 
@@ -751,9 +786,13 @@ def operating_expenses(conn, location: str, start: str, end: str) -> dict:
         """,
         (location, start, end, *sorted(LABOR_ACCOUNT_NAMES)),
     ).fetchall()
-    banked = [{"name": r["gl_name"], "amount": _r2(r["amount"]),
-               "drill": {"source": "opex_banked", "key": r["gl_name"]}}
-              for r in banked_rows]
+    by_name = {r["gl_name"]: float(r["amount"] or 0) for r in banked_rows}
+    for x in amortized_rows(conn, location, start, end):
+        if x["account_type"] in ("Expense", "Other Expense") and x["gl_name"] not in LABOR_ACCOUNT_NAMES:
+            by_name[x["gl_name"]] = by_name.get(x["gl_name"], 0.0) + x["amount"]
+    banked = [{"name": n, "amount": _r2(a),
+               "drill": {"source": "opex_banked", "key": n}}
+              for n, a in sorted(by_name.items(), key=lambda kv: -kv[1])]
     return {"invoiced": invoiced, "banked": banked,
             "invoiced_total": _r2(sum(x["amount"] for x in invoiced)),
             "banked_total": _r2(sum(x["amount"] for x in banked)),
@@ -1092,6 +1131,11 @@ def drill(conn, location: str, start: str, end: str,
             (location, start, end, str(key)),
         ).fetchall()
         cols = ["date", "detail", "reference", "status", "amount"]
+        if source == "opex_banked":
+            rows = [dict(r) for r in rows] + [
+                {"date": x["date"], "detail": x["detail"], "reference": x["source"],
+                 "status": "amortized", "row_id": None, "amount": x["amount"]}
+                for x in amortized_rows(conn, location, start, end) if x["gl_name"] == str(key)]
 
     # ── Payroll runs, behind the run wages / employer-tax lines: each run's
     #    share of the period, from the same _run_labor() labor() uses.
