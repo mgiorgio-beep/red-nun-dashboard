@@ -1952,10 +1952,12 @@ class TestProfitLossSnapshot:
         assert cents(dennis["revenue"]["net_revenue"]) == cents(96703.72)
 
     def test_dennis_march_cogs_and_food_cost(self, dennis):
-        assert cents(dennis["cogs"]["fnb_subtotal"]) == cents(29765.93)
+        # Regenerated 2026-09-24 (Mike signed off): +2,453.99 F&B is the Dennis
+        # March US Foods invoices loaded 9/23 from the account export.
+        assert cents(dennis["cogs"]["fnb_subtotal"]) == cents(32219.92)
         assert cents(dennis["cogs"]["non_fnb_subtotal"]) == cents(706.35)
-        assert cents(dennis["cogs"]["total"]) == cents(30472.28)
-        assert dennis["cogs"]["food_cost_pct"] == 30.78
+        assert cents(dennis["cogs"]["total"]) == cents(32926.27)
+        assert dennis["cogs"]["food_cost_pct"] == 33.32
 
     def test_dennis_march_labor_and_prime(self, dennis):
         lab = dennis["labor"]

@@ -1,6 +1,6 @@
 {
  "_meta": {
-  "frozen_on": "2026-08-25",
+  "frozen_on": "2026-09-24",
   "periods": [
    "dennis_2026-03",
    "chatham_2026-03"
@@ -18,7 +18,7 @@
      "qty",
      "amount"
     ],
-    "count": 56,
+    "count": 58,
     "key": "BEER",
     "rows": [
      {
@@ -430,6 +430,14 @@
       "vendor": "L. Knife & Son, Inc."
      },
      {
+      "amount": 225.0,
+      "date": "2026-03-26",
+      "detail": "Sun Cruiser Classic Iced Tea C-6/4 12Oz",
+      "qty": 5.0,
+      "reference": "485484",
+      "vendor": "L. Knife & Son, Inc."
+     },
+     {
       "amount": 226.0,
       "date": "2026-03-31",
       "detail": "HIGH LIFE 1/2 BBL",
@@ -468,10 +476,18 @@
       "qty": 0.0,
       "reference": "106029",
       "vendor": "Colonial Wholesale Beverage"
+     },
+     {
+      "amount": -180.0,
+      "date": "2026-03-31",
+      "detail": "Credit: 4 cases Sun Cruiser Classic Iced Tea returned, ref inv 485484",
+      "qty": 1.0,
+      "reference": "85484",
+      "vendor": "L. Knife & Son, Inc."
      }
     ],
     "source": "cogs",
-    "total": 7781.19
+    "total": 7826.19
    },
    "cogs:FOOD": {
     "columns": [
@@ -2273,6 +2289,867 @@
     "source": "cogs",
     "total": 816.0
    },
+   "labor_runs:Employer taxes (payroll runs)": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "amount"
+    ],
+    "count": 5,
+    "key": "Employer taxes (payroll runs)",
+    "rows": [
+     {
+      "amount": -139.71,
+      "date": "2026-03-31",
+      "detail": "Run #43 \u00b7 2026-01-01..2026-03-31",
+      "reference": "34.4% of the pay period in range"
+     },
+     {
+      "amount": 125.04,
+      "date": "2026-03-06",
+      "detail": "Run #5 \u00b7 2026-02-16..2026-03-01",
+      "reference": "7.1% of the pay period in range"
+     },
+     {
+      "amount": 1607.53,
+      "date": "2026-03-20",
+      "detail": "Run #4 \u00b7 2026-03-02..2026-03-15",
+      "reference": "100.0% of the pay period in range"
+     },
+     {
+      "amount": 1490.38,
+      "date": "2026-04-03",
+      "detail": "Run #2 \u00b7 2026-03-16..2026-03-29",
+      "reference": "100.0% of the pay period in range"
+     },
+     {
+      "amount": 231.66,
+      "date": "2026-04-17",
+      "detail": "Run #1 \u00b7 2026-03-30..2026-04-12",
+      "reference": "14.3% of the pay period in range"
+     }
+    ],
+    "source": "labor_runs",
+    "total": 3314.9
+   },
+   "labor_runs:Wages (payroll runs)": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "amount"
+    ],
+    "count": 5,
+    "key": "Wages (payroll runs)",
+    "rows": [
+     {
+      "amount": 0.0,
+      "date": "2026-03-31",
+      "detail": "Run #43 \u00b7 2026-01-01..2026-03-31",
+      "reference": "34.4% of the pay period in range"
+     },
+     {
+      "amount": 679.44,
+      "date": "2026-03-06",
+      "detail": "Run #5 \u00b7 2026-02-16..2026-03-01",
+      "reference": "7.1% of the pay period in range"
+     },
+     {
+      "amount": 9307.19,
+      "date": "2026-03-20",
+      "detail": "Run #4 \u00b7 2026-03-02..2026-03-15",
+      "reference": "100.0% of the pay period in range"
+     },
+     {
+      "amount": 9212.59,
+      "date": "2026-04-03",
+      "detail": "Run #2 \u00b7 2026-03-16..2026-03-29",
+      "reference": "100.0% of the pay period in range"
+     },
+     {
+      "amount": 1344.0,
+      "date": "2026-04-17",
+      "detail": "Run #1 \u00b7 2026-03-30..2026-04-12",
+      "reference": "14.3% of the pay period in range"
+     }
+    ],
+    "source": "labor_runs",
+    "total": 20543.22
+   },
+   "opex_banked:Bands": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 3,
+    "key": "Bands",
+    "rows": [
+     {
+      "amount": 500.0,
+      "date": "2026-03-02",
+      "detail": "PAYMENT VENMO",
+      "reference": "WEB 1048572384882 [stmt #20]",
+      "row_id": 1829,
+      "status": "suggested"
+     },
+     {
+      "amount": 500.0,
+      "date": "2026-03-02",
+      "detail": "PAYMENT VENMO",
+      "reference": "WEB 1048572393152 [stmt #20]",
+      "row_id": 1830,
+      "status": "suggested"
+     },
+     {
+      "amount": 500.0,
+      "date": "2026-03-23",
+      "detail": "PAYMENT VENMO",
+      "reference": "WEB 1049062684110 [stmt #20]",
+      "row_id": 1959,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 1500.0
+   },
+   "opex_banked:Bookkeeping": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Bookkeeping",
+    "rows": [
+     {
+      "amount": 122.19,
+      "date": "2026-03-24",
+      "detail": "QBooks Onl INTUIT *",
+      "reference": "CCD | MICHAEL GIORGIO | 8367561 [stmt #20]",
+      "row_id": 1967,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 122.19
+   },
+   "opex_banked:Cable/Phone/Internet": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 7,
+    "key": "Cable/Phone/Internet",
+    "rows": [
+     {
+      "amount": 39.75,
+      "date": "2026-03-05",
+      "detail": "DDA B/P 1221 03/05/26 994977",
+      "reference": "Google YouTube TV | 650-2530000 CA C# 4708 [stmt #20]",
+      "row_id": 1847,
+      "status": "suggested"
+     },
+     {
+      "amount": 129.26,
+      "date": "2026-03-09",
+      "detail": "CABLE SVCS COMCAST CORP",
+      "reference": "CCD | Red *Buoy | 2718683 [stmt #20]",
+      "row_id": 1869,
+      "status": "suggested"
+     },
+     {
+      "amount": 129.26,
+      "date": "2026-03-09",
+      "detail": "CABLE SVCS COMCAST CORP",
+      "reference": "CCD | Red *Buoy | 3377711 [stmt #20]",
+      "row_id": 1870,
+      "status": "suggested"
+     },
+     {
+      "amount": 240.23,
+      "date": "2026-03-10",
+      "detail": "CABLE SVCS COMCAST-XFINITY",
+      "reference": "PPD [stmt #20]",
+      "row_id": 1881,
+      "status": "suggested"
+     },
+     {
+      "amount": -129.26,
+      "date": "2026-03-11",
+      "detail": "CABLE SVCS COMCAST CORP",
+      "reference": "CCD | Red *Buoy | 3918775 [stmt #20]",
+      "row_id": 1884,
+      "status": "suggested"
+     },
+     {
+      "amount": 135.41,
+      "date": "2026-03-20",
+      "detail": "DBT CRD 1224 03/20/26 137988",
+      "reference": "COMCAST BUSINESS MOBIL | 844-963-0206 PA C# 4708 [stmt #20]",
+      "row_id": 1939,
+      "status": "suggested"
+     },
+     {
+      "amount": 9.1,
+      "date": "2026-03-23",
+      "detail": "PCS SVC T-MOBILE",
+      "reference": "WEB 7575824 [stmt #20]",
+      "row_id": 1952,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 553.75
+   },
+   "opex_banked:Daily Cleaning": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 4,
+    "key": "Daily Cleaning",
+    "rows": [
+     {
+      "amount": 260.0,
+      "date": "2026-03-03",
+      "detail": "Check 1000145",
+      "reference": "[stmt #20] | CHK: The Caron Group of Companies Lic",
+      "row_id": 1835,
+      "status": "confirmed"
+     },
+     {
+      "amount": 260.0,
+      "date": "2026-03-05",
+      "detail": "Check 1000147",
+      "reference": "[stmt #20] | CHK: The Caron Group of Companies Lic",
+      "row_id": 1846,
+      "status": "confirmed"
+     },
+     {
+      "amount": 260.0,
+      "date": "2026-03-13",
+      "detail": "Check 1000148",
+      "reference": "[stmt #20]",
+      "row_id": 1893,
+      "status": "confirmed"
+     },
+     {
+      "amount": 260.0,
+      "date": "2026-03-27",
+      "detail": "Check 1000149",
+      "reference": "[stmt #20] | CHK: The Caron Group of Companies Llc",
+      "row_id": 1991,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 1040.0
+   },
+   "opex_banked:Dues & Subscriptions": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 17,
+    "key": "Dues & Subscriptions",
+    "rows": [
+     {
+      "amount": 347.44,
+      "date": "2026-03-02",
+      "detail": "7shifts 7shifts",
+      "reference": "WEB ST-K9A9K8Y8S8M3 [stmt #20]",
+      "row_id": 1826,
+      "status": "confirmed"
+     },
+     {
+      "amount": 7.99,
+      "date": "2026-03-09",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB PP ROKU FOR PEA [stmt #20]",
+      "row_id": 1866,
+      "status": "suggested"
+     },
+     {
+      "amount": 12.99,
+      "date": "2026-03-09",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB ESPN [stmt #20]",
+      "row_id": 1867,
+      "status": "suggested"
+     },
+     {
+      "amount": 16.99,
+      "date": "2026-03-09",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB PEACOCKTVLL 1E7 [stmt #20] [job064 orphan]",
+      "row_id": 3479,
+      "status": "suggested"
+     },
+     {
+      "amount": 212.5,
+      "date": "2026-03-10",
+      "detail": "DBT CRD 1219 03/10/26 368199",
+      "reference": "CLAUDE.AI SUBSCRIPTION | ANTHROPIC.COMCA C# 4708 [stmt #20]",
+      "row_id": 1876,
+      "status": "suggested"
+     },
+     {
+      "amount": 197.29,
+      "date": "2026-03-16",
+      "detail": "Payment DTiQ Technologie",
+      "reference": "PPD [stmt #20]",
+      "row_id": 1914,
+      "status": "suggested"
+     },
+     {
+      "amount": 21.76,
+      "date": "2026-03-18",
+      "detail": "ANTHROPIC ANTHROPIC",
+      "reference": "WEB ST-S9B2D1M0L9J7 [stmt #20]",
+      "row_id": 1926,
+      "status": "suggested"
+     },
+     {
+      "amount": 73.01,
+      "date": "2026-03-20",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB RAPIDSWHOLE RAP [stmt #20]",
+      "row_id": 1940,
+      "status": "suggested"
+     },
+     {
+      "amount": 29.99,
+      "date": "2026-03-23",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB PP ROKU FOR NES [stmt #20]",
+      "row_id": 1954,
+      "status": "suggested"
+     },
+     {
+      "amount": 106.24,
+      "date": "2026-03-23",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB IPVANISH IPVANI [stmt #20]",
+      "row_id": 1956,
+      "status": "suggested"
+     },
+     {
+      "amount": 9.99,
+      "date": "2026-03-26",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB GOOGLE GOOGLE_Y [stmt #20]",
+      "row_id": 1982,
+      "status": "suggested"
+     },
+     {
+      "amount": 10.99,
+      "date": "2026-03-26",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB GOOGLE GOOGLE_Y [stmt #20]",
+      "row_id": 1983,
+      "status": "suggested"
+     },
+     {
+      "amount": 18.49,
+      "date": "2026-03-26",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB GOOGLE GOOGLE_Y [stmt #20]",
+      "row_id": 1984,
+      "status": "suggested"
+     },
+     {
+      "amount": 82.99,
+      "date": "2026-03-26",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB GOOGLE GOOGLE_Y [stmt #20]",
+      "row_id": 1985,
+      "status": "suggested"
+     },
+     {
+      "amount": 119.99,
+      "date": "2026-03-26",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB CANVA [stmt #20]",
+      "row_id": 1986,
+      "status": "suggested"
+     },
+     {
+      "amount": 180.0,
+      "date": "2026-03-27",
+      "detail": "INST XFER PAYPAL",
+      "reference": "WEB PDFFILLER [stmt #20]",
+      "row_id": 1993,
+      "status": "suggested"
+     },
+     {
+      "amount": 108.38,
+      "date": "2026-03-31",
+      "detail": "PURCHASE 7 7shifts",
+      "reference": "WEB ST-Y6J4Q0H9Y7X8 [stmt #20]",
+      "row_id": 2009,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 1557.03
+   },
+   "opex_banked:Electric": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 4,
+    "key": "Electric",
+    "rows": [
+     {
+      "amount": 968.56,
+      "date": "2026-03-02",
+      "detail": "WEB_PAY EVERSOURCE",
+      "reference": "WEB 23290796020926 [stmt #20]",
+      "row_id": 1832,
+      "status": "suggested"
+     },
+     {
+      "amount": 229.08,
+      "date": "2026-03-16",
+      "detail": "AGNT PMT Clearway 16",
+      "reference": "PPD [stmt #20]",
+      "row_id": 1915,
+      "status": "suggested"
+     },
+     {
+      "amount": 318.31,
+      "date": "2026-03-16",
+      "detail": "PPD PAYMNT Clearway 15",
+      "reference": "PPD [stmt #20]",
+      "row_id": 1919,
+      "status": "suggested"
+     },
+     {
+      "amount": 1176.51,
+      "date": "2026-03-31",
+      "detail": "WEB_PAY EVERSOURCE",
+      "reference": "WEB 26987507031026 [stmt #20]",
+      "row_id": 2012,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 2692.46
+   },
+   "opex_banked:Fire Extinguishers": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Fire Extinguishers",
+    "rows": [
+     {
+      "amount": 256.5,
+      "date": "2026-03-16",
+      "detail": "autopay FireEquipment",
+      "reference": "PPD [stmt #20]",
+      "row_id": 1918,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 256.5
+   },
+   "opex_banked:Gas": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Gas",
+    "rows": [
+     {
+      "amount": 507.89,
+      "date": "2026-03-16",
+      "detail": "MEBillPay Sprague Operatin",
+      "reference": "CCD | Red Buoy Inc | MEEP000156 [stmt #20]",
+      "row_id": 1920,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 507.89
+   },
+   "opex_banked:Hood Cleaning": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Hood Cleaning",
+    "rows": [
+     {
+      "amount": 132.33,
+      "date": "2026-03-09",
+      "detail": "DBT CRD 1321 03/08/26 203309",
+      "reference": "IN *TIGER EXCHANGE, IN | 508-6413585 MA C# 4708 [stmt #20]",
+      "row_id": 1864,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 132.33
+   },
+   "opex_banked:Kitchen Supplies": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Kitchen Supplies",
+    "rows": [
+     {
+      "amount": 99.0,
+      "date": "2026-03-20",
+      "detail": "DBT CRD 1224 03/20/26 531881",
+      "reference": "THE WEBSTAURANT STORE | 717-392-7472 PA C# 4708 [stmt #20]",
+      "row_id": 1938,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 99.0
+   },
+   "opex_banked:Knife Sharpening": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 3,
+    "key": "Knife Sharpening",
+    "rows": [
+     {
+      "amount": 28.9,
+      "date": "2026-03-02",
+      "detail": "MEBillPay Cozzini Bros., I",
+      "reference": "CCD | Red Buoy Inc | MEEP000152 [stmt #20]",
+      "row_id": 1820,
+      "status": "suggested"
+     },
+     {
+      "amount": 28.9,
+      "date": "2026-03-23",
+      "detail": "MEBillPay Cozzini Bros., I",
+      "reference": "CCD | Red Buoy Inc | MEEP000159 [stmt #20]",
+      "row_id": 1953,
+      "status": "suggested"
+     },
+     {
+      "amount": 28.9,
+      "date": "2026-03-30",
+      "detail": "MEBillPay Cozzini Bros., I",
+      "reference": "CCD | Red Buoy Inc | MEEP000161 [stmt #20]",
+      "row_id": 2003,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 86.7
+   },
+   "opex_banked:Liability Insurance": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 3,
+    "key": "Liability Insurance",
+    "rows": [
+     {
+      "amount": 72.56,
+      "date": "2026-03-02",
+      "detail": "NEXT INSUR NEXT INSUR (AP I",
+      "reference": "WEB ST-A3W4V9X1G3G8 [stmt #20]",
+      "row_id": 1821,
+      "status": "suggested"
+     },
+     {
+      "amount": 74.84,
+      "date": "2026-03-16",
+      "detail": "NEXT INSUR NEXT INSUR (AP I",
+      "reference": "WEB ST-A1H9I3Y2D6C8 [stmt #20]",
+      "row_id": 1910,
+      "status": "suggested"
+     },
+     {
+      "amount": 73.41,
+      "date": "2026-03-30",
+      "detail": "NEXT INSUR NEXT INSUR (AP I",
+      "reference": "WEB ST-F4F7T2V3T4M4 [stmt #20]",
+      "row_id": 2004,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 220.81
+   },
+   "opex_banked:Linens": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 5,
+    "key": "Linens",
+    "rows": [
+     {
+      "amount": 476.59,
+      "date": "2026-03-03",
+      "detail": "MEBillPay UniFirst Corpora",
+      "reference": "CCD | Red Buoy Inc | MEEP000153 [stmt #20]",
+      "row_id": 1840,
+      "status": "suggested"
+     },
+     {
+      "amount": 60.42,
+      "date": "2026-03-10",
+      "detail": "MEBillPay Cintas",
+      "reference": "CCD | Red Buoy Inc | MEEP000155 [stmt #20]",
+      "row_id": 1877,
+      "status": "suggested"
+     },
+     {
+      "amount": 157.02,
+      "date": "2026-03-10",
+      "detail": "MEBillPay UniFirst Corpora",
+      "reference": "CCD | Red Buoy Inc | MEEP000154 [stmt #20]",
+      "row_id": 1879,
+      "status": "suggested"
+     },
+     {
+      "amount": 137.51,
+      "date": "2026-03-16",
+      "detail": "MEBillPay Cintas",
+      "reference": "CCD | Red Buoy Inc | MEEP000158 [stmt #20]",
+      "row_id": 1912,
+      "status": "suggested"
+     },
+     {
+      "amount": 157.02,
+      "date": "2026-03-24",
+      "detail": "MEBillPay UniFirst Corpora",
+      "reference": "CCD | Red Buoy Inc | MEEP000160 [stmt #20]",
+      "row_id": 1968,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 988.56
+   },
+   "opex_banked:Office Supplies & Software": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Office Supplies & Software",
+    "rows": [
+     {
+      "amount": 383.63,
+      "date": "2026-03-09",
+      "detail": "8884889612 MarginEdge",
+      "reference": "WEB 868995510 [stmt #20]",
+      "row_id": 1873,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 383.63
+   },
+   "opex_banked:POS Fees": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "POS Fees",
+    "rows": [
+     {
+      "amount": 602.45,
+      "date": "2026-03-26",
+      "detail": "PURCHASE T Toast, Inc",
+      "reference": "CCD | TOAST INC | ST-B6D3Z3G2A9X2 [stmt #20]",
+      "row_id": 1988,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 602.45
+   },
+   "opex_banked:Pest Control": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 4,
+    "key": "Pest Control",
+    "rows": [
+     {
+      "amount": 91.0,
+      "date": "2026-03-02",
+      "detail": "DBT CRD 1227 02/28/26 564570",
+      "reference": "WWP*A1 EXTERMINATORS | 800-523-4825 NJ C# 4708 [stmt #20]",
+      "row_id": 1818,
+      "status": "confirmed"
+     },
+     {
+      "amount": 57.0,
+      "date": "2026-03-09",
+      "detail": "DBT CRD 1321 03/08/26 565084",
+      "reference": "WWP*A1 EXTERMINATORS | 800-523-4825 NJ C# 4708 [stmt #20]",
+      "row_id": 1863,
+      "status": "confirmed"
+     },
+     {
+      "amount": 57.0,
+      "date": "2026-03-26",
+      "detail": "DBT CRD 1222 03/26/26 204488",
+      "reference": "WWP*A1 EXTERMINATORS | 800-523-4825 NJ C# 4708 [stmt #20]",
+      "row_id": 1979,
+      "status": "confirmed"
+     },
+     {
+      "amount": 91.0,
+      "date": "2026-03-26",
+      "detail": "DBT CRD 1222 03/26/26 207414",
+      "reference": "WWP*A1 EXTERMINATORS | 800-523-4825 NJ C# 4708 [stmt #20]",
+      "row_id": 1980,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 296.0
+   },
+   "opex_banked:Property Insurance": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 2,
+    "key": "Property Insurance",
+    "rows": [
+     {
+      "amount": 124.76,
+      "date": "2026-03-19",
+      "detail": "PREM EFT QuincyMutual462",
+      "reference": "PPD [stmt #20]",
+      "row_id": 1930,
+      "status": "suggested"
+     },
+     {
+      "amount": 2136.13,
+      "date": "2026-03-30",
+      "detail": "PAYMENTS P1 FINANCE HOLDI",
+      "reference": "CCD | 7743536519 | 30337148 [stmt #20]",
+      "row_id": 2007,
+      "status": "suggested"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 2260.89
+   },
+   "opex_banked:Rent & Lease": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Rent & Lease",
+    "rows": [
+     {
+      "amount": 1000.0,
+      "date": "2026-03-24",
+      "detail": "Transfer from x5975 to x1239",
+      "reference": "[stmt #20]",
+      "row_id": 1964,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 1000.0
+   },
+   "opex_banked:Trash Removal": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Trash Removal",
+    "rows": [
+     {
+      "amount": 569.16,
+      "date": "2026-03-05",
+      "detail": "DBT CRD 1221 03/05/26 499625",
+      "reference": "BENJAMIN T NICKERSON I | 508-4302500 MA C# 4708 [stmt #20]",
+      "row_id": 1848,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 569.16
+   },
    "opex_invoiced:DR_SUPPLIES": {
     "columns": [
      "date",
@@ -2362,7 +3239,7 @@
      "qty",
      "amount"
     ],
-    "count": 78,
+    "count": 82,
     "key": "NON_COGS",
     "rows": [
      {
@@ -2428,6 +3305,14 @@
       "qty": -4.0,
       "reference": "545010",
       "vendor": "Colonial Wholesale Beverage"
+     },
+     {
+      "amount": 9.96,
+      "date": "2026-03-04",
+      "detail": "Fees & tax (unitemized)",
+      "qty": 1.0,
+      "reference": "52427",
+      "vendor": "US Foods"
      },
      {
       "amount": -50.0,
@@ -2590,6 +3475,14 @@
       "vendor": "Colonial Wholesale Beverage"
      },
      {
+      "amount": 7.0,
+      "date": "2026-03-11",
+      "detail": "Fees & tax (unitemized)",
+      "qty": 1.0,
+      "reference": "327704",
+      "vendor": "US Foods"
+     },
+     {
       "amount": -50.0,
       "date": "2026-03-12",
       "detail": "AB COOPERAGE",
@@ -2692,6 +3585,14 @@
       "qty": 1.0,
       "reference": "C20641318",
       "vendor": "Cozzini Bros., Inc."
+     },
+     {
+      "amount": 23.25,
+      "date": "2026-03-18",
+      "detail": "Fees & tax (unitemized)",
+      "qty": 1.0,
+      "reference": "606658",
+      "vendor": "US Foods"
      },
      {
       "amount": 11.46,
@@ -2878,6 +3779,14 @@
       "vendor": "Cozzini Bros., Inc."
      },
      {
+      "amount": 10.75,
+      "date": "2026-03-25",
+      "detail": "Fees & tax (unitemized)",
+      "qty": 1.0,
+      "reference": "872575",
+      "vendor": "US Foods"
+     },
+     {
       "amount": -50.0,
       "date": "2026-03-26",
       "detail": "AB COOPERAGE",
@@ -2991,7 +3900,7 @@
      }
     ],
     "source": "opex_invoiced",
-    "total": -294.52
+    "total": -243.56
    },
    "opex_invoiced:OTHER": {
     "columns": [
@@ -4241,8 +5150,8 @@
   "pl": {
    "cogs": {
     "approximate": [],
-    "fnb_subtotal": 24124.5,
-    "food_cost_pct": 38.46,
+    "fnb_subtotal": 24169.5,
+    "food_cost_pct": 38.53,
     "lines": [
      {
       "amount": 13355.22,
@@ -4255,7 +5164,7 @@
       "name": "Food Costs -F&B"
      },
      {
-      "amount": 7781.19,
+      "amount": 7826.19,
       "category": "BEER",
       "confidence": "exact",
       "drill": {
@@ -4306,24 +5215,25 @@
      }
     ],
     "non_fnb_subtotal": 748.02,
-    "total": 24872.52,
-    "total_cogs_pct": 39.65
+    "total": 24917.52,
+    "total_cogs_pct": 39.72
    },
    "footnotes": [
-    "NO BANK ROWS for this period \u2014 the statement has not been imported. Operating expense and labor are MISSING, so the bottom line is revenue minus invoices only and is NOT a profit figure.",
     "TIPS: $12,097.60 passed through in this period (19.3% of net revenue). Booked to Tip Bank, a balance-sheet account, so it is correctly EXCLUDED from revenue here. Summing all JE credits instead would overstate revenue by that amount.",
     "TOAST FEES ARE NOT BOOKED. Processing fees are netted out of the settlement deposit and never reach an expense account, so operating expense is understated and net income is overstated by roughly the monthly Toast fee.",
     "NO INVENTORY ADJUSTMENT. COGS here is PURCHASES, not cost of goods consumed. Without opening and closing counts, a month that stocks up looks expensive and a month that draws down looks cheap. Food cost % is therefore directionally right and precisely wrong.",
-    "LABOR SOURCE is the bank rows on labor accounts, the only complete view. For comparison: Toast time entries show $13,636.67 over 855.3 hours (152 shifts) \u2014 hourly wages only, no employer taxes or salaried staff \u2014 and payroll checks total $30,284.40 across 32 check(s), which is partial coverage for the period."
+    "LABOR SOURCE is the payroll runs (5 in range): gross pay less tips plus employer taxes, spread over each pay period, plus any bank rows still on a labor account. Tips of $12,609.27 ran through payroll and are excluded \u2014 they settle Tip Bank. The bank lines that pay a run settle Payroll Liabilities, not labor. For comparison: Toast time entries show $13,636.67 over 855.3 hours (152 shifts) \u2014 hourly wages only, no employer taxes or salaried staff \u2014 and payroll checks total $30,284.40 across 32 check(s).",
+    "SALES TAX COLLECTED BUT NOT REMITTED \u2014 2 business day(s) totalling $393.13 have no matching DAVO pull, the oldest being 2026-04-04. DAVO remits each day's tax exactly, 0-9 days later, so a day still unmatched well beyond that lag was not remitted. This is the state's money.",
+    "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 18 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost."
    ],
    "guardrails": {
     "clearing_excluded": true,
     "clearing_violations": [],
     "expense_coverage": {
-     "bank_rows": 0,
-     "expense_side_complete": false,
-     "labor_rows": 0,
-     "warning": "NO BANK ROWS for this period \u2014 the statement has not been imported. Operating expense and labor are MISSING, so the bottom line is revenue minus invoices only and is NOT a profit figure."
+     "bank_rows": 196,
+     "expense_side_complete": true,
+     "labor_rows": 5,
+     "warning": null
     },
     "journal_control": {
      "balanced": true,
@@ -4340,33 +5250,173 @@
      "threshold": 50.0
     },
     "sales_tax": {
-     "alarm": false,
+     "alarm": true,
      "available": true,
-     "avg_daily_tax": 132.25,
-     "collected": 4232.07,
-     "direction": "balanced",
-     "growing": false,
+     "avg_daily_tax": 270.99,
+     "collected": 65850.98,
+     "direction": "debit",
+     "growing": true,
      "matching": {
-      "exact": 20,
-      "lag_avg": 2.91,
-      "lag_max": 5,
-      "lag_min": 2,
-      "match_rate": 85.19,
-      "matched": 23,
-      "pulls": 26,
+      "exact": 107,
+      "lag_avg": 2.86,
+      "lag_max": 9,
+      "lag_min": 0,
+      "match_rate": 98.1,
+      "matched": 206,
+      "pulls": 228,
       "reversals": [
        {
         "amount": -6.16,
         "date": "2026-01-13",
         "id": 307
+       },
+       {
+        "amount": -4.86,
+        "date": "2026-02-11",
+        "id": 1658
+       },
+       {
+        "amount": -5.36,
+        "date": "2026-03-23",
+        "id": 1946
+       },
+       {
+        "amount": -6.15,
+        "date": "2026-04-10",
+        "id": 2080
+       },
+       {
+        "amount": -6.62,
+        "date": "2026-05-13",
+        "id": 2312
+       },
+       {
+        "amount": -8.3,
+        "date": "2026-06-11",
+        "id": 2490
+       },
+       {
+        "amount": -9.41,
+        "date": "2026-07-13",
+        "id": 2690
+       },
+       {
+        "amount": -14.3,
+        "date": "2026-08-12",
+        "id": 2898
        }
       ],
-      "tax_days": 27,
-      "unmatched_pull_total": 0.0,
-      "unmatched_pulls": [],
-      "unremitted_days": [],
-      "unremitted_total": 0.0,
-      "variance_total": 4.28,
+      "tax_days": 210,
+      "unmatched_pull_total": 4325.09,
+      "unmatched_pulls": [
+       {
+        "amount": 61.61,
+        "date": "2026-02-03",
+        "id": 1595
+       },
+       {
+        "amount": 92.56,
+        "date": "2026-02-09",
+        "id": 1635
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-03-03",
+        "id": 1837
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-04-06",
+        "id": 2035
+       },
+       {
+        "amount": 48.5,
+        "date": "2026-04-07",
+        "id": 2051
+       },
+       {
+        "amount": 332.05,
+        "date": "2026-04-09",
+        "id": 2077
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-05-04",
+        "id": 2243
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-06-03",
+        "id": 2451
+       },
+       {
+        "amount": 170.04,
+        "date": "2026-06-11",
+        "id": 2492
+       },
+       {
+        "amount": 214.13,
+        "date": "2026-06-12",
+        "id": 2496
+       },
+       {
+        "amount": 485.5,
+        "date": "2026-06-25",
+        "id": 2584
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-07-02",
+        "id": 2632
+       },
+       {
+        "amount": 578.7,
+        "date": "2026-07-22",
+        "id": 2761
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-08-03",
+        "id": 2836
+       },
+       {
+        "amount": 2.31,
+        "date": "2026-08-04",
+        "id": 2846
+       },
+       {
+        "amount": 731.53,
+        "date": "2026-08-24",
+        "id": 2982
+       },
+       {
+        "amount": 389.96,
+        "date": "2026-08-25",
+        "id": 2986
+       },
+       {
+        "amount": 582.95,
+        "date": "2026-08-25",
+        "id": 2987
+       },
+       {
+        "amount": 265.59,
+        "date": "2026-08-26",
+        "id": 2996
+       }
+      ],
+      "unremitted_days": [
+       {
+        "amount": 284.17,
+        "date": "2026-04-04"
+       },
+       {
+        "amount": 108.96,
+        "date": "2026-04-05"
+       }
+      ],
+      "unremitted_total": 393.13,
+      "variance_total": -175.73,
       "variances": [
        {
         "accrued": 141.74,
@@ -4388,11 +5438,686 @@
         "pull_id": 371,
         "remitted": 209.6,
         "variance": 1.89
+       },
+       {
+        "accrued": 71.72,
+        "date": "2026-01-29",
+        "pull_id": 1583,
+        "remitted": 70.74,
+        "variance": 0.98
+       },
+       {
+        "accrued": 149.52,
+        "date": "2026-01-31",
+        "pull_id": 1597,
+        "remitted": 148.35,
+        "variance": 1.17
+       },
+       {
+        "accrued": 133.98,
+        "date": "2026-02-10",
+        "pull_id": 1668,
+        "remitted": 131.9,
+        "variance": 2.08
+       },
+       {
+        "accrued": 143.02,
+        "date": "2026-02-11",
+        "pull_id": 1676,
+        "remitted": 140.75,
+        "variance": 2.27
+       },
+       {
+        "accrued": 292.48,
+        "date": "2026-02-13",
+        "pull_id": 1700,
+        "remitted": 283.31,
+        "variance": 9.17
+       },
+       {
+        "accrued": 165.62,
+        "date": "2026-02-17",
+        "pull_id": 1729,
+        "remitted": 164.05,
+        "variance": 1.57
+       },
+       {
+        "accrued": 276.25,
+        "date": "2026-02-20",
+        "pull_id": 1758,
+        "remitted": 272.17,
+        "variance": 4.08
+       },
+       {
+        "accrued": 273.65,
+        "date": "2026-02-24",
+        "pull_id": 1806,
+        "remitted": 272.97,
+        "variance": 0.68
+       },
+       {
+        "accrued": 189.69,
+        "date": "2026-02-26",
+        "pull_id": 1824,
+        "remitted": 188.38,
+        "variance": 1.31
+       },
+       {
+        "accrued": 200.73,
+        "date": "2026-02-25",
+        "pull_id": 1825,
+        "remitted": 198.6,
+        "variance": 2.13
+       },
+       {
+        "accrued": 293.22,
+        "date": "2026-02-27",
+        "pull_id": 1839,
+        "remitted": 290.58,
+        "variance": 2.64
+       },
+       {
+        "accrued": 166.1,
+        "date": "2026-03-01",
+        "pull_id": 1842,
+        "remitted": 164.0,
+        "variance": 2.1
+       },
+       {
+        "accrued": 247.98,
+        "date": "2026-03-06",
+        "pull_id": 1882,
+        "remitted": 240.76,
+        "variance": 7.22
+       },
+       {
+        "accrued": 127.93,
+        "date": "2026-03-18",
+        "pull_id": 1957,
+        "remitted": 127.76,
+        "variance": 0.17
+       },
+       {
+        "accrued": 182.85,
+        "date": "2026-03-24",
+        "pull_id": 1987,
+        "remitted": 178.39,
+        "variance": 4.46
+       },
+       {
+        "accrued": 255.13,
+        "date": "2026-03-28",
+        "pull_id": 2011,
+        "remitted": 253.48,
+        "variance": 1.65
+       },
+       {
+        "accrued": 301.85,
+        "date": "2026-04-10",
+        "pull_id": 2102,
+        "remitted": 300.35,
+        "variance": 1.5
+       },
+       {
+        "accrued": 158.94,
+        "date": "2026-04-15",
+        "pull_id": 2129,
+        "remitted": 157.59,
+        "variance": 1.35
+       },
+       {
+        "accrued": 262.66,
+        "date": "2026-04-17",
+        "pull_id": 2152,
+        "remitted": 262.46,
+        "variance": 0.2
+       },
+       {
+        "accrued": 133.2,
+        "date": "2026-04-19",
+        "pull_id": 2162,
+        "remitted": 132.48,
+        "variance": 0.72
+       },
+       {
+        "accrued": 306.83,
+        "date": "2026-04-24",
+        "pull_id": 2202,
+        "remitted": 311.29,
+        "variance": -4.46
+       },
+       {
+        "accrued": 211.05,
+        "date": "2026-04-28",
+        "pull_id": 2220,
+        "remitted": 209.1,
+        "variance": 1.95
+       },
+       {
+        "accrued": 310.03,
+        "date": "2026-05-01",
+        "pull_id": 2247,
+        "remitted": 316.1,
+        "variance": -6.07
+       },
+       {
+        "accrued": 145.07,
+        "date": "2026-05-03",
+        "pull_id": 2265,
+        "remitted": 144.17,
+        "variance": 0.9
+       },
+       {
+        "accrued": 180.46,
+        "date": "2026-05-06",
+        "pull_id": 2279,
+        "remitted": 177.41,
+        "variance": 3.05
+       },
+       {
+        "accrued": 324.08,
+        "date": "2026-05-08",
+        "pull_id": 2302,
+        "remitted": 330.09,
+        "variance": -6.01
+       },
+       {
+        "accrued": 175.3,
+        "date": "2026-05-10",
+        "pull_id": 2307,
+        "remitted": 172.08,
+        "variance": 3.22
+       },
+       {
+        "accrued": 172.79,
+        "date": "2026-05-14",
+        "pull_id": 2335,
+        "remitted": 170.69,
+        "variance": 2.1
+       },
+       {
+        "accrued": 320.72,
+        "date": "2026-05-16",
+        "pull_id": 2347,
+        "remitted": 314.24,
+        "variance": 6.48
+       },
+       {
+        "accrued": 207.9,
+        "date": "2026-05-19",
+        "pull_id": 2358,
+        "remitted": 207.34,
+        "variance": 0.56
+       },
+       {
+        "accrued": 180.4,
+        "date": "2026-05-20",
+        "pull_id": 2371,
+        "remitted": 180.23,
+        "variance": 0.17
+       },
+       {
+        "accrued": 503.98,
+        "date": "2026-05-22",
+        "pull_id": 2394,
+        "remitted": 520.05,
+        "variance": -16.07
+       },
+       {
+        "accrued": 642.97,
+        "date": "2026-05-24",
+        "pull_id": 2410,
+        "remitted": 641.3,
+        "variance": 1.67
+       },
+       {
+        "accrued": 700.93,
+        "date": "2026-05-23",
+        "pull_id": 2411,
+        "remitted": 729.97,
+        "variance": -29.04
+       },
+       {
+        "accrued": 128.96,
+        "date": "2026-05-26",
+        "pull_id": 2418,
+        "remitted": 126.97,
+        "variance": 1.99
+       },
+       {
+        "accrued": 344.23,
+        "date": "2026-05-29",
+        "pull_id": 2436,
+        "remitted": 346.84,
+        "variance": -2.61
+       },
+       {
+        "accrued": 462.13,
+        "date": "2026-05-30",
+        "pull_id": 2445,
+        "remitted": 431.67,
+        "variance": 30.46
+       },
+       {
+        "accrued": 213.03,
+        "date": "2026-06-02",
+        "pull_id": 2454,
+        "remitted": 207.5,
+        "variance": 5.53
+       },
+       {
+        "accrued": 486.98,
+        "date": "2026-06-05",
+        "pull_id": 2476,
+        "remitted": 493.46,
+        "variance": -6.48
+       },
+       {
+        "accrued": 266.12,
+        "date": "2026-06-07",
+        "pull_id": 2482,
+        "remitted": 273.75,
+        "variance": -7.63
+       },
+       {
+        "accrued": 375.83,
+        "date": "2026-06-06",
+        "pull_id": 2483,
+        "remitted": 378.33,
+        "variance": -2.5
+       },
+       {
+        "accrued": 498.02,
+        "date": "2026-06-12",
+        "pull_id": 2508,
+        "remitted": 494.29,
+        "variance": 3.73
+       },
+       {
+        "accrued": 357.43,
+        "date": "2026-06-14",
+        "pull_id": 2513,
+        "remitted": 357.92,
+        "variance": -0.49
+       },
+       {
+        "accrued": 387.89,
+        "date": "2026-06-16",
+        "pull_id": 2514,
+        "remitted": 392.16,
+        "variance": -4.27
+       },
+       {
+        "accrued": 386.23,
+        "date": "2026-06-18",
+        "pull_id": 2546,
+        "remitted": 386.37,
+        "variance": -0.14
+       },
+       {
+        "accrued": 337.06,
+        "date": "2026-06-17",
+        "pull_id": 2564,
+        "remitted": 338.2,
+        "variance": -1.14
+       },
+       {
+        "accrued": 374.15,
+        "date": "2026-06-13",
+        "pull_id": 2565,
+        "remitted": 386.92,
+        "variance": -12.77
+       },
+       {
+        "accrued": 883.23,
+        "date": "2026-06-19",
+        "pull_id": 2566,
+        "remitted": 888.4,
+        "variance": -5.17
+       },
+       {
+        "accrued": 294.01,
+        "date": "2026-06-21",
+        "pull_id": 2573,
+        "remitted": 303.95,
+        "variance": -9.94
+       },
+       {
+        "accrued": 619.69,
+        "date": "2026-06-20",
+        "pull_id": 2575,
+        "remitted": 633.01,
+        "variance": -13.32
+       },
+       {
+        "accrued": 335.51,
+        "date": "2026-06-24",
+        "pull_id": 2595,
+        "remitted": 331.35,
+        "variance": 4.16
+       },
+       {
+        "accrued": 400.46,
+        "date": "2026-06-25",
+        "pull_id": 2606,
+        "remitted": 400.0,
+        "variance": 0.46
+       },
+       {
+        "accrued": 688.98,
+        "date": "2026-06-26",
+        "pull_id": 2607,
+        "remitted": 697.26,
+        "variance": -8.28
+       },
+       {
+        "accrued": 301.79,
+        "date": "2026-06-28",
+        "pull_id": 2612,
+        "remitted": 302.15,
+        "variance": -0.36
+       },
+       {
+        "accrued": 623.7,
+        "date": "2026-06-27",
+        "pull_id": 2614,
+        "remitted": 628.21,
+        "variance": -4.51
+       },
+       {
+        "accrued": 260.63,
+        "date": "2026-06-29",
+        "pull_id": 2622,
+        "remitted": 261.73,
+        "variance": -1.1
+       },
+       {
+        "accrued": 778.55,
+        "date": "2026-07-01",
+        "pull_id": 2640,
+        "remitted": 783.11,
+        "variance": -4.56
+       },
+       {
+        "accrued": 906.05,
+        "date": "2026-07-02",
+        "pull_id": 2653,
+        "remitted": 920.41,
+        "variance": -14.36
+       },
+       {
+        "accrued": 650.34,
+        "date": "2026-07-05",
+        "pull_id": 2660,
+        "remitted": 663.34,
+        "variance": -13.0
+       },
+       {
+        "accrued": 832.58,
+        "date": "2026-07-03",
+        "pull_id": 2661,
+        "remitted": 852.81,
+        "variance": -20.23
+       },
+       {
+        "accrued": 1183.44,
+        "date": "2026-07-04",
+        "pull_id": 2662,
+        "remitted": 1220.39,
+        "variance": -36.95
+       },
+       {
+        "accrued": 702.56,
+        "date": "2026-07-06",
+        "pull_id": 2671,
+        "remitted": 702.47,
+        "variance": 0.09
+       },
+       {
+        "accrued": 523.57,
+        "date": "2026-07-07",
+        "pull_id": 2674,
+        "remitted": 521.48,
+        "variance": 2.09
+       },
+       {
+        "accrued": 489.85,
+        "date": "2026-07-09",
+        "pull_id": 2698,
+        "remitted": 487.75,
+        "variance": 2.1
+       },
+       {
+        "accrued": 652.36,
+        "date": "2026-07-10",
+        "pull_id": 2699,
+        "remitted": 646.64,
+        "variance": 5.72
+       },
+       {
+        "accrued": 606.66,
+        "date": "2026-07-11",
+        "pull_id": 2706,
+        "remitted": 617.77,
+        "variance": -11.11
+       },
+       {
+        "accrued": 767.82,
+        "date": "2026-07-14",
+        "pull_id": 2727,
+        "remitted": 766.97,
+        "variance": 0.85
+       },
+       {
+        "accrued": 572.02,
+        "date": "2026-07-16",
+        "pull_id": 2744,
+        "remitted": 572.21,
+        "variance": -0.19
+       },
+       {
+        "accrued": 660.68,
+        "date": "2026-07-17",
+        "pull_id": 2745,
+        "remitted": 671.2,
+        "variance": -10.52
+       },
+       {
+        "accrued": 524.75,
+        "date": "2026-07-19",
+        "pull_id": 2756,
+        "remitted": 529.01,
+        "variance": -4.26
+       },
+       {
+        "accrued": 728.83,
+        "date": "2026-07-18",
+        "pull_id": 2758,
+        "remitted": 734.55,
+        "variance": -5.72
+       },
+       {
+        "accrued": 645.16,
+        "date": "2026-07-22",
+        "pull_id": 2776,
+        "remitted": 632.14,
+        "variance": 13.02
+       },
+       {
+        "accrued": 572.29,
+        "date": "2026-07-23",
+        "pull_id": 2793,
+        "remitted": 575.55,
+        "variance": -3.26
+       },
+       {
+        "accrued": 702.3,
+        "date": "2026-07-24",
+        "pull_id": 2795,
+        "remitted": 704.47,
+        "variance": -2.17
+       },
+       {
+        "accrued": 761.8,
+        "date": "2026-07-25",
+        "pull_id": 2802,
+        "remitted": 777.37,
+        "variance": -15.57
+       },
+       {
+        "accrued": 420.92,
+        "date": "2026-07-27",
+        "pull_id": 2807,
+        "remitted": 414.92,
+        "variance": 6.0
+       },
+       {
+        "accrued": 518.05,
+        "date": "2026-07-29",
+        "pull_id": 2825,
+        "remitted": 523.26,
+        "variance": -5.21
+       },
+       {
+        "accrued": 459.73,
+        "date": "2026-07-30",
+        "pull_id": 2839,
+        "remitted": 459.98,
+        "variance": -0.25
+       },
+       {
+        "accrued": 696.48,
+        "date": "2026-07-31",
+        "pull_id": 2840,
+        "remitted": 700.69,
+        "variance": -4.21
+       },
+       {
+        "accrued": 581.51,
+        "date": "2026-08-02",
+        "pull_id": 2850,
+        "remitted": 582.07,
+        "variance": -0.56
+       },
+       {
+        "accrued": 828.51,
+        "date": "2026-08-01",
+        "pull_id": 2851,
+        "remitted": 834.48,
+        "variance": -5.97
+       },
+       {
+        "accrued": 325.13,
+        "date": "2026-08-04",
+        "pull_id": 2864,
+        "remitted": 323.59,
+        "variance": 1.54
+       },
+       {
+        "accrued": 639.87,
+        "date": "2026-08-05",
+        "pull_id": 2870,
+        "remitted": 642.53,
+        "variance": -2.66
+       },
+       {
+        "accrued": 462.6,
+        "date": "2026-08-06",
+        "pull_id": 2886,
+        "remitted": 462.5,
+        "variance": 0.1
+       },
+       {
+        "accrued": 705.85,
+        "date": "2026-08-07",
+        "pull_id": 2887,
+        "remitted": 711.92,
+        "variance": -6.07
+       },
+       {
+        "accrued": 447.29,
+        "date": "2026-08-09",
+        "pull_id": 2894,
+        "remitted": 447.17,
+        "variance": 0.12
+       },
+       {
+        "accrued": 725.88,
+        "date": "2026-08-08",
+        "pull_id": 2895,
+        "remitted": 747.26,
+        "variance": -21.38
+       },
+       {
+        "accrued": 478.93,
+        "date": "2026-08-11",
+        "pull_id": 2908,
+        "remitted": 468.53,
+        "variance": 10.4
+       },
+       {
+        "accrued": 566.18,
+        "date": "2026-08-14",
+        "pull_id": 2930,
+        "remitted": 575.93,
+        "variance": -9.75
+       },
+       {
+        "accrued": 487.72,
+        "date": "2026-08-16",
+        "pull_id": 2944,
+        "remitted": 485.6,
+        "variance": 2.12
+       },
+       {
+        "accrued": 723.4,
+        "date": "2026-08-15",
+        "pull_id": 2945,
+        "remitted": 723.02,
+        "variance": 0.38
+       },
+       {
+        "accrued": 440.02,
+        "date": "2026-08-19",
+        "pull_id": 2968,
+        "remitted": 438.76,
+        "variance": 1.26
+       },
+       {
+        "accrued": 345.86,
+        "date": "2026-08-27",
+        "pull_id": 3010,
+        "remitted": 344.87,
+        "variance": 0.99
+       },
+       {
+        "accrued": 380.69,
+        "date": "2026-08-28",
+        "pull_id": 3015,
+        "remitted": 397.25,
+        "variance": -16.56
+       },
+       {
+        "accrued": 350.09,
+        "date": "2026-08-30",
+        "pull_id": 3029,
+        "remitted": 346.93,
+        "variance": 3.16
+       },
+       {
+        "accrued": 400.71,
+        "date": "2026-08-29",
+        "pull_id": 3031,
+        "remitted": 387.66,
+        "variance": 13.05
        }
       ]
      },
-     "message": null,
-     "messages": [],
+     "message": "SALES TAX COLLECTED BUT NOT REMITTED \u2014 2 business day(s) totalling $393.13 have no matching DAVO pull, the oldest being 2026-04-04. DAVO remits each day's tax exactly, 0-9 days later, so a day still unmatched well beyond that lag was not remitted. This is the state's money.",
+     "messages": [
+      "SALES TAX COLLECTED BUT NOT REMITTED \u2014 2 business day(s) totalling $393.13 have no matching DAVO pull, the oldest being 2026-04-04. DAVO remits each day's tax exactly, 0-9 days later, so a day still unmatched well beyond that lag was not remitted. This is the state's money.",
+      "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 18 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost."
+     ],
      "monthly": [
       {
        "collected": 4159.39,
@@ -4402,31 +6127,93 @@
        "residual": -665.83
       },
       {
-       "collected": 72.68,
-       "cumulative": -593.15,
+       "collected": 4158.6,
+       "cumulative": -473.23,
        "month": "2026-02",
-       "remitted": 0.0,
-       "residual": 72.68
+       "remitted": 3966.0,
+       "residual": 192.6
+      },
+      {
+       "collected": 4412.25,
+       "cumulative": -1165.78,
+       "month": "2026-03",
+       "remitted": 5104.8,
+       "residual": -692.55
+      },
+      {
+       "collected": 5035.19,
+       "cumulative": -1088.08,
+       "month": "2026-04",
+       "remitted": 4957.49,
+       "residual": 77.7
+      },
+      {
+       "collected": 7358.33,
+       "cumulative": -307.51,
+       "month": "2026-05",
+       "remitted": 6577.76,
+       "residual": 780.57
+      },
+      {
+       "collected": 9543.24,
+       "cumulative": -1694.43,
+       "month": "2026-06",
+       "remitted": 10930.16,
+       "residual": -1386.92
+      },
+      {
+       "collected": 18983.14,
+       "cumulative": -2041.43,
+       "month": "2026-07",
+       "remitted": 19330.14,
+       "residual": -347.0
+      },
+      {
+       "collected": 12200.84,
+       "cumulative": -4895.25,
+       "month": "2026-08",
+       "remitted": 15054.66,
+       "residual": -2853.82
       }
      ],
-     "pulls": 27,
-     "remitted": 4825.22,
-     "residual": -593.15,
-     "tolerance_band": 661.25,
+     "pulls": 236,
+     "remitted": 70746.23,
+     "residual": -4895.25,
+     "tolerance_band": 1354.95,
      "transit_days": 5,
      "window": {
-      "days": 32,
-      "end": "2026-02-01",
+      "days": 243,
+      "end": "2026-08-31",
       "start": "2026-01-01"
      },
-     "within_tolerance": true
+     "within_tolerance": false
     }
    },
    "has_sales_journal": true,
    "labor": {
-    "accounts": [],
-    "available": false,
-    "by_account": {},
+    "accounts": [
+     {
+      "amount": 20543.22,
+      "drill": {
+       "key": "Wages (payroll runs)",
+       "source": "labor_runs"
+      },
+      "name": "Wages (payroll runs)"
+     },
+     {
+      "amount": 3314.9,
+      "drill": {
+       "key": "Employer taxes (payroll runs)",
+       "source": "labor_runs"
+      },
+      "name": "Employer taxes (payroll runs)"
+     }
+    ],
+    "available": true,
+    "by_account": {
+     "Employer taxes (payroll runs)": 3314.9,
+     "Wages (payroll runs)": 20543.22
+    },
     "comparison": {
      "payroll_checks": 32,
      "payroll_checks_gross": 30284.4,
@@ -4434,24 +6221,179 @@
      "toast_hours": 855.3,
      "toast_shifts": 152
     },
-    "labor_cost": null,
-    "labor_pct": null,
-    "source": "bank_rows_on_labor_accounts",
+    "labor_cost": 23858.12,
+    "labor_pct": 38.03,
+    "payroll_runs": 5,
+    "source": "payroll_runs_plus_labor_bank_rows",
     "tip_channel_rows_on_labor": 0.0,
     "tip_channels": {},
     "tip_drill": {
      "key": "*",
      "source": "labor_tips"
     },
-    "total": 0.0,
-    "wages_excl_tip_payouts": 0.0
+    "tips_excluded": 12609.27,
+    "total": 23858.12,
+    "wages_excl_tip_payouts": 23858.12
    },
    "location": "chatham",
-   "net_income": null,
-   "net_income_withheld_reason": "NO BANK ROWS for this period \u2014 the statement has not been imported. Operating expense and labor are MISSING, so the bottom line is revenue minus invoices only and is NOT a profit figure.",
+   "net_income": -1352.64,
+   "net_income_withheld_reason": null,
    "operating_expenses": {
-    "banked": [],
-    "banked_total": 0.0,
+    "banked": [
+     {
+      "amount": 2692.46,
+      "drill": {
+       "key": "Electric",
+       "source": "opex_banked"
+      },
+      "name": "Electric"
+     },
+     {
+      "amount": 2260.89,
+      "drill": {
+       "key": "Property Insurance",
+       "source": "opex_banked"
+      },
+      "name": "Property Insurance"
+     },
+     {
+      "amount": 1557.03,
+      "drill": {
+       "key": "Dues & Subscriptions",
+       "source": "opex_banked"
+      },
+      "name": "Dues & Subscriptions"
+     },
+     {
+      "amount": 1500.0,
+      "drill": {
+       "key": "Bands",
+       "source": "opex_banked"
+      },
+      "name": "Bands"
+     },
+     {
+      "amount": 1040.0,
+      "drill": {
+       "key": "Daily Cleaning",
+       "source": "opex_banked"
+      },
+      "name": "Daily Cleaning"
+     },
+     {
+      "amount": 1000.0,
+      "drill": {
+       "key": "Rent & Lease",
+       "source": "opex_banked"
+      },
+      "name": "Rent & Lease"
+     },
+     {
+      "amount": 988.56,
+      "drill": {
+       "key": "Linens",
+       "source": "opex_banked"
+      },
+      "name": "Linens"
+     },
+     {
+      "amount": 602.45,
+      "drill": {
+       "key": "POS Fees",
+       "source": "opex_banked"
+      },
+      "name": "POS Fees"
+     },
+     {
+      "amount": 569.16,
+      "drill": {
+       "key": "Trash Removal",
+       "source": "opex_banked"
+      },
+      "name": "Trash Removal"
+     },
+     {
+      "amount": 553.75,
+      "drill": {
+       "key": "Cable/Phone/Internet",
+       "source": "opex_banked"
+      },
+      "name": "Cable/Phone/Internet"
+     },
+     {
+      "amount": 507.89,
+      "drill": {
+       "key": "Gas",
+       "source": "opex_banked"
+      },
+      "name": "Gas"
+     },
+     {
+      "amount": 383.63,
+      "drill": {
+       "key": "Office Supplies & Software",
+       "source": "opex_banked"
+      },
+      "name": "Office Supplies & Software"
+     },
+     {
+      "amount": 296.0,
+      "drill": {
+       "key": "Pest Control",
+       "source": "opex_banked"
+      },
+      "name": "Pest Control"
+     },
+     {
+      "amount": 256.5,
+      "drill": {
+       "key": "Fire Extinguishers",
+       "source": "opex_banked"
+      },
+      "name": "Fire Extinguishers"
+     },
+     {
+      "amount": 220.81,
+      "drill": {
+       "key": "Liability Insurance",
+       "source": "opex_banked"
+      },
+      "name": "Liability Insurance"
+     },
+     {
+      "amount": 132.33,
+      "drill": {
+       "key": "Hood Cleaning",
+       "source": "opex_banked"
+      },
+      "name": "Hood Cleaning"
+     },
+     {
+      "amount": 122.19,
+      "drill": {
+       "key": "Bookkeeping",
+       "source": "opex_banked"
+      },
+      "name": "Bookkeeping"
+     },
+     {
+      "amount": 99.0,
+      "drill": {
+       "key": "Kitchen Supplies",
+       "source": "opex_banked"
+      },
+      "name": "Kitchen Supplies"
+     },
+     {
+      "amount": 86.7,
+      "drill": {
+       "key": "Knife Sharpening",
+       "source": "opex_banked"
+      },
+      "name": "Knife Sharpening"
+     }
+    ],
+    "banked_total": 14869.35,
     "invoiced": [
      {
       "amount": 484.59,
@@ -4481,7 +6423,7 @@
       "name": "Dining Room Supplies"
      },
      {
-      "amount": -294.52,
+      "amount": -243.56,
       "category": "NON_COGS",
       "drill": {
        "key": "NON_COGS",
@@ -4490,15 +6432,15 @@
       "name": "Other Business Expenses"
      }
     ],
-    "invoiced_total": 391.0,
-    "total": 391.0
+    "invoiced_total": 441.96,
+    "total": 15311.31
    },
    "period": {
     "end": "2026-03-31",
     "start": "2026-03-01"
    },
-   "prime_cost": null,
-   "prime_cost_pct": null,
+   "prime_cost": 48775.64,
+   "prime_cost_pct": 77.75,
    "revenue": {
     "contra": -2935.52,
     "gross_sales": 65669.83,
@@ -4966,9 +6908,17 @@
      "qty",
      "amount"
     ],
-    "count": 226,
+    "count": 228,
     "key": "FOOD",
     "rows": [
+     {
+      "amount": 2513.42,
+      "date": "2026-03-02",
+      "detail": "FOOD",
+      "qty": 1.0,
+      "reference": "2900298",
+      "vendor": "US Foods"
+     },
      {
       "amount": 73.98,
       "date": "2026-03-05",
@@ -5240,6 +7190,14 @@
       "qty": 1.0,
       "reference": "706267",
       "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": -59.43,
+      "date": "2026-03-06",
+      "detail": "FOOD",
+      "qty": 1.0,
+      "reference": "2900298",
+      "vendor": "US Foods"
      },
      {
       "amount": -45.45,
@@ -6779,7 +8737,7 @@
      }
     ],
     "source": "cogs",
-    "total": 16955.76
+    "total": 19409.75
    },
    "cogs:LIQUOR": {
     "columns": [
@@ -6910,7 +8868,7 @@
       "date": "2026-03-11",
       "detail": "BAILEYS IRISH CREAM LIQUEUR 34'",
       "qty": 1.0,
-      "reference": "US1-1033337603",
+      "reference": "US1-103337603",
       "vendor": "Martignetti Companies"
      },
      {
@@ -6918,7 +8876,7 @@
       "date": "2026-03-11",
       "detail": "BULLEIT BOURBON 90",
       "qty": 1.0,
-      "reference": "US1-1033337603",
+      "reference": "US1-103337603",
       "vendor": "Martignetti Companies"
      },
      {
@@ -6926,7 +8884,7 @@
       "date": "2026-03-11",
       "detail": "JAMESON BLACK BARREL 80 6/CS",
       "qty": 1.0,
-      "reference": "US1-1033337603",
+      "reference": "US1-103337603",
       "vendor": "Martignetti Companies"
      },
      {
@@ -6934,7 +8892,7 @@
       "date": "2026-03-11",
       "detail": "JAMESON IRISH WHISKEY 80",
       "qty": 2.0,
-      "reference": "US1-1033337603",
+      "reference": "US1-103337603",
       "vendor": "Martignetti Companies"
      },
      {
@@ -6942,7 +8900,7 @@
       "date": "2026-03-11",
       "detail": "JAMESON ORANGE 60 6/CS",
       "qty": 3.0,
-      "reference": "US1-1033337603",
+      "reference": "US1-103337603",
       "vendor": "Martignetti Companies"
      },
      {
@@ -6950,7 +8908,7 @@
       "date": "2026-03-11",
       "detail": "PALLINI LIMONCELLO LIQUEUR 52' 6/CS",
       "qty": 2.0,
-      "reference": "US1-1033337603",
+      "reference": "US1-103337603",
       "vendor": "Martignetti Companies"
      },
      {
@@ -6958,7 +8916,7 @@
       "date": "2026-03-11",
       "detail": "THREE OLIVES ESPRESSO VOD 60 6/CS",
       "qty": 2.0,
-      "reference": "US1-1033337603",
+      "reference": "US1-103337603",
       "vendor": "Martignetti Companies"
      },
      {
@@ -7582,7 +9540,7 @@
       "date": "2026-03-11",
       "detail": "JOSH CELLARS CABERNET 2023",
       "qty": 1.0,
-      "reference": "US1-1033337603",
+      "reference": "US1-103337603",
       "vendor": "Martignetti Companies"
      },
      {
@@ -7677,147 +9635,93 @@
     "source": "cogs",
     "total": 1881.74
    },
-   "labor:Payroll Expenses": {
+   "labor_runs:Employer taxes (payroll runs)": {
     "columns": [
      "date",
      "detail",
      "reference",
-     "status",
      "amount"
     ],
-    "count": 2,
-    "key": "Payroll Expenses",
+    "count": 5,
+    "key": "Employer taxes (payroll runs)",
     "rows": [
      {
-      "amount": 13518.17,
-      "date": "2026-03-04",
-      "detail": "PCR 7shifts",
-      "reference": "CCD | Red Nun Public House I [stmt #8]",
-      "row_id": 994,
-      "status": "suggested"
+      "amount": -288.07,
+      "date": "2026-03-31",
+      "detail": "Run #40 \u00b7 2026-01-01..2026-03-31",
+      "reference": "34.4% of the pay period in range"
      },
      {
-      "amount": 14321.76,
-      "date": "2026-03-18",
-      "detail": "PCR 7shifts",
-      "reference": "CCD | Red Nun Public House I [stmt #8]",
-      "row_id": 1082,
-      "status": "suggested"
+      "amount": 167.86,
+      "date": "2026-03-06",
+      "detail": "Run #39 \u00b7 2026-02-16..2026-03-01",
+      "reference": "7.1% of the pay period in range"
+     },
+     {
+      "amount": 2375.04,
+      "date": "2026-03-20",
+      "detail": "Run #3 \u00b7 2026-03-02..2026-03-15",
+      "reference": "100.0% of the pay period in range"
+     },
+     {
+      "amount": 2218.58,
+      "date": "2026-04-03",
+      "detail": "Run #41 \u00b7 2026-03-16..2026-03-29",
+      "reference": "100.0% of the pay period in range"
+     },
+     {
+      "amount": 289.39,
+      "date": "2026-04-17",
+      "detail": "Run #6 \u00b7 2026-03-30..2026-04-12",
+      "reference": "14.3% of the pay period in range"
      }
     ],
-    "source": "labor",
-    "total": 27839.93
+    "source": "labor_runs",
+    "total": 4762.8
    },
-   "labor:Wages": {
+   "labor_runs:Wages (payroll runs)": {
     "columns": [
      "date",
      "detail",
      "reference",
-     "status",
      "amount"
     ],
-    "count": 12,
-    "key": "Wages",
+    "count": 5,
+    "key": "Wages (payroll runs)",
     "rows": [
      {
-      "amount": 1190.63,
-      "date": "2026-03-03",
-      "detail": "Check 9672",
-      "reference": "[stmt #8]",
-      "row_id": 981,
-      "status": "confirmed"
+      "amount": 0.0,
+      "date": "2026-03-31",
+      "detail": "Run #40 \u00b7 2026-01-01..2026-03-31",
+      "reference": "34.4% of the pay period in range"
      },
      {
-      "amount": 1586.16,
-      "date": "2026-03-09",
-      "detail": "Check 9675",
-      "reference": "[stmt #8]",
-      "row_id": 1012,
-      "status": "confirmed"
+      "amount": 929.27,
+      "date": "2026-03-06",
+      "detail": "Run #39 \u00b7 2026-02-16..2026-03-01",
+      "reference": "7.1% of the pay period in range"
      },
      {
-      "amount": 655.27,
-      "date": "2026-03-09",
-      "detail": "Check 9677",
-      "reference": "[stmt #8]",
-      "row_id": 1015,
-      "status": "confirmed"
+      "amount": 14045.23,
+      "date": "2026-03-20",
+      "detail": "Run #3 \u00b7 2026-03-02..2026-03-15",
+      "reference": "100.0% of the pay period in range"
      },
      {
-      "amount": 748.66,
-      "date": "2026-03-09",
-      "detail": "Check 9678",
-      "reference": "[stmt #8]",
-      "row_id": 1016,
-      "status": "confirmed"
+      "amount": 13676.14,
+      "date": "2026-04-03",
+      "detail": "Run #41 \u00b7 2026-03-16..2026-03-29",
+      "reference": "100.0% of the pay period in range"
      },
      {
-      "amount": 1254.21,
-      "date": "2026-03-10",
-      "detail": "Check 9679",
-      "reference": "[stmt #8]",
-      "row_id": 1027,
-      "status": "confirmed"
-     },
-     {
-      "amount": 403.03,
-      "date": "2026-03-11",
-      "detail": "Check 9680",
-      "reference": "[stmt #8]",
-      "row_id": 1035,
-      "status": "confirmed"
-     },
-     {
-      "amount": 16.25,
-      "date": "2026-03-13",
-      "detail": "Check 9631",
-      "reference": "[stmt #8]",
-      "row_id": 1045,
-      "status": "confirmed"
-     },
-     {
-      "amount": 24.3,
-      "date": "2026-03-13",
-      "detail": "Check 9548",
-      "reference": "[stmt #8]",
-      "row_id": 1046,
-      "status": "confirmed"
-     },
-     {
-      "amount": 27.85,
-      "date": "2026-03-17",
-      "detail": "Check 9681",
-      "reference": "[stmt #8]",
-      "row_id": 1073,
-      "status": "confirmed"
-     },
-     {
-      "amount": 122.46,
-      "date": "2026-03-17",
-      "detail": "Check 9667",
-      "reference": "[stmt #8]",
-      "row_id": 1074,
-      "status": "confirmed"
-     },
-     {
-      "amount": 177.99,
-      "date": "2026-03-17",
-      "detail": "Check 9673",
-      "reference": "[stmt #8]",
-      "row_id": 1075,
-      "status": "confirmed"
-     },
-     {
-      "amount": 130.0,
-      "date": "2026-03-24",
-      "detail": "Check 9654",
-      "reference": "[stmt #8]",
-      "row_id": 1124,
-      "status": "confirmed"
+      "amount": 1844.87,
+      "date": "2026-04-17",
+      "detail": "Run #6 \u00b7 2026-03-30..2026-04-12",
+      "reference": "14.3% of the pay period in range"
      }
     ],
-    "source": "labor",
-    "total": 6336.81
+    "source": "labor_runs",
+    "total": 30495.51
    },
    "opex_banked:Accountant": {
     "columns": [
@@ -7849,6 +9753,29 @@
     ],
     "source": "opex_banked",
     "total": 4750.0
+   },
+   "opex_banked:Advertising & Marketing": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Advertising & Marketing",
+    "rows": [
+     {
+      "amount": 130.0,
+      "date": "2026-03-24",
+      "detail": "Check 9654",
+      "reference": "[stmt #8]",
+      "row_id": 1124,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 130.0
    },
    "opex_banked:Ask My Accountant": {
     "columns": [
@@ -8017,7 +9944,7 @@
       "detail": "SALE GLANOLA NORTH AM",
       "reference": "CCD | MICHAEL GIORGIO [stmt #8]",
       "row_id": 965,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8040,7 +9967,7 @@
       "detail": "Transfer to DDA",
       "reference": "Acct No. Acct Ending 5087 [stmt #8]",
       "row_id": 958,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 4000.0,
@@ -8048,7 +9975,7 @@
       "detail": "Transfer from x2757 to x5087",
       "reference": "[stmt #8]",
       "row_id": 959,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 2500.0,
@@ -8056,7 +9983,7 @@
       "detail": "Transfer from x2757 to x5087",
       "reference": "[stmt #8]",
       "row_id": 1079,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8079,7 +10006,7 @@
       "detail": "CABLE SVCS COMCAST CORP",
       "reference": "CCD | Mike *Giorgio | 2717212 [stmt #8]",
       "row_id": 1017,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 135.99,
@@ -8087,7 +10014,7 @@
       "detail": "CABLE SVCS COMCAST CORP",
       "reference": "CCD | Mike *Giorgio | 3377440 [stmt #8]",
       "row_id": 1018,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 301.75,
@@ -8095,7 +10022,7 @@
       "detail": "CABLE SVCS COMCAST-XFINITY",
       "reference": "PPD [stmt #8]",
       "row_id": 1030,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": -135.99,
@@ -8103,11 +10030,34 @@
       "detail": "CABLE SVCS COMCAST CORP",
       "reference": "CCD | Mike *Giorgio | 3958096 [stmt #8]",
       "row_id": 1034,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
     "total": 437.74
+   },
+   "opex_banked:Chemicals": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Chemicals",
+    "rows": [
+     {
+      "amount": 321.81,
+      "date": "2026-03-09",
+      "detail": "DBT CRD 1317 03/08/26 511689",
+      "reference": "IN *SUBURBAN SUPPLY CO | 781-8010512 MA C# 9032 [stmt #8]",
+      "row_id": 1014,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 321.81
    },
    "opex_banked:Condo Fees": {
     "columns": [
@@ -8195,7 +10145,7 @@
      "status",
      "amount"
     ],
-    "count": 9,
+    "count": 7,
     "key": "Dues & Subscriptions",
     "rows": [
      {
@@ -8204,15 +10154,7 @@
       "detail": "DBT CRD 1335 03/02/26 059696",
       "reference": "7SHIFTS | 7SHIFTS.COM DE C# 9032 [stmt #8]",
       "row_id": 961,
-      "status": "suggested"
-     },
-     {
-      "amount": 442.22,
-      "date": "2026-03-02",
-      "detail": "DDA B/P 1335 03/02/26 535325",
-      "reference": "SPI*DIRECTV SERVICE | 800-531-5000 CA C# 9032 [stmt #8]",
-      "row_id": 963,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 61.61,
@@ -8220,7 +10162,7 @@
       "detail": "ACH DAVO TECHNOLOGIE",
       "reference": "PPD [stmt #8]",
       "row_id": 983,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 1573.57,
@@ -8228,7 +10170,7 @@
       "detail": "DBT CRD 1220 03/06/26 319706",
       "reference": "ASCAP LICENSE FEE | 800-505-4052 NY C# 9032 [stmt #8]",
       "row_id": 1002,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 1214.0,
@@ -8236,7 +10178,7 @@
       "detail": "DBT CRD 1320 03/22/26 079201",
       "reference": "GLOBAL MUSIC RIGHTS | GLOBALMUSICRICA C# 9032 [stmt #8]",
       "row_id": 1108,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 12.99,
@@ -8244,7 +10186,7 @@
       "detail": "INST XFER PAYPAL",
       "reference": "WEB SPOTIFY*P40C18B [stmt #8]",
       "row_id": 1139,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 122.19,
@@ -8252,15 +10194,7 @@
       "detail": "QBooks Onl INTUIT *",
       "reference": "CCD | MICHAEL GIORGIO | 9426032 [stmt #8]",
       "row_id": 1146,
-      "status": "suggested"
-     },
-     {
-      "amount": 442.22,
-      "date": "2026-03-30",
-      "detail": "DDA B/P 1319 03/29/26 179190",
-      "reference": "SPI*DIRECTV SERVICE | 800-531-5000 CA C# 9032 [stmt #8]",
-      "row_id": 1160,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 95.63,
@@ -8268,11 +10202,11 @@
       "detail": "DBT CRD 1216 03/31/26 064566",
       "reference": "7SHIFTS | 7SHIFTS.COM DE C# 9032 [stmt #8]",
       "row_id": 1171,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
-    "total": 4142.93
+    "total": 3258.49
    },
    "opex_banked:Electric": {
     "columns": [
@@ -8282,7 +10216,7 @@
      "status",
      "amount"
     ],
-    "count": 3,
+    "count": 4,
     "key": "Electric",
     "rows": [
      {
@@ -8291,7 +10225,15 @@
       "detail": "PPD PAYMNT Clearway 15",
       "reference": "PPD [stmt #8]",
       "row_id": 1062,
-      "status": "suggested"
+      "status": "confirmed"
+     },
+     {
+      "amount": 703.61,
+      "date": "2026-03-16",
+      "detail": "AGNT PMT Clearway 16",
+      "reference": "PPD [stmt #8]",
+      "row_id": 1067,
+      "status": "confirmed"
      },
      {
       "amount": 762.31,
@@ -8299,7 +10241,7 @@
       "detail": "MEBillPay Sprague Operatin",
       "reference": "CCD | Red nun Public House I | MEEP000161 [stmt #8]",
       "row_id": 1089,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 2315.17,
@@ -8307,11 +10249,11 @@
       "detail": "WEB_PAY EVERSOURCE",
       "reference": "WEB 29150088032526 [stmt #8]",
       "row_id": 1150,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
-    "total": 3395.79
+    "total": 4099.4
    },
    "opex_banked:Gas": {
     "columns": [
@@ -8330,7 +10272,7 @@
       "detail": "NGRID07 NGRID07",
       "reference": "PPD [stmt #8]",
       "row_id": 1081,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8376,7 +10318,7 @@
       "detail": "DBT CRD 1317 03/08/26 208337",
       "reference": "IN *TIGER EXCHANGE, IN | 508-6413585 MA C# 9032 [stmt #8]",
       "row_id": 1013,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8399,7 +10341,7 @@
       "detail": "PAYMENTS P1 FINANCE HOLDI",
       "reference": "CCD | 7743536519 | 29778165 [stmt #8]",
       "row_id": 991,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 2576.43,
@@ -8407,7 +10349,7 @@
       "detail": "PAYMENTS P1 FINANCE HOLDI",
       "reference": "CCD | 7743536519 | 30146449 [stmt #8]",
       "row_id": 1091,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8430,7 +10372,7 @@
       "detail": "MEBillPay Cozzini Bros., I",
       "reference": "CCD | Red nun Public House I | MEEP000156 [stmt #8]",
       "row_id": 982,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 23.9,
@@ -8438,7 +10380,7 @@
       "detail": "MEBillPay Cozzini Bros., I",
       "reference": "CCD | Red nun Public House I | MEEP000164 [stmt #8]",
       "row_id": 1144,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 23.9,
@@ -8446,7 +10388,7 @@
       "detail": "MEBillPay Cozzini Bros., I",
       "reference": "CCD | Red nun Public House I | MEEP000165 [stmt #8]",
       "row_id": 1172,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8469,7 +10411,7 @@
       "detail": "MEBillPay Cintas",
       "reference": "CCD | Red nun Public House I | MEEP000158 [stmt #8]",
       "row_id": 985,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 326.13,
@@ -8477,7 +10419,7 @@
       "detail": "MEBillPay UniFirst Corpora",
       "reference": "CCD | Red nun Public House I | MEEP000157 [stmt #8]",
       "row_id": 987,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 168.18,
@@ -8485,7 +10427,7 @@
       "detail": "MEBillPay UniFirst Corpora",
       "reference": "CCD | Red nun Public House I | MEEP000159 [stmt #8]",
       "row_id": 1028,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 168.18,
@@ -8493,7 +10435,7 @@
       "detail": "MEBillPay UniFirst Corpora",
       "reference": "CCD | Red nun Public House I | MEEP000160 [stmt #8]",
       "row_id": 1059,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 168.18,
@@ -8501,7 +10443,7 @@
       "detail": "MEBillPay UniFirst Corpora",
       "reference": "CCD | Red nun Public House I | MEEP000162 [stmt #8]",
       "row_id": 1086,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 969.82,
@@ -8509,7 +10451,7 @@
       "detail": "MEBillPay Cintas",
       "reference": "CCD | Red nun Public House I | MEEP000163 [stmt #8]",
       "row_id": 1090,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8532,7 +10474,7 @@
       "detail": "APPS_COMME GOOGLE",
       "reference": "WEB US004AQWMD [stmt #8]",
       "row_id": 995,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 543.01,
@@ -8540,7 +10482,7 @@
       "detail": "8884889612 MarginEdge",
       "reference": "WEB 868995262 [stmt #8]",
       "row_id": 1023,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 30.79,
@@ -8548,7 +10490,7 @@
       "detail": "DBT CRD 1225 03/16/26 400068",
       "reference": "AMAZON MKTPL*B55FR5OE2 | Amzn.com/billWA C# 9032 [stmt #8]",
       "row_id": 1057,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 9.49,
@@ -8556,7 +10498,7 @@
       "detail": "DBT CRD 1216 03/17/26 636568",
       "reference": "AMAZON MKTPL*BP4N94UL0 | Amzn.com/billWA C# 9032 [stmt #8]",
       "row_id": 1070,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 127.49,
@@ -8564,7 +10506,7 @@
       "detail": "DBT CRD 1216 03/17/26 212996",
       "reference": "AMAZON MKTPL*B54RC5AN2 | Amzn.com/billWA C# 9032 [stmt #8]",
       "row_id": 1072,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 195.37,
@@ -8572,7 +10514,7 @@
       "detail": "DBT CRD 1221 03/20/26 828051",
       "reference": "AMAZON MKTPL*B57PL3292 | Amzn.com/billWA C# 9032 [stmt #8]",
       "row_id": 1097,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 91.98,
@@ -8580,13 +10522,13 @@
       "detail": "DBT CRD 1219 03/25/26 557114",
       "reference": "AMAZON MKTPL*B50VX9XY1 | Amzn.com/billWA C# 9032 [stmt #8]",
       "row_id": 1136,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
     "total": 1095.81
    },
-   "opex_banked:POS Rental": {
+   "opex_banked:POS Fees": {
     "columns": [
      "date",
      "detail",
@@ -8595,7 +10537,7 @@
      "amount"
     ],
     "count": 2,
-    "key": "POS Rental",
+    "key": "POS Fees",
     "rows": [
      {
       "amount": 834.13,
@@ -8603,7 +10545,7 @@
       "detail": "Toast, Inc Toast, Inc",
       "reference": "CCD | TOAST INC | ST-Z7H0C2B9O2D5 [stmt #8]",
       "row_id": 976,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 734.73,
@@ -8611,7 +10553,7 @@
       "detail": "PURCHASE T Toast, Inc",
       "reference": "CCD | TOAST INC | ST-Y5N7S1Y7S7F2 [stmt #8]",
       "row_id": 1169,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8634,7 +10576,7 @@
       "detail": "A1 Extermi Ned's Pest and L",
       "reference": "PPD [stmt #8]",
       "row_id": 984,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 109.0,
@@ -8642,7 +10584,7 @@
       "detail": "A1 Extermi Ned's Pest and L",
       "reference": "PPD [stmt #8]",
       "row_id": 1145,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8656,7 +10598,7 @@
      "status",
      "amount"
     ],
-    "count": 4,
+    "count": 2,
     "key": "Repairs & Maintenance",
     "rows": [
      {
@@ -8665,23 +10607,7 @@
       "detail": "SALE DEPENDABLE RESTA",
       "reference": "CCD | MICHAEL GIORGIO [stmt #8]",
       "row_id": 1003,
-      "status": "suggested"
-     },
-     {
-      "amount": 321.81,
-      "date": "2026-03-09",
-      "detail": "DBT CRD 1317 03/08/26 511689",
-      "reference": "IN *SUBURBAN SUPPLY CO | 781-8010512 MA C# 9032 [stmt #8]",
-      "row_id": 1014,
-      "status": "suggested"
-     },
-     {
-      "amount": 31.88,
-      "date": "2026-03-17",
-      "detail": "DBT CRD 1216 03/17/26 509299",
-      "reference": "IN *SUBURBAN SUPPLY CO | 781-8010512 MA C# 9032 [stmt #8]",
-      "row_id": 1071,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 566.14,
@@ -8689,11 +10615,42 @@
       "detail": "SALE DEPENDABLE RESTA",
       "reference": "CCD | MICHAEL GIORGIO [stmt #8]",
       "row_id": 1117,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
-    "total": 1094.83
+    "total": 741.14
+   },
+   "opex_banked:Satellite": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 2,
+    "key": "Satellite",
+    "rows": [
+     {
+      "amount": 442.22,
+      "date": "2026-03-02",
+      "detail": "DDA B/P 1335 03/02/26 535325",
+      "reference": "SPI*DIRECTV SERVICE | 800-531-5000 CA C# 9032 [stmt #8]",
+      "row_id": 963,
+      "status": "confirmed"
+     },
+     {
+      "amount": 442.22,
+      "date": "2026-03-30",
+      "detail": "DDA B/P 1319 03/29/26 179190",
+      "reference": "SPI*DIRECTV SERVICE | 800-531-5000 CA C# 9032 [stmt #8]",
+      "row_id": 1160,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 884.44
    },
    "opex_banked:Small Equipment": {
     "columns": [
@@ -8712,7 +10669,7 @@
       "detail": "INST XFER PAYPAL",
       "reference": "WEB BAMBULABUSA [stmt #8]",
       "row_id": 971,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8735,7 +10692,7 @@
       "detail": "DBT CRD 1218 03/19/26 445602",
       "reference": "BARROWS WASTE SYSTEMS | 508-430-1715 MA C# 9032 [stmt #8]",
       "row_id": 1085,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 500.0,
@@ -8743,7 +10700,7 @@
       "detail": "DBT CRD 1217 03/24/26 306901",
       "reference": "BARROWS WASTE SYSTEMS | 508-430-1715 MA C# 9032 [stmt #8]",
       "row_id": 1123,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8788,29 +10745,6 @@
     "source": "opex_banked",
     "total": 1050.0
    },
-   "opex_banked:Utilities": {
-    "columns": [
-     "date",
-     "detail",
-     "reference",
-     "status",
-     "amount"
-    ],
-    "count": 1,
-    "key": "Utilities",
-    "rows": [
-     {
-      "amount": 703.61,
-      "date": "2026-03-16",
-      "detail": "AGNT PMT Clearway 16",
-      "reference": "PPD [stmt #8]",
-      "row_id": 1067,
-      "status": "suggested"
-     }
-    ],
-    "source": "opex_banked",
-    "total": 703.61
-   },
    "opex_banked:Workers Comp. Insurance": {
     "columns": [
      "date",
@@ -8828,7 +10762,7 @@
       "detail": "NEXT INSUR NEXT INSUR (AP I",
       "reference": "WEB ST-S6Y4K5R1Z3M0 [stmt #8]",
       "row_id": 964,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 86.63,
@@ -8836,7 +10770,7 @@
       "detail": "NEXT INSUR NEXT INSUR (AP I",
       "reference": "WEB ST-K3E8T7N0P6I1 [stmt #8]",
       "row_id": 1058,
-      "status": "suggested"
+      "status": "confirmed"
      },
      {
       "amount": 92.89,
@@ -8844,7 +10778,7 @@
       "detail": "NEXT INSUR NEXT INSUR (AP I",
       "reference": "WEB ST-A6I4L4L4C4I6 [stmt #8]",
       "row_id": 1162,
-      "status": "suggested"
+      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
@@ -8971,7 +10905,7 @@
      "qty",
      "amount"
     ],
-    "count": 107,
+    "count": 111,
     "key": "NON_COGS",
     "rows": [
      {
@@ -9141,6 +11075,14 @@
       "qty": -8.0,
       "reference": "470603",
       "vendor": "L. Knife & Son, Inc."
+     },
+     {
+      "amount": 7.0,
+      "date": "2026-03-09",
+      "detail": "Fees & tax (unitemized)",
+      "qty": 1.0,
+      "reference": "225348",
+      "vendor": "US Foods"
      },
      {
       "amount": -30.0,
@@ -9423,6 +11365,14 @@
       "vendor": "Toast Inc."
      },
      {
+      "amount": 7.0,
+      "date": "2026-03-16",
+      "detail": "Fees & tax (unitemized)",
+      "qty": 1.0,
+      "reference": "499098",
+      "vendor": "US Foods"
+     },
+     {
       "amount": 87.0,
       "date": "2026-03-18",
       "detail": "3X10 XTRAC MAT ONYX",
@@ -9525,6 +11475,14 @@
       "qty": 1.0,
       "reference": "16565",
       "vendor": "Fore & Aft, Inc."
+     },
+     {
+      "amount": 21.25,
+      "date": "2026-03-23",
+      "detail": "Fees & tax (unitemized)",
+      "qty": 1.0,
+      "reference": "767202",
+      "vendor": "US Foods"
      },
      {
       "amount": 87.0,
@@ -9829,10 +11787,18 @@
       "qty": 636.6,
       "reference": "71373465",
       "vendor": "Sprague Operating Resources LLC"
+     },
+     {
+      "amount": 7.76,
+      "date": "2026-03-30",
+      "detail": "Fees & tax (unitemized)",
+      "qty": 1.0,
+      "reference": "1042097",
+      "vendor": "US Foods"
      }
     ],
     "source": "opex_invoiced",
-    "total": 3733.05
+    "total": 3776.06
    },
    "opex_invoiced:OTHER": {
     "columns": [
@@ -11017,11 +12983,11 @@
       "note": "Ambiguous multi-category OCR tag. Booked to Liquor; splits beverage COGS slightly wrong but the total is correct."
      }
     ],
-    "fnb_subtotal": 29765.93,
-    "food_cost_pct": 30.78,
+    "fnb_subtotal": 32219.92,
+    "food_cost_pct": 33.32,
     "lines": [
      {
-      "amount": 16955.76,
+      "amount": 19409.75,
       "category": "FOOD",
       "confidence": "exact",
       "drill": {
@@ -11102,23 +13068,25 @@
      }
     ],
     "non_fnb_subtotal": 706.35,
-    "total": 30472.28,
-    "total_cogs_pct": 31.51
+    "total": 32926.27,
+    "total_cogs_pct": 34.05
    },
    "footnotes": [
     "TIPS: $15,526.58 passed through in this period (16.1% of net revenue). Booked to Tip Bank, a balance-sheet account, so it is correctly EXCLUDED from revenue here. Summing all JE credits instead would overstate revenue by that amount.",
     "TOAST FEES ARE NOT BOOKED. Processing fees are netted out of the settlement deposit and never reach an expense account, so operating expense is understated and net income is overstated by roughly the monthly Toast fee.",
     "NO INVENTORY ADJUSTMENT. COGS here is PURCHASES, not cost of goods consumed. Without opening and closing counts, a month that stocks up looks expensive and a month that draws down looks cheap. Food cost % is therefore directionally right and precisely wrong.",
-    "LABOR SOURCE is the bank rows on labor accounts, the only complete view. For comparison: Toast time entries show $23,167.13 over 1,388.5 hours (249 shifts) \u2014 hourly wages only, no employer taxes or salaried staff \u2014 and payroll checks total $7,375.86 across 7 check(s), which is partial coverage for the period.",
-    "APPROXIMATE CATEGORY MAPPINGS: $12.16 across LIQUOR_WINE_BEER, LIQUOR_WINE. Totals are right; the split between beverage lines is a judgement call."
+    "LABOR SOURCE is the payroll runs (5 in range): gross pay less tips plus employer taxes, spread over each pay period, plus any bank rows still on a labor account. Tips of $16,581.03 ran through payroll and are excluded \u2014 they settle Tip Bank. The bank lines that pay a run settle Payroll Liabilities, not labor. For comparison: Toast time entries show $23,167.13 over 1,388.5 hours (249 shifts) \u2014 hourly wages only, no employer taxes or salaried staff \u2014 and payroll checks total $40,911.76 across 32 check(s).",
+    "APPROXIMATE CATEGORY MAPPINGS: $12.16 across LIQUOR_WINE_BEER, LIQUOR_WINE. Totals are right; the split between beverage lines is a judgement call.",
+    "SALES TAX COLLECTED BUT NOT REMITTED \u2014 1 business day(s) totalling $540.94 have no matching DAVO pull, the oldest being 2026-08-09. DAVO remits each day's tax exactly, 2-5 days later, so a day still unmatched well beyond that lag was not remitted. This is the state's money.",
+    "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 11 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost."
    ],
    "guardrails": {
     "clearing_excluded": true,
     "clearing_violations": [],
     "expense_coverage": {
-     "bank_rows": 221,
+     "bank_rows": 198,
      "expense_side_complete": true,
-     "labor_rows": 14,
+     "labor_rows": 5,
      "warning": null
     },
     "journal_control": {
@@ -11141,20 +13109,20 @@
      "threshold": 50.0
     },
     "sales_tax": {
-     "alarm": false,
+     "alarm": true,
      "available": true,
-     "avg_daily_tax": 232.73,
-     "collected": 27928.09,
-     "direction": "balanced",
+     "avg_daily_tax": 275.91,
+     "collected": 67045.92,
+     "direction": "debit",
      "growing": false,
      "matching": {
-      "exact": 79,
-      "lag_avg": 3.12,
+      "exact": 141,
+      "lag_avg": 3.05,
       "lag_max": 5,
       "lag_min": 2,
-      "match_rate": 97.67,
-      "matched": 84,
-      "pulls": 86,
+      "match_rate": 97.65,
+      "matched": 166,
+      "pulls": 180,
       "reversals": [
        {
         "amount": -63.05,
@@ -11175,20 +13143,105 @@
         "amount": -60.09,
         "date": "2026-04-09",
         "id": 1230
+       },
+       {
+        "amount": -67.69,
+        "date": "2026-05-12",
+        "id": 1457
+       },
+       {
+        "amount": -90.85,
+        "date": "2026-06-12",
+        "id": 3089
+       },
+       {
+        "amount": -68.65,
+        "date": "2026-07-09",
+        "id": 3209
+       },
+       {
+        "amount": -124.44,
+        "date": "2026-08-12",
+        "id": 3392
        }
       ],
-      "tax_days": 86,
-      "unmatched_pull_total": 2.03,
+      "tax_days": 170,
+      "unmatched_pull_total": 3856.59,
       "unmatched_pulls": [
        {
         "amount": 2.03,
         "date": "2026-03-23",
         "id": 1110
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-04-06",
+        "id": 1201
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-05-04",
+        "id": 1393
+       },
+       {
+        "amount": 10.97,
+        "date": "2026-05-20",
+        "id": 1503
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-06-03",
+        "id": 3055
+       },
+       {
+        "amount": 280.64,
+        "date": "2026-06-12",
+        "id": 3092
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-07-02",
+        "id": 3182
+       },
+       {
+        "amount": 61.61,
+        "date": "2026-08-03",
+        "id": 3337
+       },
+       {
+        "amount": 597.65,
+        "date": "2026-08-11",
+        "id": 3389
+       },
+       {
+        "amount": 1059.2,
+        "date": "2026-08-24",
+        "id": 3448
+       },
+       {
+        "amount": 407.84,
+        "date": "2026-08-25",
+        "id": 3454
+       },
+       {
+        "amount": 839.7,
+        "date": "2026-08-25",
+        "id": 3455
+       },
+       {
+        "amount": 350.51,
+        "date": "2026-08-28",
+        "id": 3462
        }
       ],
-      "unremitted_days": [],
-      "unremitted_total": 0.0,
-      "variance_total": 22.09,
+      "unremitted_days": [
+       {
+        "amount": 540.94,
+        "date": "2026-08-09"
+       }
+      ],
+      "unremitted_total": 540.94,
+      "variance_total": 9.15,
       "variances": [
        {
         "accrued": 279.08,
@@ -11224,11 +13277,154 @@
         "pull_id": 1295,
         "remitted": 299.9,
         "variance": 1.68
+       },
+       {
+        "accrued": 396.81,
+        "date": "2026-05-01",
+        "pull_id": 1398,
+        "remitted": 397.61,
+        "variance": -0.8
+       },
+       {
+        "accrued": 531.79,
+        "date": "2026-05-15",
+        "pull_id": 1492,
+        "remitted": 531.9,
+        "variance": -0.11
+       },
+       {
+        "accrued": 520.81,
+        "date": "2026-05-16",
+        "pull_id": 1500,
+        "remitted": 511.18,
+        "variance": 9.63
+       },
+       {
+        "accrued": 230.26,
+        "date": "2026-05-27",
+        "pull_id": 1574,
+        "remitted": 229.27,
+        "variance": 0.99
+       },
+       {
+        "accrued": 317.37,
+        "date": "2026-05-28",
+        "pull_id": 3044,
+        "remitted": 316.1,
+        "variance": 1.27
+       },
+       {
+        "accrued": 475.89,
+        "date": "2026-05-30",
+        "pull_id": 3053,
+        "remitted": 475.97,
+        "variance": -0.08
+       },
+       {
+        "accrued": 440.26,
+        "date": "2026-06-05",
+        "pull_id": 3076,
+        "remitted": 448.63,
+        "variance": -8.37
+       },
+       {
+        "accrued": 497.48,
+        "date": "2026-06-13",
+        "pull_id": 3111,
+        "remitted": 503.17,
+        "variance": -5.69
+       },
+       {
+        "accrued": 618.41,
+        "date": "2026-06-19",
+        "pull_id": 3137,
+        "remitted": 620.42,
+        "variance": -2.01
+       },
+       {
+        "accrued": 545.9,
+        "date": "2026-06-20",
+        "pull_id": 3142,
+        "remitted": 547.29,
+        "variance": -1.39
+       },
+       {
+        "accrued": 437.99,
+        "date": "2026-06-27",
+        "pull_id": 3178,
+        "remitted": 440.46,
+        "variance": -2.47
+       },
+       {
+        "accrued": 478.84,
+        "date": "2026-07-04",
+        "pull_id": 3205,
+        "remitted": 515.99,
+        "variance": -37.15
+       },
+       {
+        "accrued": 988.39,
+        "date": "2026-07-03",
+        "pull_id": 3207,
+        "remitted": 954.18,
+        "variance": 34.21
+       },
+       {
+        "accrued": 476.78,
+        "date": "2026-07-08",
+        "pull_id": 3219,
+        "remitted": 472.09,
+        "variance": 4.69
+       },
+       {
+        "accrued": 729.38,
+        "date": "2026-07-11",
+        "pull_id": 3237,
+        "remitted": 732.53,
+        "variance": -3.15
+       },
+       {
+        "accrued": 522.58,
+        "date": "2026-07-17",
+        "pull_id": 3265,
+        "remitted": 523.76,
+        "variance": -1.18
+       },
+       {
+        "accrued": 625.63,
+        "date": "2026-07-24",
+        "pull_id": 3305,
+        "remitted": 626.75,
+        "variance": -1.12
+       },
+       {
+        "accrued": 651.26,
+        "date": "2026-07-25",
+        "pull_id": 3314,
+        "remitted": 653.92,
+        "variance": -2.66
+       },
+       {
+        "accrued": 400.41,
+        "date": "2026-07-31",
+        "pull_id": 3342,
+        "remitted": 397.57,
+        "variance": 2.84
+       },
+       {
+        "accrued": 597.86,
+        "date": "2026-08-01",
+        "pull_id": 3351,
+        "remitted": 598.25,
+        "variance": -0.39
        }
       ]
      },
-     "message": null,
-     "messages": [],
+     "message": "SALES TAX COLLECTED BUT NOT REMITTED \u2014 1 business day(s) totalling $540.94 have no matching DAVO pull, the oldest being 2026-08-09. DAVO remits each day's tax exactly, 2-5 days later, so a day still unmatched well beyond that lag was not remitted. This is the state's money.",
+     "messages": [
+      "SALES TAX COLLECTED BUT NOT REMITTED \u2014 1 business day(s) totalling $540.94 have no matching DAVO pull, the oldest being 2026-08-09. DAVO remits each day's tax exactly, 2-5 days later, so a day still unmatched well beyond that lag was not remitted. This is the state's money.",
+      "DAVO'S OWN FEE IS ON THE TAX ACCOUNT \u2014 $61.61 recurs monthly among 11 pull(s) with no matching day's tax. A repeated identical amount is a subscription charge, not a remittance. It belongs on an expense account: on Sales Tax Payable it understates the liability and hides a real cost."
+     ],
      "monthly": [
       {
        "collected": 6817.76,
@@ -11253,71 +13449,101 @@
       },
       {
        "collected": 8106.12,
-       "cumulative": 62.13,
+       "cumulative": 0.52,
        "month": "2026-04",
-       "remitted": 7429.49,
-       "residual": 676.63
+       "remitted": 7491.1,
+       "residual": 615.02
+      },
+      {
+       "collected": 9391.57,
+       "cumulative": 722.96,
+       "month": "2026-05",
+       "remitted": 8669.13,
+       "residual": 722.44
+      },
+      {
+       "collected": 7306.24,
+       "cumulative": -879.66,
+       "month": "2026-06",
+       "remitted": 8908.86,
+       "residual": -1602.62
+      },
+      {
+       "collected": 13201.31,
+       "cumulative": 79.01,
+       "month": "2026-07",
+       "remitted": 12242.64,
+       "residual": 958.67
+      },
+      {
+       "collected": 9218.71,
+       "cumulative": -2710.44,
+       "month": "2026-08",
+       "remitted": 12008.16,
+       "residual": -2789.45
       }
      ],
-     "pulls": 90,
-     "remitted": 27865.96,
-     "residual": 62.13,
-     "tolerance_band": 1163.65,
+     "pulls": 188,
+     "remitted": 69756.36,
+     "residual": -2710.44,
+     "tolerance_band": 1379.55,
      "transit_days": 5,
      "window": {
-      "days": 120,
-      "end": "2026-04-30",
+      "days": 243,
+      "end": "2026-08-31",
       "start": "2026-01-01"
      },
-     "within_tolerance": true
+     "within_tolerance": false
     }
    },
    "has_sales_journal": true,
    "labor": {
     "accounts": [
      {
-      "amount": 27839.93,
+      "amount": 30495.51,
       "drill": {
-       "key": "Payroll Expenses",
-       "source": "labor"
+       "key": "Wages (payroll runs)",
+       "source": "labor_runs"
       },
-      "name": "Payroll Expenses"
+      "name": "Wages (payroll runs)"
      },
      {
-      "amount": 6336.81,
+      "amount": 4762.8,
       "drill": {
-       "key": "Wages",
-       "source": "labor"
+       "key": "Employer taxes (payroll runs)",
+       "source": "labor_runs"
       },
-      "name": "Wages"
+      "name": "Employer taxes (payroll runs)"
      }
     ],
     "available": true,
     "by_account": {
-     "Payroll Expenses": 27839.93,
-     "Wages": 6336.81
+     "Employer taxes (payroll runs)": 4762.8,
+     "Wages (payroll runs)": 30495.51
     },
     "comparison": {
-     "payroll_checks": 7,
-     "payroll_checks_gross": 7375.86,
+     "payroll_checks": 32,
+     "payroll_checks_gross": 40911.76,
      "toast_hourly_wages": 23167.13,
      "toast_hours": 1388.5,
      "toast_shifts": 249
     },
-    "labor_cost": 34176.74,
-    "labor_pct": 35.34,
-    "source": "bank_rows_on_labor_accounts",
+    "labor_cost": 35258.31,
+    "labor_pct": 36.46,
+    "payroll_runs": 5,
+    "source": "payroll_runs_plus_labor_bank_rows",
     "tip_channel_rows_on_labor": 0.0,
     "tip_channels": {},
     "tip_drill": {
      "key": "*",
      "source": "labor_tips"
     },
-    "total": 34176.74,
-    "wages_excl_tip_payouts": 34176.74
+    "tips_excluded": 16581.03,
+    "total": 35258.31,
+    "wages_excl_tip_payouts": 35258.31
    },
    "location": "dennis",
-   "net_income": -21742.25,
+   "net_income": -25418.94,
    "net_income_withheld_reason": null,
    "operating_expenses": {
     "banked": [
@@ -11354,20 +13580,20 @@
       "name": "Accountant"
      },
      {
-      "amount": 4142.93,
-      "drill": {
-       "key": "Dues & Subscriptions",
-       "source": "opex_banked"
-      },
-      "name": "Dues & Subscriptions"
-     },
-     {
-      "amount": 3395.79,
+      "amount": 4099.4,
       "drill": {
        "key": "Electric",
        "source": "opex_banked"
       },
       "name": "Electric"
+     },
+     {
+      "amount": 3258.49,
+      "drill": {
+       "key": "Dues & Subscriptions",
+       "source": "opex_banked"
+      },
+      "name": "Dues & Subscriptions"
      },
      {
       "amount": 3218.82,
@@ -11396,10 +13622,10 @@
      {
       "amount": 1568.86,
       "drill": {
-       "key": "POS Rental",
+       "key": "POS Fees",
        "source": "opex_banked"
       },
-      "name": "POS Rental"
+      "name": "POS Fees"
      },
      {
       "amount": 1428.0,
@@ -11418,14 +13644,6 @@
       "name": "Office Supplies & Software"
      },
      {
-      "amount": 1094.83,
-      "drill": {
-       "key": "Repairs & Maintenance",
-       "source": "opex_banked"
-      },
-      "name": "Repairs & Maintenance"
-     },
-     {
       "amount": 1050.0,
       "drill": {
        "key": "Trivia",
@@ -11442,6 +13660,14 @@
       "name": "Trash Removal"
      },
      {
+      "amount": 884.44,
+      "drill": {
+       "key": "Satellite",
+       "source": "opex_banked"
+      },
+      "name": "Satellite"
+     },
+     {
       "amount": 805.4,
       "drill": {
        "key": "Gas",
@@ -11450,12 +13676,12 @@
       "name": "Gas"
      },
      {
-      "amount": 703.61,
+      "amount": 741.14,
       "drill": {
-       "key": "Utilities",
+       "key": "Repairs & Maintenance",
        "source": "opex_banked"
       },
-      "name": "Utilities"
+      "name": "Repairs & Maintenance"
      },
      {
       "amount": 695.0,
@@ -11482,6 +13708,14 @@
       "name": "Cable/Phone/Internet"
      },
      {
+      "amount": 321.81,
+      "drill": {
+       "key": "Chemicals",
+       "source": "opex_banked"
+      },
+      "name": "Chemicals"
+     },
+     {
       "amount": 265.55,
       "drill": {
        "key": "Workers Comp. Insurance",
@@ -11496,6 +13730,14 @@
        "source": "opex_banked"
       },
       "name": "Pest Control"
+     },
+     {
+      "amount": 130.0,
+      "drill": {
+       "key": "Advertising & Marketing",
+       "source": "opex_banked"
+      },
+      "name": "Advertising & Marketing"
      },
      {
       "amount": 120.63,
@@ -11522,10 +13764,10 @@
       "name": "Knife Sharpening"
      }
     ],
-    "banked_total": 49322.77,
+    "banked_total": 49420.89,
     "invoiced": [
      {
-      "amount": 3733.05,
+      "amount": 3776.06,
       "category": "NON_COGS",
       "drill": {
        "key": "NON_COGS",
@@ -11561,15 +13803,15 @@
       "name": "Dining Room Supplies"
      }
     ],
-    "invoiced_total": 4474.18,
-    "total": 53796.95
+    "invoiced_total": 4517.19,
+    "total": 53938.08
    },
    "period": {
     "end": "2026-03-31",
     "start": "2026-03-01"
    },
-   "prime_cost": 64649.02,
-   "prime_cost_pct": 66.85,
+   "prime_cost": 68184.58,
+   "prime_cost_pct": 70.51,
    "revenue": {
     "contra": -7912.28,
     "gross_sales": 104616.0,
