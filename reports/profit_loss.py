@@ -577,6 +577,11 @@ def expense_coverage(conn, location: str, start: str, end: str) -> dict:
         (location, start, end, *sorted(LABOR_ACCOUNT_NAMES)),
     ).fetchone()[0]
 
+    # Payroll runs are labor data in their own right (labor() is built on
+    # them); a period with runs but no labor-coded bank row is fully known.
+    labor_rows += conn.execute(
+        "SELECT COUNT(*) FROM payroll_runs WHERE location = ? AND pay_period_start <= ? "
+        "AND pay_period_end >= ?", (location, end, start)).fetchone()[0]
     complete = n > 0 and labor_rows > 0
     warning = None
     if n == 0:
@@ -756,24 +761,72 @@ def operating_expenses(conn, location: str, start: str, end: str) -> dict:
                          + sum(x["amount"] for x in banked))}
 
 
-def labor(conn, location: str, start: str, end: str) -> dict:
-    """Labor cost, from the bank rows that actually paid it.
+def _run_labor(conn, location: str, start: str, end: str) -> dict:
+    """Payroll-run labor for [start, end], each run spread evenly over the days
+    of its pay period (a run straddling a month end splits across the two).
 
-    Source choice matters and none of the three candidates is clean:
-
-      bank rows      — what left the account. COMPLETE (payroll runs, taxes,
-                       contract labor) and used here.
-      payroll_checks — partial. Dennis March 2026 holds one pay run of two,
-                       five checks against 249 shifts worked.
-      Toast entries  — hourly wages only. No employer taxes, no salaried.
-
-    The bank rows are the only complete picture, but they are contaminated:
-    TIP DISBURSEMENTS are coded to Payroll Expenses and Tip Wages. Tips are
-    collected into a liability (Tip Bank) and paying them out should DEBIT that
-    liability, not hit an expense account. So the payouts are quantified
-    separately here and reported — not silently reclassified, which is a coding
-    decision, not a reporting one.
+      wages     gross - paycheck tips - cash tips  (every earning: hourly,
+                salaried, overtime, PTO, bonus)
+      er_taxes  employer taxes; an adjustment run (zero gross, e.g. the Q1
+                SUTA/COVID true-ups dated 1/01-3/31) spreads its credit over
+                its own period
+      tips      paycheck + cash tips, EXCLUDED from labor: they are customers'
+                money passing through Tip Bank, never a cost
+    Returns totals and the per-run rows the drill shows.
     """
+    rows = []
+    for r in conn.execute(
+            """SELECT id, pay_period_start, pay_period_end, pay_date, total_gross, total_paycheck_tips,
+                      total_cash_tips, total_er_taxes, memo
+               FROM payroll_runs
+               WHERE location = ? AND pay_period_start <= ? AND pay_period_end >= ?
+               ORDER BY pay_period_start, id""", (location, end, start)):
+        ps, pe = date.fromisoformat(r["pay_period_start"]), date.fromisoformat(r["pay_period_end"])
+        days = (pe - ps).days + 1
+        lo, hi = max(ps, date.fromisoformat(start)), min(pe, date.fromisoformat(end))
+        share = ((hi - lo).days + 1) / days
+        tips = (r["total_paycheck_tips"] or 0) + (r["total_cash_tips"] or 0)
+        rows.append({
+            "run_id": r["id"], "pay_date": r["pay_date"],
+            "period": f"{r['pay_period_start']}..{r['pay_period_end']}",
+            "share": round(share, 4),
+            "wages": (r["total_gross"] or 0) - tips,
+            "er_taxes": r["total_er_taxes"] or 0,
+            "tips": tips,
+            "memo": r["memo"],
+        })
+        # Round each run's share first and total the rounded figures, so the
+        # drill (per-run rows) sums to the line to the cent.
+        for k in ("wages", "er_taxes", "tips"):
+            rows[-1][k] = _r2(rows[-1][k] * share)
+    return {"rows": rows,
+            "wages": _r2(sum(x["wages"] for x in rows)),
+            "er_taxes": _r2(sum(x["er_taxes"] for x in rows)),
+            "tips": _r2(sum(x["tips"] for x in rows))}
+
+
+RUN_WAGES = "Wages (payroll runs)"
+RUN_ER_TAXES = "Employer taxes (payroll runs)"
+
+
+def labor(conn, location: str, start: str, end: str) -> dict:
+    """Labor cost: the payroll runs, plus whatever labor-account bank rows remain.
+
+    Mike, 2026-09-24. Labor used to be the bank rows on labor accounts. That
+    lost every paper check once it was merged into its payroll_checks row
+    (~$177K Jan-Aug), carried paycheck tips inside the 7shifts impounds, and
+    dated pay by when the bank moved it. Now:
+
+      runs       gross less tips, plus employer taxes, per pay period
+                 (_run_labor). The bank lines that pay a run — 7shifts
+                 impounds, paper checks, tax refunds — settle Payroll
+                 Liabilities (116), so they are not labor and cannot double.
+      bank rows  anything still coded to a labor account that is NOT a
+                 run settlement (payroll-software fees, a stray tax charge,
+                 contract labor) stays labor, by account.
+      tips       reported alongside (`tips_excluded`), never in the total.
+    """
+    runs = _run_labor(conn, location, start, end)
     ph = ",".join("?" * len(LABOR_ACCOUNT_NAMES))
     rows = conn.execute(
         f"""
@@ -788,6 +841,10 @@ def labor(conn, location: str, start: str, end: str) -> dict:
     ).fetchall()
 
     by_account, total, tips_out = {}, 0.0, 0.0
+    if runs["rows"]:
+        by_account[RUN_WAGES] = runs["wages"]
+        by_account[RUN_ER_TAXES] = runs["er_taxes"]
+        total += runs["wages"] + runs["er_taxes"]
     # Tip-channel rows found sitting on a LABOR account. This should now be
     # empty: they are coded to Tip Bank at import. Anything here is a coding
     # fault to fix, and it is reported rather than silently netted out.
@@ -827,13 +884,15 @@ def labor(conn, location: str, start: str, end: str) -> dict:
     ).fetchone()
 
     return {
-        "source": "bank_rows_on_labor_accounts",
+        "source": "payroll_runs_plus_labor_bank_rows",
         "by_account": by_account,
+        "tips_excluded": runs["tips"],
+        "payroll_runs": len(runs["rows"]),
         # Same figures as by_account, carrying drill descriptors. by_account
         # stays because it is the shape the page already renders from.
         "accounts": [
             {"name": n, "amount": a,
-             "drill": {"source": "labor", "key": n}}
+             "drill": {"source": "labor_runs" if n in (RUN_WAGES, RUN_ER_TAXES) else "labor", "key": n}}
             for n, a in sorted(by_account.items(), key=lambda kv: -kv[1])
         ],
         "tip_drill": {"source": "labor_tips", "key": "*"},
@@ -911,13 +970,17 @@ def footnotes(conn, location: str, start: str, end: str, parts: dict) -> list[st
             f"register rather than adjusting the report."
         )
     notes.append(
-        f"LABOR SOURCE is the bank rows on labor accounts, the only complete "
-        f"view. For comparison: Toast time entries show "
+        f"LABOR SOURCE is the payroll runs ({lab.get('payroll_runs', 0)} in range): "
+        f"gross pay less tips plus employer taxes, spread over each pay period, "
+        f"plus any bank rows still on a labor account. Tips of "
+        f"${lab.get('tips_excluded', 0):,.2f} ran through payroll and are excluded — "
+        f"they settle Tip Bank. The bank lines that pay a run settle Payroll "
+        f"Liabilities, not labor. For comparison: Toast time entries show "
         f"${cmp_['toast_hourly_wages']:,.2f} over {cmp_['toast_hours']:,.1f} "
         f"hours ({cmp_['toast_shifts']} shifts) — hourly wages only, no employer "
         f"taxes or salaried staff — and payroll checks total "
         f"${cmp_['payroll_checks_gross']:,.2f} across {cmp_['payroll_checks']} "
-        f"check(s), which is partial coverage for the period."
+        f"check(s)."
     )
 
     approx = parts["cogs"]["approximate"]
@@ -960,7 +1023,7 @@ def footnotes(conn, location: str, start: str, end: str, parts: dict) -> list[st
 # back what the engine gave it rather than re-deriving how a line was built.
 
 DRILL_SOURCES = ("revenue", "cogs", "opex_invoiced", "opex_banked",
-                 "labor", "labor_tips")
+                 "labor", "labor_runs", "labor_tips")
 
 
 def drill(conn, location: str, start: str, end: str,
@@ -1029,6 +1092,18 @@ def drill(conn, location: str, start: str, end: str,
             (location, start, end, str(key)),
         ).fetchall()
         cols = ["date", "detail", "reference", "status", "amount"]
+
+    # ── Payroll runs, behind the run wages / employer-tax lines: each run's
+    #    share of the period, from the same _run_labor() labor() uses.
+    elif source == "labor_runs":
+        field = {RUN_WAGES: "wages", RUN_ER_TAXES: "er_taxes"}.get(str(key))
+        if not field:
+            raise ValueError(f"unknown labor_runs key: {key!r}")
+        rows = [{"date": x["pay_date"], "detail": f"Run #{x['run_id']} · {x['period']}",
+                 "reference": f"{x['share'] * 100:.1f}% of the pay period in range",
+                 "amount": _r2(x[field])}
+                for x in _run_labor(conn, location, start, end)["rows"]]
+        cols = ["date", "detail", "reference", "amount"]
 
     # ── The tip-disbursement adjustment: the rows it nets out.
     else:  # labor_tips

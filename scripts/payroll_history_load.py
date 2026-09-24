@@ -64,8 +64,13 @@ def totals(emps):
                 ("cash_tips", "cash_tips"), ("ee_taxes", "ee_taxes"), ("er_taxes", "er_taxes"))}}
 
 
-def insert_check(conn, run_id, loc, e, start, end):
+def insert_check(conn, run_id, loc, e, start, end, adjustment=False):
     paper = e["payment_method"].lower() != "direct deposit"
+    if adjustment:
+        # An adjustment run's +/-0.01 nets are tax true-up rounding, not
+        # issued checks. Voided (with the reason) keeps them off the register,
+        # out of Payroll Liabilities and out of the tie-out's paper total.
+        e = {**e, "payment_method": "Adjustment"}
     conn.execute(
         """INSERT INTO payroll_checks (payroll_run_id, employee_name, check_number, gross_pay, net_pay, wages,
                paycheck_tips, cash_tips, ee_taxes, er_taxes, deductions, total_hours, pay_period_start, pay_period_end,
@@ -75,6 +80,9 @@ def insert_check(conn, run_id, loc, e, start, end):
          e["er_taxes"], json.dumps(e["deductions"]), e["total_hours"], start, end, e["payment_method"], loc,
          BANK[loc], f"{WHO}: historical 7shifts journal; issued outside the dashboard",
          "printed" if paper and e["net"] > 0 else "pending"))
+    if adjustment:
+        conn.execute("UPDATE payroll_checks SET voided=1, voided_at=datetime('now'), voided_reason=? WHERE id=last_insert_rowid()",
+                     ("tax true-up rounding line, never issued as a check",))
 
 
 def load(conn, loc, path, emps, now, apply):
@@ -124,7 +132,7 @@ def load(conn, loc, path, emps, now, apply):
                                     else f"Payroll {start}..{end} — {WHO}: historical 7shifts journal"), dest,
              *t.values())).lastrowid
         for e in emps:
-            insert_check(conn, run_id, loc, e, start, end)
+            insert_check(conn, run_id, loc, e, start, end, adjustment)
         msg += f"  -> new run #{run_id}"
     if apply:
         import csv, io

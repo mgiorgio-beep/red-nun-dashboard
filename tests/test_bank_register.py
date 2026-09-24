@@ -280,15 +280,22 @@ class TestOutstandingItems:
         see test_march_outstanding_is_maya_jones, which asserts the snapshot,
         not the books. This is THE worked example for why `delta == 0` is
         the wrong pass condition: the statement ties exactly AND there is
-        -23,963.55 outstanding."""
+        money outstanding.
+
+        2026-09-24: -23,963.55 / 18 became -14,488.12 / 8. The Martignetti and
+        Southern Glazer's settlements corrected the 3/26 import's placeholder
+        payments (real FinTech/Exchange refs, made-up amounts) and cleared them
+        with their drafts, and the payroll switch merged the paper checks
+        cashed weeks late. Left open at 3/31: six PFG Bill Pay rows
+        (14,187.92), James Liadis 3/06 (242.74), Maya Jones 3/20 (57.46)."""
         u = _upload(uploads, DENNIS, "2026-03-02")
         s = register(client, u)["summary"]
-        assert cents(s["outstanding_net"]) == -2396355
-        assert s["outstanding_count"] == 10          # March's own rows still open at 3/31
+        assert cents(s["outstanding_net"]) == -1448812
+        assert s["outstanding_count"] == 5           # March's own rows still open at 3/31
         p = preview(client, u)
-        assert len(p["outstanding_items"]) == 18
-        assert p["outstanding_prior_count"] == 8
-        assert cents(sum(i["amount"] for i in p["outstanding_items"])) == -2396355
+        assert len(p["outstanding_items"]) == 8
+        assert p["outstanding_prior_count"] == 3
+        assert cents(sum(i["amount"] for i in p["outstanding_items"])) == -1448812
         assert p["ties"]
 
     def test_chatham_january_outstanding(self, client, uploads):

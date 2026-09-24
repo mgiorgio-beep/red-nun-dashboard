@@ -3770,6 +3770,25 @@ def list_gl_account_balances():
     for r in conn.execute(activity_sql, activity_params).fetchall():
         activity_by_id[r["gl_account_id"]] = dict(r)
 
+    # Payroll Liabilities (116) is a clearing account (Mike, 2026-09-24): each
+    # payroll run credits it with the cash it will draw (net pay + employee and
+    # employer taxes) and the register rows that pay the run debit it. The run
+    # side is not a register row, so add it here; without it 116 shows every
+    # impound as a debit with nothing against it.
+    accrual = conn.execute(
+        """SELECT COALESCE(SUM(pr.total_ee_taxes + pr.total_er_taxes
+                              + (SELECT COALESCE(SUM(pc.net_pay), 0) FROM payroll_checks pc
+                                 WHERE pc.payroll_run_id = pr.id AND COALESCE(pc.voided, 0) = 0)), 0) AS c,
+                  COUNT(*) AS n
+           FROM payroll_runs pr WHERE pr.location = ? AND pr.pay_date <= ?""",
+        (location, as_of)).fetchone()
+    for g in conn.execute("SELECT id FROM gl_accounts WHERE location = ? AND name = 'Payroll Liabilities'",
+                          (location,)):
+        a = activity_by_id.setdefault(g["id"], {"gl_account_id": g["id"], "total_outflow": 0.0,
+                                                 "total_inflow": 0.0, "row_count": 0})
+        a["total_inflow"] = (a["total_inflow"] or 0.0) + (accrual["c"] or 0.0)
+        a["row_count"] = (a["row_count"] or 0) + (accrual["n"] or 0)
+
     # All balance-sheet GL accounts at this location (or unscoped legacy)
     bs_types = list(_DEBIT_POSITIVE_TYPES | _CREDIT_POSITIVE_TYPES)
     type_placeholders = ",".join("?" for _ in bs_types)

@@ -52,6 +52,7 @@ QB_WAGES         = "Payroll Expenses:Wages"
 QB_PAYROLL_TIPS  = "Payroll Expenses:Payroll Tips"
 QB_PAYROLL_TAXES = "Payroll Expenses:Payroll Taxes"
 QB_TIP_BANK      = "Tip Bank"
+QB_PAYROLL_LIAB  = "Payroll Liabilities"
 QB_BANK_CHATHAM  = "Cape Cod Five (5975)"
 QB_BANK_DENNIS   = "Cape Cod Five (2757)"
 
@@ -587,8 +588,10 @@ def build_qbo_csv(employees, pay_date_str, period_str, location):
     total_ee_taxes     = sum(e["ee_taxes"]       for e in employees)
     total_er_taxes     = sum(e["er_taxes"]       for e in employees)
 
+    # Nonzero, not just positive: an adjustment run (the Q1 tax true-up) carries
+    # -0.01 nets, and dropping them leaves the entry out of balance.
     paper_checks = [e for e in employees
-                    if e["payment_method"].lower() != "direct deposit" and e["net"] > 0]
+                    if e["payment_method"].lower() != "direct deposit" and abs(e["net"]) > 0.0049]
     dd_employees = [e for e in employees
                     if e["payment_method"].lower() == "direct deposit"]
     dd_net  = sum(e["net"] for e in dd_employees)
@@ -597,6 +600,11 @@ def build_qbo_csv(employees, pay_date_str, period_str, location):
     rows = []
 
     def row(account, debit="", credit="", desc=description, name=""):
+        # A negative amount belongs on the other side (adjustment runs).
+        if debit != "" and debit < 0:
+            debit, credit = "", -debit
+        elif credit != "" and credit < 0:
+            debit, credit = -credit, ""
         rows.append({
             "JournalNo":   journal_no,
             "JournalDate": journal_date,
@@ -607,24 +615,28 @@ def build_qbo_csv(employees, pay_date_str, period_str, location):
             "Name":        name,
         })
 
+    # Mike, 2026-09-24: the run accrues to Payroll Liabilities (116), and the
+    # bank lines that pay it (7shifts impound, each paper check) settle 116 in
+    # the register. Crediting the bank here as well counted the cash twice.
+    # Paycheck tips were collected into Tip Bank with the day's sales, so
+    # paying them out relieves Tip Bank; cash tips were already paid from Tip
+    # Bank (Kickfin / 7shifts tips) and appear in gross for tax only, so they
+    # are not in this entry at all. Tips never touch an expense account.
     if total_wages:
         row(QB_WAGES,         debit=total_wages)
-    if total_tips:
-        row(QB_PAYROLL_TIPS,  debit=total_tips)
+    if total_paycheck_tips:
+        row(QB_TIP_BANK,      debit=total_paycheck_tips, desc="Paycheck tips paid out")
     if total_er_taxes:
         row(QB_PAYROLL_TAXES, debit=total_er_taxes)
 
     for e in paper_checks:
-        row(bank_acct, credit=e["net"], name=e["name"])
+        row(QB_PAYROLL_LIAB, credit=e["net"], name=e["name"])
 
-    if dd_ach > 0:
-        row(bank_acct, credit=dd_ach, desc="DD + Taxes")
+    if dd_ach:
+        row(QB_PAYROLL_LIAB, credit=dd_ach, desc="DD + Taxes (7shifts impound)")
 
-    if total_cash_tips > 0:
-        row(QB_TIP_BANK, credit=total_cash_tips, desc="Cash Tips Paid")
-
-    total_d = total_wages + total_tips + total_er_taxes
-    total_c = sum(e["net"] for e in paper_checks) + dd_ach + total_cash_tips
+    total_d = total_wages + total_paycheck_tips + total_er_taxes
+    total_c = sum(e["net"] for e in paper_checks) + dd_ach
     balanced = abs(total_d - total_c) < 0.02
 
     out = io.StringIO()
