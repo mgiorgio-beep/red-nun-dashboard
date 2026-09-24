@@ -2377,45 +2377,6 @@
     "source": "labor_runs",
     "total": 20543.22
    },
-   "opex_banked:Bands": {
-    "columns": [
-     "date",
-     "detail",
-     "reference",
-     "status",
-     "amount"
-    ],
-    "count": 3,
-    "key": "Bands",
-    "rows": [
-     {
-      "amount": 500.0,
-      "date": "2026-03-02",
-      "detail": "PAYMENT VENMO",
-      "reference": "WEB 1048572384882 [stmt #20]",
-      "row_id": 1829,
-      "status": "suggested"
-     },
-     {
-      "amount": 500.0,
-      "date": "2026-03-02",
-      "detail": "PAYMENT VENMO",
-      "reference": "WEB 1048572393152 [stmt #20]",
-      "row_id": 1830,
-      "status": "suggested"
-     },
-     {
-      "amount": 500.0,
-      "date": "2026-03-23",
-      "detail": "PAYMENT VENMO",
-      "reference": "WEB 1049062684110 [stmt #20]",
-      "row_id": 1959,
-      "status": "suggested"
-     }
-    ],
-    "source": "opex_banked",
-    "total": 1500.0
-   },
    "opex_banked:Bookkeeping": {
     "columns": [
      "date",
@@ -2438,6 +2399,29 @@
     ],
     "source": "opex_banked",
     "total": 122.19
+   },
+   "opex_banked:Building Rent": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 1,
+    "key": "Building Rent",
+    "rows": [
+     {
+      "amount": 1000.0,
+      "date": "2026-03-24",
+      "detail": "Transfer from x5975 to x1239",
+      "reference": "[stmt #20]",
+      "row_id": 1964,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 1000.0
    },
    "opex_banked:Cable/Phone/Internet": {
     "columns": [
@@ -2824,6 +2808,45 @@
     "source": "opex_banked",
     "total": 132.33
    },
+   "opex_banked:Karoake": {
+    "columns": [
+     "date",
+     "detail",
+     "reference",
+     "status",
+     "amount"
+    ],
+    "count": 3,
+    "key": "Karoake",
+    "rows": [
+     {
+      "amount": 500.0,
+      "date": "2026-03-02",
+      "detail": "PAYMENT VENMO",
+      "reference": "WEB 1048572384882 [stmt #20]",
+      "row_id": 1829,
+      "status": "confirmed"
+     },
+     {
+      "amount": 500.0,
+      "date": "2026-03-02",
+      "detail": "PAYMENT VENMO",
+      "reference": "WEB 1048572393152 [stmt #20]",
+      "row_id": 1830,
+      "status": "confirmed"
+     },
+     {
+      "amount": 500.0,
+      "date": "2026-03-23",
+      "detail": "PAYMENT VENMO",
+      "reference": "WEB 1049062684110 [stmt #20]",
+      "row_id": 1959,
+      "status": "confirmed"
+     }
+    ],
+    "source": "opex_banked",
+    "total": 1500.0
+   },
    "opex_banked:Kitchen Supplies": {
     "columns": [
      "date",
@@ -3104,29 +3127,6 @@
     "source": "opex_banked",
     "total": 2260.89
    },
-   "opex_banked:Rent & Lease": {
-    "columns": [
-     "date",
-     "detail",
-     "reference",
-     "status",
-     "amount"
-    ],
-    "count": 1,
-    "key": "Rent & Lease",
-    "rows": [
-     {
-      "amount": 1000.0,
-      "date": "2026-03-24",
-      "detail": "Transfer from x5975 to x1239",
-      "reference": "[stmt #20]",
-      "row_id": 1964,
-      "status": "confirmed"
-     }
-    ],
-    "source": "opex_banked",
-    "total": 1000.0
-   },
    "opex_banked:Trash Removal": {
     "columns": [
      "date",
@@ -3239,7 +3239,7 @@
      "qty",
      "amount"
     ],
-    "count": 82,
+    "count": 83,
     "key": "NON_COGS",
     "rows": [
      {
@@ -3651,6 +3651,14 @@
       "vendor": "L. Knife & Son, Inc."
      },
      {
+      "amount": 325.0,
+      "date": "2026-03-20",
+      "detail": "Spring Cleaning - Labor and Disposal Fees",
+      "qty": 1.0,
+      "reference": "16565",
+      "vendor": "Fore & Aft, Inc."
+     },
+     {
       "amount": 6.04,
       "date": "2026-03-20",
       "detail": "AIR FRESH-(EA)TWIST TROPCAL PA",
@@ -3900,7 +3908,7 @@
      }
     ],
     "source": "opex_invoiced",
-    "total": -243.56
+    "total": 81.44
    },
    "opex_invoiced:OTHER": {
     "columns": [
@@ -5230,7 +5238,7 @@
     "clearing_excluded": true,
     "clearing_violations": [],
     "expense_coverage": {
-     "bank_rows": 196,
+     "bank_rows": 195,
      "expense_side_complete": true,
      "labor_rows": 5,
      "warning": null
@@ -6236,7 +6244,7 @@
     "wages_excl_tip_payouts": 23858.12
    },
    "location": "chatham",
-   "net_income": -1352.64,
+   "net_income": -1677.64,
    "net_income_withheld_reason": null,
    "operating_expenses": {
     "banked": [
@@ -6267,10 +6275,10 @@
      {
       "amount": 1500.0,
       "drill": {
-       "key": "Bands",
+       "key": "Karoake",
        "source": "opex_banked"
       },
-      "name": "Bands"
+      "name": "Karoake"
      },
      {
       "amount": 1040.0,
@@ -6283,10 +6291,10 @@
      {
       "amount": 1000.0,
       "drill": {
-       "key": "Rent & Lease",
+       "key": "Building Rent",
        "source": "opex_banked"
       },
-      "name": "Rent & Lease"
+      "name": "Building Rent"
      },
      {
       "amount": 988.56,
@@ -6414,6 +6422,15 @@
       "name": "Kitchen Supplies"
      },
      {
+      "amount": 81.44,
+      "category": "NON_COGS",
+      "drill": {
+       "key": "NON_COGS",
+       "source": "opex_invoiced"
+      },
+      "name": "Other Business Expenses"
+     },
+     {
       "amount": 51.39,
       "category": "DR_SUPPLIES",
       "drill": {
@@ -6421,19 +6438,10 @@
        "source": "opex_invoiced"
       },
       "name": "Dining Room Supplies"
-     },
-     {
-      "amount": -243.56,
-      "category": "NON_COGS",
-      "drill": {
-       "key": "NON_COGS",
-       "source": "opex_invoiced"
-      },
-      "name": "Other Business Expenses"
      }
     ],
-    "invoiced_total": 441.96,
-    "total": 15311.31
+    "invoiced_total": 766.96,
+    "total": 15636.31
    },
    "period": {
     "end": "2026-03-31",
@@ -6524,7 +6532,7 @@
      "qty",
      "amount"
     ],
-    "count": 46,
+    "count": 47,
     "key": "BEER",
     "rows": [
      {
@@ -6880,6 +6888,14 @@
       "vendor": "L. Knife & Son, Inc."
      },
      {
+      "amount": 91.71,
+      "date": "2026-03-26",
+      "detail": "Onion Ring Battered Beer 5/8\" Frozen",
+      "qty": 3.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
       "amount": 35.33,
       "date": "2026-03-30",
       "detail": "DRINK, SODA ROOT BEER C/F GLS",
@@ -6897,7 +6913,7 @@
      }
     ],
     "source": "cogs",
-    "total": 7151.02
+    "total": 7242.73
    },
    "cogs:FOOD": {
     "columns": [
@@ -6908,7 +6924,7 @@
      "qty",
      "amount"
     ],
-    "count": 228,
+    "count": 258,
     "key": "FOOD",
     "rows": [
      {
@@ -8544,6 +8560,246 @@
       "vendor": "US Foods"
      },
      {
+      "amount": 36.09,
+      "date": "2026-03-26",
+      "detail": "Avocado Hass #2 Ripe Fresh",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 57.21,
+      "date": "2026-03-26",
+      "detail": "Bacon Topping 1/4\" Silver Fully Cooked Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 126.76,
+      "date": "2026-03-26",
+      "detail": "Beef Brisket Burnt Ends Pit Smoked And Seasoned Frozen",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 54.6,
+      "date": "2026-03-26",
+      "detail": "Brussels Sprouts #1 Fresh",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 161.52,
+      "date": "2026-03-26",
+      "detail": "COD Fillet 8-10 Ounce Individually Quick Frozen Longline Atlantic Frozen",
+      "qty": 2.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 46.51,
+      "date": "2026-03-26",
+      "detail": "Cheese Cheddar Monterey Jack Feather Shredded 50/50 Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 27.87,
+      "date": "2026-03-26",
+      "detail": "Cheese Cheddar White Mild 192/.75Oz Slice Mild Easy Peel Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 23.77,
+      "date": "2026-03-26",
+      "detail": "Cheese Parmesan Fancy Shredded Domestic Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 20.02,
+      "date": "2026-03-26",
+      "detail": "Cheese Parmesan Style Grated Poly Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 72.26,
+      "date": "2026-03-26",
+      "detail": "Chicken Breast 6 Ounce Single Boneless Skinless Super Trim Controlled Vacuum Packaged Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 46.59,
+      "date": "2026-03-26",
+      "detail": "Chicken Breast Fillet Breaded Seasoned Average 6 Ounce Prebrowned Frozen",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 138.33,
+      "date": "2026-03-26",
+      "detail": "Chicken Wing Split Steamed Fully Cooked Frozen",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 55.21,
+      "date": "2026-03-26",
+      "detail": "Creamer White Non Dairy Canister",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 22.57,
+      "date": "2026-03-26",
+      "detail": "Dressing Blue Cheese Chunky Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 16.58,
+      "date": "2026-03-26",
+      "detail": "Dressing Ranch Buttermilk Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 88.94,
+      "date": "2026-03-26",
+      "detail": "Fries Straight Cut 3/8\" Long Fancy Frozen",
+      "qty": 2.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 7.5,
+      "date": "2026-03-26",
+      "detail": "Fuel Surcharge",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 75.93,
+      "date": "2026-03-26",
+      "detail": "Ketchup Upside Down Red Squeeze Bottle Forever Full",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 23.56,
+      "date": "2026-03-26",
+      "detail": "Mayonnaise Heavy Duty Deluxe Jar",
+      "qty": 2.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 49.13,
+      "date": "2026-03-26",
+      "detail": "Mustard Dijon Squeeze Bottle",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 20.45,
+      "date": "2026-03-26",
+      "detail": "Mustard Yellow Squeeze Bottle",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 178.95,
+      "date": "2026-03-26",
+      "detail": "Oil Canola Clear Fry Trans Fat Free",
+      "qty": 5.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 52.17,
+      "date": "2026-03-26",
+      "detail": "Oil Sesame",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 32.58,
+      "date": "2026-03-26",
+      "detail": "Paper Butcher 24\"X800' Roll Brown",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 28.14,
+      "date": "2026-03-26",
+      "detail": "Pasta Linguine 10\"",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 34.17,
+      "date": "2026-03-26",
+      "detail": "Pickle Dill Kosher Chip Crinkle Cut Average 1150 Refrigerated",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 25.69,
+      "date": "2026-03-26",
+      "detail": "Sauce Sriracha",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 16.98,
+      "date": "2026-03-26",
+      "detail": "Sour Cream Grade A Heavy Body Cultured Refrigerated",
+      "qty": 2.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 46.83,
+      "date": "2026-03-26",
+      "detail": "Tomato 5X6 Fresh",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 38.0,
+      "date": "2026-03-27",
+      "detail": "Fries Sweet Potato Wave Length Extra Long Fancy 5/16X11/16 Frozen",
+      "qty": 1.0,
+      "reference": "731144",
+      "vendor": "Performance Foodservice"
+     },
+     {
       "amount": 687.57,
       "date": "2026-03-30",
       "detail": "BEEF, PTY GRND CHUK BRSKT &",
@@ -8737,7 +8993,7 @@
      }
     ],
     "source": "cogs",
-    "total": 19409.75
+    "total": 21034.66
    },
    "cogs:LIQUOR": {
     "columns": [
@@ -8748,7 +9004,7 @@
      "qty",
      "amount"
     ],
-    "count": 52,
+    "count": 53,
     "key": "LIQUOR",
     "rows": [
      {
@@ -9128,6 +9384,14 @@
       "vendor": "L. Knife & Son, Inc."
      },
      {
+      "amount": 56.36,
+      "date": "2026-03-26",
+      "detail": "Muffin English Sandwich 4\" Original Baked Thaw & Serve Frozen",
+      "qty": 2.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
       "amount": 40.78,
       "date": "2026-03-31",
       "detail": "Cabo Anejo Light Cream 12/cs",
@@ -9169,7 +9433,7 @@
      }
     ],
     "source": "cogs",
-    "total": 3231.65
+    "total": 3288.01
    },
    "cogs:LIQUOR_WINE": {
     "columns": [
@@ -9252,7 +9516,7 @@
      "qty",
      "amount"
     ],
-    "count": 10,
+    "count": 11,
     "key": "NA_BEVERAGES",
     "rows": [
      {
@@ -9334,10 +9598,18 @@
       "qty": 1.0,
       "reference": "485444",
       "vendor": "L. Knife & Son, Inc."
+     },
+     {
+      "amount": 39.66,
+      "date": "2026-03-26",
+      "detail": "Juice Pineapple 100% Bar Pack",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
      }
     ],
     "source": "cogs",
-    "total": 533.6
+    "total": 573.26
    },
    "cogs:TOGO_SUPPLIES": {
     "columns": [
@@ -9348,7 +9620,7 @@
      "qty",
      "amount"
     ],
-    "count": 13,
+    "count": 20,
     "key": "TOGO_SUPPLIES",
     "rows": [
      {
@@ -9440,6 +9712,62 @@
       "vendor": "US Foods"
      },
      {
+      "amount": 66.77,
+      "date": "2026-03-26",
+      "detail": "Bag Paper 14X10x15.75 With Handle Kraft",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 38.59,
+      "date": "2026-03-26",
+      "detail": "Carrot Jumbo Bag Fresh",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 56.19,
+      "date": "2026-03-26",
+      "detail": "Container Plastic 9X9 1 Compartment  Square Hinged Black Bottom Clear Lid",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 59.78,
+      "date": "2026-03-26",
+      "detail": "Container Plastic Polypropylene 1 Compartment 9X6 Hinged Clear Lid/Black Base",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 56.19,
+      "date": "2026-03-27",
+      "detail": "Container Plastic 9X9 1 Compartment  Square Hinged Black Bottom Clear Lid",
+      "qty": 1.0,
+      "reference": "731144",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 59.78,
+      "date": "2026-03-27",
+      "detail": "Container Plastic Polypropylene 1 Compartment 9X6 Hinged Clear Lid/Black Base",
+      "qty": 1.0,
+      "reference": "731144",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 24.04,
+      "date": "2026-03-27",
+      "detail": "Onion Yellow Jumbo Bag Fresh Hi-Low",
+      "qty": 1.0,
+      "reference": "731144",
+      "vendor": "Performance Foodservice"
+     },
+     {
       "amount": 25.56,
       "date": "2026-03-30",
       "detail": "CHEESE, BLU CRBL BAG REF",
@@ -9457,7 +9785,7 @@
      }
     ],
     "source": "cogs",
-    "total": 706.35
+    "total": 1067.69
    },
    "cogs:WINE": {
     "columns": [
@@ -10536,7 +10864,7 @@
      "status",
      "amount"
     ],
-    "count": 2,
+    "count": 1,
     "key": "POS Fees",
     "rows": [
      {
@@ -10546,18 +10874,10 @@
       "reference": "CCD | TOAST INC | ST-Z7H0C2B9O2D5 [stmt #8]",
       "row_id": 976,
       "status": "confirmed"
-     },
-     {
-      "amount": 734.73,
-      "date": "2026-03-30",
-      "detail": "PURCHASE T Toast, Inc",
-      "reference": "CCD | TOAST INC | ST-Y5N7S1Y7S7F2 [stmt #8]",
-      "row_id": 1169,
-      "status": "confirmed"
      }
     ],
     "source": "opex_banked",
-    "total": 1568.86
+    "total": 834.13
    },
    "opex_banked:Pest Control": {
     "columns": [
@@ -10793,7 +11113,7 @@
      "qty",
      "amount"
     ],
-    "count": 4,
+    "count": 5,
     "key": "DR_SUPPLIES",
     "rows": [
      {
@@ -10827,10 +11147,18 @@
       "qty": 4.0,
       "reference": "1020308656",
       "vendor": "UniFirst"
+     },
+     {
+      "amount": 66.76,
+      "date": "2026-03-26",
+      "detail": "Napkin Dinner 15X16.25 White 1/8 Fold 2Ply",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
      }
     ],
     "source": "opex_invoiced",
-    "total": 80.02
+    "total": 146.78
    },
    "opex_invoiced:KITCHEN_SUPPLIES": {
     "columns": [
@@ -10841,7 +11169,7 @@
      "qty",
      "amount"
     ],
-    "count": 6,
+    "count": 8,
     "key": "KITCHEN_SUPPLIES",
     "rows": [
      {
@@ -10891,10 +11219,26 @@
       "qty": 2.0,
       "reference": "721961",
       "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 41.76,
+      "date": "2026-03-26",
+      "detail": "Glove Nitrile Extra Large Powder Free  Blue 3.5 Millimeter",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
+     },
+     {
+      "amount": 81.99,
+      "date": "2026-03-26",
+      "detail": "Straw Paper Jumbo 7.75\" Individually Wrapped Teal Marine Biodegradable & Compostable Hold",
+      "qty": 1.0,
+      "reference": "729650",
+      "vendor": "Performance Foodservice"
      }
     ],
     "source": "opex_invoiced",
-    "total": 147.49
+    "total": 271.24
    },
    "opex_invoiced:NON_COGS": {
     "columns": [
@@ -10905,7 +11249,7 @@
      "qty",
      "amount"
     ],
-    "count": 111,
+    "count": 92,
     "key": "NON_COGS",
     "rows": [
      {
@@ -11309,62 +11653,6 @@
       "vendor": "L. Knife & Son, Inc."
      },
      {
-      "amount": 40.0,
-      "date": "2026-03-12",
-      "detail": "Additional Tablet Monthly Software Subscription",
-      "qty": 1.0,
-      "reference": "INV8985070",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 30.0,
-      "date": "2026-03-12",
-      "detail": "DoorDash Integration",
-      "qty": 1.0,
-      "reference": "INV8985070",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 40.0,
-      "date": "2026-03-12",
-      "detail": "Gift Card Program Monthly Subscription",
-      "qty": 1.0,
-      "reference": "INV8985070",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 30.0,
-      "date": "2026-03-12",
-      "detail": "GrubHub Integration",
-      "qty": 1.0,
-      "reference": "INV8985070",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 72.0,
-      "date": "2026-03-12",
-      "detail": "Software Monthly Subscription",
-      "qty": 1.0,
-      "reference": "INV8985070",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 119.2,
-      "date": "2026-03-12",
-      "detail": "Toast Digital Storefront Pro",
-      "qty": 1.0,
-      "reference": "INV8985070",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 50.0,
-      "date": "2026-03-12",
-      "detail": "Toast Restaurant Management Essentials",
-      "qty": 1.0,
-      "reference": "INV8985070",
-      "vendor": "Toast Inc."
-     },
-     {
       "amount": 7.0,
       "date": "2026-03-16",
       "detail": "Fees & tax (unitemized)",
@@ -11467,14 +11755,6 @@
       "qty": 1.0,
       "reference": "1020308656",
       "vendor": "UniFirst"
-     },
-     {
-      "amount": 325.0,
-      "date": "2026-03-20",
-      "detail": "Spring Cleaning - Labor and Disposal Fees",
-      "qty": 1.0,
-      "reference": "16565",
-      "vendor": "Fore & Aft, Inc."
      },
      {
       "amount": 21.25,
@@ -11661,94 +11941,6 @@
       "vendor": "L. Knife & Son, Inc."
      },
      {
-      "amount": 25.0,
-      "date": "2026-03-27",
-      "detail": "API Monthly Subscription",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 32.5,
-      "date": "2026-03-27",
-      "detail": "Additional Tablet Monthly Software Subscription",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 30.0,
-      "date": "2026-03-27",
-      "detail": "DoorDash Integration",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 32.5,
-      "date": "2026-03-27",
-      "detail": "Gift Card Program Monthly Subscription",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 97.5,
-      "date": "2026-03-27",
-      "detail": "Handheld Monthly Software Subscription",
-      "qty": 3.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 23.0,
-      "date": "2026-03-27",
-      "detail": "Kitchen Display Screen Monthly Subscription",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 67.5,
-      "date": "2026-03-27",
-      "detail": "Marketing Monthly Subscription",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 58.5,
-      "date": "2026-03-27",
-      "detail": "Software Monthly Subscription",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 175.0,
-      "date": "2026-03-27",
-      "detail": "Toast Catering and Events Management Pro",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 100.0,
-      "date": "2026-03-27",
-      "detail": "Toast Digital Storefront Pro",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
-      "amount": 50.0,
-      "date": "2026-03-27",
-      "detail": "Toast Tables (Waitlist)",
-      "qty": 1.0,
-      "reference": "INV9084212",
-      "vendor": "Toast Inc."
-     },
-     {
       "amount": 20.0,
       "date": "2026-03-30",
       "detail": "KR KNIFE SERVICE",
@@ -11798,7 +11990,7 @@
      }
     ],
     "source": "opex_invoiced",
-    "total": 3776.06
+    "total": 2378.36
    },
    "opex_invoiced:OTHER": {
     "columns": [
@@ -12111,6 +12303,166 @@
     ],
     "source": "opex_invoiced",
     "total": 513.62
+   },
+   "opex_invoiced:POS_SOFTWARE": {
+    "columns": [
+     "date",
+     "vendor",
+     "reference",
+     "detail",
+     "qty",
+     "amount"
+    ],
+    "count": 18,
+    "key": "POS_SOFTWARE",
+    "rows": [
+     {
+      "amount": 40.0,
+      "date": "2026-03-12",
+      "detail": "Additional Tablet Monthly Software Subscription",
+      "qty": 1.0,
+      "reference": "INV8985070",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 30.0,
+      "date": "2026-03-12",
+      "detail": "DoorDash Integration",
+      "qty": 1.0,
+      "reference": "INV8985070",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 40.0,
+      "date": "2026-03-12",
+      "detail": "Gift Card Program Monthly Subscription",
+      "qty": 1.0,
+      "reference": "INV8985070",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 30.0,
+      "date": "2026-03-12",
+      "detail": "GrubHub Integration",
+      "qty": 1.0,
+      "reference": "INV8985070",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 72.0,
+      "date": "2026-03-12",
+      "detail": "Software Monthly Subscription",
+      "qty": 1.0,
+      "reference": "INV8985070",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 119.2,
+      "date": "2026-03-12",
+      "detail": "Toast Digital Storefront Pro",
+      "qty": 1.0,
+      "reference": "INV8985070",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 50.0,
+      "date": "2026-03-12",
+      "detail": "Toast Restaurant Management Essentials",
+      "qty": 1.0,
+      "reference": "INV8985070",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 25.0,
+      "date": "2026-03-27",
+      "detail": "API Monthly Subscription",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 32.5,
+      "date": "2026-03-27",
+      "detail": "Additional Tablet Monthly Software Subscription",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 30.0,
+      "date": "2026-03-27",
+      "detail": "DoorDash Integration",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 32.5,
+      "date": "2026-03-27",
+      "detail": "Gift Card Program Monthly Subscription",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 97.5,
+      "date": "2026-03-27",
+      "detail": "Handheld Monthly Software Subscription",
+      "qty": 3.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 23.0,
+      "date": "2026-03-27",
+      "detail": "Kitchen Display Screen Monthly Subscription",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 67.5,
+      "date": "2026-03-27",
+      "detail": "Marketing Monthly Subscription",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 58.5,
+      "date": "2026-03-27",
+      "detail": "Software Monthly Subscription",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 175.0,
+      "date": "2026-03-27",
+      "detail": "Toast Catering and Events Management Pro",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 100.0,
+      "date": "2026-03-27",
+      "detail": "Toast Digital Storefront Pro",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     },
+     {
+      "amount": 50.0,
+      "date": "2026-03-27",
+      "detail": "Toast Tables (Waitlist)",
+      "qty": 1.0,
+      "reference": "INV9084212",
+      "vendor": "Toast Inc."
+     }
+    ],
+    "source": "opex_invoiced",
+    "total": 1072.7
    },
    "revenue:15": {
     "columns": [
@@ -12983,11 +13335,11 @@
       "note": "Ambiguous multi-category OCR tag. Booked to Liquor; splits beverage COGS slightly wrong but the total is correct."
      }
     ],
-    "fnb_subtotal": 32219.92,
-    "food_cost_pct": 33.32,
+    "fnb_subtotal": 34032.56,
+    "food_cost_pct": 35.19,
     "lines": [
      {
-      "amount": 19409.75,
+      "amount": 21034.66,
       "category": "FOOD",
       "confidence": "exact",
       "drill": {
@@ -12997,7 +13349,7 @@
       "name": "Food Costs -F&B"
      },
      {
-      "amount": 7151.02,
+      "amount": 7242.73,
       "category": "BEER",
       "confidence": "exact",
       "drill": {
@@ -13007,7 +13359,7 @@
       "name": "Beer COGS"
      },
      {
-      "amount": 3231.65,
+      "amount": 3288.01,
       "category": "LIQUOR",
       "confidence": "exact",
       "drill": {
@@ -13027,7 +13379,7 @@
       "name": "Wine COGS"
      },
      {
-      "amount": 706.35,
+      "amount": 1067.69,
       "category": "TOGO_SUPPLIES",
       "confidence": "exact",
       "drill": {
@@ -13037,7 +13389,7 @@
       "name": "TakeOut Supplies"
      },
      {
-      "amount": 533.6,
+      "amount": 573.26,
       "category": "NA_BEVERAGES",
       "confidence": "exact",
       "drill": {
@@ -13067,9 +13419,9 @@
       "name": "Liquor COGS"
      }
     ],
-    "non_fnb_subtotal": 706.35,
-    "total": 32926.27,
-    "total_cogs_pct": 34.05
+    "non_fnb_subtotal": 1067.69,
+    "total": 35100.25,
+    "total_cogs_pct": 36.3
    },
    "footnotes": [
     "TIPS: $15,526.58 passed through in this period (16.1% of net revenue). Booked to Tip Bank, a balance-sheet account, so it is correctly EXCLUDED from revenue here. Summing all JE credits instead would overstate revenue by that amount.",
@@ -13543,7 +13895,7 @@
     "wages_excl_tip_payouts": 35258.31
    },
    "location": "dennis",
-   "net_income": -25418.94,
+   "net_income": -26723.7,
    "net_income_withheld_reason": null,
    "operating_expenses": {
     "banked": [
@@ -13620,14 +13972,6 @@
       "name": "Linens"
      },
      {
-      "amount": 1568.86,
-      "drill": {
-       "key": "POS Fees",
-       "source": "opex_banked"
-      },
-      "name": "POS Fees"
-     },
-     {
       "amount": 1428.0,
       "drill": {
        "key": "Condo Fees",
@@ -13666,6 +14010,14 @@
        "source": "opex_banked"
       },
       "name": "Satellite"
+     },
+     {
+      "amount": 834.13,
+      "drill": {
+       "key": "POS Fees",
+       "source": "opex_banked"
+      },
+      "name": "POS Fees"
      },
      {
       "amount": 805.4,
@@ -13764,16 +14116,25 @@
       "name": "Knife Sharpening"
      }
     ],
-    "banked_total": 49420.89,
+    "banked_total": 48686.16,
     "invoiced": [
      {
-      "amount": 3776.06,
+      "amount": 2378.36,
       "category": "NON_COGS",
       "drill": {
        "key": "NON_COGS",
        "source": "opex_invoiced"
       },
       "name": "Other Business Expenses"
+     },
+     {
+      "amount": 1072.7,
+      "category": "POS_SOFTWARE",
+      "drill": {
+       "key": "POS_SOFTWARE",
+       "source": "opex_invoiced"
+      },
+      "name": "POS Fees"
      },
      {
       "amount": 513.62,
@@ -13785,7 +14146,7 @@
       "name": "Other Business Expenses"
      },
      {
-      "amount": 147.49,
+      "amount": 271.24,
       "category": "KITCHEN_SUPPLIES",
       "drill": {
        "key": "KITCHEN_SUPPLIES",
@@ -13794,7 +14155,7 @@
       "name": "Kitchen Supplies"
      },
      {
-      "amount": 80.02,
+      "amount": 146.78,
       "category": "DR_SUPPLIES",
       "drill": {
        "key": "DR_SUPPLIES",
@@ -13803,15 +14164,15 @@
       "name": "Dining Room Supplies"
      }
     ],
-    "invoiced_total": 4517.19,
-    "total": 53938.08
+    "invoiced_total": 4382.7,
+    "total": 53068.86
    },
    "period": {
     "end": "2026-03-31",
     "start": "2026-03-01"
    },
-   "prime_cost": 68184.58,
-   "prime_cost_pct": 70.51,
+   "prime_cost": 70358.56,
+   "prime_cost_pct": 72.76,
    "revenue": {
     "contra": -7912.28,
     "gross_sales": 104616.0,

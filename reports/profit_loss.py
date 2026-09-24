@@ -754,6 +754,28 @@ def amortized_rows(conn, location: str, start: str, end: str) -> list[dict]:
     return out
 
 
+def _unbacked_billpay(conn, location: str, start: str, end: str) -> list[dict]:
+    """Bill Pay rows for this entity with no invoice attached, coded to a
+    non-labor Expense / Other Expense account, dated in range (cleared date,
+    else payment date). Mike, 2026-09-24: merging a statement line into such a
+    row had taken its cost out of the P&L entirely."""
+    ph = ",".join("?" * len(LABOR_ACCOUNT_NAMES))
+    return [dict(r) for r in conn.execute(
+        f"""SELECT v.id, COALESCE(v.cleared_date, v.payment_date) AS date, v.vendor AS detail,
+                   v.payment_ref AS reference, v.gl_status AS status, g.name AS gl_name,
+                   ROUND(v.payment_total, 2) AS amount
+            FROM vendor_payments v
+            JOIN gl_accounts g ON g.id = v.gl_account_id AND g.active = 1
+            WHERE v.location = ? AND COALESCE(v.cleared_date, v.payment_date) BETWEEN ? AND ?
+              AND (v.status IS NULL OR v.status NOT IN ('void', 'failed'))
+              AND g.account_type IN ('Expense', 'Other Expense') AND g.name NOT IN ({ph})
+              AND NOT EXISTS (SELECT 1 FROM vendor_payment_invoices vpi WHERE vpi.payment_id = v.id)
+              AND NOT EXISTS (SELECT 1 FROM ap_payment_invoices api
+                              WHERE api.payment_id = v.ap_payment_id AND v.ap_payment_id IS NOT NULL)
+            ORDER BY date, v.id""",
+        (location, start, end, *sorted(LABOR_ACCOUNT_NAMES)))]
+
+
 def operating_expenses(conn, location: str, start: str, end: str) -> dict:
     """Operating expense from two disjoint sources, kept visibly separate.
 
@@ -787,6 +809,12 @@ def operating_expenses(conn, location: str, start: str, end: str) -> dict:
         (location, start, end, *sorted(LABOR_ACCOUNT_NAMES)),
     ).fetchall()
     by_name = {r["gl_name"]: float(r["amount"] or 0) for r in banked_rows}
+    # Bill Pay rows with NO invoice behind them, coded to an expense account,
+    # are expense in their own right (KOD, Dennisport Village condo fees, the
+    # Dart League). Settlements (invoices attached) stay out: the invoice is
+    # the cost. Dated by when the bank cleared them, else the payment date.
+    for r in _unbacked_billpay(conn, location, start, end):
+        by_name[r["gl_name"]] = by_name.get(r["gl_name"], 0.0) + float(r["amount"])
     for x in amortized_rows(conn, location, start, end):
         if x["account_type"] in ("Expense", "Other Expense") and x["gl_name"] not in LABOR_ACCOUNT_NAMES:
             by_name[x["gl_name"]] = by_name.get(x["gl_name"], 0.0) + x["amount"]
@@ -1133,6 +1161,9 @@ def drill(conn, location: str, start: str, end: str,
         cols = ["date", "detail", "reference", "status", "amount"]
         if source == "opex_banked":
             rows = [dict(r) for r in rows] + [
+                {"date": x["date"], "detail": f"Bill Pay: {x['detail']}", "reference": x["reference"],
+                 "status": x["status"], "row_id": None, "amount": x["amount"]}
+                for x in _unbacked_billpay(conn, location, start, end) if x["gl_name"] == str(key)] + [
                 {"date": x["date"], "detail": x["detail"], "reference": x["source"],
                  "status": "amortized", "row_id": None, "amount": x["amount"]}
                 for x in amortized_rows(conn, location, start, end) if x["gl_name"] == str(key)]

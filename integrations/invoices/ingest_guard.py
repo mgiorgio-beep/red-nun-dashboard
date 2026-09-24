@@ -33,6 +33,9 @@ Rules (same vendor, case-insensitive; same location unless noted):
      gate) — on 90 days of data this holds exactly one invoice, a genuine
      Sprague OCR error ($24.68) that validation's best-of-pretax/posttax
      comparison had let through.
+  5. Single-entity vendor on the wrong entity (Mike, 2026-09-24): Fore & Aft
+     and Nickerson bill Chatham only, Barrows Dennis only
+     (integrations/vendors/vendor_entity.py).
 
 Tuning was validated against the last 90 days of confirmed invoices
 (401 invoices, all vendors, both locations): 0 false positives, and a
@@ -189,6 +192,21 @@ def check_invoice(conn, invoice):
                         f"under a different number — possible duplicate."
                     ),
                 })
+
+    # Rule 5 — a single-entity vendor filed on the other entity (Mike,
+    # 2026-09-24: Fore & Aft and Nickerson are Chatham's, Barrows is Dennis's).
+    from integrations.vendors.vendor_entity import owner_for_text
+    owned = owner_for_text(vendor)
+    if owned and location and owned[0] != location:
+        hits.append({
+            "rule": 5,
+            "existing_id": None,
+            "existing_number": None,
+            "reason": (
+                f"{vendor} bills belong to {owned[0].title()} only ({owned[2]}); "
+                f"this one is filed on {location.title()} — wrong entity."
+            ),
+        })
 
     # Rule 4 — egregious foot-check failure.
     if total > 0:

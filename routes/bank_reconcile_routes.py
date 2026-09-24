@@ -152,6 +152,15 @@ def resolve_import_gl(conn, tx: dict, signed: float,
             log.warning("Tip channel left for review: %s — %s",
                            desc.strip()[:70], tip_reason)
 
+    # Single-entity vendors (Fore & Aft, Nickerson = Chatham; Barrows =
+    # Dennis). On the other entity's bank the line is intercompany, never an
+    # expense — see integrations/vendors/vendor_entity.py.
+    if not name and not reason:
+        from integrations.vendors.vendor_entity import bank_account_name
+        name, why = bank_account_name(desc, acct_location, signed)
+        if name:
+            log.info("Single-entity vendor: %s -> %s (%s)", desc.strip()[:60], name, why)
+
     if not name and not reason:
         name, venmo_reason = classify_venmo(desc, signed)
         if name:

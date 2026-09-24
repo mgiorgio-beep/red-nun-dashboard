@@ -1960,11 +1960,13 @@ class TestProfitLossSnapshot:
 
     def test_dennis_march_cogs_and_food_cost(self, dennis):
         # Regenerated 2026-09-24 (Mike signed off): +2,453.99 F&B is the Dennis
-        # March US Foods invoices loaded 9/23 from the account export.
-        assert cents(dennis["cogs"]["fnb_subtotal"]) == cents(32219.92)
-        assert cents(dennis["cogs"]["non_fnb_subtotal"]) == cents(706.35)
-        assert cents(dennis["cogs"]["total"]) == cents(32926.27)
-        assert dennis["cogs"]["food_cost_pct"] == 33.32
+        # March US Foods invoices loaded 9/23 from the account export; the
+        # second regeneration adds PFG 729650 / 731144, which had no lines
+        # until they were pulled from the PFG portal (+2,173.98 COGS).
+        assert cents(dennis["cogs"]["fnb_subtotal"]) == cents(34032.56)
+        assert cents(dennis["cogs"]["non_fnb_subtotal"]) == cents(1067.69)
+        assert cents(dennis["cogs"]["total"]) == cents(35100.25)
+        assert dennis["cogs"]["food_cost_pct"] == 35.19
 
     def test_dennis_march_labor_and_prime(self, dennis):
         lab = dennis["labor"]

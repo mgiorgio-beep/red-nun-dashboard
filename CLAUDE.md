@@ -287,6 +287,15 @@ a new brief.
 - The matcher never pairs a book row the bank already cleared in another period
   (`cleared_elsewhere`); `_mark_cleared` keeps the first date unless `force=True`.
 - Zero-net payroll checks are not register rows. Direct Deposit rows never are.
+- Single-entity vendors (Mike, 2026-09-24; `integrations/vendors/vendor_entity.py`): Fore & Aft and
+  Nickerson are Chatham's only, Barrows is Dennis's only. Invoice intake holds one filed on the other
+  entity (ingest guard rule 5); on the other entity's bank a line is intercompany (loan account), never
+  an expense. The matchers never pair a payment with another entity's bank line.
+- The P&L counts a Bill Pay row with no invoice behind it, coded to an expense, as banked opex
+  (`_unbacked_billpay`) — merging a statement line into such a row used to drop its cost.
+- Dennis reuses check numbers (two check stocks), and a later statement's extraction overwrites
+  `web/static/check_images/acct2_check_<n>.png`. To see an older check, re-extract from that month's
+  PDF into a scratch dir (`extract_checks` with `CHECK_IMAGE_DIR` pointed elsewhere).
 - GL: machine codings are `gl_status='suggested'`; a rule exists only when Mike confirmed
   the coding; `needs_review` marks rows the classifier refused (Kickfin float candidates).
   Venmo is never tips (Bands; $350 = Trivia). PayPal is never ruled — the learner refuses.
