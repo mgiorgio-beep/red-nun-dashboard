@@ -1081,10 +1081,17 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
     # Bill pay (vendor_payments) — also include rows with NULL bank_account_id
     # for the Chatham account (catch-all per register_routes convention).
     acct = conn.execute(
-        "SELECT account_last4 FROM bank_accounts WHERE id = ?", (account_id,)
+        "SELECT account_last4, location FROM bank_accounts WHERE id = ?", (account_id,)
     ).fetchone()
     is_default = bool(acct and acct["account_last4"] == "5975")
+    bank_loc = acct["location"] if acct else None
 
+    # ENTITY GUARD (Mike, 2026-09-24): an uncleared payment is a candidate only
+    # on its own entity's account. job066 paired a Chatham KOD check with a
+    # Dennis Venmo line because the payment carried Dennis's bank id; an
+    # automatic matcher must never make a cross-entity pairing. A row already
+    # cleared on this account stays visible — that is a deliberate intercompany
+    # pairing a human made (a Dennis bill Chatham's bank paid).
     bp_clause = "(bank_account_id = ?" + (" OR bank_account_id IS NULL" if is_default else "") + ")"
     for r in conn.execute(
         f"""SELECT id, vendor, payment_date AS date, payment_total AS amount,
@@ -1093,8 +1100,9 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
             FROM vendor_payments
             WHERE payment_date >= ? AND payment_date <= ?
               AND (status IS NULL OR status NOT IN ('void', 'failed'))
-              AND {bp_clause}""",
-        (start, end, account_id),
+              AND {bp_clause}
+              AND (location IS NULL OR location = ? OR cleared = 1)""",
+        (start, end, account_id, bank_loc),
     ).fetchall():
         rows.append({
             "source": "bill_pay",
@@ -1126,8 +1134,9 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
                  AND (pc.voided IS NULL OR pc.voided = 0)
                  AND (pc.payment_method IS NULL OR pc.payment_method != 'Direct Deposit')
                  AND COALESCE(pc.net_pay, 0) <> 0
-                 AND pc.bank_account_id = ?""",
-            (start, end, account_id),
+                 AND pc.bank_account_id = ?
+                 AND (pc.location = ? OR pc.cleared = 1)""",
+            (start, end, account_id, bank_loc),
         ).fetchall():
             rows.append({
                 "source": "payroll",
@@ -1532,6 +1541,10 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who,
         match_bp, match_pr = False, True
     account_id = bank["id"]
     is_default = bank["account_last4"] == "5975"
+    bank_loc = bank.get("location") if isinstance(bank, dict) else None
+    if bank_loc is None:
+        r = conn.execute("SELECT location FROM bank_accounts WHERE id = ?", (account_id,)).fetchone()
+        bank_loc = r["location"] if r else None
 
     # 1. Statement-imported outflows in range. Only statement rows are
     #    candidates: a hand-entered manual row is not a duplicate of anything.
@@ -1570,8 +1583,9 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who,
                  AND (status IS NULL OR status NOT IN ('void', 'failed'))
                  AND COALESCE(cleared, 0) = 0
                  AND reconciliation_id IS NULL
-                 AND {bp_clause}""",
-            (wide_start, wide_end, account_id),
+                 AND {bp_clause}
+                 AND (location IS NULL OR location = ?)""",
+            (wide_start, wide_end, account_id, bank_loc),
         ).fetchall()
 
     pr_rows = []
@@ -1591,8 +1605,9 @@ def _dedupe_period(conn, bank, start, end, tol, match_bp, match_pr, commit, who,
                  AND COALESCE(pc.net_pay, 0) <> 0
                  AND COALESCE(pc.cleared, 0) = 0
                  AND pc.reconciliation_id IS NULL
-                 AND pc.bank_account_id = ?""",
-            (wide_start, wide_end, account_id),
+                 AND pc.bank_account_id = ?
+                 AND pc.location = ?""",
+            (wide_start, wide_end, account_id, bank_loc),
         ).fetchall()
 
     from collections import defaultdict
