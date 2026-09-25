@@ -274,7 +274,15 @@ a new brief.
   opening/bank balance, `_reconciliation_state()` (preview + close) and the `R` stamp on
   sign-off all use it. Outstanding at period end is cumulative (rows dated on or before
   period end not cleared by then); book = bank + outstanding. All 16 periods Jan–Aug 2026
-  tie; the register opening equals the statement beginning on every one.
+  tie; the register opening equals the statement beginning on every one. **All 16 are
+  signed off (2026-09-25), stored figures equal live.** Voiding or merging an item that
+  sits on a signed period's outstanding list changes that period — do stale-item cleanup
+  in the current period, or the page shows the older periods amber "Re-sign".
+- Bank Reconcile page (`web/static/bank_reconcile.html`): every figure comes from the
+  server preview (`_reconciliation_state`) — never recompute a delta client-side from
+  register rows (those are by book date; it showed false red deltas until 2026-09-25).
+  The outstanding roll-forward (`_outstanding_rollforward`) compares the prior period's
+  SIGNED list with live rows and flags voids/edits since the signature.
 - `POST /api/bank-reconcile/import-all {account_id}` imports every unimported statement in
   order with the continuity check (balance to the cent, contiguous dates; a break stops the
   run), one transaction per period, then check OCR, invariant audit and tie-out. The
