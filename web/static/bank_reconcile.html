@@ -107,6 +107,44 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .btn.warn { border-color: var(--amber); color: var(--amber); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+.signoff-bar {
+  display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  margin-top: 14px; padding: 14px 16px; border-radius: 10px;
+  border: 1px solid var(--border-focus); background: var(--bg);
+}
+.signoff-bar.ready { border-color: var(--green); background: var(--green-soft); }
+.signoff-bar.resign { border-color: var(--amber); background: var(--amber-soft); }
+.signoff-bar .msg { font-size: 13px; color: var(--text2); }
+.signoff-bar .msg b { color: var(--text); }
+.btn.big { padding: 13px 26px; font-size: 15px; border-radius: 10px; }
+.btn.primary.big:not(:disabled) { background: var(--green); color: #020617; }
+.btn.primary.big:hover:not(:disabled) { background: #16a34a; color: #020617; }
+.btn.warn.big:not(:disabled) { background: var(--amber); color: #020617; }
+
+.modal-bg { position: fixed; inset: 0; background: rgba(2,6,23,0.75); display: none;
+  align-items: flex-start; justify-content: center; z-index: 1000; overflow-y: auto; padding: 40px 16px; }
+.modal-bg.open { display: flex; }
+.modal { width: 100%; max-width: 640px; background: var(--bg-card); border: 1px solid var(--border-focus);
+  border-radius: 14px; padding: 20px; }
+.modal h3 { font-size: 16px; margin-bottom: 4px; }
+.modal .sub { font-size: 12px; color: var(--text3); margin-bottom: 14px; }
+.chk-line { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0;
+  border-bottom: 1px solid var(--border); font-size: 13px; }
+.chk-line .v { font-family: var(--mono); font-weight: 700; text-align: right; }
+.chk-line.ok .v { color: var(--green); }
+.chk-line.bad .v { color: var(--red); }
+.stale-box { margin-top: 14px; border: 1px solid var(--amber); background: var(--amber-soft);
+  border-radius: 10px; padding: 12px; }
+.stale-box .hd { color: var(--amber); font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+.stale-row { display: grid; grid-template-columns: 80px 1fr 90px 60px; gap: 8px; font-size: 12px;
+  font-family: var(--mono); padding: 3px 0; color: var(--text); }
+.stale-row .a, .stale-row .d { text-align: right; }
+.stale-row .d { color: var(--amber); }
+.modal .ack { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-size: 13px; color: var(--text2); cursor: pointer; }
+.modal .ack input { margin-top: 2px; width: 18px; height: 18px; }
+.modal .notes-box { width: 100%; margin-top: 12px; }
+.modal .btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
 .closed-banner {
   border: 1px solid var(--green); background: var(--green-soft);
   border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
@@ -134,6 +172,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   .tile .val { font-size: 15px; }
   .txrow { grid-template-columns: 20px 70px 1fr 80px 18px; padding: 7px 8px; font-size: 11px; }
   .notes-box { width: 100%; }
+  .signoff-bar .btn.big { width: 100%; }
+  .stale-row { grid-template-columns: 70px 1fr 80px 44px; font-size: 11px; }
 }
 </style>
 </head>
@@ -177,6 +217,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <h2>Reconciliation</h2>
       <div class="tiles" id="tiles-recon"></div>
       <div class="subtle" id="delta-hint" style="margin-top:10px"></div>
+      <div class="signoff-bar" id="signoff-bar">
+        <div class="msg" id="signoff-msg"></div>
+        <button class="btn primary big" id="btn-close" disabled>Sign off period</button>
+      </div>
     </div>
 
     <div class="section">
@@ -207,18 +251,25 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
         not errors. They're what makes book != bank on a period that otherwise ties. They will be recorded
         against this reconciliation on close, and if they carry forward long enough they'll flag as stale.
       </div>
-
-      <div class="actions">
-        <div class="left">
-          <textarea class="notes-box" id="notes" placeholder="Notes (optional) — anything unusual about this close"></textarea>
-        </div>
-        <div>
-          <button class="btn primary" id="btn-close" disabled>Sign off period</button>
-          <button class="btn warn"    id="btn-reopen" style="display:none">Re-open (recompute)</button>
-        </div>
-      </div>
     </div>
 
+  </div>
+
+  <!-- Sign-off confirmation: the review happens here, on the figures being attested to. -->
+  <div class="modal-bg" id="signoff-modal" onclick="if (event.target === this) closeSignoff()">
+    <div class="modal">
+      <h3 id="so-title"></h3>
+      <div class="sub">You are attesting to the figures below. Cleared rows in this period lock as R.</div>
+      <div id="so-checks"></div>
+      <div id="so-stale"></div>
+      <label class="ack" id="so-ack-wrap"><input type="checkbox" id="so-ack">
+        <span id="so-ack-text"></span></label>
+      <textarea class="notes-box" id="notes" placeholder="Notes (optional). Anything unusual about this close"></textarea>
+      <div class="btns">
+        <button class="btn" onclick="closeSignoff()">Cancel</button>
+        <button class="btn primary big" id="btn-confirm-close">Confirm sign-off</button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -521,8 +572,29 @@ function render() {
 
   // Close button state
   const closed = STATE.currentRec && STATE.currentRec.status === 'reconciled';
-  $('btn-close').disabled = !ties || closed;
-  $('btn-close').textContent = closed ? 'Already signed off' : (ties ? 'Sign off period' : `Off by ${fmt(deltaC/100)}`);
+  // A signed period whose live outstanding no longer matches what was signed
+  // (a stale item was voided or merged since) needs a fresh signature.
+  const changed = closed && cents(STATE.currentRec.outstanding_net) !== outstandingC;
+  const btn = $('btn-close'), bar = $('signoff-bar');
+  btn.className = 'btn big ' + (changed ? 'warn' : 'primary');
+  btn.disabled = !ties || (closed && !changed);
+  bar.className = 'signoff-bar' + (ties && !closed ? ' ready' : '') + (ties && changed ? ' resign' : '');
+  if (!ties) {
+    btn.textContent = `Off by ${fmt(deltaC/100)}`;
+    $('signoff-msg').innerHTML = 'Cleared rows must tie to the statement to the cent before this period can be signed.';
+  } else if (changed) {
+    btn.textContent = 'Re-sign period';
+    $('signoff-msg').innerHTML = `<b>Signed off, but the figures changed since.</b> Outstanding was `
+      + `${fmt(STATE.currentRec.outstanding_net)} at sign-off and is ${fmt(outstandingC/100)} now.`;
+  } else if (closed) {
+    btn.textContent = 'Signed off';
+    $('signoff-msg').innerHTML = `Signed off by <b>${esc(STATE.currentRec.closed_by || '')}</b>`
+      + `${STATE.currentRec.closed_at ? ' on ' + esc(STATE.currentRec.closed_at.slice(0, 10)) : ''}.`;
+  } else {
+    btn.textContent = 'Sign off period';
+    $('signoff-msg').innerHTML = `<b>Ties to the cent.</b> ${(p.outstanding_items || []).length} outstanding `
+      + `item${(p.outstanding_items || []).length === 1 ? '' : 's'} (${fmt(outstandingC/100)}) will be recorded and carried forward.`;
+  }
 }
 
 function renderTxRow(r) {
@@ -597,10 +669,55 @@ function warnR(source, id, recId) {
   }).catch(e => showErr('Force-untick error: ' + e));
 }
 
-$('btn-close').addEventListener('click', async () => {
+const STALE_DAYS = 90;
+
+function openSignoff() {
+  const up = STATE.currentUpload, p = STATE.preview;
+  if (!up || !p) return;
+  const items = p.outstanding_items || [];
+  const endC = cents(up.ending_balance), bankC = cents(p.bank_balance);
+  const tie = endC === bankC;
+  const resign = STATE.currentRec && STATE.currentRec.status === 'reconciled';
+  $('so-title').textContent = `${resign ? 'Re-sign' : 'Sign off'} ${up.period_start} to ${up.period_end}`;
+  const line = (label, val, cls) =>
+    `<div class="chk-line ${cls || ''}"><span>${label}</span><span class="v">${val}</span></div>`;
+  $('so-checks').innerHTML =
+    line('Statement ending balance', fmt(up.ending_balance))
+    + line('Bank balance from cleared rows', fmt(p.bank_balance))
+    + line('Difference', tie ? '0.00 ✓' : fmt((bankC - endC) / 100), tie ? 'ok' : 'bad')
+    + line('Book balance', fmt(p.book_balance))
+    + line(`Outstanding (${items.length} item${items.length === 1 ? '' : 's'})`, fmt(p.outstanding_net))
+    + (resign ? line('Outstanding when last signed', fmt(STATE.currentRec.outstanding_net)) : '');
+  // Age is measured at period end, not today: a signature speaks for the period.
+  const endD = new Date(up.period_end + 'T00:00:00');
+  const aged = items.map(it => ({...it,
+      age: Math.round((endD - new Date(it.entry_date + 'T00:00:00')) / 86400000)}))
+    .filter(it => it.age > STALE_DAYS).sort((a, b) => b.age - a.age);
+  const staleTotal = aged.reduce((s, it) => s + cents(it.amount), 0);
+  $('so-stale').innerHTML = aged.length ? `
+    <div class="stale-box">
+      <div class="hd">${aged.length} item${aged.length === 1 ? '' : 's'} older than ${STALE_DAYS} days (${fmt(staleTotal / 100)})</div>
+      ${aged.map(it => `<div class="stale-row"><span>${esc(it.entry_date)}</span><span>${esc(it.payee || '')}</span>
+        <span class="a">${fmt(it.amount)}</span><span class="d">${it.age}d</span></div>`).join('')}
+    </div>` : '';
+  $('so-ack-wrap').style.display = aged.length ? 'flex' : 'none';
+  $('so-ack-text').textContent = `I've seen the ${aged.length} stale item${aged.length === 1 ? '' : 's'} above. `
+    + 'They stay outstanding and carry into the next period.';
+  $('so-ack').checked = false;
+  $('btn-confirm-close').disabled = !tie || aged.length > 0;
+  $('so-ack').onchange = () => { $('btn-confirm-close').disabled = !tie || !$('so-ack').checked; };
+  $('notes').value = (resign && STATE.currentRec.notes) || '';
+  $('signoff-modal').classList.add('open');
+}
+
+function closeSignoff() { $('signoff-modal').classList.remove('open'); }
+
+$('btn-close').addEventListener('click', openSignoff);
+
+$('btn-confirm-close').addEventListener('click', async () => {
   const up = STATE.currentUpload;
   if (!up) return;
-  if (!confirm(`Sign off ${up.period_start} to ${up.period_end}? All cleared rows in this period will be locked into R.`)) return;
+  $('btn-confirm-close').disabled = true;
   try {
     const j = await api('/api/bank-reconcile/reconciliation/close', {
       method: 'POST',
@@ -614,9 +731,10 @@ $('btn-close').addEventListener('click', async () => {
     for (const r of (recs.reconciliations || [])) STATE.recs[r.period_start + ':' + r.period_end] = r;
     STATE.currentRec = periodRec(up);
     renderPeriods();
+    closeSignoff();
     await refresh();
     alert(`Signed off. rec #${j.reconciliation_id}, ${j.stamped_reconciled || 0} rows locked as R, ${j.outstanding_count || 0} outstanding items recorded.`);
-  } catch (e) { showErr('Close failed: ' + e.message); }
+  } catch (e) { closeSignoff(); showErr('Close failed: ' + e.message); }
 });
 
 loadAccounts();
