@@ -431,20 +431,17 @@ function render() {
     <div class="tile"><div class="lbl">Ending balance</div><div class="val">${fmt(up.ending_balance)}</div><div class="subtle">upload #${up.id}</div></div>
   `;
 
-  // Reconciliation figures — recompute delta client-side so ticking is live
-  // without a round-trip. The server verifies again on close.
+  // Reconciliation figures come from the server's preview, the same
+  // _reconciliation_state() that close checks. Do NOT recompute them here
+  // from the register rows: those are the period's rows by BOOK date with a
+  // cleared flag, and the tie-out is by CLEARED date. A check dated 2/27 that
+  // the bank paid 3/02 is March's money. The old client-side sum showed a red
+  // delta on periods that tie to the cent (Chatham Feb +1,838.36, 2026-09-25).
   const rows = r.rows || [];
-  let clrIn = 0, clrOut = 0, allIn = 0, allOut = 0;
-  for (const row of rows) {
-    allIn += cents(row.inflow); allOut += cents(row.outflow);
-    if (row.cleared) { clrIn += cents(row.inflow); clrOut += cents(row.outflow); }
-  }
-  const beginC = cents(up.beginning_balance);
-  const endC   = cents(up.ending_balance);
-  const bankC  = beginC + clrIn - clrOut;
-  const bookC  = beginC + allIn - allOut;
-  const outstandingC = bookC - bankC;
-  const deltaC = bankC - endC;
+  const bankC  = cents(p.bank_balance);
+  const bookC  = cents(p.book_balance);
+  const outstandingC = cents(p.outstanding_net);
+  const deltaC = cents(p.delta);
   const ties = deltaC === 0;
 
   $('tiles-recon').innerHTML = `
@@ -509,7 +506,15 @@ function render() {
   $('cnt-in').textContent  = inflows.length + ' items';
 
   // Outstanding
-  const outstanding = rows.filter(x => !x.cleared);
+  // The server's itemized list: every row dated on or before period end the
+  // bank had not cleared by then, including items carried in from earlier
+  // periods. It sums to the Outstanding tile.
+  const outstanding = (p.outstanding_items || []).map(it => ({
+    source: it.source, source_id: it.source_id, date: it.entry_date,
+    payee: it.payee, ref: it.ref || it.check_number || '',
+    outflow: it.amount < 0 ? -it.amount : 0, inflow: it.amount > 0 ? it.amount : 0,
+    cleared: 0, recon_status: '',
+  }));
   $('list-outstanding').innerHTML = outstanding.length
     ? outstanding.map(renderTxRow).join('')
     : '<div class="empty-list">Nothing outstanding — the period ties on all rows.</div>';
@@ -548,15 +553,9 @@ async function toggle(source, id, next) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({source, id, cleared: next === true || next === 'true'}),
     });
-    // Optimistic update: flip the row locally, re-render.
-    for (const row of (STATE.register.rows || [])) {
-      if (row.source === source && row.source_id === id) {
-        row.cleared = (next === true || next === 'true') ? 1 : 0;
-        row.recon_status = row.cleared ? 'C' : '';
-        break;
-      }
-    }
-    render();
+    // Re-fetch: the tiles are the server's cleared-date figures, which a
+    // local flip of one row's flag cannot reproduce.
+    await refresh();
   } catch (e) { showErr('Could not update row: ' + e.message); }
 }
 
