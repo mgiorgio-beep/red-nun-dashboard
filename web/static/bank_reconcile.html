@@ -149,7 +149,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .stale-row { display: grid; grid-template-columns: 80px 1fr 90px 60px; gap: 8px; font-size: 12px;
   font-family: var(--mono); padding: 3px 0; color: var(--text); }
 .stale-row .a, .stale-row .d { text-align: right; }
-.stale-row .d { color: var(--amber); }
+.stale-row .d { color: var(--text2); }
+.stale-row.old .d, .stale-row.old span { color: var(--amber); font-weight: 700; }
+.stale-box.calm { border-color: var(--border); background: var(--bg); }
+.stale-box.calm .hd { color: var(--text); }
+.stale-box { max-height: 340px; overflow-y: auto; }
 .modal .ack { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-size: 13px; color: var(--text2); cursor: pointer; }
 .modal .ack input { margin-top: 2px; width: 18px; height: 18px; }
 .modal .notes-box { width: 100%; margin-top: 12px; }
@@ -785,10 +789,17 @@ function openSignoff() {
       age: Math.round((endD - new Date(it.entry_date + 'T00:00:00')) / 86400000)}))
     .filter(it => it.age > STALE_DAYS).sort((a, b) => b.age - a.age);
   const staleTotal = aged.reduce((s, it) => s + cents(it.amount), 0);
-  $('so-stale').innerHTML = aged.length ? `
-    <div class="stale-box">
-      <div class="hd">${aged.length} item${aged.length === 1 ? '' : 's'} older than ${STALE_DAYS} days (${fmt(staleTotal / 100)})</div>
-      ${aged.map(it => `<div class="stale-row"><span>${esc(it.entry_date)}</span><span>${esc(it.payee || '')}</span>
+  // Every outstanding item is listed: a signature covers all of them. Items
+  // past STALE_DAYS are flagged and need the acknowledgement below.
+  const all = items.map(it => ({...it,
+      age: Math.round((endD - new Date(it.entry_date + 'T00:00:00')) / 86400000)}))
+    .sort((a, b) => b.age - a.age);
+  $('so-stale').innerHTML = items.length ? `
+    <div class="${aged.length ? 'stale-box' : 'stale-box calm'}">
+      <div class="hd">${aged.length
+        ? `${aged.length} of ${items.length} outstanding item${items.length === 1 ? '' : 's'} older than ${STALE_DAYS} days (${fmt(staleTotal / 100)})`
+        : `${items.length} outstanding item${items.length === 1 ? '' : 's'}, none older than ${STALE_DAYS} days`}</div>
+      ${all.map(it => `<div class="stale-row${it.age > STALE_DAYS ? ' old' : ''}"><span>${esc(it.entry_date)}</span><span>${esc(it.payee || '')}</span>
         <span class="a">${fmt(it.amount)}</span><span class="d">${it.age}d</span></div>`).join('')}
     </div>` : '';
   $('so-ack-wrap').style.display = aged.length ? 'flex' : 'none';
