@@ -116,10 +116,20 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .signoff-bar.resign { border-color: var(--amber); background: var(--amber-soft); }
 .signoff-bar .msg { font-size: 13px; color: var(--text2); }
 .signoff-bar .msg b { color: var(--text); }
-.btn.big { padding: 13px 26px; font-size: 15px; border-radius: 10px; }
-.btn.primary.big:not(:disabled) { background: var(--green); color: #020617; }
-.btn.primary.big:hover:not(:disabled) { background: #16a34a; color: #020617; }
-.btn.warn.big:not(:disabled) { background: var(--amber); color: #020617; }
+/* sidebar.css forces every .btn to small white with !important; the sign-off
+   buttons are the page's one decision, so they out-rank it by id/class. */
+#btn-close.big, #btn-confirm-close.big {
+  padding: 13px 28px !important; font-size: 15px !important; font-weight: 700 !important;
+  border-radius: 10px !important; border: none !important; min-width: 180px;
+}
+#btn-close.primary.big:not(:disabled), #btn-confirm-close.primary.big:not(:disabled) {
+  background: #16a34a !important; color: #fff !important; box-shadow: 0 2px 8px rgba(22,163,74,0.3) !important;
+}
+#btn-close.primary.big:hover:not(:disabled), #btn-confirm-close.primary.big:hover:not(:disabled) { background: #15803d !important; }
+#btn-close.warn.big:not(:disabled) { background: #d97706 !important; color: #fff !important; }
+#btn-close.big:disabled, #btn-confirm-close.big:disabled {
+  background: #e5e7eb !important; color: #6b7280 !important; opacity: 1 !important;
+}
 
 .modal-bg { position: fixed; inset: 0; background: rgba(2,6,23,0.75); display: none;
   align-items: flex-start; justify-content: center; z-index: 1000; overflow-y: auto; padding: 40px 16px; }
@@ -149,8 +159,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .rf-eq .tile .op { font-family: var(--mono); color: var(--text3); margin-right: 4px; }
 .rf-block { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .rf-block > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; justify-content: space-between;
-  gap: 10px; font-size: 13px; font-weight: 700; color: var(--text); background: var(--bg); }
+  gap: 10px; font-size: 13px; font-weight: 700; color: var(--text); background: var(--bg); text-align: left; }
 .rf-block > summary::-webkit-details-marker { display: none; }
+.rf-block > summary > span:first-child { flex: 1; text-align: left; }
 .rf-block > summary .n { font-family: var(--mono); color: var(--text2); font-weight: 600; }
 .rf-block > summary::before { content: '▸'; color: var(--text3); margin-right: 6px; }
 .rf-block[open] > summary::before { content: '▾'; }
@@ -626,7 +637,7 @@ function rfBlock(title, items, net, rowFn, opts) {
   opts = opts || {};
   const body = items.length ? items.map(rowFn).join('')
     : `<div class="rf-empty">${opts.empty || 'None.'}</div>`;
-  return `<details class="rf-block ${opts.cls || ''}" ${opts.open ? 'open' : ''}>
+  return `<details class="rf-block ${opts.cls || ''}" ${opts.open === false ? '' : 'open'}>
     <summary><span>${title}</span><span class="n">${items.length} · ${fmt(net)}</span></summary>
     ${body}</details>`;
 }
@@ -671,7 +682,7 @@ function renderRollforward(rf, up) {
     if (!g.count) continue;
     out += rfBlock(`All outstanding, ${labels[b]}`, g.items, g.net,
       it => rfRow(it, `${it.age_days}d${it.carried ? ' · carried' : ''}`, b === '90+' ? 'amber' : ''),
-      {cls: b === '90+' ? 'warn' : '', open: b === '90+'});
+      {cls: b === '90+' ? 'warn' : ''});
   }
   return out;
 }
