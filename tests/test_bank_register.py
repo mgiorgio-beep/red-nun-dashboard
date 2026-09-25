@@ -334,6 +334,17 @@ class TestClearedDateSemantics:
                 f"account {u['bank_account_id']} {u['period_start']}: register bank "
                 f"{s['bank_balance']} vs statement {u['ending_balance']}")
 
+    def test_outstanding_rolls_forward(self, client, uploads):
+        """prior outstanding - cleared from prior + new = outstanding now, and
+        the ending figure is the same number the Outstanding tile shows."""
+        for u in uploads:
+            p = preview(client, u)
+            rf = p["rollforward"]
+            assert rf["closes"], f"{u['bank_account_id']} {u['period_start']}: roll-forward does not close"
+            assert cents(rf["outstanding_net"]) == cents(p["outstanding_net"])
+            aged = sum(cents(g["net"]) for g in rf["aging"].values())
+            assert aged == cents(p["outstanding_net"]), f"{u['period_start']}: aging buckets {aged}"
+
     def test_outstanding_is_itemized_and_the_identity_holds(self, client, uploads):
         for u in uploads:
             p = preview(client, u)

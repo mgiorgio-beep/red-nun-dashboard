@@ -145,6 +145,29 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .modal .notes-box { width: 100%; margin-top: 12px; }
 .modal .btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 
+.rf-eq { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.rf-eq .tile .op { font-family: var(--mono); color: var(--text3); margin-right: 4px; }
+.rf-block { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.rf-block > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; justify-content: space-between;
+  gap: 10px; font-size: 13px; font-weight: 700; color: var(--text); background: var(--bg); }
+.rf-block > summary::-webkit-details-marker { display: none; }
+.rf-block > summary .n { font-family: var(--mono); color: var(--text2); font-weight: 600; }
+.rf-block > summary::before { content: '▸'; color: var(--text3); margin-right: 6px; }
+.rf-block[open] > summary::before { content: '▾'; }
+.rf-block.warn { border-color: var(--amber); }
+.rf-block.warn > summary { background: var(--amber-soft); color: var(--amber); }
+.rf-block.bad { border-color: var(--red); }
+.rf-block.bad > summary { background: var(--red-soft); color: var(--red); }
+.rf-row { display: grid; grid-template-columns: 84px 1fr 100px 150px; gap: 10px; padding: 6px 14px;
+  font-size: 12px; border-top: 1px solid var(--border); align-items: center; }
+.rf-row .mono { font-family: var(--mono); }
+.rf-row .amt { font-family: var(--mono); text-align: right; }
+.rf-row .note { font-size: 11px; color: var(--text2); text-align: right; }
+.rf-row .note.amber { color: var(--amber); }
+.rf-row .note.red { color: var(--red); }
+.rf-row .src { font-size: 10px; color: var(--text3); text-transform: uppercase; margin-left: 6px; }
+.rf-empty { padding: 8px 14px; font-size: 12px; color: var(--text3); font-style: italic; border-top: 1px solid var(--border); }
+
 .closed-banner {
   border: 1px solid var(--green); background: var(--green-soft);
   border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
@@ -173,6 +196,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   .txrow { grid-template-columns: 20px 70px 1fr 80px 18px; padding: 7px 8px; font-size: 11px; }
   .notes-box { width: 100%; }
   .signoff-bar .btn.big { width: 100%; }
+  .rf-eq { grid-template-columns: 1fr 1fr; }
+  .rf-row { grid-template-columns: 64px 1fr 80px; }
+  .rf-row .note { grid-column: 2 / 4; text-align: left; }
   .stale-row { grid-template-columns: 70px 1fr 80px 44px; font-size: 11px; }
 }
 </style>
@@ -244,12 +270,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     </div>
 
     <div class="section">
-      <h2>Outstanding at close — itemized</h2>
-      <div class="txlist" id="list-outstanding"></div>
-      <div class="subtle" style="margin-top:8px">
-        These are the checks written but not yet cashed, and deposits in transit — timing differences,
-        not errors. They're what makes book != bank on a period that otherwise ties. They will be recorded
-        against this reconciliation on close, and if they carry forward long enough they'll flag as stale.
+      <h2>Outstanding items — roll-forward</h2>
+      <div id="rf-slot"></div>
+      <div class="subtle" style="margin-top:10px">
+        Checks written but not yet cashed, and deposits in transit: timing differences, not errors.
+        They are recorded against this reconciliation on sign-off and carried forward until the bank clears them.
       </div>
     </div>
 
@@ -557,18 +582,7 @@ function render() {
   $('cnt-in').textContent  = inflows.length + ' items';
 
   // Outstanding
-  // The server's itemized list: every row dated on or before period end the
-  // bank had not cleared by then, including items carried in from earlier
-  // periods. It sums to the Outstanding tile.
-  const outstanding = (p.outstanding_items || []).map(it => ({
-    source: it.source, source_id: it.source_id, date: it.entry_date,
-    payee: it.payee, ref: it.ref || it.check_number || '',
-    outflow: it.amount < 0 ? -it.amount : 0, inflow: it.amount > 0 ? it.amount : 0,
-    cleared: 0, recon_status: '',
-  }));
-  $('list-outstanding').innerHTML = outstanding.length
-    ? outstanding.map(renderTxRow).join('')
-    : '<div class="empty-list">Nothing outstanding — the period ties on all rows.</div>';
+  $('rf-slot').innerHTML = renderRollforward(p.rollforward, up);
 
   // Close button state
   const closed = STATE.currentRec && STATE.currentRec.status === 'reconciled';
@@ -595,6 +609,71 @@ function render() {
     $('signoff-msg').innerHTML = `<b>Ties to the cent.</b> ${(p.outstanding_items || []).length} outstanding `
       + `item${(p.outstanding_items || []).length === 1 ? '' : 's'} (${fmt(outstandingC/100)}) will be recorded and carried forward.`;
   }
+}
+
+const SRC_LABEL = {bill_pay: 'bill pay', payroll: 'payroll', deposit: 'deposit', manual: 'bank'};
+
+function rfRow(it, note, noteCls) {
+  return `<div class="rf-row">
+    <span class="mono">${esc(it.entry_date || '')}</span>
+    <span>${esc(it.payee || '')}<span class="src">${esc(SRC_LABEL[it.source] || it.source)}</span></span>
+    <span class="amt">${fmt(it.amount)}</span>
+    <span class="note ${noteCls || ''}">${note || ''}</span>
+  </div>`;
+}
+
+function rfBlock(title, items, net, rowFn, opts) {
+  opts = opts || {};
+  const body = items.length ? items.map(rowFn).join('')
+    : `<div class="rf-empty">${opts.empty || 'None.'}</div>`;
+  return `<details class="rf-block ${opts.cls || ''}" ${opts.open ? 'open' : ''}>
+    <summary><span>${title}</span><span class="n">${items.length} · ${fmt(net)}</span></summary>
+    ${body}</details>`;
+}
+
+// The outstanding-items roll-forward: last period's list, what cleared from
+// it, what is new, what is still hanging by age. The equation closes by
+// construction; the finding is what changed since the prior signature.
+function renderRollforward(rf, up) {
+  if (!rf) return '<div class="empty-list">Roll-forward unavailable.</div>';
+  const eq = `<div class="rf-eq">
+    <div class="tile"><div class="lbl">Outstanding ${esc(rf.prior_period_end)}</div>
+      <div class="val">${fmt(rf.prior_outstanding_net)}</div><div class="subtle">${rf.prior_outstanding_count} items, last period</div></div>
+    <div class="tile"><div class="lbl">Cleared this period</div>
+      <div class="val"><span class="op">−</span>${fmt(rf.cleared_from_prior_net)}</div><div class="subtle">${rf.cleared_from_prior.length} of last period's items</div></div>
+    <div class="tile"><div class="lbl">New this period</div>
+      <div class="val"><span class="op">+</span>${fmt(rf.new_net)}</div><div class="subtle">${rf.new_items.length} items not yet cleared</div></div>
+    <div class="tile delta ${rf.closes ? 'ties' : 'off'}"><div class="lbl">Outstanding ${esc(up.period_end)}</div>
+      <div class="val"><span class="op">=</span>${fmt(rf.outstanding_net)}</div><div class="subtle">${rf.closes ? '✓ rolls forward' : 'does not roll forward'}</div></div>
+  </div>`;
+
+  let out = eq;
+  const ch = rf.changed_since_signoff || [];
+  if (rf.prior_signoff && ch.length) {
+    const why = x => x.kind === 'removed' ? `${esc(x.why)} since sign-off (was ${fmt(x.signed_amount)})`
+      : x.kind === 'added' ? 'not on the signed list' : `signed at ${fmt(x.signed_amount)}`;
+    out += rfBlock(`Changed since ${esc(rf.prior_signoff.period_end)} was signed off. Re-sign that period`,
+      ch, rf.changed_since_signoff_net,
+      x => rfRow({...x, amount: x.kind === 'removed' ? x.signed_amount : x.amount}, why(x), 'red'),
+      {cls: 'bad', open: true});
+  }
+  out += rfBlock(`Cleared this period from last period's list`, rf.cleared_from_prior, rf.cleared_from_prior_net,
+    it => rfRow(it, `cleared ${esc(it.cleared_date)}${it.days_to_clear != null ? ' · ' + it.days_to_clear + 'd' : ''}`,
+                it.days_to_clear > 30 ? 'amber' : ''),
+    {empty: 'Nothing from last period cleared.'});
+  out += rfBlock('New this period, not yet cleared', rf.new_items, rf.new_net,
+    it => rfRow(it, `${it.age_days}d at period end`), {empty: 'Everything written this period cleared.'});
+
+  const ag = rf.aging || {};
+  const labels = {'0-30': '0–30 days', '31-60': '31–60 days', '61-90': '61–90 days', '90+': 'Over 90 days: stale, needs a decision'};
+  for (const b of ['90+', '61-90', '31-60', '0-30']) {
+    const g = ag[b] || {count: 0, net: 0, items: []};
+    if (!g.count) continue;
+    out += rfBlock(`All outstanding, ${labels[b]}`, g.items, g.net,
+      it => rfRow(it, `${it.age_days}d${it.carried ? ' · carried' : ''}`, b === '90+' ? 'amber' : ''),
+      {cls: b === '90+' ? 'warn' : '', open: b === '90+'});
+  }
+  return out;
 }
 
 function renderTxRow(r) {

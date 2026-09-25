@@ -1959,6 +1959,130 @@ def _cleared_flow_by_date(conn, acct_id, start, end):
     return _c(inflow), _c(outflow)
 
 
+_ROW_TABLES = {
+    "bill_pay": ("vendor_payments", "payment_total"),
+    "payroll": ("payroll_checks", "net_pay"),
+    "deposit": ("bank_deposits", "amount"),
+    "manual": ("manual_bank_entries", "amount"),
+}
+
+
+def _outstanding_rollforward(conn, acct_id, start, end, all_rows, outstanding,
+                             item, signed):
+    """The outstanding-items roll-forward an accountant reads first:
+
+        outstanding at prior period end
+      - prior items the bank cleared in this period
+      + new items dated in this period, not cleared by its end
+      = outstanding at this period end
+
+    All four are computed live from the same rows, so the equation always
+    closes. The finding is `changed_since_signoff`: last period's SIGNED
+    list compared with what that list looks like today. An item on the
+    signed list that is no longer outstanding and did not clear in this
+    period was voided, merged or edited after the signature. An item that
+    is outstanding at prior end today but was not on the signed list was
+    added or re-dated after it. Either one means the prior signature no
+    longer describes the books.
+    """
+    from routes.register_routes import row_cleared_by
+    day_before = (date.fromisoformat(start) - timedelta(days=1)).isoformat()
+    end_date = date.fromisoformat(end)
+
+    prior_open = [r for r in all_rows
+                  if (r["date"] or "") < start and not row_cleared_by(r, day_before)]
+    cleared_prior = [r for r in prior_open if row_cleared_by(r, end)]
+    carried = [r for r in prior_open if not row_cleared_by(r, end)]
+    new = [r for r in outstanding if (r["date"] or "") >= start]
+
+    def cleared_item(r):
+        it = item(r)
+        cd = r.get("cleared_date") or r["date"]
+        it["cleared_date"] = cd
+        try:
+            it["days_to_clear"] = (date.fromisoformat(cd) - date.fromisoformat(r["date"])).days
+        except (TypeError, ValueError):
+            it["days_to_clear"] = None
+        return it
+
+    def age_bucket(r):
+        try:
+            age = (end_date - date.fromisoformat(r["date"])).days
+        except (TypeError, ValueError):
+            return "90+"
+        return "0-30" if age <= 30 else "31-60" if age <= 60 else "61-90" if age <= 90 else "90+"
+
+    buckets = {b: [] for b in ("0-30", "31-60", "61-90", "90+")}
+    for r in sorted(outstanding, key=lambda r: (r["date"] or "", r["source"], r["source_id"])):
+        buckets[age_bucket(r)].append(item(r))
+
+    # Last period's signed list, if it was signed.
+    prior_rec = conn.execute(
+        "SELECT id, period_start, period_end, closed_by, closed_at, outstanding_net "
+        "FROM bank_reconciliations WHERE bank_account_id = ? AND period_end = ? "
+        "AND status = 'reconciled'", (acct_id, day_before)).fetchone()
+    changed = []
+    if prior_rec:
+        live = {(r["source"], r["source_id"]): r for r in prior_open}
+        signed_items = conn.execute(
+            "SELECT source, source_id, entry_date, payee, amount FROM bank_reconciliation_items "
+            "WHERE reconciliation_id = ?", (prior_rec["id"],)).fetchall()
+        signed_keys = set()
+        for s in signed_items:
+            key = (s["source"], s["source_id"])
+            signed_keys.add(key)
+            r = live.get(key)
+            if r is not None:
+                now = round(signed(r) / 100, 2)
+                if round(s["amount"] or 0, 2) != now:
+                    changed.append({"kind": "amount_changed", "source": key[0], "source_id": key[1],
+                                    "entry_date": s["entry_date"], "payee": s["payee"],
+                                    "signed_amount": s["amount"], "amount": now})
+                continue
+            # Not outstanding at prior end any more. Find out why.
+            tbl, amt_col = _ROW_TABLES.get(key[0], (None, None))
+            row = conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (key[1],)).fetchone() if tbl else None
+            if row is None:
+                why = "deleted"
+            elif "status" in row.keys() and row["status"] == "void":
+                why = "voided"
+            elif row["cleared_date"] and row["cleared_date"] <= day_before:
+                why = f"marked cleared {row['cleared_date']}, inside the signed period"
+            else:
+                why = "no longer on the register"
+            changed.append({"kind": "removed", "why": why, "source": key[0], "source_id": key[1],
+                            "entry_date": s["entry_date"], "payee": s["payee"],
+                            "signed_amount": s["amount"], "amount": 0.0})
+        for key, r in live.items():
+            if key not in signed_keys:
+                it = item(r)
+                changed.append({"kind": "added", "source": key[0], "source_id": key[1],
+                                "entry_date": r["date"], "payee": r.get("payee"),
+                                "signed_amount": 0.0, "amount": it["amount"]})
+
+    c = lambda rows: sum(signed(r) for r in rows)
+    return {
+        "prior_period_end": day_before,
+        "prior_outstanding_net": round(c(prior_open) / 100, 2),
+        "prior_outstanding_count": len(prior_open),
+        "cleared_from_prior": [cleared_item(r) for r in
+                               sorted(cleared_prior, key=lambda r: (r.get("cleared_date") or "", r["date"] or ""))],
+        "cleared_from_prior_net": round(c(cleared_prior) / 100, 2),
+        "new_items": [item(r) for r in sorted(new, key=lambda r: (r["date"] or "", r["source"], r["source_id"]))],
+        "new_net": round(c(new) / 100, 2),
+        "carried_count": len(carried),
+        "carried_net": round(c(carried) / 100, 2),
+        "outstanding_net": round(c(outstanding) / 100, 2),
+        "closes": c(prior_open) - c(cleared_prior) + c(new) == c(outstanding),
+        "aging": {b: {"count": len(v), "net": round(sum(i["amount"] for i in v), 2), "items": v}
+                  for b, v in buckets.items()},
+        "prior_signoff": dict(prior_rec) if prior_rec else None,
+        "changed_since_signoff": changed,
+        "changed_since_signoff_net": round(sum((x["amount"] or 0) - (x["signed_amount"] or 0)
+                                               for x in changed), 2),
+    }
+
+
 def _reconciliation_state(conn, upload):
     """Compute the closing figures + the outstanding items for one statement
     period, WITHOUT writing anything. Shared by preview, close and import-all.
@@ -2074,6 +2198,8 @@ def _reconciliation_state(conn, upload):
         }
 
     items = [item(r) for r in sorted(outstanding, key=lambda r: (r["date"] or "", r["source"], r["source_id"]))]
+    rollforward = _outstanding_rollforward(conn, acct_id, start, end, all_rows,
+                                           outstanding, item, signed)
 
     return {
         "bank_account_id": acct_id,
@@ -2089,6 +2215,7 @@ def _reconciliation_state(conn, upload):
         "delta": round(delta_c / 100, 2),
         "ties": delta_c == 0,
         "outstanding_items": items,
+        "rollforward": rollforward,
         "identity_holds": identity_holds,
         "book_balance_by_date": round(book_by_date_c / 100, 2),
         "off_period_cleared": {
