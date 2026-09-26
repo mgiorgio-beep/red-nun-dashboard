@@ -230,12 +230,28 @@ def _sync_sales_categories(location: str, client=None):
     return {}
 
 
-def _get_declared_cash_tips(location: str, entry_date: str, client=None) -> float:
-    """Get employee-declared cash tips from Toast time entries for a business date."""
+_TOAST_CLIENT = None
+
+
+def _toast_client():
+    """One Toast client per process. A fresh client per call logs in every time,
+    and a rebuild of many days trips Toast's login rate limit (429)."""
+    global _TOAST_CLIENT
+    if _TOAST_CLIENT is None:
+        from integrations.toast.toast_client import ToastAPIClient
+        _TOAST_CLIENT = ToastAPIClient()
+    return _TOAST_CLIENT
+
+
+def _get_declared_cash_tips(location: str, entry_date: str, client=None):
+    """Get employee-declared cash tips from Toast time entries for a business date.
+
+    Returns None when Toast could not be read. The caller must not treat that as
+    zero: an entry built on a failed read balances but silently drops the cash
+    tips, and used to be marked ready (2026-09-26, 429s on a bulk rebuild)."""
     try:
         if client is None:
-            from integrations.toast.toast_client import ToastAPIClient
-            client = ToastAPIClient()
+            client = _toast_client()
         import requests
         from datetime import datetime, timedelta
         token = client._get_token()
@@ -252,9 +268,11 @@ def _get_declared_cash_tips(location: str, entry_date: str, client=None) -> floa
         if r.status_code == 200:
             entries = r.json()
             return round(sum(float(e.get("declaredCashTips", 0) or 0) for e in entries), 2)
+        logger.warning(f"Could not fetch declared cash tips: HTTP {r.status_code}")
     except Exception as e:
         logger.warning(f"Could not fetch declared cash tips: {e}")
-    return 0.0
+    return None
+
 
 def build_journal_entry(location: str, entry_date: str) -> dict:
     """
@@ -379,6 +397,9 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
 
     # Declared cash tips from Toast time entries (employees declare during shift review)
     declared_cash_tips = _get_declared_cash_tips(location, entry_date)
+    cash_tips_unread = declared_cash_tips is None
+    if cash_tips_unread:
+        declared_cash_tips = 0.0
     tips = round(cc_tips + declared_cash_tips, 2)
 
     # Tenders: full CC charge (base + tip); cash gets declared cash tips added
@@ -513,7 +534,7 @@ def build_journal_entry(location: str, entry_date: str) -> dict:
     balanced = abs(total_debits - total_credits) < 0.005
 
     any_unmapped = any(not li["mapped"] for li in line_items)
-    status = "needs_attention" if (any_unmapped or not balanced) else "ready"
+    status = "needs_attention" if (any_unmapped or not balanced or cash_tips_unread) else "ready"
 
     return {
         "entry_date": entry_date,

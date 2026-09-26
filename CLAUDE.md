@@ -249,11 +249,18 @@ Pattern:
     line only: Dr Tip Bank / Cr Tip Wages 7,799.61); its bank credits ARE Dennis's
     1/09 bank side in QBO, so the 1/09 impound and checks #9647–9653 must never
     be pushed again.
-  - **Every write to Red Buoy's (Chatham's) QBO is blocked in code**
-    (`integrations/quickbooks/push_guard.py`, `CHATHAM_QBO_WRITES_BLOCKED`). 197
-    Chatham gl_accounts carried QBO ids copied from Dennis's chart; 132 were
-    rebuilt from Red Buoy's own chart on 2026-09-24 (logged `qbo_id_remap`), the
-    rest await Mike. Lift the block only on his sign-off.
+  - **Red Buoy's (Chatham's) QBO writes are OPEN again (Mike signed off every
+    Chatham account id, 2026-09-26).** 197 Chatham gl_accounts had carried QBO ids
+    copied from Dennis's chart; all were rebuilt from Red Buoy's own chart
+    (logged `qbo_id_remap`) — the last, Tip Bank, 175 (= Red Buoy's American
+    Express CC) -> 188. The switch stays in `integrations/quickbooks/push_guard.py`
+    (`CHATHAM_QBO_WRITES_BLOCKED`); throw it again if the chart drifts. The 131
+    open Chatham sales JEs (5/08–9/25) were rebuilt on the new ids.
+  - **Tip Bank is a LIABILITY** (Mike, 2026-09-26). Both QBO companies still type
+    it Other Current Asset / Employee Cash Advances; that QBO change is Mike's
+    or the accountant's to make.
+  - A sales JE whose declared-cash-tips read from Toast fails is built
+    `needs_attention`, never `ready` with the tips silently zeroed.
   - Pending QBO work lives in the Drive folder's `QBO_CATCHUP_LIST.md`.
 
 > ⚠️ **Row counts in this file go stale fast and have been badly wrong before.** The

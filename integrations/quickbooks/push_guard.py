@@ -10,10 +10,15 @@ of which default to Red Buoy's realm.
 
 Reads are not affected. Set CHATHAM_QBO_WRITES_BLOCKED = False only after the
 rebuild is approved and applied.
+
+LIFTED 2026-09-26: Mike signed off every Chatham account id. The rebuild is
+applied (gl_repair_log kind 'qbo_id_remap'); the last copied id, Tip Bank
+175 (American Express CC in Red Buoy), now points at Red Buoy's Tip Bank 188.
+The switch stays so it can be thrown again if the chart drifts.
 """
 import os
 
-CHATHAM_QBO_WRITES_BLOCKED = True
+CHATHAM_QBO_WRITES_BLOCKED = False
 _RED_BUOY_DEFAULT_REALM = "123146237986854"   # the legacy scripts' hardcoded default
 
 
