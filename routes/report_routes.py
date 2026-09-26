@@ -973,3 +973,235 @@ def report_profit_loss_drill():
         return jsonify({"error": f"Could not load the detail: {e}"}), 500
     finally:
         conn.close()
+
+
+def _pl_statement_rows(pl):
+    """The P&L as flat rows (kind, section, line, category, amount, pct) — the
+    same order and totals the page shows. Withheld figures stay withheld: a
+    row with amount None carries the reason in `line`, never a zero."""
+    rows = []
+    nr = pl["revenue"]["net_revenue"]
+
+    def add(kind, section, line, amount=None, pct=None, category=""):
+        rows.append((kind, section, line, category, amount, pct))
+
+    add("sec", "Revenue", "Revenue")
+    for l in pl["revenue"]["lines"]:
+        add("item", "Revenue", l["name"], l["amount"])
+    add("total", "Revenue", "Net revenue", nr, 100.0)
+
+    c = pl["cogs"]
+    add("sec", "COGS", "Cost of goods sold — at invoice date")
+    for l in c["lines"]:
+        name = l["name"] + (" (approx)" if l.get("confidence") == "approximate" else "")
+        add("item", "COGS", name, l["amount"], None, l.get("category") or "")
+    add("sub", "COGS", "Food & beverage COGS", c["fnb_subtotal"], c.get("food_cost_pct"))
+    if c.get("non_fnb_subtotal"):
+        add("item", "COGS", "Takeout supplies (in COGS, out of food cost)", c["non_fnb_subtotal"])
+    add("total", "COGS", "Total COGS", c["total"], c.get("total_cogs_pct"))
+
+    lab = pl["labor"]
+    add("sec", "Labor", "Labor")
+    if not lab.get("available"):
+        add("note", "Labor", "Labor not available — no labor rows imported for this period. "
+                             "Prime cost cannot be computed.")
+    else:
+        for a in lab.get("accounts") or []:
+            add("item", "Labor", a["name"], a["amount"])
+        if lab.get("tip_channel_rows_on_labor"):
+            add("item", "Labor", "Miscoded tip payouts included above", lab["tip_channel_rows_on_labor"])
+        add("total", "Labor", "Labor cost", lab["labor_cost"], lab.get("labor_pct"))
+        add("total", "Labor", "Prime cost", pl["prime_cost"], pl.get("prime_cost_pct"))
+
+    ox = pl["operating_expenses"]
+    add("sec", "Operating expenses", "Operating expenses")
+    for l in ox["invoiced"]:
+        add("item", "Operating expenses", l["name"], l["amount"], None, l.get("category") or "invoiced")
+    for l in ox["banked"]:
+        add("item", "Operating expenses", l["name"], l["amount"], None, "banked")
+    add("total", "Operating expenses", "Total operating expenses", ox["total"])
+
+    if pl.get("net_income") is None:
+        add("note", "Net income", "Net income withheld — " +
+            (pl.get("net_income_withheld_reason") or "the expense side is incomplete."))
+    else:
+        add("bottom", "Net income", "Net income", pl["net_income"],
+            (pl["net_income"] / nr * 100) if nr else None)
+    return rows
+
+
+def _pl_warnings(pl):
+    g = pl.get("guardrails") or {}
+    out = []
+    for w in ((g.get("expense_coverage") or {}).get("warning"), (g.get("plug") or {}).get("banner")):
+        if w:
+            out.append(w)
+    if g and not g.get("clearing_excluded", True):
+        out.append("Clearing accounts are reaching the revenue section: " +
+                   "; ".join(g.get("clearing_violations") or []) + ". Revenue is not trustworthy.")
+    return out
+
+
+def _pl_pdf(title, rows, notes, filename):
+    """P&L as a PDF: fixed column widths so long notes cannot stretch the
+    table, notes as wrapped paragraphs underneath."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from xml.sax.saxutils import escape
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+                            leftMargin=0.6 * inch, rightMargin=0.6 * inch, title=title)
+    styles = getSampleStyleSheet()
+    cell = ParagraphStyle("cell", parent=styles["Normal"], fontSize=8, leading=10)
+    note = ParagraphStyle("note", parent=styles["Normal"], fontSize=7.5, leading=9.5, spaceAfter=4)
+    data = [["Line", "Category", "Amount", "% rev"]]
+    style = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.Color(0.12, 0.16, 0.23)),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (2, 0), (3, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]
+    for kind, sec, line, cat, amt, pct in rows:
+        i = len(data)
+        if kind == "sec":
+            data.append([line.upper(), "", "", ""])
+            style += [("FONTNAME", (0, i), (-1, i), "Helvetica-Bold"),
+                      ("TEXTCOLOR", (0, i), (-1, i), colors.Color(0.4, 0.45, 0.52)),
+                      ("TOPPADDING", (0, i), (-1, i), 8)]
+            continue
+        label = Paragraph(("&nbsp;&nbsp;&nbsp;&nbsp;" if kind == "item" else "") + escape(line), cell)
+        data.append([label, cat, "" if amt is None else _fmt_money(amt).replace("$-", "-$"),
+                     "" if pct is None else f"{pct:.2f}%"])
+        if kind in ("sub", "total", "bottom"):
+            style += [("FONTNAME", (0, i), (-1, i), "Helvetica-Bold"),
+                      ("LINEABOVE", (0, i), (-1, i), 0.6, colors.Color(0.5, 0.5, 0.5))]
+            data[i][0] = Paragraph("<b>" + escape(line) + "</b>", cell)
+        if kind == "note":
+            data[i][0] = Paragraph('<font color="#b45309"><b>' + escape(line) + "</b></font>", cell)
+            style.append(("SPAN", (0, i), (-1, i)))
+    t = Table(data, colWidths=[3.9 * inch, 1.3 * inch, 1.2 * inch, 0.9 * inch], repeatRows=1)
+    t.setStyle(TableStyle(style))
+    els = [Paragraph(escape(title), styles["Title"]), Spacer(1, 6), t]
+    if notes:
+        els += [Spacer(1, 14), Paragraph("<b>Read with these</b> — known defects and limits affecting "
+                                         "the numbers above", styles["Normal"]), Spacer(1, 4)]
+        els += [Paragraph(f"{i}. " + escape(n), note) for i, n in enumerate(notes, 1)]
+    doc.build(els)
+    return Response(buf.getvalue(), mimetype="application/pdf",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@report_bp.route("/api/reports/profit-loss/export")
+@login_required
+def report_profit_loss_export():
+    """The management P&L as a file. Query: location, start, end,
+    format=xlsx|csv|pdf (default xlsx). Same engine as the page, so the file
+    always matches the screen, footnotes and withheld figures included."""
+    location = (request.args.get("location") or "dennis").strip().lower()
+    if location not in ("chatham", "dennis"):
+        return jsonify({"error": "location must be 'chatham' or 'dennis'"}), 400
+    now = datetime.now(ET)
+    start = request.args.get("start") or now.replace(day=1).strftime("%Y-%m-%d")
+    end = request.args.get("end") or now.strftime("%Y-%m-%d")
+    for label, value in (("start", start), ("end", end)):
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": f"{label} must be YYYY-MM-DD"}), 400
+    if start > end:
+        return jsonify({"error": "start must not be after end"}), 400
+    fmt = (request.args.get("format") or "xlsx").lower()
+    if fmt not in ("xlsx", "csv", "pdf"):
+        return jsonify({"error": "format must be xlsx, csv or pdf"}), 400
+
+    from reports.profit_loss import build_profit_loss
+    try:
+        pl = build_profit_loss(location, start, end)
+    except Exception as e:
+        logger.exception("P&L export failed for %s %s..%s", location, start, end)
+        return jsonify({"error": f"Could not build the P&L: {e}"}), 500
+
+    label = LOC_LABELS.get(location, location)
+    title = f"Red Nun {label} — Profit & Loss, {start} to {end}"
+    fname = f"PL_{location}_{start}_{end}"
+    if not pl.get("has_sales_journal"):
+        return jsonify({"error": f"{label} has no sales journal entries between {start} and {end}"}), 404
+
+    rows = _pl_statement_rows(pl)
+    warnings = _pl_warnings(pl)
+    footnotes = pl.get("footnotes") or []
+
+    if fmt == "csv":
+        data = [(sec, line, cat, "" if amt is None else round(amt, 2),
+                 "" if pct is None else round(pct, 2))
+                for kind, sec, line, cat, amt, pct in rows if kind != "sec"]
+        data += [("Warning", w, "", "", "") for w in warnings]
+        data += [("Footnote", f, "", "", "") for f in footnotes]
+        return _csv_response(data, ["Section", "Line", "Category", "Amount", "% of revenue"], fname + ".csv")
+
+    if fmt == "pdf":
+        return _pl_pdf(title, rows, warnings + footnotes, fname + ".pdf")
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "P&L"
+    ws["A1"] = title
+    ws["A1"].font = Font(bold=True, size=13)
+    ws["A2"] = ("Management basis — cost at invoice date, revenue from the daily sales journal. "
+                f"Generated {now.strftime('%Y-%m-%d %H:%M')} ET.")
+    ws["A2"].font = Font(italic=True, color="666666", size=9)
+    r = 4
+    for i, h in enumerate(["Line", "Category", "Amount", "% of revenue"], 1):
+        c = ws.cell(r, i, h)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="1E293B")
+    money_fmt = '#,##0.00;(#,##0.00)'
+    top = Border(top=Side(style="thin"))
+    for kind, sec, line, cat, amt, pct in rows:
+        r += 1
+        if kind == "sec":
+            r += 0 if r == 5 else 1
+            ws.cell(r, 1, line.upper()).font = Font(bold=True, color="475569", size=9)
+            continue
+        ws.cell(r, 1, ("   " if kind == "item" else "") + line)
+        ws.cell(r, 2, cat)
+        if amt is not None:
+            ws.cell(r, 3, round(amt, 2)).number_format = money_fmt
+        if pct is not None:
+            ws.cell(r, 4, round(pct, 2) / 100).number_format = "0.00%"
+        if kind in ("sub", "total", "bottom"):
+            for col in range(1, 5):
+                ws.cell(r, col).font = Font(bold=True, size=12 if kind == "bottom" else 11)
+                ws.cell(r, col).border = top
+        if kind == "note":
+            ws.cell(r, 1).font = Font(bold=True, color="B45309")
+    notes = [("Warning", w) for w in warnings] + [("Note", f) for f in footnotes]
+    if notes:
+        r += 2
+        ws.cell(r, 1, "READ WITH THESE — known defects and limits affecting the numbers above").font = \
+            Font(bold=True, color="B45309")
+        for i, (_, n) in enumerate(notes, 1):
+            r += 1
+            c = ws.cell(r, 1, f"{i}. {n}")
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+            ws.row_dimensions[r].height = max(15, 15 * (len(n) // 110 + 1))
+    ws.column_dimensions["A"].width = 58
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 16
+    ws.column_dimensions["D"].width = 14
+    ws.freeze_panes = "A5"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(buf.getvalue(),
+                    mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename={fname}.xlsx"})

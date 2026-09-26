@@ -39,11 +39,35 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .loc-pill:hover { border-color: var(--border-focus); color: var(--text); }
 .loc-pill.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
 .spacer { flex: 1 1 auto; }
-input[type=month], select {
+input[type=month], input[type=date], select {
   padding: 9px 12px; border-radius: 9px; border: 1px solid var(--border);
   background: var(--bg-card); color: var(--text); font-size: 13px; font-family: var(--font);
 }
-input[type=month]:focus, select:focus { outline: none; border-color: var(--border-focus); }
+input[type=month]:focus, input[type=date]:focus, select:focus { outline: none; border-color: var(--border-focus); }
+input[type=date] { color-scheme: dark; }
+input[type=month] { color-scheme: dark; }
+.period-ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.period-ctl .to { color: var(--text3); font-size: 12px; }
+.hidden { display: none !important; }
+.export { position: relative; }
+.export-btn {
+  padding: 9px 14px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text2); font-size: 13px; font-weight: 600;
+  font-family: var(--font); cursor: pointer;
+}
+.export-btn:hover { border-color: var(--border-focus); color: var(--text); }
+.export-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 170px;
+  background: var(--bg-card); border: 1px solid var(--border-focus); border-radius: 10px;
+  padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+.export-menu a {
+  display: block; padding: 9px 12px; border-radius: 7px; color: var(--text);
+  font-size: 13px; text-decoration: none;
+}
+.export-menu a:hover { background: var(--bg-elevated); }
+.export-menu a span { color: var(--text3); font-size: 11px; margin-left: 6px; }
+.period-label { font-size: 12px; color: var(--text2); margin: -8px 0 16px; font-family: var(--mono); }
 
 /* Banners */
 .banner {
@@ -159,8 +183,33 @@ table.dd tfoot td {
       <div class="loc-pill" data-loc="dennis">Dennis Port</div>
       <div class="loc-pill" data-loc="chatham">Chatham</div>
       <div class="spacer"></div>
-      <input type="month" id="month">
+      <div class="period-ctl">
+        <select id="ptype" aria-label="Period">
+          <option value="month">Month</option>
+          <option value="quarter">Quarter</option>
+          <option value="ytd">Year to date</option>
+          <option value="lytd">Last year to date</option>
+          <option value="year">Full year</option>
+          <option value="t12">Last 12 months</option>
+          <option value="custom">Custom range</option>
+        </select>
+        <input type="month" id="month">
+        <select id="quarter" class="hidden" aria-label="Quarter"></select>
+        <select id="year" class="hidden" aria-label="Year"></select>
+        <input type="date" id="from" class="hidden" aria-label="From">
+        <span class="to hidden" id="to-sep">to</span>
+        <input type="date" id="to" class="hidden" aria-label="To">
+        <div class="export">
+          <button type="button" class="export-btn" id="export-btn">Export ▾</button>
+          <div class="export-menu hidden" id="export-menu">
+            <a href="#" data-fmt="xlsx">Excel<span>.xlsx</span></a>
+            <a href="#" data-fmt="pdf">PDF<span>.pdf</span></a>
+            <a href="#" data-fmt="csv">CSV<span>.csv</span></a>
+          </div>
+        </div>
+      </div>
     </div>
+    <div class="period-label" id="period-label"></div>
 
     <div id="out"><div class="empty">Loading…</div></div>
 
@@ -198,10 +247,7 @@ function row(cls, label, amount, percent, extra, drill){
 }
 
 // ── Drill-down: open the rows behind a number, inline beneath it.
-function currentRange(){
-  var mv = document.getElementById('month').value;
-  return monthRange(mv);
-}
+function currentRange(){ return periodRange(); }
 function detailTable(d){
   if (!d.rows.length) return '<div class="dd-empty">No underlying rows found.</div>';
   var cols = d.columns;
@@ -252,6 +298,72 @@ function monthRange(v){
   var y = +v.slice(0,4), m = +v.slice(5,7);
   var last = new Date(y, m, 0).getDate();
   return [v + '-01', v + '-' + String(last).padStart(2,'0')];
+}
+
+// ── Periods. The API takes any start/end; everything here just picks them.
+function ymd(d){
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0') + '-' +
+         String(d.getDate()).padStart(2,'0');
+}
+function val(id){ return document.getElementById(id).value; }
+function periodRange(){
+  var now = new Date(), y = now.getFullYear();
+  switch (val('ptype')){
+    case 'month':   return val('month') ? monthRange(val('month')) : null;
+    case 'quarter': {
+      var q = val('quarter'); if (!q) return null;          // "2026-Q3"
+      var qy = +q.slice(0,4), qn = +q.slice(6);
+      return [ymd(new Date(qy, (qn - 1) * 3, 1)), ymd(new Date(qy, qn * 3, 0))];
+    }
+    case 'ytd':  return [y + '-01-01', ymd(now)];
+    case 'lytd': {
+      // Same calendar span last year. Feb 29 falls back to Feb 28.
+      var e = new Date(y - 1, now.getMonth(), now.getDate());
+      if (e.getMonth() !== now.getMonth()) e = new Date(y - 1, now.getMonth() + 1, 0);
+      return [(y - 1) + '-01-01', ymd(e)];
+    }
+    case 'year': { var fy = val('year'); return fy ? [fy + '-01-01', fy + '-12-31'] : null; }
+    case 't12':
+      // The last twelve COMPLETE months; the current month is always partial.
+      return [ymd(new Date(y, now.getMonth() - 12, 1)), ymd(new Date(y, now.getMonth(), 0))];
+    case 'custom': {
+      var f = val('from'), t = val('to');
+      return (f && t && f <= t) ? [f, t] : null;
+    }
+  }
+  return null;
+}
+function showPeriodInputs(){
+  var t = val('ptype');
+  function vis(id, on){ document.getElementById(id).classList.toggle('hidden', !on); }
+  vis('month', t === 'month');
+  vis('quarter', t === 'quarter');
+  vis('year', t === 'year');
+  vis('from', t === 'custom'); vis('to-sep', t === 'custom'); vis('to', t === 'custom');
+}
+function fillPeriodSelects(){
+  var now = new Date(), y = now.getFullYear(), cq = Math.floor(now.getMonth() / 3) + 1;
+  var qs = [], ys = [];
+  for (var i = 0; i < 12; i++){
+    var n = cq - i, yy = y;
+    while (n < 1){ n += 4; yy -= 1; }
+    qs.push('<option value="' + yy + '-Q' + n + '">Q' + n + ' ' + yy + (i === 0 ? ' (to date)' : '') + '</option>');
+  }
+  for (var k = y; k >= 2025; k--)
+    ys.push('<option value="' + k + '">' + k + (k === y ? ' (to date)' : '') + '</option>');
+  document.getElementById('quarter').innerHTML = qs.join('');
+  document.getElementById('year').innerHTML = ys.join('');
+}
+function fmtDate(s){
+  var d = new Date(s + 'T12:00:00');
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+function savePeriod(){
+  try {
+    ['ptype','month','quarter','year','from','to'].forEach(function(id){
+      localStorage.setItem('pl_' + id, val(id));
+    });
+  } catch(e){}
 }
 
 function render(d){
@@ -378,9 +490,11 @@ function render(d){
 }
 
 function load(){
-  var mv = document.getElementById('month').value;
-  if (!mv) return;
-  var r = monthRange(mv);
+  var r = periodRange();
+  var lbl = document.getElementById('period-label');
+  if (!r){ lbl.textContent = ''; return; }
+  var days = Math.round((new Date(r[1]) - new Date(r[0])) / 86400000) + 1;
+  lbl.textContent = fmtDate(r[0]) + ' – ' + fmtDate(r[1]) + '  ·  ' + days + ' day' + (days === 1 ? '' : 's');
   document.getElementById('out').innerHTML = '<div class="empty">Loading…</div>';
   fetch('/api/reports/profit-loss?location=' + encodeURIComponent(LOC) +
         '&start=' + r[0] + '&end=' + r[1])
@@ -407,14 +521,37 @@ document.querySelectorAll('.loc-pill').forEach(function(p){
     load();
   });
 });
-document.getElementById('month').addEventListener('change', function(){
-  try { localStorage.setItem('pl_month', this.value); } catch(e){}
-  load();
+document.getElementById('ptype').addEventListener('change', function(){
+  showPeriodInputs(); savePeriod(); load();
+});
+['month','quarter','year','from','to'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', function(){ savePeriod(); load(); });
+});
+
+// ── Export: the server builds the file from the same engine as the screen.
+document.getElementById('export-btn').addEventListener('click', function(ev){
+  ev.stopPropagation();
+  document.getElementById('export-menu').classList.toggle('hidden');
+});
+document.addEventListener('click', function(){
+  document.getElementById('export-menu').classList.add('hidden');
+});
+document.querySelectorAll('#export-menu a').forEach(function(a){
+  a.addEventListener('click', function(ev){
+    ev.preventDefault();
+    var r = periodRange();
+    if (!r) return;
+    window.location = '/api/reports/profit-loss/export?location=' + encodeURIComponent(LOC) +
+      '&start=' + r[0] + '&end=' + r[1] + '&format=' + a.dataset.fmt;
+  });
 });
 
 (function init(){
-  var savedLoc = null, savedMonth = null;
-  try { savedLoc = localStorage.getItem('pl_loc'); savedMonth = localStorage.getItem('pl_month'); } catch(e){}
+  var savedLoc = null, savedMonth = null, saved = {};
+  try {
+    savedLoc = localStorage.getItem('pl_loc'); savedMonth = localStorage.getItem('pl_month');
+    ['ptype','quarter','year','from','to'].forEach(function(id){ saved[id] = localStorage.getItem('pl_' + id); });
+  } catch(e){}
   var q = new URLSearchParams(location.search);
   LOC = q.get('location') || savedLoc || 'dennis';
   if (LOC !== 'chatham' && LOC !== 'dennis') LOC = 'dennis';
@@ -425,6 +562,22 @@ document.getElementById('month').addEventListener('change', function(){
   var d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   document.getElementById('month').value =
     q.get('month') || savedMonth || (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0'));
+
+  fillPeriodSelects();
+  function pick(id, v){
+    var el = document.getElementById(id);
+    if (!v) return;
+    if (el.tagName === 'SELECT' && !el.querySelector('option[value="' + v + '"]')) return;
+    el.value = v;
+  }
+  pick('quarter', saved.quarter); pick('year', saved.year);
+  pick('from', q.get('start') || saved.from); pick('to', q.get('end') || saved.to);
+  // ?period=ytd etc. wins; ?month= or ?start= alone implies month / custom.
+  var pt = q.get('period') || (q.get('start') ? 'custom' : (q.get('month') ? 'month' : saved.ptype));
+  pick('ptype', pt || 'month');
+  if (!val('from')) document.getElementById('from').value = new Date().getFullYear() + '-01-01';
+  if (!val('to'))   document.getElementById('to').value = ymd(new Date());
+  showPeriodInputs();
   load();
 })();
 </script>
