@@ -302,6 +302,14 @@ a new brief.
 - The matcher never pairs a book row the bank already cleared in another period
   (`cleared_elsewhere`); `_mark_cleared` keeps the first date unless `force=True`.
 - Zero-net payroll checks are not register rows. Direct Deposit rows never are.
+- Invoice lines with no real category (NON_COGS / OTHER / TAX) resolve through
+  **`gl_vendor_mapping`** (per location, vendor-name prefix key, longest wins) before
+  `gl_category_mapping` — Mike, 2026-09-26; seeded by
+  `scripts/vendor_gl_mapping_2026_09_26.py`. Keg/container deposit returns → Beer COGS
+  (as DEPOSIT, inside F&B cost); US Foods fees → Food COGS; Chatham's 7shifts annual
+  invoice → Prepaid Expenses (its bank payment is amortized). "Other Business Expenses"
+  should stay empty: a line there means a vendor needs a mapping. The P&L, its drill
+  and the uncoded footnote all read `_INVOICE_LINES_SQL` in `reports/profit_loss.py`.
 - Single-entity vendors (Mike, 2026-09-24; `integrations/vendors/vendor_entity.py`): Fore & Aft and
   Nickerson are Chatham's only, Barrows is Dennis's only. Invoice intake holds one filed on the other
   entity (ingest guard rule 5); on the other entity's bank a line is intercompany (loan account), never

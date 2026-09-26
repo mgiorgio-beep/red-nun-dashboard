@@ -657,39 +657,73 @@ def journal_control_total(conn, location: str, start: str, end: str) -> dict:
 
 # ─── COGS AND EXPENSE, ACCRUAL FROM INVOICES ─────────────────────────────────
 
+# Vendor name -> gl_vendor_mapping.vendor_key, in SQL. Must strip what
+# register_routes.vendor_key() strips (everything non-alphanumeric); these are
+# the characters vendor names actually carry.
+_VENDOR_KEY_SQL = "UPPER(" + "".join("REPLACE(" for _ in range(9)) + "COALESCE(si.vendor_name, '')" + "".join(
+    f", '{c}', '')" for c in (" ", ".", ",", "&", "''", "-", "(", ")", "/")) + ")"
+
+# Every confirmed invoice line with the account it resolves to. ONE definition
+# for the P&L totals, the drill-down and the uncoded-spend footnote, so a line
+# and its drill can never disagree about where an item landed.
+#   1. gl_vendor_mapping, when the vendor has a row covering the line's
+#      category (longest vendor_key prefix wins) — Mike, 2026-09-26;
+#   2. else gl_category_mapping by category.
+_INVOICE_LINES_SQL = f"""
+    SELECT si.invoice_date AS date, si.vendor_name AS vendor,
+           si.invoice_number AS reference, ii.product_name AS detail,
+           ii.quantity AS qty, COALESCE(ii.total_price, 0) AS amount,
+           COALESCE(NULLIF(TRIM(vm.as_category), ''), ii.cat) AS category,
+           COALESCE(vg.id, cg.id) AS gl_id,
+           COALESCE(vg.name, cg.name) AS gl_name,
+           COALESCE(vg.account_type, cg.account_type) AS account_type,
+           CASE WHEN vg.id IS NOT NULL THEN 'exact' ELSE cm.confidence END AS confidence,
+           CASE WHEN vg.id IS NOT NULL THEN vm.note ELSE cm.note END AS note
+    FROM (SELECT x.*, COALESCE(NULLIF(UPPER(TRIM(x.category_type)), ''), 'UNKNOWN') AS cat
+          FROM scanned_invoice_items x) ii
+    JOIN scanned_invoices si ON si.id = ii.invoice_id
+    LEFT JOIN gl_vendor_mapping vm ON vm.id = (
+        SELECT v2.id FROM gl_vendor_mapping v2
+        WHERE v2.location = si.location
+          AND instr(',' || v2.category_types || ',', ',' || ii.cat || ',') > 0
+          AND {_VENDOR_KEY_SQL} LIKE v2.vendor_key || '%'
+        ORDER BY length(v2.vendor_key) DESC LIMIT 1)
+    LEFT JOIN gl_accounts vg ON vg.id = vm.gl_account_id AND vg.active = 1
+                            AND vg.location = vm.location
+    LEFT JOIN gl_category_mapping cm ON cm.location = si.location AND cm.category_type = ii.cat
+    LEFT JOIN gl_accounts cg ON cg.id = cm.gl_account_id AND cg.active = 1
+    WHERE si.location = ? AND si.status = 'confirmed'
+      AND si.invoice_date BETWEEN ? AND ?
+"""
+
+
 def _invoice_costs(conn, location: str, start: str, end: str) -> list[dict]:
     """Confirmed invoice line items in the period, resolved to GL accounts.
 
     Recognised at INVOICE date — this is the accrual. The payment that settles
     the invoice is excluded by construction: it is never in this query, and
     register_routes refuses to give it a P&L account.
+
+    Grouped by (category, account): with vendor mappings one category can
+    reach several accounts, so the drill key carries both ("CAT|gl_id").
     """
     rows = conn.execute(
-        """
-        SELECT COALESCE(NULLIF(TRIM(ii.category_type), ''), 'UNKNOWN') AS category,
-               g.id AS gl_id, g.name AS gl_name, g.account_type,
-               cm.confidence, cm.note,
-               ROUND(SUM(COALESCE(ii.total_price, 0)), 2) AS amount
-        FROM scanned_invoice_items ii
-        JOIN scanned_invoices si ON si.id = ii.invoice_id
-        LEFT JOIN gl_category_mapping cm
-               ON cm.location = si.location
-              AND cm.category_type = COALESCE(NULLIF(TRIM(ii.category_type), ''), 'UNKNOWN')
-        LEFT JOIN gl_accounts g ON g.id = cm.gl_account_id AND g.active = 1
-        WHERE si.location = ? AND si.status = 'confirmed'
-          AND si.invoice_date BETWEEN ? AND ?
-        -- Group by the EXPRESSION, never the alias. `scanned_invoices` has its
-        -- own `category` column, which shadows the alias in GROUP BY and
-        -- silently splits each category across invoices. Subtotals still came
-        -- out right, so the only symptom was fragmented line detail — a query
-        -- that resolves cleanly and groups by the wrong thing.
-        GROUP BY COALESCE(NULLIF(TRIM(ii.category_type), ''), 'UNKNOWN'),
-                 g.id, g.name, g.account_type, cm.confidence, cm.note
+        f"""
+        SELECT b.category, b.gl_id, b.gl_name, b.account_type,
+               MIN(b.confidence) AS confidence,   -- 'approximate' < 'exact'
+               MAX(b.note) AS note,
+               ROUND(SUM(b.amount), 2) AS amount
+        FROM ({_INVOICE_LINES_SQL}) b
+        GROUP BY b.category, b.gl_id, b.gl_name, b.account_type
         ORDER BY amount DESC
         """,
         (location, start, end),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _invoice_drill_key(r) -> str:
+    return f"{r['category']}|{r['gl_id'] if r['gl_id'] is not None else ''}"
 
 
 def cogs(conn, location: str, start: str, end: str) -> dict:
@@ -706,7 +740,7 @@ def cogs(conn, location: str, start: str, end: str) -> dict:
         amt = _r2(r["amount"])
         lines.append({"category": r["category"], "name": r["gl_name"],
                       "amount": amt, "confidence": r["confidence"],
-                      "drill": {"source": "cogs", "key": r["category"]}})
+                      "drill": {"source": "cogs", "key": _invoice_drill_key(r)}})
         if r["category"] in FNB_COGS_CATEGORIES:
             fnb += amt
         else:
@@ -784,12 +818,22 @@ def operating_expenses(conn, location: str, start: str, end: str) -> dict:
                charges, fees). Settlements cannot appear here: they are barred
                from carrying a P&L account.
     """
-    invoiced = [
-        {"category": r["category"], "name": r["gl_name"], "amount": _r2(r["amount"]),
-         "drill": {"source": "opex_invoiced", "key": r["category"]}}
-        for r in _invoice_costs(conn, location, start, end)
-        if r["account_type"] in EXPENSE_TYPES
-    ]
+    # One line per ACCOUNT: with vendor mappings an account gathers lines
+    # from several categories (Linens: NON_COGS + OTHER + TAX). The drill key
+    # "*|gl_id" opens all of them.
+    by_gl = {}
+    for r in _invoice_costs(conn, location, start, end):
+        if r["account_type"] not in EXPENSE_TYPES:
+            continue
+        x = by_gl.setdefault(r["gl_id"], {"name": r["gl_name"], "cats": [], "amount": 0.0})
+        x["amount"] += r["amount"] or 0
+        if r["category"] not in x["cats"]:
+            x["cats"].append(r["category"])
+    invoiced = sorted(
+        ({"category": ", ".join(x["cats"]), "name": x["name"], "amount": _r2(x["amount"]),
+          "drill": {"source": "opex_invoiced", "key": f"*|{gid}"}}
+         for gid, x in by_gl.items()),
+        key=lambda l: -l["amount"])
     # Labor accounts are excluded here — labor is its own line inside prime
     # cost, and leaving them in counts the same wages twice.
     ph = ",".join("?" * len(LABOR_ACCOUNT_NAMES))
@@ -1060,14 +1104,8 @@ def footnotes(conn, location: str, start: str, end: str, parts: dict) -> list[st
         )
 
     unmapped = conn.execute(
-        """SELECT ROUND(SUM(COALESCE(ii.total_price, 0)), 2) AS amt
-           FROM scanned_invoice_items ii
-           JOIN scanned_invoices si ON si.id = ii.invoice_id
-           LEFT JOIN gl_category_mapping cm
-                  ON cm.location = si.location
-                 AND cm.category_type = COALESCE(NULLIF(TRIM(ii.category_type), ''), 'UNKNOWN')
-           WHERE si.location = ? AND si.status = 'confirmed'
-             AND si.invoice_date BETWEEN ? AND ? AND cm.id IS NULL""",
+        f"""SELECT ROUND(SUM(b.amount), 2) AS amt FROM ({_INVOICE_LINES_SQL}) b
+            WHERE b.gl_id IS NULL""",
         (location, start, end),
     ).fetchone()["amt"]
     if unmapped:
@@ -1123,22 +1161,22 @@ def drill(conn, location: str, start: str, end: str,
 
     # ── Invoice line items, behind a COGS or invoiced-expense category.
     elif source in ("cogs", "opex_invoiced"):
+        # Key is "CATEGORY|gl_id" (see _invoice_drill_key); a bare category
+        # (older links) still drills the whole category.
+        cat, _, gl = str(key).partition("|")
+        where, params = ("1 = 1", []) if cat == "*" else ("b.category = ?", [cat.strip().upper()])
+        if _:
+            where += " AND b.gl_id IS NULL" if gl == "" else " AND b.gl_id = ?"
+            params += [] if gl == "" else [int(gl)]
         rows = conn.execute(
-            """
-            SELECT si.invoice_date AS date,
-                   si.vendor_name AS vendor,
-                   si.invoice_number AS reference,
-                   ii.product_name AS detail,
-                   ii.quantity AS qty,
-                   ROUND(COALESCE(ii.total_price, 0), 2) AS amount
-            FROM scanned_invoice_items ii
-            JOIN scanned_invoices si ON si.id = ii.invoice_id
-            WHERE si.location = ? AND si.status = 'confirmed'
-              AND si.invoice_date BETWEEN ? AND ?
-              AND COALESCE(NULLIF(TRIM(ii.category_type), ''), 'UNKNOWN') = ?
-            ORDER BY si.invoice_date, si.vendor_name, ii.product_name
+            f"""
+            SELECT b.date, b.vendor, b.reference, b.detail, b.qty,
+                   ROUND(b.amount, 2) AS amount
+            FROM ({_INVOICE_LINES_SQL}) b
+            WHERE {where}
+            ORDER BY b.date, b.vendor, b.detail
             """,
-            (location, start, end, str(key).strip().upper()),
+            (location, start, end, *params),
         ).fetchall()
         cols = ["date", "vendor", "reference", "detail", "qty", "amount"]
 

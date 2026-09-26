@@ -233,6 +233,28 @@ def init_register_tables():
             FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id)
         );
         CREATE INDEX IF NOT EXISTS idx_gl_cat_map ON gl_category_mapping(location, category_type);
+
+        -- Per-vendor override for invoice lines that carry no real category
+        -- (NON_COGS / OTHER / TAX all fell into "Other Business Expenses"; Mike,
+        -- 2026-09-26). vendor_key is the vendor name upper-cased with every
+        -- non-alphanumeric removed, matched as a PREFIX (longest key wins).
+        -- category_types limits which line categories it touches, so a
+        -- vendor's food lines are never re-coded by it. as_category, when set,
+        -- replaces the line's category on the P&L (deposit returns -> DEPOSIT so
+        -- they count in food & beverage cost). Points at an id, like the rest.
+        CREATE TABLE IF NOT EXISTS gl_vendor_mapping (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location TEXT NOT NULL,
+            vendor_key TEXT NOT NULL,
+            category_types TEXT NOT NULL DEFAULT 'NON_COGS,OTHER,TAX',
+            gl_account_id INTEGER NOT NULL,
+            as_category TEXT,
+            note TEXT,
+            created_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(location, vendor_key),
+            FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id)
+        );
     """)
 
     # qb_line_mapping resolves into gl_accounts too. It was keyed on a RAW QBO
@@ -821,6 +843,8 @@ def audit_register_invariants(conn=None, location: str | None = None) -> dict:
             audit_gl_category_mapping(conn))
         add("journal_mappings", "sales-journal line → GL mappings",
             audit_qb_line_mapping(conn))
+        add("vendor_mappings", "invoice vendor → GL mappings",
+            audit_gl_vendor_mapping(conn))
 
         # 5. Accrual: a settlement may not carry a P&L account.
         add("settlements", "invoice settlements coded as expense (double count)",
@@ -1042,6 +1066,25 @@ def audit_qb_line_mapping(conn=None) -> list[dict]:
     finally:
         if own:
             conn.close()
+
+
+def vendor_key(name: str) -> str:
+    """gl_vendor_mapping key: upper case, alphanumerics only. The SQL side
+    (profit_loss._VENDOR_KEY_SQL) must strip the same characters."""
+    import re
+    return re.sub(r"[^A-Z0-9]", "", (name or "").upper())
+
+
+def audit_gl_vendor_mapping(conn) -> list[dict]:
+    """gl_vendor_mapping rows pointing at a missing, inactive or other-entity
+    account. Should always be empty."""
+    return [dict(r) for r in conn.execute(
+        """SELECT m.id, m.location, m.vendor_key, m.gl_account_id, g.name AS gl_name,
+                  CASE WHEN g.id IS NULL THEN 'missing' WHEN g.active = 0 THEN 'inactive'
+                       ELSE 'wrong_entity' END AS problem
+           FROM gl_vendor_mapping m LEFT JOIN gl_accounts g ON g.id = m.gl_account_id
+           WHERE g.id IS NULL OR g.active = 0 OR g.location IS NULL OR g.location <> m.location
+           ORDER BY m.location, m.vendor_key""")]
 
 
 def audit_gl_category_mapping(conn=None) -> list[dict]:
@@ -3613,6 +3656,8 @@ def import_balance_sheet():
                                     WHERE gl_account_id IS NOT NULL)
                      AND id NOT IN (SELECT gl_account_id FROM gl_category_mapping
                                     WHERE gl_account_id IS NOT NULL)
+                     AND id NOT IN (SELECT gl_account_id FROM gl_vendor_mapping
+                                    WHERE gl_account_id IS NOT NULL)
                      AND id NOT IN (SELECT gl_account_id FROM qb_line_mapping
                                     WHERE gl_account_id IS NOT NULL)
                      AND id NOT IN (SELECT prepaid_gl_account_id FROM expense_amortization)
@@ -3626,6 +3671,7 @@ def import_balance_sheet():
                      AND (id IN (SELECT gl_account_id FROM manual_bank_entries WHERE gl_account_id IS NOT NULL)
                        OR id IN (SELECT gl_account_id FROM gl_account_rules WHERE gl_account_id IS NOT NULL)
                        OR id IN (SELECT gl_account_id FROM gl_category_mapping WHERE gl_account_id IS NOT NULL)
+                       OR id IN (SELECT gl_account_id FROM gl_vendor_mapping WHERE gl_account_id IS NOT NULL)
                        OR id IN (SELECT gl_account_id FROM qb_line_mapping WHERE gl_account_id IS NOT NULL))""",
                 (location,),
             ).fetchone()[0]

@@ -301,12 +301,19 @@ class TestOutstandingItems:
         assert p["ties"]
 
     def test_chatham_january_outstanding(self, client, uploads):
-        """Previously mis-reported as an unexplained -5,151.48 break. It is 9
-        outstanding items; the statement itself ties exactly."""
+        """Previously mis-reported as an unexplained -5,151.48 break. Job 068
+        (2026-09-25) voided the #244 duplicate and merged the stale items;
+        the period was re-signed at -2,355.95 by CLEARED date, which is the
+        authority (_reconciliation_state), not the register's book-date view."""
+        from routes.bank_reconcile_routes import _reconciliation_state
         u = _upload(uploads, CHATHAM, "2026-01-01")
-        s = register(client, u)["summary"]
-        assert cents(s["outstanding_net"]) == -515148
-        assert s["outstanding_count"] == 9
+        conn = get_connection()
+        try:
+            st = _reconciliation_state(conn, u)
+        finally:
+            conn.close()
+        assert cents(st["outstanding_net"]) == -235595
+        assert st["ties"] and st["opening_drift"] == 0
         _, _, delta = tie_out(client, u)
         assert delta == 0, "Chatham January must tie on cleared rows"
 
@@ -931,6 +938,14 @@ class TestNoOrphanedGlReferences:
         ("bank_deposits", "bank_account_id"),
     ]
 
+    def test_no_vendor_mapping_points_at_an_invalid_account(self, conn):
+        from routes.register_routes import audit_gl_vendor_mapping
+        try:
+            bad = audit_gl_vendor_mapping(conn)
+        except Exception:
+            pytest.skip("no gl_vendor_mapping table")
+        assert not bad, bad
+
     def test_no_amortization_schedule_points_at_an_invalid_account(self, conn):
         try:
             rows = conn.execute("SELECT * FROM expense_amortization").fetchall()
@@ -1169,7 +1184,7 @@ class TestPostImportAudit:
         a = audit_register_invariants(conn)
         names = {c["name"] for c in a["checks"]}
         assert names == {"row_codings", "rules", "category_mappings",
-                         "journal_mappings", "settlements",
+                         "journal_mappings", "vendor_mappings", "settlements",
                          "tip_payouts_on_labor"}
         for c in a["checks"]:
             assert set(c) >= {"name", "ok", "count", "summary", "detail"}
