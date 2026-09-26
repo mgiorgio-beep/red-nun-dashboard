@@ -1,6 +1,7 @@
 # Dashboard chat assistant — plan
 
-2026-09-26. Status: **plan, nothing built.** Decisions marked ❓ need Mike.
+2026-09-26. Status: **plan, nothing built.** Mike's decisions recorded 2026-09-26 (below);
+the action list (phase 3) is a suggestion awaiting his pick.
 
 ## What it is
 
@@ -99,6 +100,18 @@ restarts, SSH.
 
 ## Phases
 
+0. **Retire the Telegram bot (Mike: "no — hate the Telegram bot").** It still runs
+   three background jobs, so move them first, then `systemctl disable --now
+   rednun-agent`:
+   - Temp Stick fridge/freezer alerts every 15 min — **the only fridge monitor;
+     must move before the bot stops.** New cron script, no AI, alerts by
+     email/SMS.
+   - Endpoint check every 5 min — `monitoring/server_down_check.py` (cron, :07/:37)
+     already covers it; tighten that cron to every 5 min if wanted.
+   - 7 AM AI briefing — drop it. `reports.morning_report` (7:30 cron) already
+     sends one, and a scheduled Anthropic call breaks Rule 11.
+   The `/ask` HTTP endpoint and the Jarvis user go with it. Keep `bot/bot.py`'s
+   tool code — it moves into `ai/assistant_tools.py`.
 1. **Read-only assistant, admin only (~2 sessions).** Shared tools module,
    blueprint + tables, SSE, panel in `sidebar.js`, page context, links,
    spend meter. Test: 20 real questions Mike asks, each answer checked against
@@ -109,13 +122,26 @@ restarts, SSH.
    3–4 actions above, each with an audit row.
 4. **Manager access (~1 session).** Location-scoped users (Matt → Chatham,
    Alexis → Dennis) see only their location's data; no accounting tools.
-5. **Retire overlap.** Point Telegram and the web panel at the one tools module
-   so a fix lands in both.
+5. ~~Retire overlap~~ — moot, the bot is retired in phase 0.
 
-## Decisions for Mike ❓
+## Decisions (Mike, 2026-09-26)
 
-1. **Who gets it first** — just you (admin), or managers too?
-2. **Daily spend cap** — suggest $5/day to start.
-3. **Actions** — which write actions do you actually want from chat (phase 3)?
-4. **Model** — Sonnet by default with an Opus toggle, OK?
-5. **Telegram** — keep Jarvis running alongside, sharing the same tools?
+1. **Access:** Mike and managers. Admin sees everything. Managers get sales,
+   labor, invoices, recipes, food cost, specials — no bank / QBO / payroll tools.
+   Scoped by `users.location`: Rob → Dennis; Margaret, Tim → both.
+2. **Daily spend cap:** $5/day (all users combined) to start.
+3. **Actions:** not decided — suggested set below, awaiting Mike's pick.
+4. **Model:** Sonnet by default, Opus toggle — yes.
+5. **Telegram:** no. Retire it (phase 0).
+
+### Suggested phase 3 actions (each behind a Confirm card)
+
+Admin: pull a bill from email into Invoices · code bank lines to a GL account ·
+pair a payment with an invoice / mark paid · rebuild (never push) a day's sales JE.
+
+Managers: update the specials board (add / 86 / reprice) · flag an invoice
+problem (short, damaged, wrong price) — marks the invoice and drafts a credit
+request for Mike to send.
+
+Never from chat: QBO pushes, bank sign-off, deletes, payroll, check printing,
+service restarts.
