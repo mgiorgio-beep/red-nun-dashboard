@@ -14,6 +14,21 @@ came from.
 It is the Telegram bot (`bot/bot.py`, "Jarvis") brought into the browser, with
 the dashboard's own accounting engines behind it.
 
+## The idea: a direct line to the company controller (Mike, 2026-09-26)
+
+Not a search box — a controller Mike and the managers can talk to. It answers
+general questions, but it also **reviews the books and proposes fixes**, the
+way a controller would, and applies them on a yes. Worked example from the
+day this was written: Mike, looking at the YTD P&L, asked why "Other Business
+Expenses" held so many lines. The right answer was: explain why (invoice lines
+are mapped by category only, so every NON_COGS/OTHER line from every vendor
+lands in one bucket), show the vendors with totals, propose an account per
+vendor (reusing Mike's confirmed bank rules), flag the side findings (7shifts
+annual invoice double counted against its amortization; bank rules that
+disagree with the invoices), ask only the questions that are genuinely his
+call, then apply the approved table with a log entry. Every phase-3 action
+follows that shape: **diagnose → propose table → confirm → apply → log.**
+
 ## Ground rules it must keep (from CLAUDE.md)
 
 - **Rule 11, no silent API spend** — every Anthropic call is a message the user
