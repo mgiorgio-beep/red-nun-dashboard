@@ -50,6 +50,7 @@ payroll_runs/
 data/autotunes.json
 data/odds.json
 data/specials.json
+data/specials_sunday.json
 data/tvs.json
 
 # vendor-scrapers is its own private repo (https://github.com/mgiorgio-beep/vendor-scrapers).
