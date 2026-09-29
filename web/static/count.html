@@ -155,6 +155,21 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .vo-add{width:100%;padding:16px;border:none;border-radius:13px;background:var(--green);color:#000;font-size:16px;font-weight:800;
   cursor:pointer;margin-top:12px}
 .vo-add:disabled{opacity:.4}
+.vc-btn{width:100%;padding:15px;margin-bottom:10px;border-radius:12px;border:1px solid rgba(191,90,242,0.5);
+  background:rgba(191,90,242,0.14);color:var(--purple);font-size:15px;font-weight:800;cursor:pointer}
+.missed-tag{font-size:10px;font-weight:800;color:#000;background:var(--orange);border-radius:6px;padding:3px 7px}
+.product-row.missed{border-color:rgba(255,159,10,0.6)}
+.vc-list{margin-top:4px}
+.vc-shelf{padding:12px 4px 4px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.vc-row{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)}
+.vc-name{flex:1;min-width:0;font-size:15px;font-weight:600}
+.vc-heard{display:block;font-size:11px;font-weight:500;color:var(--text3)}
+.vc-row.got .vc-name{color:var(--green)}
+.vc-qty{width:74px;padding:10px;border-radius:9px;background:var(--card);border:1px solid var(--border2);color:var(--text);
+  font-size:17px;font-weight:700;text-align:center}
+.vc-row.got .vc-qty{border-color:var(--green)}
+.vc-row.miss .vc-qty{border-color:rgba(255,159,10,0.6)}
+.vc-sum{position:sticky;bottom:0;background:rgba(10,10,12,0.97);padding-top:10px}
 .vo-back{width:100%;padding:14px;border:none;background:none;color:var(--blue);font-size:15px;font-weight:600;cursor:pointer}
 .sa-done{background:rgba(48,209,88,0.14);border-color:rgba(48,209,88,0.5);color:var(--green)}
 .ai-ov{position:fixed;inset:0;background:rgba(10,10,12,0.97);display:none;flex-direction:column;
@@ -389,10 +404,25 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   </div>
 </div>
 
+<!-- Count by voice: say "name amount" down the shelf; nothing is counted until OK -->
+<div class="ai-ov" id="vc-ov">
+  <div class="ai-head">
+    <div style="flex:1;font-size:16px;font-weight:800" id="vc-title">Count by voice</div>
+    <button class="ai-close" onclick="closeVoiceCount()">Cancel</button>
+  </div>
+  <div class="ai-results">
+    <textarea class="vo-text" id="vc-text" style="min-height:70px" placeholder="Titos 3, Jameson 2 and a half, Goslings half…" oninput="vcParse()"></textarea>
+    <div class="vo-tip" id="vc-tip"></div>
+    <button class="vo-mic" id="vc-mic" style="width:100%" onclick="vcToggleMic()">🎤 Tap to talk</button>
+    <div class="vc-list" id="vc-list"></div>
+    <div class="vc-sum"><button class="vo-add" id="vc-ok" onclick="vcApply()">OK</button></div>
+  </div>
+</div>
+
 <button class="look-chip" id="look-chip" onclick="openLookFor()"></button>
 
 <script>
-const S = { location: null, sections: [], counts: {}, lookFor: {}, countId: null, totalProducts: 0 };
+const S = { location: null, sections: [], counts: {}, lookFor: {}, missed: {}, countId: null, totalProducts: 0 };
 
 // Count type comes from the URL (?type=food | ?type=booze). No param = full count (unchanged).
 const URLP = new URLSearchParams(location.search);
@@ -459,7 +489,7 @@ function pickLoc(el) {
 function lsKey(loc){ return 'rn_count_' + loc + '_' + COUNT_TYPE + (LIST === 'weekly' ? '_weekly' : ''); }
 function saveLocal(){
   if (!S.location) return;
-  try { localStorage.setItem(lsKey(S.location), JSON.stringify({ sheet:S.sections, counts:S.counts, lookFor:S.lookFor, countId:S.countId, total:S.totalProducts, ts:Date.now() })); } catch(e){}
+  try { localStorage.setItem(lsKey(S.location), JSON.stringify({ sheet:S.sections, counts:S.counts, lookFor:S.lookFor, missed:S.missed, countId:S.countId, total:S.totalProducts, ts:Date.now() })); } catch(e){}
 }
 function loadLocal(loc){ try { return JSON.parse(localStorage.getItem(lsKey(loc)) || 'null'); } catch(e){ return null; } }
 function clearLocal(loc){ try { localStorage.removeItem(lsKey(loc)); } catch(e){} }
@@ -537,6 +567,7 @@ async function startCount() {
       S.sections = saved.sheet || [];
       S.counts = saved.counts || {};
       S.lookFor = saved.lookFor || {};
+      S.missed = saved.missed || {};
       S.countId = saved.countId || null;
       S.totalProducts = saved.total || S.sections.reduce((s, sec) => s + (sec.products || []).length, 0);
       S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
@@ -587,6 +618,7 @@ async function startCount() {
   S.countId = null;
   S.counts = {};
   S.lookFor = {};
+  S.missed = {};
   S.totalProducts = S.sections.reduce((sum, sec) => sum + sec.products.length, 0);
   S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
   document.getElementById('setup-screen').style.display = 'none';
@@ -665,13 +697,15 @@ function mdMainHtml(){
   return h;
 }
 function shelfTopBar(sec){
-  if (!sec.location_id) return '<div class="noshelf-hint">These key items have no shelf yet. Count them wherever they are — ' +
+  const voice = (!S.reorder && shelfItems(sec, S.shelfKey).length)
+    ? '<button class="vc-btn" onclick="openVoiceCount(\'shelf\')">🎤 Count this shelf by voice</button>' : '';
+  if (!sec.location_id) return voice + '<div class="noshelf-hint">These key items have no shelf yet. Count them wherever they are — ' +
     'or open the shelf where one lives and tap <b>+ Add product</b> to put it there for next week.</div>';
-  return S.reorder
+  return voice + (S.reorder
     ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
     : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ Add product</button>' +
       '<button class="sa-btn sa-voice" onclick="openVoice()">🎤 Say items</button>' +
-      '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
+      '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>');
 }
 function navBar(html){ document.getElementById('nav-bar').innerHTML = html; }
 
@@ -699,13 +733,15 @@ function renderShelves(){
     '<div class="nav-pct ' + pctClass(ap) + '">' + ap + '%</div>');
   const shelves = (sec.sections || []).map(s => ({ key: s.id, name: s.name }));
   if (shelfItems(sec, 'un').length || !shelves.length) shelves.push({ key: 'un', name: shelves.length ? 'Unshelved' : 'Whole area' });
-  document.getElementById('product-list').innerHTML = shelves.length ? shelves.map(sh => {
+  const voice = sec.products.length
+    ? '<button class="vc-btn" onclick="openVoiceCount(\'area\')">🎤 Count all of ' + esc(sec.location_name) + ' by voice</button>' : '';
+  document.getElementById('product-list').innerHTML = voice + (shelves.length ? shelves.map(sh => {
     const items = shelfItems(sec, sh.key), p = pct(items), c = items.filter(counted).length;
     return '<div class="drill" onclick="goShelf(\'' + sh.key + '\')"><div class="drill-main">' +
       '<div class="drill-name">' + esc(sh.name) + '</div><div class="drill-sub">' + c + ' of ' + items.length + ' counted</div>' +
       '<div class="pbar"><i style="width:' + p + '%"></i></div></div>' +
       '<div class="drill-pct ' + pctClass(p) + '">' + p + '%</div><div class="chev">›</div></div>';
-  }).join('') : '<div class="empty"><div class="empty-text">No shelves in this area.</div></div>';
+  }).join('') : '<div class="empty"><div class="empty-text">No shelves in this area.</div></div>');
 }
 
 function renderShelf(){
@@ -893,7 +929,7 @@ async function createAndAddItem(name){
 // Speech runs on the phone (Safari's recognizer, or the keyboard mic); matching is
 // /api/count-templates/voice-match on our server. No AI spend.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let _rec = null, _listening = false, _voItems = [];
+let _voItems = [];
 function curShelfName(){
   const sec = S.sections[S.areaIdx] || {};
   return S.shelfKey === 'un' ? sec.location_name : (((sec.sections || []).find(s => String(s.id) === String(S.shelfKey)) || {}).name || sec.location_name);
@@ -914,31 +950,35 @@ function openVoice(){
 }
 function closeVoice(){ stopListen(); document.getElementById('vo-ov').classList.remove('open'); }
 function voInputChanged(){ document.getElementById('vo-match').disabled = !document.getElementById('vo-text').value.trim(); }
-function toggleListen(){ _listening ? stopListen() : startListen(); }
-function startListen(){
+// One mic at a time, dictating into a textarea. Each pause-separated result is its own line.
+let _mic = null;
+function micStart(taId, btnId, idleLabel, onChange){
   if (!SR) return;
-  const ta = document.getElementById('vo-text');
+  micStop();
+  const ta = document.getElementById(taId), btn = document.getElementById(btnId);
   const base = ta.value.trim();
-  _rec = new SR(); _rec.lang = 'en-US'; _rec.continuous = true; _rec.interimResults = true;
-  _rec.onresult = e => {
-    // Each final result is one pause-separated item -> its own line.
+  const rec = new SR(); rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true;
+  _mic = { rec: rec, btn: btn, idle: idleLabel };
+  rec.onresult = e => {
     const lines = [];
     for (let i = 0; i < e.results.length; i++) lines.push(e.results[i][0].transcript.trim());
     ta.value = [base].concat(lines).filter(Boolean).join('\n');
-    voInputChanged();
+    onChange();
   };
-  _rec.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed')
-    showToast('Mic blocked — use the mic on your keyboard instead', true); stopListen(); };
-  _rec.onend = () => { if (_listening) stopListen(); };
-  try { _rec.start(); } catch(e) { showToast('Mic not available — use the keyboard mic', true); return; }
-  _listening = true;
-  const b = document.getElementById('vo-mic'); b.classList.add('live'); b.textContent = '● Listening — tap to stop';
+  rec.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed')
+    showToast('Mic blocked — use the mic on your keyboard instead', true); micStop(); };
+  rec.onend = () => { if (_mic && _mic.rec === rec) micStop(); };
+  try { rec.start(); } catch(e) { _mic = null; showToast('Mic not available — use the keyboard mic', true); return; }
+  btn.classList.add('live'); btn.textContent = '● Listening — tap to stop';
 }
-function stopListen(){
-  _listening = false;
-  if (_rec) { try { _rec.stop(); } catch(e){} _rec = null; }
-  const b = document.getElementById('vo-mic'); b.classList.remove('live'); b.textContent = '🎤 Tap to talk';
+function micStop(){
+  if (!_mic) return;
+  const m = _mic; _mic = null;
+  try { m.rec.stop(); } catch(e){}
+  m.btn.classList.remove('live'); m.btn.textContent = m.idle;
 }
+function toggleListen(){ _mic ? micStop() : micStart('vo-text', 'vo-mic', '🎤 Tap to talk', voInputChanged); }
+function stopListen(){ micStop(); }
 async function voMatch(){
   stopListen();
   const text = document.getElementById('vo-text').value.trim(); if (!text) return;
@@ -996,6 +1036,155 @@ async function voAddAll(){
                   : 'Nothing added', !added || failed);
 }
 
+// ---- Count by voice: "Titos 3, Jameson 2 and a half, Goslings half" ----
+// Parsed on the phone against only the items being counted. The numbers fill in live;
+// nothing reaches the count until OK, and anything not heard is marked Missed.
+const VC = { items: [], heard: {}, typed: {}, phrase: {}, multi: false };
+const _SMALL = {zero:0, none:0, out:0, empty:0, nothing:0, one:1, won:1, two:2, to:2, too:2, three:3, four:4, for:4,
+  five:5, six:6, seven:7, eight:8, ate:8, nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15,
+  sixteen:16, seventeen:17, eighteen:18, nineteen:19};
+const _TENS = {twenty:20, thirty:30, forty:40, fifty:50, sixty:60};
+const _FILLER = new Set(['um','uh','and','the','of','we','have','got','there','theres','is','are','bottles','bottle','a','an','about','like','okay','ok']);
+function _numAt(t, i){
+  // A spoken amount starting at t[i] -> {v, n: words used}, else null.
+  let v = null, n = 0;
+  const w = t[i];
+  if (w === undefined) return null;
+  const frac = s => { const m = /^(\d+)\/(\d+)$/.exec(s || ''); return m && +m[2] ? +m[1] / +m[2] : null; };
+  if (/^\d+(\.\d+)?$/.test(w)) { v = parseFloat(w); n = 1; }
+  else if (w === '½') { v = 0.5; n = 1; }
+  else if (frac(w) !== null) { v = frac(w); n = 1; }
+  else if (w in _TENS) { v = _TENS[w]; n = 1; if (t[i+1] in _SMALL && _SMALL[t[i+1]] > 0 && _SMALL[t[i+1]] < 10) { v += _SMALL[t[i+1]]; n = 2; } }
+  else if (w in _SMALL) { v = _SMALL[w]; n = 1; }
+  else if (w === 'point' && /^\d+$/.test(t[i+1] || '')) return { v: parseFloat('0.' + t[i+1]), n: 2 };
+  else if (w === 'point' && (t[i+1] in _SMALL)) return { v: parseFloat('0.' + _SMALL[t[i+1]]), n: 2 };
+  else if (w === 'half') return { v: 0.5, n: 1 };
+  else if (w === 'a' && t[i+1] === 'half') return { v: 0.5, n: 2 };
+  else if (w === 'quarter') return { v: 0.25, n: 1 };
+  else if (w === 'a' && t[i+1] === 'quarter') return { v: 0.25, n: 2 };
+  else return null;
+  // "2 1/2", "2½", "two and a half", "and a quarter", "three quarters", "point five"
+  const nx = t[i+n];
+  if (nx === '½') { v += 0.5; n++; }
+  else if (frac(nx) !== null && frac(nx) < 1) { v += frac(nx); n++; }
+  else if (nx === 'and' && t[i+n+1] === 'a' && t[i+n+2] === 'half') { v += 0.5; n += 3; }
+  else if (nx === 'and' && t[i+n+1] === 'half') { v += 0.5; n += 2; }
+  else if (nx === 'and' && t[i+n+1] === 'a' && t[i+n+2] === 'quarter') { v += 0.25; n += 3; }
+  else if ((nx === 'quarters' || nx === 'quarter') && v > 0 && v < 4) { v = v / 4; n++; }
+  else if (nx === 'point' && /^\d+$/.test(t[i+n+1] || '')) { v = parseFloat(v + '.' + t[i+n+1]); n += 2; }
+  else if (nx === 'point' && (t[i+n+1] in _SMALL)) { v = parseFloat(v + '.' + _SMALL[t[i+n+1]]); n += 2; }
+  return { v: v, n: n };
+}
+function _undouble(w){ return w.replace(/(.)\1+/g, '$1'); }
+function _sing(w){ return w.length > 4 && w.endsWith('ies') ? w.slice(0, -3) + 'y' : (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w); }
+function _lev(a, b){
+  const d = Array.from({length: a.length + 1}, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function _tok(t, u){
+  t = _sing(t); u = _sing(u);
+  if (t === u || (t.length >= 3 && u.startsWith(t)) || (u.length >= 4 && t.startsWith(u))) return 1;
+  if (t.length >= 4) { const a = _undouble(t), b = _undouble(u); if (1 - _lev(a, b) / Math.max(a.length, b.length) >= 0.75) return 0.9; }
+  return 0;
+}
+function _words(s){
+  // Keep decimals ("4.5") through the punctuation strip.
+  return (s || '').toLowerCase().replace(/['’]/g, '').replace(/(\d)\.(\d)/g, '$1qdotq$2').replace(/[^a-z0-9½\/ ]+/g, ' ')
+    .replace(/qdotq/g, '.').split(/\s+/).filter(Boolean);
+}
+function vcBestItem(phrase){
+  const q = _words(phrase).filter(w => !_FILLER.has(w));
+  if (!q.length) return null;
+  let best = null, bestScore = 0;
+  VC.items.forEach(it => {
+    const hit = q.reduce((s, w) => s + Math.max(0, ...it.toks.map(u => _tok(w, u))), 0);
+    const score = hit / q.length + (VC.heard[it.p.id] === undefined ? 0.01 : 0);  // a tie goes to one not yet heard
+    if (hit >= 0.9 && score > bestScore) { best = it; bestScore = score; }
+  });
+  return bestScore >= 0.5 ? best : null;
+}
+function vcParse(){
+  const t = _words(document.getElementById('vc-text').value);
+  VC.heard = {}; VC.phrase = {};
+  let name = [];
+  for (let i = 0; i < t.length; ) {
+    const num = name.length ? _numAt(t, i) : null;
+    if (num) {
+      const it = vcBestItem(name.join(' '));
+      if (it) { VC.heard[it.p.id] = Math.round(num.v * 100) / 100; VC.phrase[it.p.id] = name.join(' '); }  // a later mention wins
+      name = []; i += num.n;
+    } else { name.push(t[i]); i++; }
+  }
+  vcRender();
+}
+function vcValue(pid){ return VC.typed[pid] !== undefined ? VC.typed[pid] : VC.heard[pid]; }
+function vcOkLabel(){
+  const got = VC.items.filter(it => { const x = vcValue(it.p.id); return x !== undefined && x !== ''; }).length;
+  const miss = VC.items.length - got;
+  document.getElementById('vc-ok').textContent = 'OK — count ' + got + (miss ? ' · mark ' + miss + ' missed' : '');
+}
+function vcRender(){
+  let h = '', lastShelf = null;
+  VC.items.forEach(it => {
+    if (VC.multi && it.shelf !== lastShelf) { h += '<div class="vc-shelf">' + esc(it.shelf) + '</div>'; lastShelf = it.shelf; }
+    const v = vcValue(it.p.id), has = v !== undefined && v !== '';
+    h += '<div class="vc-row ' + (has ? 'got' : 'miss') + '"><div class="vc-name">' + esc(niceName(it.p)) +
+      (VC.phrase[it.p.id] && VC.typed[it.p.id] === undefined ? '<span class="vc-heard">heard “' + esc(VC.phrase[it.p.id]) + '”</span>' : '') +
+      '</div><input class="vc-qty" type="number" inputmode="decimal" step="0.25" placeholder="—" data-pid="' + it.p.id + '" value="' + (has ? v : '') +
+      '" oninput="vcType(' + it.p.id + ', this)"></div>';
+  });
+  // Keep the cursor if a box was being typed in while the mic added more.
+  const act = document.activeElement, fp = act && act.classList && act.classList.contains('vc-qty') ? act.dataset.pid : null;
+  document.getElementById('vc-list').innerHTML = h || '<div style="padding:14px;color:var(--text3)">Nothing to count here.</div>';
+  if (fp) { const el = document.querySelector('.vc-qty[data-pid="' + fp + '"]'); if (el) el.focus(); }
+  vcOkLabel();
+}
+function vcType(pid, el){
+  const v = el.value.trim();
+  VC.typed[pid] = v === '' ? '' : parseFloat(v);
+  el.closest('.vc-row').className = 'vc-row ' + (v === '' ? 'miss' : 'got');
+  vcOkLabel();
+}
+function openVoiceCount(scope){
+  const sec = S.sections[S.areaIdx]; if (!sec) return;
+  const shName = k => k === 'un' ? ((sec.sections || []).length ? 'Unshelved' : sec.location_name)
+    : (((sec.sections || []).find(x => String(x.id) === String(k)) || {}).name || 'Shelf');
+  let list = [];
+  if (scope === 'area') {
+    // Walk order: each shelf in order, then unshelved.
+    (sec.sections || []).map(s => s.id).concat(['un']).forEach(k => shelfItems(sec, k).forEach(p => list.push({ p: p, shelf: shName(k) })));
+  } else list = shelfItems(sec, S.shelfKey).map(p => ({ p: p, shelf: shName(S.shelfKey) }));
+  VC.items = list.filter(it => !S.lookFor[it.p.id])
+    .map(it => Object.assign(it, { toks: _words(niceName(it.p) + ' ' + (it.p.name || '')).filter(w => !_FILLER.has(w) && !/^\d/.test(w)) }));
+  VC.multi = scope === 'area' && new Set(VC.items.map(i => i.shelf)).size > 1;
+  VC.heard = {}; VC.typed = {}; VC.phrase = {};
+  document.getElementById('vc-title').textContent = '🎤 ' + (scope === 'area' ? sec.location_name : shName(S.shelfKey)) + ' · ' + VC.items.length + ' items';
+  document.getElementById('vc-text').value = '';
+  document.getElementById('vc-mic').style.display = SR ? 'block' : 'none';
+  document.getElementById('vc-tip').textContent = (SR ? 'Go down the shelf: ' : 'Tap the mic on your keyboard, then go down the shelf: ') +
+    'name, then amount — “Titos 3… Jameson 2 and a half… Goslings half… Beefeater out”. Numbers fill in below; tap one to fix it. Nothing counts until OK.';
+  vcRender();
+  document.getElementById('vc-ov').classList.add('open');
+  if (SR) micStart('vc-text', 'vc-mic', '🎤 Tap to talk', vcParse);
+  else document.getElementById('vc-text').focus();
+}
+function vcToggleMic(){ _mic ? micStop() : micStart('vc-text', 'vc-mic', '🎤 Tap to talk', vcParse); }
+function closeVoiceCount(){ micStop(); document.getElementById('vc-ov').classList.remove('open'); }
+function vcApply(){
+  micStop();
+  let got = 0, miss = 0;
+  VC.items.forEach(it => {
+    const pid = it.p.id, v = vcValue(pid);
+    if (v !== undefined && v !== '' && !isNaN(v)) { S.counts[pid] = v; delete S.missed[pid]; got++; }
+    else if (S.counts[pid] === undefined) { S.missed[pid] = true; miss++; }
+  });
+  closeVoiceCount(); render(); updateProgress(); saveLocal();
+  showToast('Counted ' + got + (miss ? ' · ' + miss + ' missed — look for the orange tags' : ''), miss > 0);
+}
+
 function goAreas(){ S.view = 'areas'; S.areaIdx = null; S.shelfKey = null; S.reorder = false; document.getElementById('search').value = ''; render(); }
 function goShelves(idx){ S.view = 'shelves'; S.areaIdx = idx; S.shelfKey = null; S.reorder = false; document.getElementById('search').value = ''; render(); }
 function goShelf(key){ S.view = 'shelf'; S.shelfKey = key; S.reorder = false; render(); }
@@ -1007,11 +1196,13 @@ function productRowHtml(p, i) {
   const unit = p.inventory_unit || p.unit || 'ea';
   const prevHtml = prev !== null && prev !== undefined ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
   const looking = !!S.lookFor[p.id];
-  return '<div class="product-row fade-up' + (looking ? ' looking' : '') + '" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
+  const missed = !!S.missed[p.id] && !hasVal;
+  return '<div class="product-row fade-up' + (looking ? ' looking' : '') + (missed ? ' missed' : '') + '" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
     '<div class="product-info">' +
       '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(niceName(p)) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
       '<div class="product-meta">' +
         '<span class="unit-chip" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">count: ' + esc(unit) + '</span>' + prevHtml +
+        (missed ? '<span class="missed-tag">Missed</span>' : '') +
         (looking ? '<span class="look-tag">🔎 Looking</span>' : '<button class="out-btn" onclick="markOut(' + p.id + ')">Out (0)</button>') +
         '<button class="nh-btn" onclick="markMoved(' + p.id + ')">' + (looking ? 'It\'s back' : 'Moved') + '</button>' +
       '</div>' +
@@ -1065,6 +1256,7 @@ function setQty(pid, el) {
   if (v === '') { delete S.counts[pid]; el.classList.remove('has-value'); }
   else {
     S.counts[pid] = parseFloat(v); el.classList.add('has-value');
+    if (S.missed[pid]) { delete S.missed[pid]; const r = el.closest('.product-row'); if (r) { r.classList.remove('missed'); const t = r.querySelector('.missed-tag'); if (t) t.remove(); } }
     if (S.lookFor[pid]) { delete S.lookFor[pid]; const r = el.closest('.product-row'); if (r) r.classList.remove('looking'); }
   }
   updateProgress();
@@ -1094,6 +1286,8 @@ async function saveCount() {
   }
   const counted = Object.keys(S.counts).length;
   if (counted === 0) { showToast('No items counted yet', true); return; }
+  const missedN = Object.keys(S.missed).filter(pid => S.counts[pid] === undefined).length;
+  if (missedN && !confirm(missedN + ' item' + (missedN === 1 ? ' was' : 's were') + ' missed by voice and still blank (orange "Missed").\n\nSave anyway?')) return;
   const blanks = S.totalProducts - counted;
   if (blanks > 0 && !confirm(blanks + ' item' + (blanks === 1 ? '' : 's') + ' still blank (not counted). Anything you\'re OUT of should be entered as 0, not left blank.\n\nSave anyway?')) return;
 
@@ -1114,7 +1308,7 @@ async function saveCount() {
   function finish(msg, err) {
     showToast(msg, err);
     clearLocal(S.location);
-    S.counts = {}; S.lookFor = {};
+    S.counts = {}; S.lookFor = {}; S.missed = {};
     updateConn(); updateLookChip();
     setTimeout(() => {
       document.getElementById('count-screen').style.display = 'none';
@@ -1147,7 +1341,7 @@ function discardCount() {
   document.getElementById('setup-screen').style.display = 'block';
   document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
   document.getElementById('search').value = '';
-  S.counts = {}; S.lookFor = {};
+  S.counts = {}; S.lookFor = {}; S.missed = {};
   updateLookChip();
 }
 
