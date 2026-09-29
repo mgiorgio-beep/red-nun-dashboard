@@ -704,8 +704,11 @@ async function ensureCatalog(){
   if (S.catalog) return;
   const all = await fetch('/api/inventory/products', {credentials:'include'}).then(r => r.json()).catch(() => null);
   if (!Array.isArray(all)) return;  // offline: the picker still has everything on the count sheet
-  S.catalog = all.filter(p => p.active !== 0 && inCountType(p.category) &&
-    (!p.location || p.location === S.location || p.location === 'both'));
+  // products.location is only where an item was first seen (both houses buy most things),
+  // so it orders the list — this house first — and never hides a product.
+  const other = p => p.location && p.location !== 'both' && p.location !== S.location ? 1 : 0;
+  S.catalog = all.filter(p => p.active !== 0 && inCountType(p.category))
+    .sort((a, b) => other(a) - other(b));
 }
 async function openAddItem(){
   document.getElementById('ai-ov').classList.add('open');
