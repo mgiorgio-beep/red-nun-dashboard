@@ -15,7 +15,7 @@ from integrations.tempstick.tempstick import (
     get_tempstick_settings,
     save_tempstick_settings,
 )
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, redirect
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
@@ -230,6 +230,16 @@ def manage():
 def count_page():
     """Serve the inventory count interface."""
     return send_from_directory("static", "count.html")
+
+@app.route("/food")
+def food_count_short():
+    """Short phone URL for the food count."""
+    return redirect("/count?type=food")
+
+@app.route("/booze")
+def booze_count_short():
+    """Short phone URL for the booze count."""
+    return redirect("/count?type=booze")
 
 @app.route("/storage")
 def storage_page():
