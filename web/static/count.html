@@ -421,6 +421,31 @@ function inCountType(cat) {
   return COUNT_TYPE === 'booze' ? isBooze : !isBooze;
 }
 
+// Booze names without proof, pack and bottle-size noise: "GOSLING BLACK SEAL RUM 80'" -> "Gosling Black Seal Rum".
+function cleanBoozeName(n){
+  let s = ' ' + (n || '') + ' ';
+  s = s.replace(/\([^)]*\b(case|cs|pk|pack|bulk|ct|oz|ml|ltr)\b[^)]*\)/gi, ' ');                 // (24/Case) (6pk Case, Bulk) (12oz)
+  s = s.replace(/\(\d+\)\w?/g, ' ');                                                               // (4) (4)B
+  s = s.replace(/\b[bck]-[\d\/.]+(\s*gal\b)?/gi, ' ');                                             // B-24  C-4/6  K-15.5 Gal
+  s = s.replace(/\b\d+(\.\d+)?\s*(°|'|’|proof|pf)(?=[\s,)]|$)/gi, ' ');                            // 80° 95' 80 proof
+  s = s.replace(/\b\d+\s*\/\s*(\d+(\.\d+)?)?\s*(cs|case|c|pk|ct|oz|z|ltr|l|cn)?(?![a-z])/gi, ' ');  // 6/CS 12/cs 24/12 6/ 1/2
+  s = s.replace(/\b\d+-\d+[a-z]*\b/gi, ' ');                                                       // 24-12 24-12NR
+  s = s.replace(/\b\d+\s*(pk|pack|ct)\b(\s+(box|bottles?|cans?|loose))?/gi, ' ');                  // 24pk Box
+  s = s.replace(/\b\d+(\.\d+)?\s*(ml|l|ltr|litr|oz|z|m|cs)\b/gi, ' ');                             // 750ml 1L 12oz 750M 12CS
+  s = s.replace(/\b(case|cs|bulk|new pkg|nr|cn|litr|ltr|ltrcs|loose)\b/gi, ' ');
+  s = s.replace(/[,\s]+\d{2,3}(\.\d+)?\s*$/, ' ');                                                 // trailing ", 80" / "15.5"
+  s = s.replace(/\(\s*\)/g, ' ').replace(/\s*[,\/\-]+\s*$/g, '').replace(/^\s*[,\/\-]+/, '').replace(/\s+,/g, ',').replace(/\s+/g, ' ').trim();
+  if (s && s === s.toUpperCase()) s = s.toLowerCase().replace(/(^|\s)[a-z]/g, c => c.toUpperCase());
+  return s || n;
+}
+// What the count page shows: booze without proof / pack / size noise (display names carry
+// it too, e.g. "Titos Vodka, 80°"; a clean name passes through unchanged). Food as-is.
+function niceName(p){
+  if (!p) return '';
+  const n = p.display_name || p.name || '';
+  return BOOZE_CATS.includes((p.category || '').toUpperCase()) ? cleanBoozeName(n) : n;
+}
+
 function pickLoc(el) {
   document.querySelectorAll('.loc-btn[data-loc]').forEach(b => b.classList.remove('sel'));
   el.classList.add('sel');
@@ -703,7 +728,7 @@ function renderShelf(){
 
 function arrangeRowHtml(p, i, n){
   return '<div class="product-row" style="align-items:center">' +
-    '<div class="product-info"><div class="product-name">' + esc(p.display_name || p.name) + '</div>' +
+    '<div class="product-info"><div class="product-name">' + esc(niceName(p)) + '</div>' +
       '<div class="product-meta"><span class="unit-chip">count: ' + esc(p.inventory_unit || p.unit || 'ea') + '</span></div></div>' +
     '<div class="arrange-btns">' +
       '<button class="step-btn" onclick="moveItem(' + p.id + ',-1)" ' + (i === 0 ? 'disabled' : '') + '>▲</button>' +
@@ -728,7 +753,7 @@ function moveItem(pid, dir){
 async function removeFromShelf(pid){
   const area = S.sections[S.areaIdx]; if (!area) return;
   const item = area.products.find(p => p.id === pid);
-  if (!confirm('Remove "' + (item ? (item.display_name || item.name) : 'this item') + '" from this area?\n\nIt stays in the catalog but won\'t be counted here.')) return;
+  if (!confirm('Remove "' + (item ? niceName(item) : 'this item') + '" from this area?\n\nIt stays in the catalog but won\'t be counted here.')) return;
   try {
     await fetch('/api/storage/locations/' + area.location_id + '/products/' + pid, { method:'DELETE', credentials:'include' });
     const idx = area.products.findIndex(p => p.id === pid);
@@ -778,7 +803,7 @@ function aiRender(){
   const cur = S.sections[S.areaIdx];
   const match = p => !ql || (p.name||'').toLowerCase().includes(ql) || (p.display_name||'').toLowerCase().includes(ql);
   const isHere = (sec, p) => sec === cur && (S.shelfKey === 'un' ? !p.section_id : String(p.section_id) === String(S.shelfKey));
-  const row = (p, where, cls) => '<div class="ai-item" onclick="moveHere(' + p.id + ')"><span>' + esc(p.display_name||p.name) +
+  const row = (p, where, cls) => '<div class="ai-item" onclick="moveHere(' + p.id + ')"><span>' + esc(niceName(p)) +
     (where ? '<span class="ai-where' + (cls ? ' ' + cls : '') + '">' + esc(where) + '</span>' : '') + '</span><span class="ai-add">Here</span></div>';
   const look = [], elsewhere = [], noshelf = [], onSheet = new Set();
   S.sections.forEach(sec => sec.products.forEach(p => {
@@ -935,8 +960,12 @@ function voRenderReview(){
   _voItems.forEach((it, i) => {
     const top = it.candidates[0];
     const good = top && top.score >= 90;
-    const opts = it.candidates.map((c, k) => '<option value="' + k + '">' + esc(c.name) +
-      (here.has(c.product_id) ? ' (already here)' : '') + '</option>').join('') +
+    const shown = new Set();
+    const opts = it.candidates.map((c, k) => {
+      // Duplicates can clean up to the same name; show the full name for the extra ones.
+      let n = niceName(c); if (shown.has(n)) n = c.display_name || c.name; shown.add(n);
+      return '<option value="' + k + '">' + esc(n) +
+      (here.has(c.product_id) ? ' (already here)' : '') + '</option>'; }).join('') +
       '<option value="new">+ New product “' + esc(it.phrase) + '”</option>';
     h += '<div class="vo-row"><input type="checkbox" id="vo-c' + i + '"' + (top && !here.has(top.product_id) ? ' checked' : '') + '>' +
       '<div class="vo-main"><div class="vo-heard' + (good ? '' : ' weak') + '">heard “' + esc(it.phrase) + '”' +
@@ -959,7 +988,7 @@ async function voAddAll(){
       catch(e) { failed++; }
     } else {
       const c = it.candidates[Number(v)];
-      if (placeItem(c.product_id, { name:c.name, category:c.category, unit:c.unit, inventory_unit:c.inventory_unit })) added++;
+      if (placeItem(c.product_id, { name:c.name, display_name:c.display_name, category:c.category, unit:c.unit, inventory_unit:c.inventory_unit })) added++;
     }
   }
   closeVoice(); render(); updateProgress(); saveLocal();
@@ -980,7 +1009,7 @@ function productRowHtml(p, i) {
   const looking = !!S.lookFor[p.id];
   return '<div class="product-row fade-up' + (looking ? ' looking' : '') + '" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
     '<div class="product-info">' +
-      '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(p.display_name || p.name) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
+      '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(niceName(p)) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
       '<div class="product-meta">' +
         '<span class="unit-chip" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">count: ' + esc(unit) + '</span>' + prevHtml +
         (looking ? '<span class="look-tag">🔎 Looking</span>' : '<button class="out-btn" onclick="markOut(' + p.id + ')">Out (0)</button>') +

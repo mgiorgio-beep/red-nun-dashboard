@@ -105,7 +105,8 @@ class Matcher:
                 p = self.products[i]
                 scored.append((cover + 3 * said + p['bonus'], cover, p))
             scored.sort(key=lambda x: -x[0])
-            self._cache[key] = [{'product_id': p['id'], 'name': p['label'], 'category': p['category'],
+            self._cache[key] = [{'product_id': p['id'], 'name': p['name'], 'display_name': p['display_name'],
+                                 'category': p['category'],
                                  'unit': p['unit'], 'inventory_unit': p['inventory_unit'],
                                  'score': round(cover), 'bought': p['bought']}
                                 for _, cover, p in scored[:10]]
