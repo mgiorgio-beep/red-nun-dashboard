@@ -117,7 +117,7 @@ function render(){
     '<b>' + items.length + ' items</b> (' + food.length + ' food, ' + bar.length + ' bar). ' +
     (lw ? 'Last weekly count: <b>' + new Date(lw.created_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'}) + '</b>, ' + lw.items + ' items.'
         : 'No weekly count saved yet.') +
-    (noShelf ? '<br><span style="color:var(--orange)">' + noShelf + ' have no shelf yet</span> — the first walk puts them away (tap “It’s here” on the shelf).' : '');
+    (noShelf ? '<br><span style="color:var(--orange)">' + noShelf + ' have no shelf yet</span> — the first walk puts them away (tap “+ Add product” on the shelf).' : '');
   document.getElementById('h-list').textContent = 'On the weekly list (' + items.length + ')';
   const row = i => '<div class="row"><div class="main"><div class="name">' + esc(i.name) + '</div><div class="sub">' +
     (i.dollars ? money(i.dollars) + ' / 90d · ' : '') + (i.area ? esc(i.area) : '<span class="warn">no shelf yet</span>') +

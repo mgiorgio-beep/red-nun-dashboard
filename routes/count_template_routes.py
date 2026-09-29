@@ -1,10 +1,11 @@
 """
-Weekly key-item count list routes.
+Weekly key-item count list routes, plus "Say items" matching for the count page.
 
   GET    /api/count-templates/sheet?location=   count sheet for the weekly count
   GET    /api/count-templates?location=         the list + ranked suggestions
   POST   /api/count-templates                   {location, product_id} add to the list
   DELETE /api/count-templates/<location>/<pid>  take off the list
+  POST   /api/count-templates/voice-match       {location, type, text} spoken items -> products
   GET    /count/list                            the list page
 """
 
@@ -150,5 +151,24 @@ def remove_item(location, pid):
                      (location, pid))
         conn.commit()
         return jsonify({'success': True})
+    finally:
+        conn.close()
+
+
+@count_template_bp.route('/api/count-templates/voice-match', methods=['POST'])
+@login_required
+def voice_match():
+    """"Say items" on the count page: {location, type: all|food|booze, text} ->
+    [{phrase, candidates:[{product_id, name, score, bought, ...}]}]. No API spend."""
+    from reports.item_match import match_text
+    data = request.json or {}
+    location = (data.get('location') or '').strip().lower()
+    if location not in LOCATIONS:
+        return jsonify({'error': 'location required'}), 400
+    count_type = data.get('type') if data.get('type') in ('food', 'booze') else 'all'
+    text = (data.get('text') or '')[:2000]
+    conn = get_connection()
+    try:
+        return jsonify({'items': match_text(conn, location, text, count_type)})
     finally:
         conn.close()

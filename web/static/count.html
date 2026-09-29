@@ -133,6 +133,29 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .sa-btn:active,.sa-done:active{transform:scale(0.98)}
 .sa-add{background:rgba(10,132,255,0.14);border-color:rgba(10,132,255,0.45);color:var(--blue)}
 .sa-arrange{background:var(--card);border-color:var(--border2);color:var(--text2)}
+.sa-voice{background:rgba(191,90,242,0.14);border-color:rgba(191,90,242,0.45);color:var(--purple)}
+@media (max-width:420px){.sa-btn,.sa-done{font-size:13px;padding:14px 6px}}
+/* "Say items" sheet */
+.vo-text{width:100%;min-height:110px;padding:13px 14px;background:var(--card);border:1px solid var(--border2);
+  border-radius:11px;color:var(--text);font-size:16px;font-family:inherit;outline:none;resize:vertical}
+.vo-tip{font-size:12px;color:var(--text3);margin:8px 2px 12px;line-height:1.45}
+.vo-btns{display:flex;gap:10px;margin-bottom:12px}
+.vo-mic{flex:1;padding:15px;border-radius:12px;border:1px solid rgba(191,90,242,0.5);background:rgba(191,90,242,0.14);
+  color:var(--purple);font-size:15px;font-weight:800;cursor:pointer}
+.vo-mic.live{background:var(--red);border-color:var(--red);color:#fff;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.7}}
+.vo-match{flex:1;padding:15px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-size:15px;font-weight:800;cursor:pointer}
+.vo-match:disabled{opacity:.4}
+.vo-row{display:flex;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--border)}
+.vo-row input[type=checkbox]{width:24px;height:24px;flex-shrink:0;accent-color:var(--green)}
+.vo-row .vo-main{flex:1;min-width:0}
+.vo-heard{font-size:11px;color:var(--text3);margin-bottom:4px}
+.vo-heard.weak{color:var(--orange)}
+.vo-sel{width:100%;padding:10px;border-radius:9px;background:var(--card);border:1px solid var(--border2);color:var(--text);font-size:15px}
+.vo-add{width:100%;padding:16px;border:none;border-radius:13px;background:var(--green);color:#000;font-size:16px;font-weight:800;
+  cursor:pointer;margin-top:12px}
+.vo-add:disabled{opacity:.4}
+.vo-back{width:100%;padding:14px;border:none;background:none;color:var(--blue);font-size:15px;font-weight:600;cursor:pointer}
 .sa-done{background:rgba(48,209,88,0.14);border-color:rgba(48,209,88,0.5);color:var(--green)}
 .ai-ov{position:fixed;inset:0;background:rgba(10,10,12,0.97);display:none;flex-direction:column;
   z-index:150;padding:calc(var(--safe-top) + 14px) 14px calc(var(--safe-bottom) + 14px)}
@@ -347,6 +370,25 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   <div class="ai-results" id="ai-results"></div>
 </div>
 
+<!-- Say items: dictate what's on this shelf, check the matches, add them all -->
+<div class="ai-ov" id="vo-ov">
+  <div class="ai-head">
+    <div style="flex:1;font-size:16px;font-weight:800" id="vo-title">Say items</div>
+    <button class="ai-close" onclick="closeVoice()">Cancel</button>
+  </div>
+  <div class="ai-results">
+    <div id="vo-input">
+      <textarea class="vo-text" id="vo-text" placeholder="Titos, Jameson, Goslings rum, Ketel One…" oninput="voInputChanged()"></textarea>
+      <div class="vo-tip" id="vo-tip"></div>
+      <div class="vo-btns">
+        <button class="vo-mic" id="vo-mic" onclick="toggleListen()">🎤 Tap to talk</button>
+        <button class="vo-match" id="vo-match" onclick="voMatch()" disabled>Find products ›</button>
+      </div>
+    </div>
+    <div id="vo-review"></div>
+  </div>
+</div>
+
 <button class="look-chip" id="look-chip" onclick="openLookFor()"></button>
 
 <script>
@@ -498,7 +540,7 @@ async function startCount() {
   }
 
   // Filter to the selected count type (food / booze) and drop areas left empty.
-  // Empty areas stay so any shelf can be opened and filled with "It's here".
+  // Empty areas stay so any shelf can be opened and filled with "+ Add product".
   if (COUNT_TYPE !== 'all') {
     S.sections = S.sections
       .map(sec => Object.assign({}, sec, { products: (sec.products || []).filter(p => inCountType(p.category)) }))
@@ -599,10 +641,11 @@ function mdMainHtml(){
 }
 function shelfTopBar(sec){
   if (!sec.location_id) return '<div class="noshelf-hint">These key items have no shelf yet. Count them wherever they are — ' +
-    'or open the shelf where one lives and tap <b>+ It\'s here</b> to put it there for next week.</div>';
+    'or open the shelf where one lives and tap <b>+ Add product</b> to put it there for next week.</div>';
   return S.reorder
     ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
-    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ It\'s here</button>' +
+    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ Add product</button>' +
+      '<button class="sa-btn sa-voice" onclick="openVoice()">🎤 Say items</button>' +
       '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
 }
 function navBar(html){ document.getElementById('nav-bar').innerHTML = html; }
@@ -699,7 +742,7 @@ function persistOrder(area){
             body: { product_ids: area.products.map(p => p.id) } });
 }
 
-// ---- "It's here": move an item onto the shelf you're standing at ----
+// ---- "+ Add product": put an item on the shelf you're standing at (moves it if it was elsewhere) ----
 async function ensureCatalog(){
   if (S.catalog) return;
   const all = await fetch('/api/inventory/products', {credentials:'include'}).then(r => r.json()).catch(() => null);
@@ -761,14 +804,15 @@ function aiRender(){
 function aiCreate(){ const name = (document.getElementById('ai-search').value || '').trim(); if (name) createAndAddItem(name); }
 
 // Moves apply on the phone at once and sync through the shelf-op queue (works in the dead zone).
-function moveHere(pid){
-  const sec = S.sections[S.areaIdx]; if (!sec || !sec.location_id) return;
+// Put one product on the shelf on screen. `info` describes a product not yet on the sheet.
+function placeItem(pid, info){
+  const sec = S.sections[S.areaIdx]; if (!sec || !sec.location_id) return false;
   const secId = (S.shelfKey === 'un') ? null : Number(S.shelfKey);
   const hit = findOnSheet(pid);
   let item;
   if (hit) item = hit.sec.products.splice(hit.i, 1)[0];
   else {
-    const c = (S.catalog || []).find(x => x.id === pid) || {};
+    const c = info || (S.catalog || []).find(x => x.id === pid) || {};
     item = { id:pid, name:c.name||'Item', display_name:c.display_name, category:c.category, unit:c.unit,
              inventory_unit:c.inventory_unit, current_price:c.current_price, current_qty:null };
     S.totalProducts++;
@@ -777,6 +821,10 @@ function moveHere(pid){
   sec.products.push(item);
   delete S.lookFor[pid];
   queueOp({ url:'/api/storage/move', body:{ move_id:newId(), product_id:pid, to_storage_location_id:sec.location_id, to_section_id:secId } });
+  return true;
+}
+function moveHere(pid){
+  if (!placeItem(pid)) return;
   closeAddItem(); render(); updateProgress(); saveLocal();
   showToast('Moved here — count it now');
   setTimeout(() => { const el = document.querySelector('.qty-input[data-pid="' + pid + '"]'); if (el) { el.scrollIntoView({block:'center'}); el.focus(); } }, 60);
@@ -797,20 +845,126 @@ function updateLookChip(){
 }
 function openLookFor(){
   const onShelf = isTablet() ? S.areaIdx != null : S.view === 'shelf';
-  if (!onShelf || !(S.sections[S.areaIdx] || {}).location_id) { showToast('Open the shelf where you found it, then tap It\'s here', true); return; }
+  if (!onShelf || !(S.sections[S.areaIdx] || {}).location_id) { showToast('Open the shelf where you found it, then tap + Add product', true); return; }
   openAddItem();
 }
 
-async function createAndAddItem(name){
+async function createProduct(name){
   const cat = COUNT_TYPE === 'booze' ? 'BEER' : 'FOOD';
-  try {
-    const r = await fetch('/api/inventory/products', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({name:name, category:cat})});
-    const d = await r.json(); const pid = d.id || d.product_id;
-    if (!pid) throw new Error();
-    await fetch('/api/storage/product/' + pid + '/units', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({active:true})}).catch(()=>{});
-    S.catalog = S.catalog || []; S.catalog.push({ id:pid, name:name, category:cat });
-  } catch(e) { showToast('Could not create product', true); return; }
+  const r = await fetch('/api/inventory/products', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({name:name, category:cat})});
+  const d = await r.json(); const pid = d.id || d.product_id;
+  if (!pid) throw new Error();
+  await fetch('/api/storage/product/' + pid + '/units', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({active:true})}).catch(()=>{});
+  S.catalog = S.catalog || []; S.catalog.push({ id:pid, name:name, category:cat });
+  return pid;
+}
+async function createAndAddItem(name){
+  let pid;
+  try { pid = await createProduct(name); } catch(e) { showToast('Could not create product', true); return; }
   moveHere(pid);
+}
+
+// ---- "Say items": dictate a shelf, check the matches, add them all at once ----
+// Speech runs on the phone (Safari's recognizer, or the keyboard mic); matching is
+// /api/count-templates/voice-match on our server. No AI spend.
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let _rec = null, _listening = false, _voItems = [];
+function curShelfName(){
+  const sec = S.sections[S.areaIdx] || {};
+  return S.shelfKey === 'un' ? sec.location_name : (((sec.sections || []).find(s => String(s.id) === String(S.shelfKey)) || {}).name || sec.location_name);
+}
+function openVoice(){
+  if (!(S.sections[S.areaIdx] || {}).location_id) return;
+  document.getElementById('vo-title').textContent = 'Say items · ' + curShelfName();
+  document.getElementById('vo-text').value = '';
+  document.getElementById('vo-review').innerHTML = '';
+  document.getElementById('vo-input').style.display = 'block';
+  document.getElementById('vo-mic').style.display = SR ? 'block' : 'none';
+  document.getElementById('vo-tip').textContent = SR
+    ? 'Tap to talk and read the shelf left to right, a short pause between items. Or type, or use the mic on your keyboard.'
+    : 'Tap the mic on your keyboard and read the shelf left to right — say "comma" between items. Or just type.';
+  voInputChanged();
+  document.getElementById('vo-ov').classList.add('open');
+  if (!SR) document.getElementById('vo-text').focus();
+}
+function closeVoice(){ stopListen(); document.getElementById('vo-ov').classList.remove('open'); }
+function voInputChanged(){ document.getElementById('vo-match').disabled = !document.getElementById('vo-text').value.trim(); }
+function toggleListen(){ _listening ? stopListen() : startListen(); }
+function startListen(){
+  if (!SR) return;
+  const ta = document.getElementById('vo-text');
+  const base = ta.value.trim();
+  _rec = new SR(); _rec.lang = 'en-US'; _rec.continuous = true; _rec.interimResults = true;
+  _rec.onresult = e => {
+    // Each final result is one pause-separated item -> its own line.
+    const lines = [];
+    for (let i = 0; i < e.results.length; i++) lines.push(e.results[i][0].transcript.trim());
+    ta.value = [base].concat(lines).filter(Boolean).join('\n');
+    voInputChanged();
+  };
+  _rec.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed')
+    showToast('Mic blocked — use the mic on your keyboard instead', true); stopListen(); };
+  _rec.onend = () => { if (_listening) stopListen(); };
+  try { _rec.start(); } catch(e) { showToast('Mic not available — use the keyboard mic', true); return; }
+  _listening = true;
+  const b = document.getElementById('vo-mic'); b.classList.add('live'); b.textContent = '● Listening — tap to stop';
+}
+function stopListen(){
+  _listening = false;
+  if (_rec) { try { _rec.stop(); } catch(e){} _rec = null; }
+  const b = document.getElementById('vo-mic'); b.classList.remove('live'); b.textContent = '🎤 Tap to talk';
+}
+async function voMatch(){
+  stopListen();
+  const text = document.getElementById('vo-text').value.trim(); if (!text) return;
+  if (!navigator.onLine) { showToast('Matching needs a connection — use + Add product offline', true); return; }
+  const btn = document.getElementById('vo-match'); btn.disabled = true; btn.textContent = 'Matching…';
+  try {
+    const r = await fetch('/api/count-templates/voice-match', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+      body: JSON.stringify({ location:S.location, type:COUNT_TYPE, text:text })});
+    if (r.redirected || !r.ok) throw new Error();
+    _voItems = (await r.json()).items || [];
+  } catch(e) { showToast('Could not match — try again', true); btn.textContent = 'Find products ›'; voInputChanged(); return; }
+  btn.textContent = 'Find products ›';
+  voRenderReview();
+}
+function voRenderReview(){
+  const here = new Set(shelfItems(S.sections[S.areaIdx], S.shelfKey).map(p => p.id));
+  document.getElementById('vo-input').style.display = 'none';
+  let h = '<div class="ai-group">Check each one — change it with the menu</div>';
+  _voItems.forEach((it, i) => {
+    const top = it.candidates[0];
+    const good = top && top.score >= 90;
+    const opts = it.candidates.map((c, k) => '<option value="' + k + '">' + esc(c.name) +
+      (here.has(c.product_id) ? ' (already here)' : '') + '</option>').join('') +
+      '<option value="new">+ New product “' + esc(it.phrase) + '”</option>';
+    h += '<div class="vo-row"><input type="checkbox" id="vo-c' + i + '"' + (top && !here.has(top.product_id) ? ' checked' : '') + '>' +
+      '<div class="vo-main"><div class="vo-heard' + (good ? '' : ' weak') + '">heard “' + esc(it.phrase) + '”' +
+      (top ? (good ? '' : ' — not sure, check it') : ' — no match') + '</div>' +
+      '<select class="vo-sel" id="vo-s' + i + '" onchange="document.getElementById(\'vo-c' + i + '\').checked=true">' + opts + '</select></div></div>';
+  });
+  if (!_voItems.length) h += '<div style="padding:14px;color:var(--text3)">Nothing heard. Go back and try again.</div>';
+  h += '<button class="vo-add" id="vo-add" onclick="voAddAll()">Add to ' + esc(curShelfName()) + '</button>' +
+       '<button class="vo-back" onclick="document.getElementById(\'vo-input\').style.display=\'block\';document.getElementById(\'vo-review\').innerHTML=\'\'">‹ Back to what I said</button>';
+  document.getElementById('vo-review').innerHTML = h;
+}
+async function voAddAll(){
+  const btn = document.getElementById('vo-add'); btn.disabled = true; btn.textContent = 'Adding…';
+  let added = 0, failed = 0;
+  for (let i = 0; i < _voItems.length; i++){
+    if (!document.getElementById('vo-c' + i).checked) continue;
+    const it = _voItems[i], v = document.getElementById('vo-s' + i).value;
+    if (v === 'new') {
+      try { const pid = await createProduct(it.phrase.replace(/\b\w/g, m => m.toUpperCase())); if (placeItem(pid)) added++; }
+      catch(e) { failed++; }
+    } else {
+      const c = it.candidates[Number(v)];
+      if (placeItem(c.product_id, { name:c.name, category:c.category, unit:c.unit, inventory_unit:c.inventory_unit })) added++;
+    }
+  }
+  closeVoice(); render(); updateProgress(); saveLocal();
+  showToast(added ? 'Added ' + added + ' — tap a name to edit, ↕ Arrange to fix order' + (failed ? ' (' + failed + ' failed)' : '')
+                  : 'Nothing added', !added || failed);
 }
 
 function goAreas(){ S.view = 'areas'; S.areaIdx = null; S.shelfKey = null; S.reorder = false; document.getElementById('search').value = ''; render(); }
