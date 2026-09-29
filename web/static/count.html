@@ -484,7 +484,7 @@ async function startCount() {
 
   // Load count sheet — fall back to the last cached sheet if we're offline.
   try {
-    const url = LIST === 'weekly' ? '/api/count-templates/sheet?location=' : '/api/storage/count-sheet?location=';
+    const url = LIST === 'weekly' ? '/api/count-templates/sheet?location=' : '/api/storage/count-sheet?include_empty=1&location=';
     const res = await fetch(url + S.location, {credentials:'include'});
     if (res.redirected || (res.headers.get('content-type') || '').indexOf('json') === -1) {
       showToast('Log in first, then open the count again', true);
@@ -498,11 +498,11 @@ async function startCount() {
   }
 
   // Filter to the selected count type (food / booze) and drop areas left empty.
-  // The weekly sheet keeps empty areas so any shelf can be opened for "It's here".
+  // Empty areas stay so any shelf can be opened and filled with "It's here".
   if (COUNT_TYPE !== 'all') {
     S.sections = S.sections
       .map(sec => Object.assign({}, sec, { products: (sec.products || []).filter(p => inCountType(p.category)) }))
-      .filter(sec => sec.products.length > 0 || (LIST === 'weekly' && sec.location_id));
+      .filter(sec => sec.products.length > 0 || sec.location_id);
   }
   if (LIST === 'weekly' && !S.sections.some(sec => sec.products.length)) {
     showToast('The weekly list is empty — set it up first', true);
@@ -630,7 +630,7 @@ function renderShelves(){
     '<div class="t">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + '</div><div class="s">Pick a shelf</div></div>' +
     '<div class="nav-pct ' + pctClass(ap) + '">' + ap + '%</div>');
   const shelves = (sec.sections || []).map(s => ({ key: s.id, name: s.name }));
-  if (shelfItems(sec, 'un').length || !shelves.length) shelves.push({ key: 'un', name: shelves.length ? 'Unshelved' : 'Whole area (no shelves yet)' });
+  if (shelfItems(sec, 'un').length || !shelves.length) shelves.push({ key: 'un', name: shelves.length ? 'Unshelved' : 'Whole area' });
   document.getElementById('product-list').innerHTML = shelves.length ? shelves.map(sh => {
     const items = shelfItems(sec, sh.key), p = pct(items), c = items.filter(counted).length;
     return '<div class="drill" onclick="goShelf(\'' + sh.key + '\')"><div class="drill-main">' +

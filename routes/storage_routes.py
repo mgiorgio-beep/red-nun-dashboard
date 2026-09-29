@@ -405,7 +405,9 @@ def get_count_sheet():
     location = request.args.get('location')
     if not location:
         return jsonify({'error': 'location required'}), 400
-    
+    # The count page asks for empty areas too, so a new layout can be filled from the phone.
+    include_empty = request.args.get('include_empty') == '1'
+
     conn = get_connection()
     
     # Get storage locations for this restaurant
@@ -432,7 +434,7 @@ def get_count_sheet():
             ORDER BY sort_order, name
         """, (loc['id'],)).fetchall()
 
-        if products:
+        if products or include_empty:
             result.append({
                 'location_id': loc['id'],
                 'location_name': loc['name'],
