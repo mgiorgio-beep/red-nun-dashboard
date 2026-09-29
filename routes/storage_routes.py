@@ -3,7 +3,7 @@ Storage Location Routes
 Handles storage location management and product-location assignments.
 """
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from integrations.toast.data_store import get_connection
 from routes.auth_routes import login_required
 
@@ -229,6 +229,98 @@ def unassign_product(loc_id, product_id):
     conn.commit()
     conn.close()
     return jsonify({'message': 'Product unassigned'})
+
+
+def _ensure_moves_table(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS storage_moves (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            move_id TEXT UNIQUE,
+            product_id INTEGER NOT NULL,
+            location TEXT NOT NULL,
+            from_storage_location_id INTEGER,
+            from_section_id INTEGER,
+            to_storage_location_id INTEGER NOT NULL,
+            to_section_id INTEGER,
+            moved_by TEXT,
+            moved_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
+@storage_bp.route('/api/storage/move', methods=['POST'])
+@login_required
+def move_product():
+    """Move a product to a storage area/shelf at one house ("It's here" on the count page).
+
+    Expects {move_id, product_id, to_storage_location_id, to_section_id|null}.
+    Removes the product from every other storage area at the SAME house (never the
+    other house), puts it at the end of the target shelf, and logs the move.
+    move_id comes from the phone so an offline replay is applied once.
+    """
+    data = request.json or {}
+    move_id = data.get('move_id')
+    product_id = data.get('product_id')
+    to_loc = data.get('to_storage_location_id')
+    to_sec = data.get('to_section_id')
+    if not move_id or not product_id or not to_loc:
+        return jsonify({'error': 'move_id, product_id and to_storage_location_id required'}), 400
+
+    conn = get_connection()
+    try:
+        _ensure_moves_table(conn)
+        if conn.execute("SELECT 1 FROM storage_moves WHERE move_id = ?", (move_id,)).fetchone():
+            return jsonify({'success': True, 'duplicate': True})
+
+        target = conn.execute("SELECT id, location FROM storage_locations WHERE id = ?", (to_loc,)).fetchone()
+        if not target:
+            return jsonify({'error': 'Unknown storage location'}), 404
+        house = target['location']
+        if to_sec is not None:
+            sec = conn.execute("SELECT storage_location_id FROM storage_sections WHERE id = ?", (to_sec,)).fetchone()
+            if not sec or sec['storage_location_id'] != target['id']:
+                return jsonify({'error': 'Shelf is not in that storage area'}), 400
+        if not conn.execute("SELECT 1 FROM products WHERE id = ?", (product_id,)).fetchone():
+            return jsonify({'error': 'Unknown product'}), 404
+
+        current = conn.execute("""
+            SELECT psl.id, psl.storage_location_id, psl.section_id
+            FROM product_storage_locations psl
+            JOIN storage_locations sl ON sl.id = psl.storage_location_id
+            WHERE psl.product_id = ? AND sl.location = ?
+            ORDER BY psl.sort_order
+        """, (product_id, house)).fetchall()
+        src = current[0] if current else None
+
+        max_order = conn.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) FROM product_storage_locations WHERE storage_location_id = ?",
+            (target['id'],)
+        ).fetchone()[0]
+        conn.execute("""
+            DELETE FROM product_storage_locations
+            WHERE product_id = ? AND storage_location_id != ?
+              AND storage_location_id IN (SELECT id FROM storage_locations WHERE location = ?)
+        """, (product_id, target['id'], house))
+        conn.execute("""
+            INSERT INTO product_storage_locations (product_id, storage_location_id, sort_order, section_id)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(product_id, storage_location_id)
+            DO UPDATE SET section_id = excluded.section_id, sort_order = excluded.sort_order
+        """, (product_id, target['id'], max_order + 1, to_sec))
+        conn.execute("""
+            INSERT INTO storage_moves (move_id, product_id, location, from_storage_location_id,
+                                       from_section_id, to_storage_location_id, to_section_id, moved_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (move_id, product_id, house,
+              src['storage_location_id'] if src else None, src['section_id'] if src else None,
+              target['id'], to_sec, session.get('username')))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 @storage_bp.route('/api/storage/locations/<int:loc_id>/reorder', methods=['POST'])

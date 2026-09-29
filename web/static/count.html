@@ -148,6 +148,18 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .ai-item:active{background:var(--card2)}
 .ai-add{color:var(--blue);font-weight:700;flex-shrink:0;margin-left:10px}
 .ai-new{padding:14px;color:var(--green);font-weight:700;cursor:pointer;border-top:1px solid var(--border)}
+.ai-group{padding:14px 14px 6px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.ai-where{display:block;font-size:11px;color:var(--text3);margin-top:2px}
+.ai-look{color:var(--orange)}
+
+/* "Not here" sheet + look-for tray */
+.nh-btn{font-size:10px;font-weight:700;color:var(--orange);background:rgba(255,159,10,0.1);
+  border:1px solid rgba(255,159,10,0.3);border-radius:6px;padding:3px 9px;cursor:pointer}
+.look-tag{font-size:10px;font-weight:700;color:var(--orange)}
+.product-row.looking{opacity:0.45}
+.look-chip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--safe-bottom) + 82px);
+  z-index:98;padding:10px 18px;border-radius:20px;background:var(--orange);color:#000;
+  font-size:13px;font-weight:800;border:none;cursor:pointer;display:none;box-shadow:0 6px 24px rgba(0,0,0,0.5)}
 
 /* Arrange (reorder) mode */
 .arrange-btns{display:flex;gap:8px;flex-shrink:0}
@@ -315,14 +327,16 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 <!-- Add item to the current shelf -->
 <div class="ai-ov" id="ai-ov">
   <div class="ai-head">
-    <input class="ai-search" id="ai-search" placeholder="Search a product, or type a new name…" oninput="aiRender()">
+    <input class="ai-search" id="ai-search" placeholder="What did you find here? Search…" oninput="aiRender()">
     <button class="ai-close" onclick="closeAddItem()">Done</button>
   </div>
   <div class="ai-results" id="ai-results"></div>
 </div>
 
+<button class="look-chip" id="look-chip" onclick="openLookFor()"></button>
+
 <script>
-const S = { location: null, sections: [], counts: {}, countId: null, totalProducts: 0 };
+const S = { location: null, sections: [], counts: {}, lookFor: {}, countId: null, totalProducts: 0 };
 
 // Count type comes from the URL (?type=food | ?type=booze). No param = full count (unchanged).
 const COUNT_TYPE = (new URLSearchParams(location.search).get('type') || 'all').toLowerCase();
@@ -348,7 +362,7 @@ function pickLoc(el) {
 function lsKey(loc){ return 'rn_count_' + loc + '_' + COUNT_TYPE; }
 function saveLocal(){
   if (!S.location) return;
-  try { localStorage.setItem(lsKey(S.location), JSON.stringify({ sheet:S.sections, counts:S.counts, countId:S.countId, total:S.totalProducts, ts:Date.now() })); } catch(e){}
+  try { localStorage.setItem(lsKey(S.location), JSON.stringify({ sheet:S.sections, counts:S.counts, lookFor:S.lookFor, countId:S.countId, total:S.totalProducts, ts:Date.now() })); } catch(e){}
 }
 function loadLocal(loc){ try { return JSON.parse(localStorage.getItem(lsKey(loc)) || 'null'); } catch(e){ return null; } }
 function clearLocal(loc){ try { localStorage.removeItem(lsKey(loc)); } catch(e){} }
@@ -372,13 +386,44 @@ async function flushPending(){
   updateConn();
   if (synced) showToast('✓ Synced ' + synced + ' saved count' + (synced>1?'s':''));
 }
+// Shelf changes (moves, reorders) queue on the device too, and replay in order.
+// A login redirect is not a success: the op stays queued until it really lands.
+function loadOps(){ try { return JSON.parse(localStorage.getItem('rn_shelf_ops') || '[]'); } catch(e){ return []; } }
+function storeOps(q){ try { localStorage.setItem('rn_shelf_ops', JSON.stringify(q)); } catch(e){} }
+function newId(){ return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2)); }
+function queueOp(op){
+  var q = loadOps();
+  if (op.key) q = q.filter(function(o){ return o.key !== op.key; });  // a newer reorder of the same area replaces the old one
+  q.push(op); storeOps(q); updateConn(); flushOps();
+}
+var _flushingOps = false;
+async function flushOps(){
+  if (_flushingOps || !navigator.onLine) return;
+  _flushingOps = true;
+  try {
+    var q = loadOps();
+    while (q.length){
+      var op = q[0], ok = false;
+      try {
+        var r = await fetch(op.url, {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(op.body)});
+        ok = r.ok && !r.redirected && (r.headers.get('content-type') || '').indexOf('json') !== -1;
+        if (!ok && r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) {
+          ok = true;  // rejected for good (e.g. product archived); drop it rather than block the queue
+          showToast('A shelf change was rejected by the server', true);
+        }
+      } catch(e){}
+      if (!ok) break;
+      q = loadOps(); q.shift(); storeOps(q);
+    }
+  } finally { _flushingOps = false; updateConn(); }
+}
 function updateConn(){
   var el = document.getElementById('conn-dot'); if (!el) return;
-  var on = navigator.onLine, pend = pendingCount();
+  var on = navigator.onLine, pend = pendingCount() + loadOps().length;
   el.textContent = (on ? '● Online' : '● Offline') + (pend ? (' · ' + pend + ' to sync') : '');
   el.style.color = on ? (pend ? 'var(--orange)' : 'var(--green)') : 'var(--red)';
 }
-window.addEventListener('online', function(){ updateConn(); flushPending(); });
+window.addEventListener('online', function(){ updateConn(); flushOps(); flushPending(); });
 window.addEventListener('offline', updateConn);
 
 // ============================================
@@ -394,6 +439,7 @@ async function startCount() {
     if (confirm('You have an in-progress ' + TYPE_LABEL.toLowerCase() + ' count here with ' + Object.keys(saved.counts).length + ' items counted.\n\nResume it?  (Cancel = start a new count)')) {
       S.sections = saved.sheet || [];
       S.counts = saved.counts || {};
+      S.lookFor = saved.lookFor || {};
       S.countId = saved.countId || null;
       S.totalProducts = saved.total || S.sections.reduce((s, sec) => s + (sec.products || []).length, 0);
       S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
@@ -431,6 +477,7 @@ async function startCount() {
   // Session is created on SAVE (not on start). Blank = not counted, 0 = counted-out.
   S.countId = null;
   S.counts = {};
+  S.lookFor = {};
   S.totalProducts = S.sections.reduce((sum, sec) => sum + sec.products.length, 0);
   S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
   document.getElementById('setup-screen').style.display = 'none';
@@ -504,7 +551,7 @@ function mdMainHtml(){
     '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div></div>';
   h += S.reorder
     ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
-    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ Add item</button>' +
+    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ It\'s here</button>' +
       '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
   h += items.length
     ? items.map((x, i) => S.reorder ? arrangeRowHtml(x, i, items.length) : productRowHtml(x, i)).join('')
@@ -559,7 +606,7 @@ function renderShelf(){
   if (search && !S.reorder) items = items.filter(x => ((x.name||'') + ' ' + (x.display_name||'')).toLowerCase().includes(search));
   const topBar = S.reorder
     ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
-    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ Add item</button>' +
+    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ It\'s here</button>' +
       '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
   const rowsHtml = items.length
     ? items.map((x, i) => S.reorder ? arrangeRowHtml(x, i, items.length) : productRowHtml(x, i)).join('')
@@ -604,64 +651,107 @@ async function removeFromShelf(pid){
   } catch(e) { showToast('Could not remove', true); }
 }
 function persistOrder(area){
-  fetch('/api/storage/locations/' + area.location_id + '/reorder', {
-    method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
-    body: JSON.stringify({ product_ids: area.products.map(p => p.id) })
-  }).catch(()=>{});
+  queueOp({ key: 'reorder-' + area.location_id, url: '/api/storage/locations/' + area.location_id + '/reorder',
+            body: { product_ids: area.products.map(p => p.id) } });
 }
 
-// ---- Add item to the shelf you're on ----
+// ---- "It's here": move an item onto the shelf you're standing at ----
 async function ensureCatalog(){
   if (S.catalog) return;
-  const all = await fetch('/api/inventory/products', {credentials:'include'}).then(r => r.json()).catch(() => []);
-  S.catalog = (all || []).filter(p => p.active !== 0 && inCountType(p.category));
+  const all = await fetch('/api/inventory/products', {credentials:'include'}).then(r => r.json()).catch(() => null);
+  if (!Array.isArray(all)) return;  // offline: the picker still has everything on the count sheet
+  S.catalog = all.filter(p => p.active !== 0 && inCountType(p.category) &&
+    (!p.location || p.location === S.location || p.location === 'both'));
 }
 async function openAddItem(){
   document.getElementById('ai-ov').classList.add('open');
   document.getElementById('ai-search').value = '';
-  document.getElementById('ai-results').innerHTML = '<div style="padding:14px;color:var(--text3)">Loading catalog…</div>';
+  aiRender();
   await ensureCatalog();
   aiRender();
-  document.getElementById('ai-search').focus();
 }
 function closeAddItem(){ document.getElementById('ai-ov').classList.remove('open'); }
+function findOnSheet(pid){
+  for (let ai = 0; ai < S.sections.length; ai++){
+    const i = S.sections[ai].products.findIndex(p => p.id === pid);
+    if (i >= 0) return { ai: ai, sec: S.sections[ai], i: i, p: S.sections[ai].products[i] };
+  }
+  return null;
+}
+function whereLabel(sec, p){
+  const sh = p.section_id ? ((sec.sections || []).find(s => String(s.id) === String(p.section_id)) || {}).name : null;
+  return sec.location_name + (sh ? ' · ' + sh : '');
+}
 function aiRender(){
   const q = (document.getElementById('ai-search').value || '').trim();
   const ql = q.toLowerCase();
-  let list = (S.catalog || []);
-  if (ql) list = list.filter(p => (p.name||'').toLowerCase().includes(ql) || (p.display_name||'').toLowerCase().includes(ql));
-  list = list.slice(0, 40);
-  let html = list.map(p => '<div class="ai-item" onclick="addExistingToShelf(' + p.id + ')"><span>' + esc(p.display_name||p.name) + '</span><span class="ai-add">+ Add</span></div>').join('');
-  if (q && !(S.catalog||[]).some(p => (p.display_name||p.name||'').toLowerCase() === ql)) {
-    html += '<div class="ai-new" onclick="aiCreate()">+ Create new product “' + esc(q) + '”</div>';
+  const cur = S.sections[S.areaIdx];
+  const match = p => !ql || (p.name||'').toLowerCase().includes(ql) || (p.display_name||'').toLowerCase().includes(ql);
+  const isHere = (sec, p) => sec === cur && (S.shelfKey === 'un' ? !p.section_id : String(p.section_id) === String(S.shelfKey));
+  const row = (p, where, cls) => '<div class="ai-item" onclick="moveHere(' + p.id + ')"><span>' + esc(p.display_name||p.name) +
+    (where ? '<span class="ai-where' + (cls ? ' ' + cls : '') + '">' + esc(where) + '</span>' : '') + '</span><span class="ai-add">Here</span></div>';
+  const look = [], elsewhere = [], onSheet = new Set();
+  S.sections.forEach(sec => sec.products.forEach(p => {
+    onSheet.add(p.id);
+    if (isHere(sec, p) || !match(p)) return;
+    if (S.lookFor[p.id]) look.push(row(p, 'Looking for it · was ' + whereLabel(sec, p), 'ai-look'));
+    else if (ql) elsewhere.push(row(p, 'Now: ' + whereLabel(sec, p)));
+  }));
+  let html = '';
+  if (look.length) html += '<div class="ai-group">Looking for</div>' + look.join('');
+  if (elsewhere.length) html += '<div class="ai-group">Elsewhere at this house</div>' + elsewhere.slice(0, 40).join('');
+  if (ql) {
+    const cat = (S.catalog || []).filter(p => !onSheet.has(p.id) && match(p)).slice(0, 15);
+    if (cat.length) html += '<div class="ai-group">Not on the count sheet yet</div>' + cat.map(p => row(p, '')).join('');
+    if (!(S.catalog||[]).some(p => (p.display_name||p.name||'').toLowerCase() === ql))
+      html += '<div class="ai-new" onclick="aiCreate()">+ Create new product “' + esc(q) + '”</div>';
   }
-  if (!html) html = '<div style="padding:14px;color:var(--text3)">Type to search products…</div>';
+  if (!html) html = '<div style="padding:14px;color:var(--text3)">Type the item you found on this shelf…</div>';
   document.getElementById('ai-results').innerHTML = html;
 }
 function aiCreate(){ const name = (document.getElementById('ai-search').value || '').trim(); if (name) createAndAddItem(name); }
 
-async function addExistingToShelf(pid){
+// Moves apply on the phone at once and sync through the shelf-op queue (works in the dead zone).
+function moveHere(pid){
   const sec = S.sections[S.areaIdx]; if (!sec) return;
-  const loc = sec.location_id;
-  try {
-    await fetch('/api/storage/locations/' + loc + '/products', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({product_id:pid})}).catch(()=>{});
-    const rows = await fetch('/api/storage/locations/' + loc + '/products', {credentials:'include'}).then(r => r.json());
-    const row = (rows || []).find(r => r.id === pid);
-    const secId = (S.shelfKey === 'un') ? null : Number(S.shelfKey);
-    if (secId != null && row) {
-      await fetch('/api/inventory/count/assign-section', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({psl_id:row.assignment_id, section_id:secId})});
-    }
-    const existing = sec.products.find(p => p.id === pid);
-    if (existing) { existing.section_id = secId; }
-    else {
-      const c = (S.catalog || []).find(x => x.id === pid) || {};
-      sec.products.push({ id:pid, name:c.name||(row&&row.name)||'Item', display_name:c.display_name, category:c.category, unit:c.unit, inventory_unit:c.inventory_unit, current_price:c.current_price, section_id:secId, current_qty:null });
-      S.totalProducts++;
-    }
-    closeAddItem(); render(); updateProgress(); saveLocal();
-    showToast('Added to shelf');
-  } catch(e) { showToast('Could not add item', true); }
+  const secId = (S.shelfKey === 'un') ? null : Number(S.shelfKey);
+  const hit = findOnSheet(pid);
+  let item;
+  if (hit) item = hit.sec.products.splice(hit.i, 1)[0];
+  else {
+    const c = (S.catalog || []).find(x => x.id === pid) || {};
+    item = { id:pid, name:c.name||'Item', display_name:c.display_name, category:c.category, unit:c.unit,
+             inventory_unit:c.inventory_unit, current_price:c.current_price, current_qty:null };
+    S.totalProducts++;
+  }
+  item.section_id = secId;
+  sec.products.push(item);
+  delete S.lookFor[pid];
+  queueOp({ url:'/api/storage/move', body:{ move_id:newId(), product_id:pid, to_storage_location_id:sec.location_id, to_section_id:secId } });
+  closeAddItem(); render(); updateProgress(); saveLocal();
+  showToast('Moved here — count it now');
+  setTimeout(() => { const el = document.querySelector('.qty-input[data-pid="' + pid + '"]'); if (el) { el.scrollIntoView({block:'center'}); el.focus(); } }, 60);
 }
+
+// "Moved": not where it used to be. Parks it on the Look-for list until you find it.
+function markMoved(pid){
+  if (S.lookFor[pid]) delete S.lookFor[pid];  // tapped again = it's back / never mind
+  else { S.lookFor[pid] = true; delete S.counts[pid]; showToast('On the Look-for list'); }
+  render(); updateProgress(); saveLocal();
+}
+function updateLookChip(){
+  const el = document.getElementById('look-chip'); if (!el) return;
+  const n = Object.keys(S.lookFor || {}).length;
+  const on = n > 0 && document.getElementById('count-screen').style.display === 'block';
+  el.style.display = on ? 'block' : 'none';
+  el.textContent = '🔎 Look for ' + n;
+}
+function openLookFor(){
+  const onShelf = isTablet() ? S.areaIdx != null : S.view === 'shelf';
+  if (!onShelf) { showToast('Open the shelf where you found it, then tap It\'s here', true); return; }
+  openAddItem();
+}
+
 async function createAndAddItem(name){
   const cat = COUNT_TYPE === 'booze' ? 'BEER' : 'FOOD';
   try {
@@ -670,8 +760,8 @@ async function createAndAddItem(name){
     if (!pid) throw new Error();
     await fetch('/api/storage/product/' + pid + '/units', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({active:true})}).catch(()=>{});
     S.catalog = S.catalog || []; S.catalog.push({ id:pid, name:name, category:cat });
-    await addExistingToShelf(pid);
-  } catch(e) { showToast('Could not create product', true); }
+  } catch(e) { showToast('Could not create product', true); return; }
+  moveHere(pid);
 }
 
 function goAreas(){ S.view = 'areas'; S.areaIdx = null; S.shelfKey = null; S.reorder = false; document.getElementById('search').value = ''; render(); }
@@ -684,12 +774,14 @@ function productRowHtml(p, i) {
   const prev = p.current_qty;
   const unit = p.inventory_unit || p.unit || 'ea';
   const prevHtml = prev !== null && prev !== undefined ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
-  return '<div class="product-row fade-up" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
+  const looking = !!S.lookFor[p.id];
+  return '<div class="product-row fade-up' + (looking ? ' looking' : '') + '" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
     '<div class="product-info">' +
       '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(p.display_name || p.name) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
       '<div class="product-meta">' +
         '<span class="unit-chip" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">count: ' + esc(unit) + '</span>' + prevHtml +
-        '<button class="out-btn" onclick="markOut(' + p.id + ')">Out (0)</button>' +
+        (looking ? '<span class="look-tag">🔎 Looking</span>' : '<button class="out-btn" onclick="markOut(' + p.id + ')">Out (0)</button>') +
+        '<button class="nh-btn" onclick="markMoved(' + p.id + ')">' + (looking ? 'It\'s back' : 'Moved') + '</button>' +
       '</div>' +
     '</div>' +
     '<div class="qty-stepper">' +
@@ -722,6 +814,7 @@ function editFromCount(pid){
 }
 
 function markOut(pid){
+  delete S.lookFor[pid];
   const el = document.querySelector('.qty-input[data-pid="' + pid + '"]');
   if (el){ el.value = 0; setQty(pid, el); }
   else { S.counts[pid] = 0; updateProgress(); }
@@ -738,12 +831,16 @@ function stepQty(pid, delta) {
 function setQty(pid, el) {
   const v = el.value.trim();
   if (v === '') { delete S.counts[pid]; el.classList.remove('has-value'); }
-  else { S.counts[pid] = parseFloat(v); el.classList.add('has-value'); }
+  else {
+    S.counts[pid] = parseFloat(v); el.classList.add('has-value');
+    if (S.lookFor[pid]) { delete S.lookFor[pid]; const r = el.closest('.product-row'); if (r) r.classList.remove('looking'); }
+  }
   updateProgress();
   saveLocal();
 }
 
 function updateProgress() {
+  updateLookChip();
   document.getElementById('counted-num').textContent = Object.keys(S.counts).length;
   document.getElementById('total-num').textContent = S.totalProducts;
   const sec = S.sections[S.areaIdx];
@@ -757,6 +854,12 @@ function updateProgress() {
 // SAVE
 // ============================================
 async function saveCount() {
+  const lost = Object.keys(S.lookFor).filter(pid => S.counts[pid] === undefined);
+  if (lost.length) {
+    if (confirm(lost.length + ' item' + (lost.length === 1 ? '' : 's') + ' marked Moved never turned up.\n\nOK = count ' + (lost.length === 1 ? 'it' : 'them') + ' as 0 (out)\nCancel = leave ' + (lost.length === 1 ? 'it' : 'them') + ' uncounted'))
+      lost.forEach(pid => { S.counts[pid] = 0; });
+    S.lookFor = {};
+  }
   const counted = Object.keys(S.counts).length;
   if (counted === 0) { showToast('No items counted yet', true); return; }
   const blanks = S.totalProducts - counted;
@@ -779,8 +882,8 @@ async function saveCount() {
   function finish(msg, err) {
     showToast(msg, err);
     clearLocal(S.location);
-    S.counts = {};
-    updateConn();
+    S.counts = {}; S.lookFor = {};
+    updateConn(); updateLookChip();
     setTimeout(() => {
       document.getElementById('count-screen').style.display = 'none';
       document.getElementById('setup-screen').style.display = 'block';
@@ -812,7 +915,8 @@ function discardCount() {
   document.getElementById('setup-screen').style.display = 'block';
   document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
   document.getElementById('search').value = '';
-  S.counts = {};
+  S.counts = {}; S.lookFor = {};
+  updateLookChip();
 }
 
 // ============================================
@@ -871,7 +975,7 @@ if (COUNT_TYPE !== 'all') {
 }
 loadHistory();
 updateConn();
-if (navigator.onLine) flushPending();
+if (navigator.onLine) { flushOps(); flushPending(); }
 // Only re-render on a real breakpoint change (rotation) — NOT on iOS toolbar show/hide,
 // which fires resize during scroll and was causing the jumpiness.
 let _rzT, _wasTablet = isTablet();
