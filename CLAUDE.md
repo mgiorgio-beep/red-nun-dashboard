@@ -441,6 +441,7 @@ Python venv: `/opt/red-nun-dashboard/venv/bin/python3`
 - Sports guide scraper: daily 10 AM
 - Vendor scrapers: daily 7 AM (`run_all.sh`)
 - Nightly backup: 3 AM (tar + DB copy, 14-day retention)
+- Weekly inventory count reminder: Tuesdays 9 AM email with one-tap links (`/week?loc=`), 3 PM nudge only for a house not counted yet (`monitoring/weekly_count_reminder.py`). The weekly list is `count_templates`, edited at `/count/list`; seeded by `scripts/seed_weekly_count_list.py` from 90-day purchase $ (`reports/key_items.py`).
 
 ## Backup Policy
 Every time you back up the DB to `/opt/backups/`, **delete all previous `.db` backups** after confirming the new one exists and is reasonable size. Disk hit 93.5% full when old backups accumulated.

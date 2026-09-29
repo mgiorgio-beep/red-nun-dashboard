@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>Red Nun — Weekly Count List</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.15);--text:#f5f5f7;--text2:rgba(245,245,247,0.6);
+  --text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;
+  --orange:#FF9F0A;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.hdr{position:sticky;top:0;z-index:100;padding:calc(var(--safe-top) + 12px) 16px 12px;
+  background:rgba(10,10,12,0.85);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.hdr-title{font-size:17px;font-weight:700}
+.hdr a{color:var(--blue);font-size:14px;font-weight:600;text-decoration:none}
+.wrap{padding:16px 16px calc(var(--safe-bottom) + 32px);max-width:1100px;margin:0 auto}
+.seg{display:flex;gap:8px;margin-bottom:14px}
+.seg button{flex:1;padding:12px;border-radius:12px;border:1px solid var(--border2);background:var(--card);
+  color:var(--text);font-size:15px;font-weight:700;cursor:pointer}
+.seg button.sel{background:var(--blue);border-color:var(--blue)}
+.status{padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--border);
+  font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.45}
+.status b{color:var(--text)}
+.go{display:block;width:100%;padding:16px;border:none;border-radius:14px;background:var(--green);color:#000;
+  font-size:16px;font-weight:800;text-align:center;text-decoration:none;margin-bottom:22px}
+.h{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:18px 4px 8px}
+.row{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;margin-bottom:6px}
+.row .main{flex:1;min-width:0}
+.row .name{font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.row .sub{font-size:12px;color:var(--text3);margin-top:2px}
+.row .sub .warn{color:var(--orange)}
+.btn{flex-shrink:0;min-width:44px;height:40px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);
+  color:var(--text);font-size:14px;font-weight:700;cursor:pointer;padding:0 12px}
+.btn.rm{color:var(--red)}
+.btn.add{color:var(--green)}
+.search{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border2);background:var(--card);
+  color:var(--text);font-size:16px;margin-bottom:8px}
+.empty{padding:14px;color:var(--text3);font-size:13px}
+.toast{position:fixed;left:50%;bottom:calc(var(--safe-bottom) + 24px);transform:translateX(-50%);padding:12px 20px;
+  border-radius:12px;background:var(--green);color:#000;font-weight:700;font-size:14px;opacity:0;transition:opacity .25s;
+  pointer-events:none;z-index:200}
+.toast.show{opacity:1}
+.toast.error{background:var(--red);color:#fff}
+@media (min-width:768px){
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+  .row{padding:9px 12px}
+}
+</style>
+</head>
+<body>
+<div class="hdr"><div class="hdr-title">Weekly Count List</div><a href="/count?list=weekly">Count ›</a></div>
+<div class="wrap">
+  <div class="seg">
+    <button data-loc="chatham" onclick="pick('chatham')">Chatham</button>
+    <button data-loc="dennis" onclick="pick('dennis')">Dennis Port</button>
+  </div>
+  <div class="status" id="status">Loading…</div>
+  <a class="go" id="go" href="/week">Start this week's count</a>
+  <div class="cols">
+    <div>
+      <div class="h" id="h-list">On the weekly list</div>
+      <div id="list"></div>
+    </div>
+    <div>
+      <div class="h">Add a product</div>
+      <input class="search" id="q" placeholder="Search any product…" oninput="renderSearch()">
+      <div id="found"></div>
+      <div class="h">Big spend, not on the list (last 90 days)</div>
+      <div id="sugg"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const L = { loc: null, data: null, catalog: null };
+const BOOZE = ['BEER', 'LIQUOR', 'WINE'];
+function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+function money(v){ return '$' + Math.round(v || 0).toLocaleString(); }
+function toast(m, err){ const t = document.getElementById('toast'); t.textContent = m; t.className = 'toast show' + (err ? ' error' : ''); setTimeout(() => t.className = 'toast', 2200); }
+async function api(url, opts){
+  const r = await fetch(url, Object.assign({ credentials: 'include' }, opts || {}));
+  if (r.redirected || (r.headers.get('content-type') || '').indexOf('json') === -1) { location.href = '/login'; throw new Error('login'); }
+  if (!r.ok) throw new Error((await r.json()).error || 'failed');
+  return r.json();
+}
+
+function pick(loc){
+  L.loc = loc;
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('sel', b.dataset.loc === loc));
+  document.getElementById('go').href = '/week?loc=' + loc;
+  history.replaceState(null, '', '/count/list?loc=' + loc);
+  load();
+}
+async function load(){
+  try { L.data = await api('/api/count-templates?location=' + L.loc); }
+  catch(e){ document.getElementById('status').textContent = 'Could not load the list.'; return; }
+  render();
+}
+function render(){
+  const d = L.data, items = d.items;
+  const food = items.filter(i => i.group === 'food'), bar = items.filter(i => i.group !== 'food');
+  const lw = d.last_weekly;
+  const noShelf = items.filter(i => !i.area).length;
+  document.getElementById('status').innerHTML =
+    '<b>' + items.length + ' items</b> (' + food.length + ' food, ' + bar.length + ' bar). ' +
+    (lw ? 'Last weekly count: <b>' + new Date(lw.created_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'}) + '</b>, ' + lw.items + ' items.'
+        : 'No weekly count saved yet.') +
+    (noShelf ? '<br><span style="color:var(--orange)">' + noShelf + ' have no shelf yet</span> — the first walk puts them away (tap “It’s here” on the shelf).' : '');
+  document.getElementById('h-list').textContent = 'On the weekly list (' + items.length + ')';
+  const row = i => '<div class="row"><div class="main"><div class="name">' + esc(i.name) + '</div><div class="sub">' +
+    (i.dollars ? money(i.dollars) + ' / 90d · ' : '') + (i.area ? esc(i.area) : '<span class="warn">no shelf yet</span>') +
+    '</div></div><button class="btn rm" onclick="removeItem(' + i.product_id + ')" aria-label="Remove">✕</button></div>';
+  document.getElementById('list').innerHTML =
+    (food.length ? '<div class="h">Kitchen</div>' + food.map(row).join('') : '') +
+    (bar.length ? '<div class="h">Bar</div>' + bar.map(row).join('') : '') ||
+    '<div class="empty">Nothing on the list yet — add from the right.</div>';
+  document.getElementById('sugg').innerHTML = d.suggestions.length ? d.suggestions.map(s =>
+    '<div class="row"><div class="main"><div class="name">' + esc(s.name) + '</div><div class="sub">' + money(s.dollars) + ' / 90d · ' +
+    esc(s.category || '') + '</div></div><button class="btn add" onclick="addItem(' + s.product_id + ')">+ Add</button></div>').join('')
+    : '<div class="empty">Nothing big is missing.</div>';
+  renderSearch();
+}
+async function renderSearch(){
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const el = document.getElementById('found');
+  if (!q) { el.innerHTML = ''; return; }
+  if (!L.catalog) {
+    el.innerHTML = '<div class="empty">Loading…</div>';
+    try { L.catalog = (await api('/api/inventory/products')).filter(p => p.active !== 0); } catch(e){ return; }
+  }
+  const on = new Set(L.data.items.map(i => i.product_id));
+  const hits = L.catalog.filter(p => !on.has(p.id) && ((p.name || '') + ' ' + (p.display_name || '')).toLowerCase().includes(q)).slice(0, 12);
+  el.innerHTML = hits.length ? hits.map(p => '<div class="row"><div class="main"><div class="name">' + esc(p.display_name || p.name) +
+    '</div><div class="sub">' + esc(p.category || '') + '</div></div><button class="btn add" onclick="addItem(' + p.id + ')">+ Add</button></div>').join('')
+    : '<div class="empty">No match.</div>';
+}
+async function addItem(pid){
+  try { await api('/api/count-templates', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ location: L.loc, product_id: pid }) }); }
+  catch(e){ toast('Could not add', true); return; }
+  document.getElementById('q').value = '';
+  toast('Added'); load();
+}
+async function removeItem(pid){
+  try { await api('/api/count-templates/' + L.loc + '/' + pid, { method: 'DELETE' }); }
+  catch(e){ toast('Could not remove', true); return; }
+  toast('Removed'); load();
+}
+pick(new URLSearchParams(location.search).get('loc') === 'dennis' ? 'dennis' : 'chatham');
+</script>
+</body>
+</html>

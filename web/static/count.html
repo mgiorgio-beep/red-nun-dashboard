@@ -256,6 +256,11 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   box-shadow:0 8px 32px rgba(0,0,0,0.4)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.error{background:var(--red);color:#fff}
+.list-sub{display:block;font-size:11px;font-weight:500;color:var(--text3);margin-top:3px}
+.list-edit{display:none;margin-top:12px;font-size:13px;font-weight:600;color:var(--blue);text-decoration:none}
+.list-edit.show{display:inline-block}
+.noshelf-hint{padding:12px 14px;margin:8px 0;border-radius:10px;background:rgba(255,159,10,0.08);
+  border:1px solid rgba(255,159,10,0.25);color:var(--text2);font-size:13px;line-height:1.4}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .fade-up{animation:fadeUp 0.25s ease both}
@@ -289,6 +294,15 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
       <button class="loc-btn" data-loc="dennis" onclick="pickLoc(this)">Dennis Port</button>
       <button class="loc-btn" data-loc="chatham" onclick="pickLoc(this)">Chatham</button>
     </div>
+  </div>
+
+  <div class="setup-card">
+    <div class="setup-label">What are you counting?</div>
+    <div class="loc-grid">
+      <button class="loc-btn list-btn" data-list="weekly" onclick="pickList(this)">Weekly key items<small class="list-sub">Tuesdays · ~40 items</small></button>
+      <button class="loc-btn list-btn" data-list="full" onclick="pickList(this)">Full count<small class="list-sub">Month end · everything</small></button>
+    </div>
+    <a class="list-edit" id="list-edit" href="/count/list">Edit the weekly list ›</a>
   </div>
 
   <button class="start-btn" id="start-btn" disabled onclick="startCount()">Start Count</button>
@@ -339,10 +353,26 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 const S = { location: null, sections: [], counts: {}, lookFor: {}, countId: null, totalProducts: 0 };
 
 // Count type comes from the URL (?type=food | ?type=booze). No param = full count (unchanged).
-const COUNT_TYPE = (new URLSearchParams(location.search).get('type') || 'all').toLowerCase();
+const URLP = new URLSearchParams(location.search);
+const COUNT_TYPE = (URLP.get('type') || 'all').toLowerCase();
 const BOOZE_CATS = ['BEER', 'LIQUOR', 'WINE'];
-const TYPE_LABEL = COUNT_TYPE === 'food' ? 'Food' : COUNT_TYPE === 'booze' ? 'Booze' : 'Full';
-const TYPE_NOTE  = COUNT_TYPE === 'food' ? 'Food count' : COUNT_TYPE === 'booze' ? 'Booze count' : 'Full count';
+// LIST: 'weekly' = the key-item list (/count/list), 'full' = everything on a shelf (month end).
+let LIST = URLP.get('list') === 'weekly' ? 'weekly' : 'full';
+let TYPE_LABEL, TYPE_NOTE;
+function applyMode(){
+  const t = COUNT_TYPE === 'food' ? 'Food' : COUNT_TYPE === 'booze' ? 'Booze' : '';
+  if (LIST === 'weekly') {
+    TYPE_LABEL = 'Weekly' + (t ? ' ' + t : '');
+    TYPE_NOTE  = 'Weekly key-item count' + (t ? ' (' + t.toLowerCase() + ')' : '');
+  } else {
+    TYPE_LABEL = t || 'Full';
+    TYPE_NOTE  = (t || 'Full') + ' count';
+  }
+  document.querySelectorAll('.list-btn').forEach(b => b.classList.toggle('sel', b.dataset.list === LIST));
+  const le = document.getElementById('list-edit'); if (le) le.classList.toggle('show', LIST === 'weekly');
+}
+function pickList(el){ LIST = el.dataset.list; applyMode(); }
+applyMode();
 function inCountType(cat) {
   if (COUNT_TYPE === 'all') return true;
   const isBooze = BOOZE_CATS.includes((cat || '').toUpperCase());
@@ -350,7 +380,7 @@ function inCountType(cat) {
 }
 
 function pickLoc(el) {
-  document.querySelectorAll('.loc-btn').forEach(b => b.classList.remove('sel'));
+  document.querySelectorAll('.loc-btn[data-loc]').forEach(b => b.classList.remove('sel'));
   el.classList.add('sel');
   S.location = el.dataset.loc;
   document.getElementById('start-btn').disabled = false;
@@ -359,7 +389,7 @@ function pickLoc(el) {
 // ============================================
 // OFFLINE PERSISTENCE  (count works in the walk-in dead zone)
 // ============================================
-function lsKey(loc){ return 'rn_count_' + loc + '_' + COUNT_TYPE; }
+function lsKey(loc){ return 'rn_count_' + loc + '_' + COUNT_TYPE + (LIST === 'weekly' ? '_weekly' : ''); }
 function saveLocal(){
   if (!S.location) return;
   try { localStorage.setItem(lsKey(S.location), JSON.stringify({ sheet:S.sections, counts:S.counts, lookFor:S.lookFor, countId:S.countId, total:S.totalProducts, ts:Date.now() })); } catch(e){}
@@ -454,7 +484,13 @@ async function startCount() {
 
   // Load count sheet — fall back to the last cached sheet if we're offline.
   try {
-    const res = await fetch('/api/storage/count-sheet?location=' + S.location);
+    const url = LIST === 'weekly' ? '/api/count-templates/sheet?location=' : '/api/storage/count-sheet?location=';
+    const res = await fetch(url + S.location, {credentials:'include'});
+    if (res.redirected || (res.headers.get('content-type') || '').indexOf('json') === -1) {
+      showToast('Log in first, then open the count again', true);
+      setTimeout(() => { location.href = '/login'; }, 1500);
+      return;
+    }
     S.sections = await res.json();
   } catch(e) {
     if (saved && saved.sheet && saved.sheet.length) { S.sections = saved.sheet; showToast('Offline — using last loaded sheet', true); }
@@ -462,10 +498,16 @@ async function startCount() {
   }
 
   // Filter to the selected count type (food / booze) and drop areas left empty.
+  // The weekly sheet keeps empty areas so any shelf can be opened for "It's here".
   if (COUNT_TYPE !== 'all') {
     S.sections = S.sections
       .map(sec => Object.assign({}, sec, { products: (sec.products || []).filter(p => inCountType(p.category)) }))
-      .filter(sec => sec.products.length > 0);
+      .filter(sec => sec.products.length > 0 || (LIST === 'weekly' && sec.location_id));
+  }
+  if (LIST === 'weekly' && !S.sections.some(sec => sec.products.length)) {
+    showToast('The weekly list is empty — set it up first', true);
+    setTimeout(() => { location.href = '/count/list?loc=' + S.location; }, 1500);
+    return;
   }
 
   if (S.sections.length === 0) {
@@ -549,14 +591,19 @@ function mdMainHtml(){
   const p = pct(items);
   let h = '<div class="md-head"><div class="t">' + esc(sec.location_name) + ' · ' + esc(shName) + '</div>' +
     '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div></div>';
-  h += S.reorder
-    ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
-    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ It\'s here</button>' +
-      '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
+  h += shelfTopBar(sec);
   h += items.length
     ? items.map((x, i) => S.reorder ? arrangeRowHtml(x, i, items.length) : productRowHtml(x, i)).join('')
     : '<div class="empty"><div class="empty-text">No items here yet — add one above.</div></div>';
   return h;
+}
+function shelfTopBar(sec){
+  if (!sec.location_id) return '<div class="noshelf-hint">These key items have no shelf yet. Count them wherever they are — ' +
+    'or open the shelf where one lives and tap <b>+ It\'s here</b> to put it there for next week.</div>';
+  return S.reorder
+    ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
+    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ It\'s here</button>' +
+      '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
 }
 function navBar(html){ document.getElementById('nav-bar').innerHTML = html; }
 
@@ -569,7 +616,7 @@ function renderAreas(){
     const items = sec.products, p = pct(items), c = items.filter(counted).length;
     return '<div class="drill" onclick="goShelves(' + i + ')"><div class="drill-main">' +
       '<div class="drill-name">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + '</div>' +
-      '<div class="drill-sub">' + c + ' of ' + items.length + ' counted</div>' +
+      '<div class="drill-sub">' + c + ' of ' + items.length + ' counted' + (sec.location_id ? '' : ' · tap to see which') + '</div>' +
       '<div class="pbar"><i style="width:' + p + '%"></i></div></div>' +
       '<div class="drill-pct ' + pctClass(p) + '">' + p + '%</div><div class="chev">›</div></div>';
   }).join('');
@@ -583,7 +630,7 @@ function renderShelves(){
     '<div class="t">' + sectionIcon(sec.location_name) + ' ' + esc(sec.location_name) + '</div><div class="s">Pick a shelf</div></div>' +
     '<div class="nav-pct ' + pctClass(ap) + '">' + ap + '%</div>');
   const shelves = (sec.sections || []).map(s => ({ key: s.id, name: s.name }));
-  if (shelfItems(sec, 'un').length) shelves.push({ key: 'un', name: 'Unshelved' });
+  if (shelfItems(sec, 'un').length || !shelves.length) shelves.push({ key: 'un', name: shelves.length ? 'Unshelved' : 'Whole area (no shelves yet)' });
   document.getElementById('product-list').innerHTML = shelves.length ? shelves.map(sh => {
     const items = shelfItems(sec, sh.key), p = pct(items), c = items.filter(counted).length;
     return '<div class="drill" onclick="goShelf(\'' + sh.key + '\')"><div class="drill-main">' +
@@ -604,10 +651,7 @@ function renderShelf(){
     '<div class="t">' + esc(shName) + '</div><div class="s">' + esc(sec.location_name) + '</div></div>' +
     '<div class="nav-pct ' + pctClass(p) + '" id="shelf-pct">' + p + '%</div>');
   if (search && !S.reorder) items = items.filter(x => ((x.name||'') + ' ' + (x.display_name||'')).toLowerCase().includes(search));
-  const topBar = S.reorder
-    ? '<div class="shelf-actions"><button class="sa-done" onclick="toggleReorder()">✓ Done arranging</button></div>'
-    : '<div class="shelf-actions"><button class="sa-btn sa-add" onclick="openAddItem()">+ It\'s here</button>' +
-      '<button class="sa-btn sa-arrange" onclick="toggleReorder()">↕ Arrange</button></div>';
+  const topBar = shelfTopBar(sec);
   const rowsHtml = items.length
     ? items.map((x, i) => S.reorder ? arrangeRowHtml(x, i, items.length) : productRowHtml(x, i)).join('')
     : '<div class="empty"><div class="empty-text">No items here yet — add one above.</div></div>';
@@ -690,15 +734,17 @@ function aiRender(){
   const isHere = (sec, p) => sec === cur && (S.shelfKey === 'un' ? !p.section_id : String(p.section_id) === String(S.shelfKey));
   const row = (p, where, cls) => '<div class="ai-item" onclick="moveHere(' + p.id + ')"><span>' + esc(p.display_name||p.name) +
     (where ? '<span class="ai-where' + (cls ? ' ' + cls : '') + '">' + esc(where) + '</span>' : '') + '</span><span class="ai-add">Here</span></div>';
-  const look = [], elsewhere = [], onSheet = new Set();
+  const look = [], elsewhere = [], noshelf = [], onSheet = new Set();
   S.sections.forEach(sec => sec.products.forEach(p => {
     onSheet.add(p.id);
     if (isHere(sec, p) || !match(p)) return;
     if (S.lookFor[p.id]) look.push(row(p, 'Looking for it · was ' + whereLabel(sec, p), 'ai-look'));
+    else if (!sec.location_id) noshelf.push(row(p, ''));
     else if (ql) elsewhere.push(row(p, 'Now: ' + whereLabel(sec, p)));
   }));
   let html = '';
   if (look.length) html += '<div class="ai-group">Looking for</div>' + look.join('');
+  if (noshelf.length) html += '<div class="ai-group">Key items with no shelf yet</div>' + noshelf.join('');
   if (elsewhere.length) html += '<div class="ai-group">Elsewhere at this house</div>' + elsewhere.slice(0, 40).join('');
   if (ql) {
     const cat = (S.catalog || []).filter(p => !onSheet.has(p.id) && match(p)).slice(0, 15);
@@ -713,7 +759,7 @@ function aiCreate(){ const name = (document.getElementById('ai-search').value ||
 
 // Moves apply on the phone at once and sync through the shelf-op queue (works in the dead zone).
 function moveHere(pid){
-  const sec = S.sections[S.areaIdx]; if (!sec) return;
+  const sec = S.sections[S.areaIdx]; if (!sec || !sec.location_id) return;
   const secId = (S.shelfKey === 'un') ? null : Number(S.shelfKey);
   const hit = findOnSheet(pid);
   let item;
@@ -748,7 +794,7 @@ function updateLookChip(){
 }
 function openLookFor(){
   const onShelf = isTablet() ? S.areaIdx != null : S.view === 'shelf';
-  if (!onShelf) { showToast('Open the shelf where you found it, then tap It\'s here', true); return; }
+  if (!onShelf || !(S.sections[S.areaIdx] || {}).location_id) { showToast('Open the shelf where you found it, then tap It\'s here', true); return; }
   openAddItem();
 }
 
@@ -924,6 +970,7 @@ function discardCount() {
 // ============================================
 function countTypeOf(c) {
   const n = (c.notes || '').toLowerCase();
+  if (n.indexOf('weekly') === 0) return 'Weekly';
   if (n.indexOf('booze') !== -1) return 'Booze';
   if (n.indexOf('food') !== -1) return 'Food';
   return 'Full';
@@ -976,6 +1023,12 @@ if (COUNT_TYPE !== 'all') {
 loadHistory();
 updateConn();
 if (navigator.onLine) { flushOps(); flushPending(); }
+// The Tuesday email links /week?loc=chatham -> /count?list=weekly&loc=chatham: start straight away.
+(function(){
+  const loc = URLP.get('loc');
+  const btn = loc && document.querySelector('.loc-btn[data-loc="' + loc + '"]');
+  if (btn) { pickLoc(btn); if (LIST === 'weekly') startCount(); }
+})();
 // Only re-render on a real breakpoint change (rotation) — NOT on iOS toolbar show/hide,
 // which fires resize during scroll and was causing the jumpiness.
 let _rzT, _wasTablet = isTablet();
