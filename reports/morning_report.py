@@ -2,7 +2,13 @@
 morning_report.py
 -----------------
 Generates and emails a daily sales summary from the local Toast SQLite database.
-Shows this week vs last week vs last year, PTD, and YTD for each location.
+Leads with a "Yesterday" flash per location (net sales vs same weekday last
+week / last year, orders, avg check, labor $ and %, discounts, voids) and a red
+banner when a location that normally trades has no sales or no labor rows.
+Then this week vs last week vs last year, PTD, and YTD for each location.
+
+Every sales figure here excludes voided/deleted orders, same as the dashboard.
+PTD/YTD run through YESTERDAY and compare to the same calendar span last year.
 
 Usage (standalone):
     cd /opt/red-nun-dashboard && venv/bin/python -m reports.morning_report
@@ -16,7 +22,6 @@ Cron (7:30 AM daily):
 
 import os
 import sys
-import sqlite3
 import smtplib
 import logging
 from datetime import date, datetime, timedelta
@@ -28,7 +33,9 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.getenv("DB_PATH", "toast_data.db")
+# Same filter as reports/analytics.py — keeps these numbers tied to the dashboard.
+VALID = ("COALESCE(json_extract(raw_json, '$.deleted'), 0) != 1 "
+         "AND COALESCE(json_extract(raw_json, '$.voided'), 0) != 1")
 
 LOCATIONS = {
     "chatham": "Red Nun Bar & Grill - Chatham, MA",
@@ -43,9 +50,8 @@ DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # ------------------------------------------------------------------------------
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    from integrations.toast.data_store import get_connection
+    return get_connection()
 
 
 def daily_sales(location, start, end):
@@ -57,14 +63,16 @@ def daily_sales(location, start, end):
         WHERE  location      = ?
           AND  business_date >= ?
           AND  business_date <= ?
+          AND  {VALID}
         GROUP  BY business_date
-    """, (location, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"))).fetchall()
+    """.format(VALID=VALID), (location, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"))).fetchall()
     conn.close()
     return {datetime.strptime(r["business_date"], "%Y%m%d").date(): r["sales"] or 0
             for r in rows}
 
 
-def ytd_sales(location, year):
+def range_sales(location, start, end):
+    """Net sales for start..end inclusive (dates)."""
     conn = get_conn()
     row = conn.execute("""
         SELECT SUM(net_amount)
@@ -72,22 +80,215 @@ def ytd_sales(location, year):
         WHERE  location      = ?
           AND  business_date >= ?
           AND  business_date <= ?
-    """, (location, f"{year}0101", date.today().strftime("%Y%m%d"))).fetchone()
+          AND  {VALID}
+    """.format(VALID=VALID),
+        (location, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"))).fetchone()
     conn.close()
     return row[0] or 0
 
 
-def ptd_sales(location, period_start):
+def same_day_last_year(d):
+    try:
+        return d.replace(year=d.year - 1)
+    except ValueError:          # Feb 29
+        return d.replace(year=d.year - 1, day=28)
+
+
+def to_date_pairs(report_date):
+    """(ptd_this, ptd_last, ytd_this, ytd_last) spans, all ending YESTERDAY.
+
+    The old version ran last year's PTD/YTD through *today's* date, so it
+    compared ~3 days of this month to 13 months of last year (PTD showed
+    -99%, YTD -53%). Last year now stops on the same calendar day.
+    """
+    end = report_date - timedelta(days=1)
+    end_ly = same_day_last_year(end)
+    return (
+        (date(end.year, end.month, 1), end),
+        (date(end_ly.year, end_ly.month, 1), end_ly),
+        (date(end.year, 1, 1), end),
+        (date(end_ly.year, 1, 1), end_ly),
+    )
+
+
+def ptd_ytd(location, report_date):
+    return tuple(range_sales(location, s, e) for s, e in to_date_pairs(report_date))
+
+
+# ------------------------------------------------------------------------------
+# Yesterday flash — the numbers to look at before anything else
+# ------------------------------------------------------------------------------
+
+# Salaried managers aren't in 7shifts time entries. Same daily rates the
+# dashboard's labor summary uses (reports/analytics.get_labor_summary).
+SALARIED_DAILY = {"dennis": 880.0 / 7, "chatham": 1375.0 / 7}
+
+LABOR_WARN_PCT = float(os.getenv("FLASH_LABOR_WARN_PCT", "30"))
+
+
+def day_stats(location, d):
+    """One location, one business date. All sales exclude voided/deleted orders."""
+    bd = d.strftime("%Y%m%d")
     conn = get_conn()
-    row = conn.execute("""
-        SELECT SUM(net_amount)
-        FROM   orders
-        WHERE  location      = ?
-          AND  business_date >= ?
-          AND  business_date <= ?
-    """, (location, period_start.strftime("%Y%m%d"), date.today().strftime("%Y%m%d"))).fetchone()
-    conn.close()
-    return row[0] or 0
+    try:
+        o = conn.execute(f"""
+            SELECT COUNT(*) AS orders, SUM(net_amount) AS net,
+                   SUM(total_amount) AS total, SUM(discount_amount) AS chk_disc
+            FROM orders
+            WHERE location = ? AND business_date = ? AND {VALID}
+        """, (location, bd)).fetchone()
+        item = conn.execute(f"""
+            SELECT SUM(CASE WHEN i.voided = 1 THEN i.price ELSE 0 END)  AS void_amt,
+                   SUM(CASE WHEN i.voided = 1 THEN 1 ELSE 0 END)        AS void_cnt,
+                   SUM(CASE WHEN i.voided = 0 THEN i.discount ELSE 0 END) AS item_disc
+            FROM order_items i
+            JOIN orders o ON o.guid = i.order_guid
+            WHERE i.location = ? AND i.business_date = ? AND {VALID.replace('raw_json', 'o.raw_json')}
+        """, (location, bd)).fetchone()
+        vchk = conn.execute("""
+            SELECT COUNT(*) AS n, SUM(total_amount) AS amt
+            FROM orders
+            WHERE location = ? AND business_date = ?
+              AND (COALESCE(json_extract(raw_json, '$.voided'), 0) = 1
+                   OR COALESCE(json_extract(raw_json, '$.deleted'), 0) = 1)
+        """, (location, bd)).fetchone()
+        top_void = conn.execute(f"""
+            SELECT COALESCE(NULLIF(o.server_name, ''), 'Unknown') AS who,
+                   SUM(i.price) AS amt
+            FROM order_items i
+            JOIN orders o ON o.guid = i.order_guid
+            WHERE i.location = ? AND i.business_date = ? AND i.voided = 1
+            GROUP BY who ORDER BY amt DESC LIMIT 1
+        """, (location, bd)).fetchone()
+        lab = conn.execute("""
+            SELECT COUNT(*) AS punches, SUM(total_pay) AS pay,
+                   SUM(regular_hours + overtime_hours) AS hrs,
+                   SUM(overtime_hours) AS ot
+            FROM time_entries
+            WHERE location = ? AND business_date = ?
+        """, (location, bd)).fetchone()
+    finally:
+        conn.close()
+
+    orders = o["orders"] or 0
+    net = o["net"] or 0
+    hourly = lab["pay"] or 0
+    punches = lab["punches"] or 0
+    labor = hourly + (SALARIED_DAILY.get(location, 0) if orders else 0)
+    return {
+        "orders": orders,
+        "net": net,
+        "avg_check": (o["total"] or 0) / orders if orders else 0,
+        "discounts": (o["chk_disc"] or 0) + ((item["item_disc"] or 0) if item else 0),
+        "item_void_amt": (item["void_amt"] or 0) if item else 0,
+        "item_void_cnt": (item["void_cnt"] or 0) if item else 0,
+        "void_checks": vchk["n"] or 0,
+        "void_check_amt": vchk["amt"] or 0,
+        "top_voider": (top_void["who"], top_void["amt"] or 0) if top_void else None,
+        "punches": punches,
+        "labor": labor,
+        "labor_pct": labor / net * 100 if net else None,
+        "hours": lab["hrs"] or 0,
+        "ot_hours": lab["ot"] or 0,
+    }
+
+
+def normally_open(location, d):
+    """True if this location traded on the same weekday last week or last year.
+    Dennis is dark Mon/Tue off-season — no alarm for a day it never opens."""
+    for prior in (d - timedelta(days=7), d - timedelta(days=364)):
+        conn = get_conn()
+        try:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM orders WHERE location = ? AND business_date = ?",
+                (location, prior.strftime("%Y%m%d"))).fetchone()[0]
+        finally:
+            conn.close()
+        if n:
+            return True
+    return False
+
+
+def flash_data(report_date):
+    y = report_date - timedelta(days=1)
+    out = {"date": y, "locs": {}, "alarms": []}
+    for loc in LOCATIONS:
+        t = day_stats(loc, y)
+        t["lw_net"] = day_stats(loc, y - timedelta(days=7))["net"]
+        t["ly_net"] = day_stats(loc, y - timedelta(days=364))["net"]
+        name = LOCATION_SHORT[loc]
+        if t["orders"] == 0 and normally_open(loc, y):
+            out["alarms"].append(
+                f"{name}: NO SALES recorded for {y:%a %m/%d}. Toast sync may be down "
+                f"— these numbers are incomplete until it's fixed.")
+        elif t["orders"] and t["punches"] == 0:
+            out["alarms"].append(
+                f"{name}: sales recorded but NO labor punches for {y:%a %m/%d}. "
+                f"Labor % below is salaried only — check the 7shifts sync.")
+        out["locs"][loc] = t
+    return out
+
+
+LOCATION_SHORT = {"chatham": "Chatham", "dennis": "Dennis"}
+
+
+def _pct_span(new, old):
+    p, d = pct_change(new, old)
+    return f'<span class="{d}">{p}</span>' if p else "&#8212;"
+
+
+def render_flash(f):
+    alarms = "".join(f'<div class="alarm">&#9888; {a}</div>' for a in f["alarms"])
+    cols = ""
+    for loc, t in f["locs"].items():
+        name = LOCATION_SHORT[loc]
+        if t["orders"] == 0:
+            cols += f'<td class="fcol"><div class="fname">{name}</div><div class="fclosed">No sales</div></td>'
+            continue
+        lp = t["labor_pct"]
+        lp_cls = "down" if lp is not None and lp >= LABOR_WARN_PCT else ""
+        voids = f'{t["item_void_cnt"]} items / ${t["item_void_amt"]:,.0f}'
+        if t["void_checks"]:
+            voids += f'<br>+ {t["void_checks"]} whole checks / ${t["void_check_amt"]:,.0f}'
+        tv = t["top_voider"]
+        top = (f'<div class="fnote">Most voids: {tv[0]} (${tv[1]:,.0f})</div>'
+               if tv and tv[1] >= 50 else "")
+        ot = (f'<div class="fnote" style="color:#cb4335">OT: {t["ot_hours"]:.1f} hrs</div>'
+              if t["ot_hours"] > 0 else "")
+        cols += f"""<td class="fcol">
+          <div class="fname">{name}</div>
+          <div class="fbig">${t['net']:,.0f}</div>
+          <table class="fk">
+            <tr><td>vs last wk</td><td>{_pct_span(t['net'], t['lw_net'])}</td></tr>
+            <tr><td>vs last yr</td><td>{_pct_span(t['net'], t['ly_net'])}</td></tr>
+            <tr><td>Orders / avg</td><td>{t['orders']} / ${t['avg_check']:,.2f}</td></tr>
+            <tr><td>Labor</td><td>${t['labor']:,.0f} &middot; <span class="{lp_cls}">{lp:.1f}%</span></td></tr>
+            <tr><td>Hours</td><td>{t['hours']:.1f}</td></tr>
+            <tr><td>Discounts</td><td>${t['discounts']:,.0f}</td></tr>
+            <tr><td>Voids</td><td>{voids}</td></tr>
+          </table>{top}{ot}
+        </td>"""
+    return f"""
+    <div class="loc-name">Yesterday &middot; {f['date']:%A %m/%d}</div>
+    {alarms}
+    <table class="flash"><tr>{cols}</tr></table>
+    <div class="fnote">Labor = 7shifts wages + salaried managers, before payroll taxes.
+      Red labor % = at or over {LABOR_WARN_PCT:.0f}%.</div>
+    <hr class="div">"""
+
+
+def flash_subject(f):
+    if not f["locs"]:
+        return ""
+    bits = []
+    for loc, t in f["locs"].items():
+        if t["orders"]:
+            lp = f' L{t["labor_pct"]:.0f}%' if t["labor_pct"] is not None else ""
+            bits.append(f'{LOCATION_SHORT[loc]} ${t["net"]:,.0f}{lp}')
+    s = " · ".join(bits)
+    if f["alarms"]:
+        s = "⚠ DATA MISSING · " + s
+    return s
 
 
 # ------------------------------------------------------------------------------
@@ -181,6 +382,20 @@ CSS = """<style>
   table.box td.up   { color:#229954; font-weight:bold; }
   table.box td.down { color:#cb4335; font-weight:bold; }
 
+  /* Yesterday flash */
+  .alarm { background:#fdecea; border:1px solid #cb4335; color:#922b21;
+           padding:8px 10px; margin:6px 0; font-weight:bold; }
+  table.flash { width:100%; border-collapse:separate; border-spacing:8px 0;
+                margin:4px -8px 6px; }
+  td.fcol { vertical-align:top; border:1px solid #ddd; padding:10px; width:50%; }
+  .fname { font-size:11px; font-weight:bold; color:#555; letter-spacing:.4px; }
+  .fbig { font-size:24px; font-weight:bold; color:#154360; margin:2px 0 6px; }
+  .fclosed { color:#999; margin-top:8px; }
+  table.fk { width:100%; border-collapse:collapse; }
+  table.fk td { padding:2px 0; font-size:12px; border-top:1px solid #f2f2f2; }
+  table.fk td + td { text-align:right; }
+  .fnote { font-size:11px; color:#888; margin-top:4px; }
+
   hr.div { border:none; border-top:1px solid #ebebeb; margin:20px 0 0; }
 
   /* Footer */
@@ -200,9 +415,13 @@ def render_sales_table(this_sales, last_sales, ly_sales, visible):
         vals = [v for v in arr if v is not None]
         return sum(vals) if vals else None
 
+    # Compare like-for-like: last week / last year totals only over the days
+    # this week has sales so far (a Sunday-morning report otherwise shows a
+    # 6-day week "down 11%" against a full 7-day week).
+    have = [i for i in range(7) if this_sales[i] is not None]
     tw_t = total(this_sales)
-    lw_t = total(last_sales)
-    ly_t = total(ly_sales)
+    lw_t = total([last_sales[i] for i in have])
+    ly_t = total([ly_sales[i] for i in have])
 
     rows = ""
     for i in visible:
@@ -296,11 +515,7 @@ def location_block(loc_key, loc_name, report_date):
     visible = [i for i in range(7)
                if any(x is not None for x in [this_s[i], last_s[i], ly_s[i]])]
 
-    ps = date(today.year, today.month, 1)
-    ptd_this = ptd_sales(loc_key, ps)
-    ptd_last = ptd_sales(loc_key, date(today.year - 1, today.month, 1))
-    ytd_this = ytd_sales(loc_key, today.year)
-    ytd_last = ytd_sales(loc_key, today.year - 1)
+    ptd_this, ptd_last, ytd_this, ytd_last = ptd_ytd(loc_key, report_date)
 
     return f"""
     <div class="loc-name">{loc_name}</div>
@@ -338,11 +553,8 @@ def company_wide_block(report_date):
     visible = [i for i in range(7)
                if any(x is not None for x in [this_s[i], last_s[i], ly_s[i]])]
 
-    ps = date(today.year, today.month, 1)
-    ptd_this = sum(ptd_sales(loc, ps) for loc in LOCATIONS)
-    ptd_last = sum(ptd_sales(loc, date(today.year - 1, today.month, 1)) for loc in LOCATIONS)
-    ytd_this = sum(ytd_sales(loc, today.year) for loc in LOCATIONS)
-    ytd_last = sum(ytd_sales(loc, today.year - 1) for loc in LOCATIONS)
+    per_loc = [ptd_ytd(loc, report_date) for loc in LOCATIONS]
+    ptd_this, ptd_last, ytd_this, ytd_last = (sum(x[i] for x in per_loc) for i in range(4))
 
     return f"""
     <div class="loc-name">Company Wide</div>
@@ -351,9 +563,12 @@ def company_wide_block(report_date):
     {render_summary(ptd_this, ptd_last, ytd_this, ytd_last)}"""
 
 
-def build_html(report_date):
+def build_html(report_date, flash=None):
     date_str = report_date.strftime("%B %d, %Y")
-    body = "".join(location_block(k, v, report_date) for k, v in LOCATIONS.items())
+    if flash is None:
+        flash = flash_data(report_date)
+    body = render_flash(flash)
+    body += "".join(location_block(k, v, report_date) for k, v in LOCATIONS.items())
     body += company_wide_block(report_date)
 
     return f"""<!DOCTYPE html>
@@ -385,7 +600,7 @@ def build_html(report_date):
 # Email
 # ------------------------------------------------------------------------------
 
-def send_email(html_body, report_date):
+def send_email(html_body, report_date, headline=""):
     from_addr = os.getenv("REPORT_FROM_EMAIL", "dashboard@rednun.com")
     to_addr   = os.getenv("REPORT_TO_EMAIL",   "mgiorgio@rednun.com")
     smtp_host = os.getenv("SMTP_HOST",         "smtp.gmail.com")
@@ -394,6 +609,8 @@ def send_email(html_body, report_date):
     smtp_pass = os.getenv("SMTP_PASSWORD")
 
     subject = f"[Red Nun] Morning Sales Report for {report_date.strftime('%m/%d/%Y')}"
+    if headline:
+        subject = f"[Red Nun] {headline}"
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = from_addr
@@ -421,7 +638,10 @@ if __name__ == "__main__":
         report_date = date.today()
 
     logger.info(f"Building report for {report_date}")
-    html = build_html(report_date)
+    flash = flash_data(report_date)
+    html = build_html(report_date, flash)
+    for a in flash["alarms"]:
+        logger.warning(f"FLASH ALARM: {a}")
 
     if os.getenv("SAVE_HTML"):
         out = f"/tmp/morning_report_{report_date}.html"
@@ -429,4 +649,5 @@ if __name__ == "__main__":
             f.write(html)
         logger.info(f"HTML saved to {out}")
 
-    send_email(html, report_date)
+    yday = report_date - timedelta(days=1)
+    send_email(html, report_date, f"{yday:%a %m/%d}: {flash_subject(flash)}")
