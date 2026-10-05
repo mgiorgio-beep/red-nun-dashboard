@@ -154,11 +154,23 @@ def match_vendor_item_to_product(invoice_item, conn):
     }
 
 
+def _line_unit_price(invoice_item):
+    """Unit price, or total / quantity when OCR missed the unit price. The bare total
+    priced Bacardi at $43.39 (2 x $21.70) on 9/29."""
+    up = invoice_item.get("unit_price")
+    if up:
+        return up
+    total, qty = invoice_item.get("total_price"), invoice_item.get("quantity")
+    if total and qty and qty > 0:
+        return round(total / qty, 4)
+    return total
+
+
 def _build_vendor_item_data(invoice_item):
     """Extract vendor item fields from an invoice line item dict."""
     return {
         "vendor_description": invoice_item.get("product_name", ""),
-        "purchase_price":     invoice_item.get("unit_price") or invoice_item.get("total_price"),
+        "purchase_price":     _line_unit_price(invoice_item),
         "pack_size":          invoice_item.get("pack_size"),
         "pack_unit":          invoice_item.get("unit"),
         "quantity":           invoice_item.get("quantity"),
@@ -179,7 +191,7 @@ def create_or_update_vendor_item(product_id, invoice_item, vendor_name, conn):
     from routes.product_helpers import parse_pack_size
 
     description = invoice_item.get("product_name", "")
-    price       = invoice_item.get("unit_price") or invoice_item.get("total_price")
+    price       = _line_unit_price(invoice_item)
     pack_size   = invoice_item.get("pack_size")
     pack_unit   = invoice_item.get("unit")
     vendor_item_code = invoice_item.get("vendor_item_code")
