@@ -882,6 +882,10 @@ function placeItem(pid, info){
   sec.products.push(item);
   delete S.lookFor[pid];
   queueOp({ url:'/api/storage/move', body:{ move_id:newId(), product_id:pid, to_storage_location_id:sec.location_id, to_section_id:secId } });
+  // The weekly sheet is only the weekly list: an item added here that isn't on it
+  // would vanish the next time the count is opened. Adding it to the shelf adds it to the list.
+  if (LIST === 'weekly' && !hit)
+    queueOp({ url:'/api/count-templates', body:{ location:S.location, product_id:pid } });
   return true;
 }
 function moveHere(pid){
