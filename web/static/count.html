@@ -624,6 +624,7 @@ async function startCount() {
     return;
   }
 
+  keyify(S.sections);
   // Blank = not counted, 0 = counted-out. Start from what the open count already has.
   if (open) { S.countId = open.count ? open.count.id : null; S.saved = Object.assign({}, open.items); }
   else      { S.countId = saved ? (saved.countId || null) : null; S.saved = Object.assign({}, (saved && saved.saved) || {}); }
@@ -631,7 +632,20 @@ async function startCount() {
   S.lookFor = {}; S.missed = {};
   // Numbers typed on this phone but not saved yet (dead zone, app closed) come back too.
   let unsavedN = 0;
+  const legacy = { dropped: 0 };
+  S.saved = upgradeKeys(S.saved);
+  S.counts = Object.assign({}, S.saved);
   if (saved && saved.counts && (!saved.countId || !S.countId || saved.countId === S.countId)) {
+    saved.counts = upgradeKeys(saved.counts, legacy);
+    saved.saved = upgradeKeys(saved.saved || {});
+    saved.missed = upgradeKeys(saved.missed || {});
+    const lf = {};
+    Object.keys(saved.lookFor || {}).forEach(pid => {
+      const v = saved.lookFor[pid];
+      if (typeof v === 'string') lf[pid] = v;
+      else { const sp = spotsOf(+pid); if (sp.length) lf[pid] = sp[0].p.key; }
+    });
+    saved.lookFor = lf;
     const had = saved.saved || {};
     Object.keys(saved.counts).forEach(k => { if (saved.counts[k] !== had[k]) { S.counts[k] = saved.counts[k]; unsavedN++; } });
     Object.keys(had).forEach(k => { if (saved.counts[k] === undefined && S.counts[k] !== undefined) { delete S.counts[k]; unsavedN++; } });
@@ -646,7 +660,9 @@ async function startCount() {
   saveLocal();
   render(); updateProgress(); updateConn();
   const savedN = Object.keys(S.saved).length;
-  if (savedN || unsavedN)
+  if (legacy.dropped)
+    showToast(legacy.dropped + ' unsaved number' + (legacy.dropped === 1 ? '' : 's') + ' from before the update could not be placed on a shelf — please re-enter', true);
+  else if (savedN || unsavedN)
     showToast('Picking up this count — ' + savedN + ' saved' + (unsavedN ? ', ' + unsavedN + ' not saved yet' : ''));
 }
 
@@ -663,7 +679,34 @@ function sectionIcon(name) {
 // ============================================
 // DRILL-DOWN RENDER:  areas → shelves → shelf items
 // ============================================
-function counted(p){ return S.counts[p.id] !== undefined; }
+// A count line is one product on one SHELF: "product:area:shelf" (0 = none). Tito's in the
+// Kitchen Well and Tito's in the Server Well are two lines, entered separately, added up
+// only at Complete. The server keys lines the same way (/api/count-sessions).
+function spotKey(pid, locId, secId){ return (+pid) + ':' + (+(locId || 0)) + ':' + (+(secId || 0)); }
+function pidOf(key){ return parseInt(String(key).split(':')[0], 10); }
+function keyify(sections){ (sections || []).forEach(sec => (sec.products || []).forEach(p => { p.key = spotKey(p.id, sec.location_id, p.section_id); })); }
+function findKey(key){
+  for (let ai = 0; ai < S.sections.length; ai++){
+    const i = S.sections[ai].products.findIndex(p => p.key === key);
+    if (i >= 0) return { ai: ai, sec: S.sections[ai], i: i, p: S.sections[ai].products[i] };
+  }
+  return null;
+}
+function spotsOf(pid){ const out = []; S.sections.forEach(sec => sec.products.forEach(p => { if (p.id === pid) out.push({ sec: sec, p: p }); })); return out; }
+// Numbers saved on a phone before 2026-10-05 were keyed by product only. One shelf: it
+// goes there. Several: it can't be told which shelf, so it's dropped (counted, and said).
+function upgradeKeys(obj, stats){
+  const out = {};
+  Object.keys(obj || {}).forEach(k => {
+    const parts = String(k).split(':');
+    if (parts.length === 3 && (parts[1] !== '0' || findKey(k))) { out[k] = obj[k]; return; }
+    const sp = spotsOf(+parts[0]);
+    if (sp.length === 1) out[sp[0].p.key] = obj[k];
+    else if (stats) stats.dropped++;
+  });
+  return out;
+}
+function counted(p){ return S.counts[p.key] !== undefined; }
 function shelfItems(sec, key){
   if (key === 'un') return (sec.products || []).filter(p => !p.section_id);
   return (sec.products || []).filter(p => String(p.section_id) === String(key));
@@ -789,16 +832,16 @@ function arrangeRowHtml(p, i, n){
     '<div class="product-info"><div class="product-name">' + esc(niceName(p)) + '</div>' +
       '<div class="product-meta"><span class="unit-chip">count: ' + esc(p.inventory_unit || p.unit || 'ea') + '</span></div></div>' +
     '<div class="arrange-btns">' +
-      '<button class="step-btn" onclick="moveItem(' + p.id + ',-1)" ' + (i === 0 ? 'disabled' : '') + '>▲</button>' +
-      '<button class="step-btn" onclick="moveItem(' + p.id + ',1)" ' + (i === n - 1 ? 'disabled' : '') + '>▼</button>' +
-      '<button class="step-btn rm-btn" onclick="removeFromShelf(' + p.id + ')" title="Remove from area">✕</button>' +
+      '<button class="step-btn" onclick="moveItem(\'' + p.key + '\',-1)" ' + (i === 0 ? 'disabled' : '') + '>▲</button>' +
+      '<button class="step-btn" onclick="moveItem(\'' + p.key + '\',1)" ' + (i === n - 1 ? 'disabled' : '') + '>▼</button>' +
+      '<button class="step-btn rm-btn" onclick="removeFromShelf(\'' + p.key + '\')" title="Remove from this shelf">✕</button>' +
     '</div></div>';
 }
 function toggleReorder(){ S.reorder = !S.reorder; document.getElementById('search').value = ''; render(); }
-function moveItem(pid, dir){
+function moveItem(key, dir){
   const area = S.sections[S.areaIdx]; if (!area) return;
   const shelfList = shelfItems(area, S.shelfKey);
-  const idx = shelfList.findIndex(p => p.id === pid);
+  const idx = shelfList.findIndex(p => p.key === key);
   const j = idx + dir;
   if (idx < 0 || j < 0 || j >= shelfList.length) return;
   const aPos = area.products.indexOf(shelfList[idx]);
@@ -812,24 +855,24 @@ function moveItem(pid, dir){
 // shelf-op queue, so it works offline and a refused delete (logged out) retries.
 // Never touches the weekly list: weekly cost needs the same items counted week over
 // week (start + purchases - end), so the list changes only on /count/list.
-function removeFromShelf(pid, swiped){
-  const area = S.sections[S.areaIdx]; if (!area) return;
-  const item = area.products.find(p => p.id === pid);
-  if (!swiped && !confirm('Remove "' + (item ? niceName(item) : 'this item') + '" from this area?\n\nIt stays in the catalog but won\'t be counted here.')) return;
+function removeFromShelf(key, swiped){
+  const hit = findKey(key); if (!hit) return;
+  const area = hit.sec, item = hit.p, pid = item.id;
+  if (!swiped && !confirm('Remove "' + niceName(item) + '" from this shelf?\n\nIt stays in the catalog and on any other shelf.')) return;
   if (area.location_id)
-    queueOp({ method:'DELETE', url:'/api/storage/locations/' + area.location_id + '/products/' + pid });
-  const idx = area.products.findIndex(p => p.id === pid);
-  if (idx >= 0) { area.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); }
-  delete S.counts[pid]; delete S.lookFor[pid]; delete S.missed[pid];
+    queueOp({ method:'DELETE', url:'/api/storage/locations/' + area.location_id + '/products/' + pid + '?section_id=' + (item.section_id || 'none') });
+  area.products.splice(hit.i, 1); S.totalProducts = Math.max(0, S.totalProducts - 1);
+  delete S.counts[key]; delete S.missed[key]; if (S.lookFor[pid] === key) delete S.lookFor[pid];
   render(); updateProgress(); saveLocal(); updateLookChip();
-  showToast('Removed ' + (item ? niceName(item) : 'item') + ' from this area' + (LIST === 'weekly' ? ' — still on the weekly list' : ''));
+  showToast('Removed ' + niceName(item) + ' from this shelf' + (LIST === 'weekly' ? ' — still on the weekly list' : ''));
 }
 function persistOrder(area){
   queueOp({ key: 'reorder-' + area.location_id, url: '/api/storage/locations/' + area.location_id + '/reorder',
-            body: { product_ids: area.products.map(p => p.id) } });
+            body: { spots: area.products.map(p => ({ product_id: p.id, section_id: p.section_id || null })) } });
 }
 
-// ---- "+ Add product": put an item on the shelf you're standing at (moves it if it was elsewhere) ----
+// ---- "+ Add product": put an item on the shelf you're standing at. It stays on any other shelf
+// too (each shelf is counted on its own) — unless it was marked "Moved", then it leaves that one. ----
 async function ensureCatalog(){
   if (S.catalog) return;
   const all = await fetch('/api/inventory/products', {credentials:'include'}).then(r => r.json()).catch(() => null);
@@ -848,13 +891,6 @@ async function openAddItem(){
   aiRender();
 }
 function closeAddItem(){ document.getElementById('ai-ov').classList.remove('open'); }
-function findOnSheet(pid){
-  for (let ai = 0; ai < S.sections.length; ai++){
-    const i = S.sections[ai].products.findIndex(p => p.id === pid);
-    if (i >= 0) return { ai: ai, sec: S.sections[ai], i: i, p: S.sections[ai].products[i] };
-  }
-  return null;
-}
 function whereLabel(sec, p){
   const sh = p.section_id ? ((sec.sections || []).find(s => String(s.id) === String(p.section_id)) || {}).name : null;
   return sec.location_name + (sh ? ' · ' + sh : '');
@@ -865,20 +901,28 @@ function aiRender(){
   const cur = S.sections[S.areaIdx];
   const match = p => !ql || (p.name||'').toLowerCase().includes(ql) || (p.display_name||'').toLowerCase().includes(ql);
   const isHere = (sec, p) => sec === cur && (S.shelfKey === 'un' ? !p.section_id : String(p.section_id) === String(S.shelfKey));
-  const row = (p, where, cls) => '<div class="ai-item" onclick="moveHere(' + p.id + ')"><span>' + esc(niceName(p)) +
-    (where ? '<span class="ai-where' + (cls ? ' ' + cls : '') + '">' + esc(where) + '</span>' : '') + '</span><span class="ai-add">Here</span></div>';
-  const look = [], elsewhere = [], noshelf = [], onSheet = new Set();
+  const row = (p, where, cls, act) => '<div class="ai-item" onclick="moveHere(' + p.id + ')"><span>' + esc(niceName(p)) +
+    (where ? '<span class="ai-where' + (cls ? ' ' + cls : '') + '">' + esc(where) + '</span>' : '') + '</span><span class="ai-add">' + (act || 'Here') + '</span></div>';
+  const here = new Set(), onSheet = new Set(), wheres = {}, firstP = {};
   S.sections.forEach(sec => sec.products.forEach(p => {
     onSheet.add(p.id);
-    if (isHere(sec, p) || !match(p)) return;
-    if (S.lookFor[p.id]) look.push(row(p, 'Looking for it · was ' + whereLabel(sec, p), 'ai-look'));
-    else if (!sec.location_id) noshelf.push(row(p, ''));
-    else if (ql) elsewhere.push(row(p, 'Now: ' + whereLabel(sec, p)));
+    if (isHere(sec, p)) { here.add(p.id); return; }
+    if (sec.location_id) (wheres[p.id] = wheres[p.id] || []).push(whereLabel(sec, p));
+    if (!firstP[p.id]) firstP[p.id] = { p: p, sec: sec };
   }));
+  const look = [], elsewhere = [], noshelf = [];
+  Object.keys(firstP).forEach(id => {
+    const f = firstP[id], p = f.p;
+    if (here.has(p.id) || !match(p)) return;
+    const lk = S.lookFor[p.id];
+    if (lk) { const h = findKey(lk); look.push(row(p, 'Looking for it · was ' + (h ? whereLabel(h.sec, h.p) : 'elsewhere'), 'ai-look', 'Found here')); }
+    else if (!wheres[p.id]) noshelf.push(row(p, ''));
+    else if (ql) elsewhere.push(row(p, 'Also at: ' + wheres[p.id].join(', '), '', 'Also here'));
+  });
   let html = '';
   if (look.length) html += '<div class="ai-group">Looking for</div>' + look.join('');
   if (noshelf.length) html += '<div class="ai-group">Key items with no shelf yet</div>' + noshelf.join('');
-  if (elsewhere.length) html += '<div class="ai-group">Elsewhere at this house</div>' + elsewhere.slice(0, 40).join('');
+  if (elsewhere.length) html += '<div class="ai-group">On another shelf too — each shelf gets its own count</div>' + elsewhere.slice(0, 40).join('');
   if (ql) {
     const cat = (S.catalog || []).filter(p => !onSheet.has(p.id) && match(p)).slice(0, 15);
     if (cat.length) html += '<div class="ai-group">Not on the count sheet yet</div>' + cat.map(p => row(p, '')).join('');
@@ -890,41 +934,48 @@ function aiRender(){
 }
 function aiCreate(){ const name = (document.getElementById('ai-search').value || '').trim(); if (name) createAndAddItem(name); }
 
-// Moves apply on the phone at once and sync through the shelf-op queue (works in the dead zone).
-// Put one product on the shelf on screen. `info` describes a product not yet on the sheet.
+// Shelf changes apply on the phone at once and sync through the shelf-op queue (works in the dead zone).
+// Put one product on the shelf on screen and return its line key. It ADDS a shelf (the product
+// stays where else it is); if it was marked "Moved", it leaves that shelf instead.
+// `info` describes a product not yet on the sheet.
 function placeItem(pid, info){
-  const sec = S.sections[S.areaIdx]; if (!sec || !sec.location_id) return false;
+  const sec = S.sections[S.areaIdx]; if (!sec || !sec.location_id) return null;
   const secId = (S.shelfKey === 'un') ? null : Number(S.shelfKey);
-  const hit = findOnSheet(pid);
-  let item;
-  if (hit) item = hit.sec.products.splice(hit.i, 1)[0];
-  else {
-    const c = info || (S.catalog || []).find(x => x.id === pid) || {};
-    item = { id:pid, name:c.name||'Item', display_name:c.display_name, category:c.category, unit:c.unit,
-             inventory_unit:c.inventory_unit, current_price:c.current_price, current_qty:null };
-    S.totalProducts++;
-  }
-  item.section_id = secId;
-  sec.products.push(item);
+  const key = spotKey(pid, sec.location_id, secId);
+  if (findKey(key)) { delete S.lookFor[pid]; return key; }          // already on this shelf
+  const wasOnSheet = spotsOf(pid).length > 0;
+  const from = S.lookFor[pid] ? findKey(S.lookFor[pid]) : null;
+  const base = from ? from.p : (wasOnSheet ? spotsOf(pid)[0].p : (info || (S.catalog || []).find(x => x.id === pid) || {}));
+  const item = { id:pid, name:base.name||'Item', display_name:base.display_name, category:base.category, unit:base.unit,
+                 inventory_unit:base.inventory_unit, current_price:base.current_price, section_id: secId, key: key };
+  const op = { move_id:newId(), product_id:pid, to_storage_location_id:sec.location_id, to_section_id:secId, mode:'add' };
+  if (from) {
+    from.sec.products.splice(from.i, 1);
+    delete S.counts[from.p.key]; delete S.missed[from.p.key];
+    Object.assign(op, { mode:'move', from_storage_location_id: from.sec.location_id, from_section_id: from.p.section_id || null });
+  } else S.totalProducts++;
   delete S.lookFor[pid];
-  queueOp({ url:'/api/storage/move', body:{ move_id:newId(), product_id:pid, to_storage_location_id:sec.location_id, to_section_id:secId } });
+  sec.products.push(item);
+  queueOp({ url:'/api/storage/move', body: op });
   // The weekly sheet is only the weekly list: an item added here that isn't on it
   // would vanish the next time the count is opened. Adding it to the shelf adds it to the list.
-  if (LIST === 'weekly' && !hit)
+  if (LIST === 'weekly' && !wasOnSheet)
     queueOp({ url:'/api/count-templates', body:{ location:S.location, product_id:pid } });
-  return true;
+  return key;
 }
 function moveHere(pid){
-  if (!placeItem(pid)) return;
+  const was = S.lookFor[pid], key = placeItem(pid);
+  if (!key) return;
   closeAddItem(); render(); updateProgress(); saveLocal();
-  showToast('Moved here — count it now');
-  setTimeout(() => { const el = document.querySelector('.qty-input[data-pid="' + pid + '"]'); if (el) { el.scrollIntoView({block:'center'}); el.focus(); } }, 60);
+  showToast(was ? 'Found — moved here, count it now' : (spotsOf(pid).length > 1 ? 'Added here too — this shelf gets its own count' : 'Added here — count it now'));
+  setTimeout(() => { const el = document.querySelector('.qty-input[data-key="' + key + '"]'); if (el) { el.scrollIntoView({block:'center'}); el.focus(); } }, 60);
 }
 
 // "Moved": not where it used to be. Parks it on the Look-for list until you find it.
-function markMoved(pid){
-  if (S.lookFor[pid]) delete S.lookFor[pid];  // tapped again = it's back / never mind
-  else { S.lookFor[pid] = true; delete S.counts[pid]; showToast('On the Look-for list'); }
+function markMoved(key){
+  const pid = pidOf(key);
+  if (S.lookFor[pid] === key) delete S.lookFor[pid];  // tapped again = it's back / never mind
+  else { S.lookFor[pid] = key; delete S.counts[key]; showToast('On the Look-for list'); }
   render(); updateProgress(); saveLocal();
 }
 function updateLookChip(){
@@ -1131,7 +1182,7 @@ function vcBestItem(phrase){
   let best = null, bestScore = 0;
   VC.items.forEach(it => {
     const hit = q.reduce((s, w) => s + Math.max(0, ...it.toks.map(u => _tok(w, u))), 0);
-    const score = hit / q.length + (VC.heard[it.p.id] === undefined ? 0.01 : 0);  // a tie goes to one not yet heard
+    const score = hit / q.length + (VC.heard[it.p.key] === undefined ? 0.01 : 0);  // a tie goes to one not yet heard
     if (hit >= 0.9 && score > bestScore) { best = it; bestScore = score; }
   });
   return bestScore >= 0.5 ? best : null;
@@ -1144,15 +1195,15 @@ function vcParse(){
     const num = name.length ? _numAt(t, i) : null;
     if (num) {
       const it = vcBestItem(name.join(' '));
-      if (it) { VC.heard[it.p.id] = Math.round(num.v * 100) / 100; VC.phrase[it.p.id] = name.join(' '); }  // a later mention wins
+      if (it) { VC.heard[it.p.key] = Math.round(num.v * 100) / 100; VC.phrase[it.p.key] = name.join(' '); }  // a later mention wins
       name = []; i += num.n;
     } else { name.push(t[i]); i++; }
   }
   vcRender();
 }
-function vcValue(pid){ return VC.typed[pid] !== undefined ? VC.typed[pid] : VC.heard[pid]; }
+function vcValue(key){ return VC.typed[key] !== undefined ? VC.typed[key] : VC.heard[key]; }
 function vcOkLabel(){
-  const got = VC.items.filter(it => { const x = vcValue(it.p.id); return x !== undefined && x !== ''; }).length;
+  const got = VC.items.filter(it => { const x = vcValue(it.p.key); return x !== undefined && x !== ''; }).length;
   const miss = VC.items.length - got;
   document.getElementById('vc-ok').textContent = 'OK — count ' + got + (miss ? ' · mark ' + miss + ' missed' : '');
 }
@@ -1160,21 +1211,21 @@ function vcRender(){
   let h = '', lastShelf = null;
   VC.items.forEach(it => {
     if (VC.multi && it.shelf !== lastShelf) { h += '<div class="vc-shelf">' + esc(it.shelf) + '</div>'; lastShelf = it.shelf; }
-    const v = vcValue(it.p.id), has = v !== undefined && v !== '';
+    const k = it.p.key, v = vcValue(k), has = v !== undefined && v !== '';
     h += '<div class="vc-row ' + (has ? 'got' : 'miss') + '"><div class="vc-name">' + esc(niceName(it.p)) +
-      (VC.phrase[it.p.id] && VC.typed[it.p.id] === undefined ? '<span class="vc-heard">heard “' + esc(VC.phrase[it.p.id]) + '”</span>' : '') +
-      '</div><input class="vc-qty" type="number" inputmode="decimal" step="0.25" placeholder="—" data-pid="' + it.p.id + '" value="' + (has ? v : '') +
-      '" oninput="vcType(' + it.p.id + ', this)"></div>';
+      (VC.phrase[k] && VC.typed[k] === undefined ? '<span class="vc-heard">heard “' + esc(VC.phrase[k]) + '”</span>' : '') +
+      '</div><input class="vc-qty" type="number" inputmode="decimal" step="0.25" placeholder="—" data-key="' + k + '" value="' + (has ? v : '') +
+      '" oninput="vcType(\'' + k + '\', this)"></div>';
   });
   // Keep the cursor if a box was being typed in while the mic added more.
-  const act = document.activeElement, fp = act && act.classList && act.classList.contains('vc-qty') ? act.dataset.pid : null;
+  const act = document.activeElement, fp = act && act.classList && act.classList.contains('vc-qty') ? act.dataset.key : null;
   document.getElementById('vc-list').innerHTML = h || '<div style="padding:14px;color:var(--text3)">Nothing to count here.</div>';
-  if (fp) { const el = document.querySelector('.vc-qty[data-pid="' + fp + '"]'); if (el) el.focus(); }
+  if (fp) { const el = document.querySelector('.vc-qty[data-key="' + fp + '"]'); if (el) el.focus(); }
   vcOkLabel();
 }
-function vcType(pid, el){
+function vcType(key, el){
   const v = el.value.trim();
-  VC.typed[pid] = v === '' ? '' : parseFloat(v);
+  VC.typed[key] = v === '' ? '' : parseFloat(v);
   el.closest('.vc-row').className = 'vc-row ' + (v === '' ? 'miss' : 'got');
   vcOkLabel();
 }
@@ -1187,7 +1238,7 @@ function openVoiceCount(scope){
     // Walk order: each shelf in order, then unshelved.
     (sec.sections || []).map(s => s.id).concat(['un']).forEach(k => shelfItems(sec, k).forEach(p => list.push({ p: p, shelf: shName(k) })));
   } else list = shelfItems(sec, S.shelfKey).map(p => ({ p: p, shelf: shName(S.shelfKey) }));
-  VC.items = list.filter(it => !S.lookFor[it.p.id])
+  VC.items = list.filter(it => S.lookFor[it.p.id] !== it.p.key)
     .map(it => Object.assign(it, { toks: _words(niceName(it.p) + ' ' + (it.p.name || '')).filter(w => !_FILLER.has(w) && !/^\d/.test(w)) }));
   VC.multi = scope === 'area' && new Set(VC.items.map(i => i.shelf)).size > 1;
   VC.heard = {}; VC.typed = {}; VC.phrase = {};
@@ -1207,9 +1258,9 @@ function vcApply(){
   micStop();
   let got = 0, miss = 0;
   VC.items.forEach(it => {
-    const pid = it.p.id, v = vcValue(pid);
-    if (v !== undefined && v !== '' && !isNaN(v)) { S.counts[pid] = v; delete S.missed[pid]; got++; }
-    else if (S.counts[pid] === undefined) { S.missed[pid] = true; miss++; }
+    const k = it.p.key, v = vcValue(k);
+    if (v !== undefined && v !== '' && !isNaN(v)) { S.counts[k] = v; delete S.missed[k]; got++; }
+    else if (S.counts[k] === undefined) { S.missed[k] = true; miss++; }
   });
   closeVoiceCount(); render(); updateProgress(); saveLocal();
   showToast('Counted ' + got + (miss ? ' · ' + miss + ' missed — look for the orange tags' : ''), miss > 0);
@@ -1220,34 +1271,36 @@ function goShelves(idx){ S.view = 'shelves'; S.areaIdx = idx; S.shelfKey = null;
 function goShelf(key){ S.view = 'shelf'; S.shelfKey = key; S.reorder = false; render(); }
 
 function productRowHtml(p, i) {
-  const val = S.counts[p.id] !== undefined ? S.counts[p.id] : '';
+  const k = p.key, q = "'" + k + "'";
+  const val = S.counts[k] !== undefined ? S.counts[k] : '';
   const hasVal = val !== '';
-  const prev = p.current_qty;
   const unit = p.inventory_unit || p.unit || 'ea';
-  const prevHtml = prev !== null && prev !== undefined ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
-  const looking = !!S.lookFor[p.id];
-  const missed = !!S.missed[p.id] && !hasVal;
-  return '<div class="swipe-wrap fade-up" data-pid="' + p.id + '" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
-    '<button class="swipe-del" onclick="removeFromShelf(' + p.id + ',true)">Remove</button>' +
+  // Blind count: no "Last" / expected number on the row (it anchors the counter).
+  const others = spotsOf(p.id).length - 1;
+  const looking = S.lookFor[p.id] === k;
+  const missed = !!S.missed[k] && !hasVal;
+  return '<div class="swipe-wrap fade-up" data-key="' + k + '" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
+    '<button class="swipe-del" onclick="removeFromShelf(' + q + ',true)">Remove</button>' +
     '<div class="product-row' + (looking ? ' looking' : '') + (missed ? ' missed' : '') + '">' +
     '<div class="product-info">' +
       '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(niceName(p)) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
       '<div class="product-meta">' +
-        '<span class="unit-chip" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">count: ' + esc(unit) + '</span>' + prevHtml +
+        '<span class="unit-chip" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">count: ' + esc(unit) + '</span>' +
+        (others > 0 ? '<span class="product-prev">+' + others + ' other shelf' + (others === 1 ? '' : 's') + '</span>' : '') +
         (missed ? '<span class="missed-tag">Missed</span>' : '') +
-        (looking ? '<span class="look-tag">🔎 Looking</span>' : '<button class="out-btn" onclick="markOut(' + p.id + ')">Out (0)</button>') +
-        '<button class="nh-btn" onclick="markMoved(' + p.id + ')">' + (looking ? 'It\'s back' : 'Moved') + '</button>' +
+        (looking ? '<span class="look-tag">🔎 Looking</span>' : '<button class="out-btn" onclick="markOut(' + q + ')">Out (0)</button>') +
+        '<button class="nh-btn" onclick="markMoved(' + q + ')">' + (looking ? 'It\'s back' : 'Moved') + '</button>' +
       '</div>' +
     '</div>' +
     '<div class="qty-stepper">' +
-      '<button class="step-btn" onclick="stepQty(' + p.id + ',-1)" aria-label="minus">−</button>' +
+      '<button class="step-btn" onclick="stepQty(' + q + ',-1)" aria-label="minus">−</button>' +
       '<div class="qty-wrap">' +
         '<input class="qty-input' + (hasVal ? ' has-value' : '') + '" type="number" inputmode="decimal" step="0.5" ' +
-          'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + p.id + ',this)" data-pid="' + p.id + '">' +
+          'placeholder="—" value="' + val + '" onfocus="this.select()" oninput="setQty(' + q + ',this)" data-key="' + k + '">' +
         '<div class="qty-unit">' + esc(unit) + '</div>' +
-        '<button class="half-btn" onclick="stepQty(' + p.id + ',0.25)">+¼</button>' +
+        '<button class="half-btn" onclick="stepQty(' + q + ',0.25)">+¼</button>' +
       '</div>' +
-      '<button class="step-btn" onclick="stepQty(' + p.id + ',1)" aria-label="plus">+</button>' +
+      '<button class="step-btn" onclick="stepQty(' + q + ',1)" aria-label="plus">+</button>' +
     '</div>' +
   '</div></div>';
 }
@@ -1290,39 +1343,38 @@ function editFromCount(pid){
   if (typeof openProductEditor !== 'function') { showToast('Editor not loaded', true); return; }
   openProductEditor(pid, { onSaved: function(p, meta){
     for (const sec of S.sections){
-      const idx = sec.products.findIndex(x => x.id === pid);
-      if (idx >= 0){
-        if (meta && meta.archived){ sec.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); delete S.counts[pid]; }
-        else if (p){ Object.assign(sec.products[idx], { name:p.name, display_name:p.display_name, category:p.category, unit:p.unit, inventory_unit:p.inventory_unit, current_price:p.current_price }); }
-        break;
+      for (let idx = sec.products.length - 1; idx >= 0; idx--){
+        const x = sec.products[idx]; if (x.id !== pid) continue;
+        if (meta && meta.archived){ sec.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); delete S.counts[x.key]; }
+        else if (p){ Object.assign(x, { name:p.name, display_name:p.display_name, category:p.category, unit:p.unit, inventory_unit:p.inventory_unit, current_price:p.current_price }); }
       }
     }
     render(); updateProgress();
   }});
 }
 
-function markOut(pid){
-  delete S.lookFor[pid];
-  const el = document.querySelector('.qty-input[data-pid="' + pid + '"]');
-  if (el){ el.value = 0; setQty(pid, el); }
-  else { S.counts[pid] = 0; updateProgress(); }
+function markOut(key){
+  if (S.lookFor[pidOf(key)] === key) delete S.lookFor[pidOf(key)];
+  const el = document.querySelector('.qty-input[data-key="' + key + '"]');
+  if (el){ el.value = 0; setQty(key, el); }
+  else { S.counts[key] = 0; updateProgress(); }
 }
 
-function stepQty(pid, delta) {
-  const el = document.querySelector('.qty-input[data-pid="' + pid + '"]');
+function stepQty(key, delta) {
+  const el = document.querySelector('.qty-input[data-key="' + key + '"]');
   if (!el) return;
   let v = parseFloat(el.value); if (isNaN(v)) v = 0;
   v = Math.max(0, Math.round((v + delta) * 100) / 100);
-  el.value = v; setQty(pid, el);
+  el.value = v; setQty(key, el);
 }
 
-function setQty(pid, el) {
-  const v = el.value.trim();
-  if (v === '') { delete S.counts[pid]; el.classList.remove('has-value'); }
+function setQty(key, el) {
+  const v = el.value.trim(), pid = pidOf(key);
+  if (v === '') { delete S.counts[key]; el.classList.remove('has-value'); }
   else {
-    S.counts[pid] = parseFloat(v); el.classList.add('has-value');
-    if (S.missed[pid]) { delete S.missed[pid]; const r = el.closest('.product-row'); if (r) { r.classList.remove('missed'); const t = r.querySelector('.missed-tag'); if (t) t.remove(); } }
-    if (S.lookFor[pid]) { delete S.lookFor[pid]; const r = el.closest('.product-row'); if (r) r.classList.remove('looking'); }
+    S.counts[key] = parseFloat(v); el.classList.add('has-value');
+    if (S.missed[key]) { delete S.missed[key]; const r = el.closest('.product-row'); if (r) { r.classList.remove('missed'); const t = r.querySelector('.missed-tag'); if (t) t.remove(); } }
+    if (S.lookFor[pid] === key) { delete S.lookFor[pid]; const r = el.closest('.product-row'); if (r) r.classList.remove('looking'); }
   }
   updateProgress();
   saveLocal();
@@ -1342,7 +1394,8 @@ function updateProgress() {
 // ============================================
 // SAVE
 // ============================================
-function unitOf(pid){
+function unitOf(key){
+  const pid = pidOf(key);
   for (const sec of S.sections) {
     const prod = sec.products.find(p => p.id == pid);
     if (prod) return prod.inventory_unit || prod.unit || 'ea';
@@ -1360,8 +1413,8 @@ async function saveCount(quiet) {
     if (!quiet) showToast(Object.keys(S.saved).length ? 'Already saved — nothing new' : 'No items counted yet', !Object.keys(S.saved).length);
     return true;
   }
-  const body = { location: S.location, notes: TYPE_NOTE, cleared: cleared.map(Number),
-                 items: changed.map(k => ({ product_id: parseInt(k), quantity: S.counts[k], unit: unitOf(k) })) };
+  const body = { location: S.location, notes: TYPE_NOTE, cleared: cleared,
+                 items: changed.map(k => ({ key: k, product_id: pidOf(k), quantity: S.counts[k], unit: unitOf(k) })) };
   const btn = document.getElementById('save-btn');
   btn.disabled = true; btn.textContent = 'Saving...';
   let ok = false;
@@ -1395,15 +1448,15 @@ async function saveCount(quiet) {
 
 // Complete = the whole count is done: save anything left, close it, update on-hand.
 async function completeCount() {
-  const lost = Object.keys(S.lookFor).filter(pid => S.counts[pid] === undefined);
+  const lost = Object.keys(S.lookFor).map(pid => S.lookFor[pid]).filter(k => typeof k === 'string' && S.counts[k] === undefined);
   if (lost.length) {
     if (confirm(lost.length + ' item' + (lost.length === 1 ? '' : 's') + ' marked Moved never turned up.\n\nOK = count ' + (lost.length === 1 ? 'it' : 'them') + ' as 0 (out)\nCancel = leave ' + (lost.length === 1 ? 'it' : 'them') + ' uncounted'))
-      lost.forEach(pid => { S.counts[pid] = 0; });
+      lost.forEach(k => { S.counts[k] = 0; });
     S.lookFor = {};
   }
-  const counted = Object.keys(S.counts).length;
+  const counted = Object.keys(S.counts).length;   // shelf lines, not products
   if (counted === 0) { showToast('No items counted yet', true); return; }
-  const missedN = Object.keys(S.missed).filter(pid => S.counts[pid] === undefined).length;
+  const missedN = Object.keys(S.missed).filter(k => S.counts[k] === undefined).length;
   if (missedN && !confirm(missedN + ' item' + (missedN === 1 ? ' was' : 's were') + ' missed by voice and still blank (orange "Missed").\n\nComplete anyway?')) return;
   const blanks = S.totalProducts - counted;
   if (!confirm('Complete the ' + TYPE_LABEL.toLowerCase() + ' count?\n\n' + counted + ' of ' + S.totalProducts + ' counted' +

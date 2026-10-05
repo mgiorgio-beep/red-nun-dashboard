@@ -14,6 +14,12 @@ The open count is found by house + notes (the count type, e.g. 'Full count',
 phones counting different areas all land on the same count. Each save only
 touches the products it sends: it never wipes what another phone saved.
 On-hand (`inventory`) and movements are written once, at Complete.
+
+A count line is one product on one SHELF (2026-10-05): Tito's in the Kitchen Well and
+Tito's in the Server Well are two lines, each entered on its own, added up at Complete.
+Lines are keyed "product:area:shelf" (0 = none), the same key the count page uses.
+A line saved without a shelf (an older phone's queued save) lands on the product's
+first shelf at that house.
 """
 
 from flask import Blueprint, jsonify, request, session
@@ -35,12 +41,34 @@ def _open_count(conn, location, notes):
     """, (location, notes, '-%d days' % OPEN_DAYS)).fetchone()
 
 
+def spot_key(pid, loc_id, sec_id):
+    return f"{int(pid)}:{int(loc_id or 0)}:{int(sec_id or 0)}"
+
+
+def _parse_key(key):
+    """'619:22:23' -> (619, 22, 23); zeros are None. A bare '619' -> (619, None, None)."""
+    parts = [int(x) for x in str(key).split(':')] + [0, 0]
+    return parts[0], (parts[1] or None), (parts[2] or None)
+
+
+def _first_shelf(conn, pid, location):
+    r = conn.execute("""
+        SELECT psl.storage_location_id, psl.section_id FROM product_storage_locations psl
+        JOIN storage_locations sl ON sl.id = psl.storage_location_id
+        WHERE psl.product_id = ? AND sl.location = ? ORDER BY psl.sort_order, psl.id LIMIT 1
+    """, (pid, location)).fetchone()
+    return (r['storage_location_id'], r['section_id']) if r else (None, None)
+
+
+_SAME_SPOT = "count_id = ? AND product_id = ? AND IFNULL(storage_location_id, 0) = ? AND IFNULL(section_id, 0) = ?"
+
+
 def _items(conn, count_id):
     rows = conn.execute("""
-        SELECT product_id, counted_quantity FROM inventory_count_items
+        SELECT product_id, storage_location_id, section_id, counted_quantity FROM inventory_count_items
         WHERE count_id = ? AND counted_quantity IS NOT NULL
     """, (count_id,)).fetchall()
-    return {str(r['product_id']): r['counted_quantity'] for r in rows}
+    return {spot_key(r['product_id'], r['storage_location_id'], r['section_id']): r['counted_quantity'] for r in rows}
 
 
 def _summary(conn, c):
@@ -80,7 +108,7 @@ def save_counts():
     if not location:
         return jsonify({'error': 'location and notes required'}), 400
     items = data.get('items') or []
-    cleared = [int(p) for p in (data.get('cleared') or [])]
+    cleared = data.get('cleared') or []
 
     conn = get_connection()
     try:
@@ -94,15 +122,23 @@ def save_counts():
             """, (location, notes, session.get('username') or 'count-page')).lastrowid
 
         for it in items:
-            pid = int(it['product_id'])
+            if it.get('key'):
+                pid, loc_id, sec_id = _parse_key(it['key'])
+            else:
+                pid, loc_id, sec_id = int(it['product_id']), it.get('storage_location_id'), it.get('section_id')
+            if not loc_id:
+                loc_id, sec_id = _first_shelf(conn, pid, location)
             qty = float(it['quantity'])
-            conn.execute("DELETE FROM inventory_count_items WHERE count_id = ? AND product_id = ?", (count_id, pid))
+            conn.execute(f"DELETE FROM inventory_count_items WHERE {_SAME_SPOT}", (count_id, pid, loc_id or 0, sec_id or 0))
             conn.execute("""
-                INSERT INTO inventory_count_items (count_id, product_id, counted_quantity, unit)
-                VALUES (?, ?, ?, ?)
-            """, (count_id, pid, qty, it.get('unit') or 'ea'))
-        for pid in cleared:
-            conn.execute("DELETE FROM inventory_count_items WHERE count_id = ? AND product_id = ?", (count_id, pid))
+                INSERT INTO inventory_count_items (count_id, product_id, storage_location_id, section_id, counted_quantity, unit)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (count_id, pid, loc_id, sec_id, qty, it.get('unit') or 'ea'))
+        for key in cleared:
+            pid, loc_id, sec_id = _parse_key(key)
+            if not loc_id and ':' not in str(key):
+                loc_id, sec_id = _first_shelf(conn, pid, location)
+            conn.execute(f"DELETE FROM inventory_count_items WHERE {_SAME_SPOT}", (count_id, pid, loc_id or 0, sec_id or 0))
         conn.commit()
         return jsonify(_summary(conn, conn.execute("SELECT * FROM inventory_counts WHERE id = ?", (count_id,)).fetchone()))
     finally:
@@ -122,17 +158,18 @@ def complete_count():
         if not c:
             # Already completed (an offline replay) or never saved: nothing to close.
             return jsonify({'success': True, 'already': True})
+        # Every shelf a product sits on is its own line; on-hand is their sum.
         rows = conn.execute("""
-            SELECT id, product_id, counted_quantity, unit FROM inventory_count_items
+            SELECT product_id, SUM(counted_quantity) AS counted_quantity, MAX(unit) AS unit, COUNT(*) AS shelves
+            FROM inventory_count_items
             WHERE count_id = ? AND counted_quantity IS NOT NULL
+            GROUP BY product_id
         """, (c['id'],)).fetchall()
         for r in rows:
             prev = conn.execute("SELECT quantity FROM inventory WHERE product_id = ? AND location = ?",
                                 (r['product_id'], location)).fetchone()
             prev_qty = prev['quantity'] if prev else None
             variance = (r['counted_quantity'] - prev_qty) if prev_qty is not None else None
-            conn.execute("UPDATE inventory_count_items SET expected_quantity = ?, variance = ? WHERE id = ?",
-                         (prev_qty, variance, r['id']))
             conn.execute("""
                 INSERT INTO inventory (product_id, location, quantity, unit, updated_at)
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)

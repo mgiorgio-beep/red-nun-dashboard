@@ -225,12 +225,20 @@ def assign_product(loc_id):
 @storage_bp.route('/api/storage/locations/<int:loc_id>/products/<int:product_id>', methods=['DELETE'])
 @login_required
 def unassign_product(loc_id, product_id):
-    """Remove a product from a storage location"""
+    """Remove a product from a storage location — from one shelf when ?section_id= is
+    given ('none' = unshelved), else from every shelf of the area."""
     conn = get_connection()
-    conn.execute(
-        "DELETE FROM product_storage_locations WHERE storage_location_id = ? AND product_id = ?",
-        (loc_id, product_id)
-    )
+    sec = request.args.get('section_id')
+    if sec is None:
+        conn.execute(
+            "DELETE FROM product_storage_locations WHERE storage_location_id = ? AND product_id = ?",
+            (loc_id, product_id)
+        )
+    else:
+        conn.execute(
+            "DELETE FROM product_storage_locations WHERE storage_location_id = ? AND product_id = ? AND IFNULL(section_id, -1) = ?",
+            (loc_id, product_id, -1 if sec in ('', 'none', '0') else int(sec))
+        )
     conn.commit()
     conn.close()
     return jsonify({'message': 'Product unassigned'})
@@ -256,18 +264,24 @@ def _ensure_moves_table(conn):
 @storage_bp.route('/api/storage/move', methods=['POST'])
 @login_required
 def move_product():
-    """Move a product to a storage area/shelf at one house ("It's here" on the count page).
+    """Put a product on a shelf at one house ("+ Add product" on the count page).
 
-    Expects {move_id, product_id, to_storage_location_id, to_section_id|null}.
-    Removes the product from every other storage area at the SAME house (never the
-    other house), puts it at the end of the target shelf, and logs the move.
-    move_id comes from the phone so an offline replay is applied once.
+    Expects {move_id, product_id, to_storage_location_id, to_section_id|null, mode,
+             from_storage_location_id, from_section_id}.
+      mode 'add'  : the product stays on every other shelf too (Tito's in the Kitchen
+                    Well AND the Server Well, each counted on its own).
+      mode 'move' : it leaves the shelf given in from_* (the one marked "Moved").
+      no mode     : an older phone's queued op — the old behavior, it leaves every
+                    other area at the house.
+    Never touches the other house. move_id comes from the phone so an offline replay
+    is applied once.
     """
     data = request.json or {}
     move_id = data.get('move_id')
     product_id = data.get('product_id')
     to_loc = data.get('to_storage_location_id')
     to_sec = data.get('to_section_id')
+    mode = data.get('mode')
     if not move_id or not product_id or not to_loc:
         return jsonify({'error': 'move_id, product_id and to_storage_location_id required'}), 400
 
@@ -288,30 +302,38 @@ def move_product():
         if not conn.execute("SELECT 1 FROM products WHERE id = ?", (product_id,)).fetchone():
             return jsonify({'error': 'Unknown product'}), 404
 
-        current = conn.execute("""
-            SELECT psl.id, psl.storage_location_id, psl.section_id
-            FROM product_storage_locations psl
-            JOIN storage_locations sl ON sl.id = psl.storage_location_id
-            WHERE psl.product_id = ? AND sl.location = ?
-            ORDER BY psl.sort_order
-        """, (product_id, house)).fetchall()
-        src = current[0] if current else None
+        src = None
+        if mode == 'move' and data.get('from_storage_location_id'):
+            src = {'storage_location_id': data.get('from_storage_location_id'), 'section_id': data.get('from_section_id')}
+            conn.execute("""
+                DELETE FROM product_storage_locations
+                WHERE product_id = ? AND storage_location_id = ? AND IFNULL(section_id, -1) = IFNULL(?, -1)
+                  AND storage_location_id IN (SELECT id FROM storage_locations WHERE location = ?)
+            """, (product_id, src['storage_location_id'], src['section_id'], house))
+        elif mode not in ('add', 'move'):
+            cur = conn.execute("""
+                SELECT psl.storage_location_id, psl.section_id FROM product_storage_locations psl
+                JOIN storage_locations sl ON sl.id = psl.storage_location_id
+                WHERE psl.product_id = ? AND sl.location = ? ORDER BY psl.sort_order
+            """, (product_id, house)).fetchone()
+            src = dict(cur) if cur else None
+            conn.execute("""
+                DELETE FROM product_storage_locations
+                WHERE product_id = ? AND NOT (storage_location_id = ? AND IFNULL(section_id, -1) = IFNULL(?, -1))
+                  AND storage_location_id IN (SELECT id FROM storage_locations WHERE location = ?)
+            """, (product_id, target['id'], to_sec, house))
 
-        max_order = conn.execute(
-            "SELECT COALESCE(MAX(sort_order), -1) FROM product_storage_locations WHERE storage_location_id = ?",
-            (target['id'],)
-        ).fetchone()[0]
-        conn.execute("""
-            DELETE FROM product_storage_locations
-            WHERE product_id = ? AND storage_location_id != ?
-              AND storage_location_id IN (SELECT id FROM storage_locations WHERE location = ?)
-        """, (product_id, target['id'], house))
-        conn.execute("""
-            INSERT INTO product_storage_locations (product_id, storage_location_id, sort_order, section_id)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(product_id, storage_location_id)
-            DO UPDATE SET section_id = excluded.section_id, sort_order = excluded.sort_order
-        """, (product_id, target['id'], max_order + 1, to_sec))
+        if not conn.execute("""SELECT 1 FROM product_storage_locations
+                               WHERE product_id = ? AND storage_location_id = ? AND IFNULL(section_id, -1) = IFNULL(?, -1)""",
+                            (product_id, target['id'], to_sec)).fetchone():
+            max_order = conn.execute(
+                "SELECT COALESCE(MAX(sort_order), -1) FROM product_storage_locations WHERE storage_location_id = ?",
+                (target['id'],)
+            ).fetchone()[0]
+            conn.execute("""
+                INSERT INTO product_storage_locations (product_id, storage_location_id, sort_order, section_id)
+                VALUES (?, ?, ?, ?)
+            """, (product_id, target['id'], max_order + 1, to_sec))
         conn.execute("""
             INSERT INTO storage_moves (move_id, product_id, location, from_storage_location_id,
                                        from_section_id, to_storage_location_id, to_section_id, moved_by)
@@ -331,11 +353,23 @@ def move_product():
 @storage_bp.route('/api/storage/locations/<int:loc_id>/reorder', methods=['POST'])
 @login_required
 def reorder_products(loc_id):
-    """Reorder products within a storage location. Expects {product_ids: [1, 5, 3, ...]}"""
+    """Reorder products within a storage location. Expects {spots: [{product_id, section_id}, ...]}
+    (one product can sit on two shelves of an area), or the older {product_ids: [1, 5, 3, ...]}."""
     data = request.json
     product_ids = data.get('product_ids', [])
     conn = get_connection()
-    
+
+    spots = data.get('spots')
+    if spots:
+        for i, sp in enumerate(spots):
+            conn.execute("""
+                UPDATE product_storage_locations SET sort_order = ?
+                WHERE storage_location_id = ? AND product_id = ? AND IFNULL(section_id, -1) = IFNULL(?, -1)
+            """, (i, loc_id, sp.get('product_id'), sp.get('section_id')))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': f'Reordered {len(spots)} products'})
+
     for i, pid in enumerate(product_ids):
         conn.execute("""
             UPDATE product_storage_locations
