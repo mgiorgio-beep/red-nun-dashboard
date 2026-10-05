@@ -326,7 +326,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
         <div class="hdr-sub" id="count-location-label">SELECT LOCATION</div>
       </div>
     </div>
-    <a href="/manage" class="back-btn">← Back</a>
+    <a href="/manage" class="back-btn" id="hdr-back">← Back</a>
   </div>
 </div>
 
@@ -1505,6 +1505,16 @@ if (COUNT_TYPE !== 'all') {
 loadHistory();
 updateConn();
 if (navigator.onLine) { flushOps(); flushPending(); }
+
+// "← Back" goes to the dashboard. Never mid-count (it left the count with nothing saved;
+// the count has its own ‹ and ✕), and never in the home-screen app, where it's a dead end.
+(function(){
+  const back = document.getElementById('hdr-back'), cs = document.getElementById('count-screen');
+  const standalone = window.navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  function sync(){ back.style.display = (standalone || cs.style.display === 'block') ? 'none' : ''; }
+  new MutationObserver(sync).observe(cs, { attributes: true, attributeFilter: ['style'] });
+  sync();
+})();
 // The Tuesday email links /week?loc=chatham -> /count?list=weekly&loc=chatham: start straight away.
 (function(){
   const loc = URLP.get('loc');
