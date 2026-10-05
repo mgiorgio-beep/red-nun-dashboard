@@ -294,6 +294,10 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .history-badge{font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px}
 .badge-complete{background:rgba(48,209,88,0.15);color:var(--green)}
 .badge-open{background:rgba(255,159,10,0.15);color:var(--orange)}
+.add-row{display:block;width:100%;margin:6px 0 14px;padding:14px;border-radius:14px;border:1.5px dashed var(--border2);
+  background:none;color:var(--blue);font:600 15px Inter,sans-serif;cursor:pointer}
+.add-row:active{background:var(--card)}
+.md-add{display:block;padding:8px 14px 10px 30px;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer}
 .history-meta{font-size:12px;color:var(--text2)}
 
 .empty{padding:60px 20px;text-align:center}
@@ -744,7 +748,9 @@ function renderMaster(){
         '<span class="md-shelf-name">' + esc(sh.name) + ' <span style="color:var(--text3);font-size:12px">(' + items.filter(counted).length + '/' + items.length + ')</span></span>' +
         '<span class="md-shelf-pct ' + pctClass(p) + '">' + p + '%</span></div>';
     });
+    if (sec.location_id) rail += '<div class="md-add" onclick="addShelf(' + ai + ')">+ Add a location</div>';
   });
+  rail += '<div class="md-add" onclick="addArea()">+ Add area</div>';
   document.getElementById('md-rail').innerHTML = rail;
   document.getElementById('md-main').innerHTML = mdMainHtml();
 }
@@ -787,7 +793,7 @@ function renderAreas(){
       '<div class="drill-sub">' + c + ' of ' + items.length + ' counted' + (sec.location_id ? '' : ' · tap to see which') + '</div>' +
       '<div class="pbar"><i style="width:' + p + '%"></i></div></div>' +
       '<div class="drill-pct ' + pctClass(p) + '">' + p + '%</div><div class="chev">›</div></div>';
-  }).join('');
+  }).join('') + '<button class="add-row" onclick="addArea()">+ Add area</button>';
 }
 
 function renderShelves(){
@@ -807,7 +813,8 @@ function renderShelves(){
       '<div class="drill-name">' + esc(sh.name) + '</div><div class="drill-sub">' + c + ' of ' + items.length + ' counted</div>' +
       '<div class="pbar"><i style="width:' + p + '%"></i></div></div>' +
       '<div class="drill-pct ' + pctClass(p) + '">' + p + '%</div><div class="chev">›</div></div>';
-  }).join('') : '<div class="empty"><div class="empty-text">No shelves in this area.</div></div>');
+  }).join('') : '<div class="empty"><div class="empty-text">No shelves in this area.</div></div>') +
+    (sec.location_id ? '<button class="add-row" onclick="addShelf()">+ Add a location in ' + esc(sec.location_name) + '</button>' : '');
 }
 
 function renderShelf(){
@@ -1265,6 +1272,44 @@ function vcApply(){
   });
   closeVoiceCount(); render(); updateProgress(); saveLocal();
   showToast('Counted ' + got + (miss ? ' · ' + miss + ' missed — look for the orange tags' : ''), miss > 0);
+}
+
+// ---- New areas and shelves from the phone (needs a connection: the server hands out the id) ----
+async function addShelf(ai){
+  if (ai !== undefined) S.areaIdx = ai;
+  const sec = S.sections[S.areaIdx]; if (!sec || !sec.location_id) return;
+  const name = (prompt('Name of the new location in ' + sec.location_name + '?\n(a shelf or spot, e.g. "Back Bar Left", "Under Register")') || '').trim();
+  if (!name) return;
+  if ((sec.sections || []).some(x => x.name.toLowerCase() === name.toLowerCase())) { showToast(sec.location_name + ' already has ' + name, true); return; }
+  if (!navigator.onLine) { showToast('Adding a shelf needs a connection', true); return; }
+  try {
+    const r = await fetch('/api/inventory/count/sections', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+      body: JSON.stringify({ storage_location_id: sec.location_id, name: name })});
+    if (!r.ok || (r.headers.get('content-type') || '').indexOf('json') === -1) throw new Error();
+    const d = await r.json();
+    sec.sections = (sec.sections || []).concat([{ id: d.id, name: name, sort_order: 999 }]);
+    saveLocal();
+    showToast('Added ' + name + ' — tap + Add product to fill it');
+    if (isTablet()) { S.shelfKey = d.id; renderMaster(); } else goShelf(String(d.id));
+  } catch(e) { showToast('Could not add the shelf — try again', true); }
+}
+async function addArea(){
+  const name = (prompt('Name of the new area at ' + (S.location === 'dennis' ? 'Dennis' : 'Chatham') + '?\n(a room or station, e.g. "Back Bar", "Basement")') || '').trim();
+  if (!name) return;
+  if (S.sections.some(x => (x.location_name || '').toLowerCase() === name.toLowerCase())) { showToast(name + ' already exists', true); return; }
+  if (!navigator.onLine) { showToast('Adding an area needs a connection', true); return; }
+  try {
+    const r = await fetch('/api/storage/locations', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+      body: JSON.stringify({ name: name, location: S.location })});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.id) { showToast(d.error || 'Could not add the area', true); return; }
+    const area = { location_id: d.id, location_name: name, sections: [], products: [] };
+    const loose = S.sections.findIndex(x => !x.location_id);       // keep "Not on a shelf yet" last
+    if (loose >= 0) S.sections.splice(loose, 0, area); else S.sections.push(area);
+    saveLocal();
+    showToast('Added ' + name + ' — add shelves inside it, or count it as one spot');
+    if (isTablet()) { S.areaIdx = S.sections.indexOf(area); S.shelfKey = 'un'; renderMaster(); } else goShelves(S.sections.indexOf(area));
+  } catch(e) { showToast('Could not add the area — try again', true); }
 }
 
 function goAreas(){ S.view = 'areas'; S.areaIdx = null; S.shelfKey = null; S.reorder = false; document.getElementById('search').value = ''; render(); }
