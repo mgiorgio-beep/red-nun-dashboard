@@ -130,6 +130,7 @@ def set_product_locations(product_id):
 # ============================================
 
 @storage_bp.route('/api/storage/locations/<int:loc_id>/products', methods=['GET'])
+@login_required
 def get_location_products(loc_id):
     """Get products assigned to a storage location, ordered by sort_order"""
     conn = get_connection()
@@ -146,6 +147,7 @@ def get_location_products(loc_id):
 
 
 @storage_bp.route('/api/storage/product/<int:product_id>/units', methods=['POST'])
+@login_required
 def set_product_units(product_id):
     """Set count unit / conversion / recipe unit, or archive a product (active=0).
 
@@ -178,6 +180,7 @@ def set_product_units(product_id):
 
 
 @storage_bp.route('/api/storage/locations/<int:loc_id>/sections', methods=['GET'])
+@login_required
 def get_location_sections(loc_id):
     """Get shelves (sub-sections) for a storage location, in order."""
     conn = get_connection()
@@ -192,6 +195,7 @@ def get_location_sections(loc_id):
 
 
 @storage_bp.route('/api/storage/locations/<int:loc_id>/products', methods=['POST'])
+@login_required
 def assign_product(loc_id):
     """Assign a product to a storage location"""
     data = request.json
@@ -219,6 +223,7 @@ def assign_product(loc_id):
 
 
 @storage_bp.route('/api/storage/locations/<int:loc_id>/products/<int:product_id>', methods=['DELETE'])
+@login_required
 def unassign_product(loc_id, product_id):
     """Remove a product from a storage location"""
     conn = get_connection()
@@ -324,6 +329,7 @@ def move_product():
 
 
 @storage_bp.route('/api/storage/locations/<int:loc_id>/reorder', methods=['POST'])
+@login_required
 def reorder_products(loc_id):
     """Reorder products within a storage location. Expects {product_ids: [1, 5, 3, ...]}"""
     data = request.json
@@ -343,6 +349,7 @@ def reorder_products(loc_id):
 
 
 @storage_bp.route('/api/storage/locations/<int:loc_id>/products/batch', methods=['POST'])
+@login_required
 def batch_assign_products(loc_id):
     """Assign multiple products to a location at once. Expects {product_ids: [1, 2, 3]}"""
     data = request.json
@@ -372,6 +379,7 @@ def batch_assign_products(loc_id):
 
 
 @storage_bp.route('/api/storage/unassigned', methods=['GET'])
+@login_required
 def get_unassigned_products():
     """Get products not assigned to any storage location"""
     location = request.args.get('location', '')
@@ -400,6 +408,7 @@ def get_unassigned_products():
 
 
 @storage_bp.route('/api/storage/count-sheet', methods=['GET'])
+@login_required
 def get_count_sheet():
     """Get full count sheet organized by storage location for a restaurant location"""
     location = request.args.get('location')

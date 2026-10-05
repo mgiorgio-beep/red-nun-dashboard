@@ -15,7 +15,7 @@ from integrations.tempstick.tempstick import (
     get_tempstick_settings,
     save_tempstick_settings,
 )
-from flask import Flask, jsonify, request, send_from_directory, redirect
+from flask import Flask, jsonify, request, send_from_directory, redirect, session
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
@@ -126,6 +126,13 @@ app.register_blueprint(report_bp)
 app.register_blueprint(recipe_fixer_bp)
 app.register_blueprint(count_template_bp)
 
+@app.before_request
+def _inventory_api_login():
+    """inventory_routes.py is frozen (CLAUDE.md rule 7), so its login gate lives here."""
+    if request.blueprint == inventory_bp.name and 'user_id' not in session:
+        return jsonify({"error": "Authentication required"}), 401
+
+
 # Initialize database
 init_db()
 # Initialize invoice scanner tables
@@ -229,6 +236,7 @@ def manage():
     from flask import make_response; resp = make_response(send_from_directory("static", "manage.html")); resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"; return resp
 
 @app.route("/count")
+@login_required
 def count_page():
     """Serve the inventory count interface."""
     return send_from_directory("static", "count.html")
@@ -548,6 +556,7 @@ def api_price_movers():
 
 
 @app.route("/api/inventory/product-settings/unreviewed-count")
+@login_required
 def unreviewed_product_count():
     conn = get_connection()
     count = conn.execute("SELECT COUNT(*) FROM product_inventory_settings WHERE reviewed = 0").fetchone()[0]
@@ -734,6 +743,7 @@ if __name__ == "__main__":
 # ── Product Setup API ──────────────────────────────────────────
 
 @app.route("/api/inventory/product-settings")
+@login_required
 def get_product_settings():
     """Get all products for Product Setup view."""
     conn = get_connection()
@@ -752,6 +762,7 @@ def get_product_settings():
 
 
 @app.route("/api/inventory/product-settings/<int:product_id>", methods=["PUT"])
+@login_required
 def update_product_setting(product_id):
     """Update a single product's inventory settings."""
     data = request.json
@@ -789,6 +800,7 @@ def update_product_setting(product_id):
 
 
 @app.route("/api/inventory/product-settings/bulk", methods=["PUT"])
+@login_required
 def bulk_update_product_settings():
     """Bulk update multiple products."""
     data = request.json
@@ -825,6 +837,7 @@ def bulk_update_product_settings():
 
 
 @app.route("/api/inventory/order-guide")
+@login_required
 def get_order_guide():
     """Generate order guide for products below par level."""
     location = request.args.get("location", "dennis")
@@ -897,6 +910,7 @@ def get_order_guide():
 
 # ── Recipe API (DELETE only — GET/POST/PUT handled by inventory_bp) ──
 @app.route("/api/inventory/recipes/<int:recipe_id>", methods=["DELETE"])
+@login_required
 def delete_recipe(recipe_id):
     """Soft delete a recipe."""
     conn = get_connection()

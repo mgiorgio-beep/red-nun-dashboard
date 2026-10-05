@@ -47,6 +47,10 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            # An API call must fail loudly: a redirect to the login page reads
+            # as a 200 and the count page would think a save had landed.
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Authentication required'}), 401
             if request.method == 'GET':
                 return redirect('/login?' + urlencode({'next': request.full_path.rstrip('?')}))
             return redirect('/login')
