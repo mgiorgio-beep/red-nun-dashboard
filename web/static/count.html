@@ -293,6 +293,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .history-date{font-size:14px;font-weight:700}
 .history-badge{font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px}
 .badge-complete{background:rgba(48,209,88,0.15);color:var(--green)}
+.badge-open{background:rgba(255,159,10,0.15);color:var(--orange)}
 .history-meta{font-size:12px;color:var(--text2)}
 
 .empty{padding:60px 20px;text-align:center}
@@ -1534,7 +1535,8 @@ async function loadHistory() {
       const typ = countTypeOf(c);
       return '<div class="history-card"><div class="history-top">' +
         '<div class="history-date">' + dateStr + ' · ' + timeStr + '</div>' +
-        '<span class="history-badge badge-complete">Complete</span>' +
+        (c.status === 'completed' ? '<span class="history-badge badge-complete">Complete</span>'
+                                  : '<span class="history-badge badge-open">Open — Save, then Complete</span>') +
         '</div><div class="history-meta">' + loc + ' · ' + typ + ' · ' + (c.item_count || 0) + ' items</div></div>';
     }).join('');
   } catch(e) {}
