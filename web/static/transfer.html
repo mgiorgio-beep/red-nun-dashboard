@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>Red Nun — Transfer</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.15);--text:#f5f5f7;--text2:rgba(245,245,247,0.6);
+  --text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;--orange:#FF9F0A;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;min-height:100dvh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.hdr{position:sticky;top:0;z-index:100;padding:calc(var(--safe-top) + 12px) 16px 12px;
+  background:rgba(10,10,12,0.85);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-logo{width:32px;height:32px;background:linear-gradient(135deg,var(--red),#FF6259);border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff}
+.hdr-title{font-size:17px;font-weight:700;letter-spacing:-0.3px}
+.hdr-sub{font-size:10px;color:var(--text3);font-weight:500}
+.hdr a{color:var(--blue);font-size:14px;font-weight:600;text-decoration:none}
+.wrap{padding:16px 16px calc(var(--safe-bottom) + 110px);max-width:640px;margin:0 auto}
+.label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 8px}
+.dir{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dir button{padding:16px 10px;border-radius:14px;background:var(--card);border:1.5px solid var(--border2);
+  color:var(--text);font:600 15px Inter,sans-serif}
+.dir button.sel{border-color:var(--blue);background:rgba(10,132,255,0.14);color:#fff}
+.search{width:100%;padding:13px 14px;border-radius:12px;background:var(--card);border:1px solid var(--border2);
+  color:var(--text);font:500 16px Inter,sans-serif;outline:none}
+.results{margin-top:6px}
+.res{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:10px}
+.res:active{background:var(--card2)}
+.res .u,.line .u{font-size:11px;color:var(--blue);font-weight:700}
+.line{display:flex;align-items:center;gap:10px;padding:12px;margin-bottom:8px;background:var(--card);
+  border:1px solid var(--border);border-radius:14px}
+.line .n{flex:1;min-width:0;font-weight:600;font-size:15px}
+.step{width:40px;height:40px;border-radius:10px;background:var(--card2);border:1px solid var(--border2);
+  color:var(--text);font-size:20px}
+.qty{width:58px;height:40px;text-align:center;border-radius:10px;background:var(--bg);border:1px solid var(--border2);
+  color:var(--text);font:700 17px Inter,sans-serif}
+.x{background:none;border:none;color:var(--red);font-size:18px;padding:0 4px}
+.empty{color:var(--text3);font-size:14px;padding:10px 2px}
+.bar{position:fixed;bottom:0;left:0;right:0;padding:12px 16px calc(var(--safe-bottom) + 12px);
+  background:rgba(10,10,12,0.92);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);border-top:1px solid var(--border)}
+.send{width:100%;max-width:640px;margin:0 auto;display:block;padding:15px;border-radius:12px;border:none;
+  background:var(--green);color:#000;font:700 16px Inter,sans-serif}
+.send:disabled{opacity:.35}
+.conn{font-size:11px;font-weight:700;text-align:center;margin-bottom:8px;color:var(--orange)}
+.hist{padding:11px 2px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;font-size:14px}
+.hist .m{flex:1;min-width:0}
+.hist .s{font-size:11px;color:var(--text3);margin-top:2px}
+.hist.void .m{text-decoration:line-through;color:var(--text3)}
+.undo{background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:6px 10px;font:600 12px Inter,sans-serif}
+.toast{position:fixed;left:50%;top:calc(var(--safe-top) + 70px);transform:translateX(-50%);z-index:200;
+  background:var(--card2);border:1px solid var(--border2);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;
+  opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{opacity:1}.toast.err{border-color:var(--red);color:var(--red)}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-left"><div class="hdr-logo">RN</div>
+    <div><div class="hdr-title">Transfer</div><div class="hdr-sub">STOCK BETWEEN THE HOUSES</div></div></div>
+  <a href="/count">Count ›</a>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="wrap">
+  <div class="label">Which way?</div>
+  <div class="dir">
+    <button data-from="chatham" data-to="dennis" onclick="pickDir(this)">Chatham → Dennis</button>
+    <button data-from="dennis" data-to="chatham" onclick="pickDir(this)">Dennis → Chatham</button>
+  </div>
+
+  <div class="label">What's going?</div>
+  <input class="search" id="q" placeholder="Search a product… (e.g. titos)" autocomplete="off" oninput="search()">
+  <div class="results" id="results"></div>
+  <div id="lines" style="margin-top:12px"></div>
+
+  <div class="label">Last 30 days</div>
+  <div id="history"><div class="empty">Loading…</div></div>
+</div>
+
+<div class="bar">
+  <div class="conn" id="conn"></div>
+  <button class="send" id="send" disabled onclick="send()">Pick a direction</button>
+</div>
+
+<script>
+const BOOZE = ['BEER', 'LIQUOR', 'WINE'];
+const T = { from: null, to: null, lines: [] };   // lines: {id, name, unit, qty}
+const QKEY = 'rn_transfer_queue';
+
+function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+function toast(msg, err){ const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(t._h); t._h = setTimeout(() => t.className = 'toast', 2600); }
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+// Same cleanup as the count page, so a bottle reads the same on both screens.
+function cleanBoozeName(n){
+  let s = ' ' + (n || '') + ' ';
+  s = s.replace(/\([^)]*\b(case|cs|pk|pack|bulk|ct|oz|ml|ltr)\b[^)]*\)/gi, ' ');
+  s = s.replace(/\(\d+\)\w?/g, ' ');
+  s = s.replace(/\b[bck]-[\d\/.]+(\s*gal\b)?/gi, ' ');
+  s = s.replace(/\b\d+(\.\d+)?\s*(°|'|’|proof|pf)(?=[\s,)]|$)/gi, ' ');
+  s = s.replace(/\b\d+\s*\/\s*(\d+(\.\d+)?)?\s*(cs|case|c|pk|ct|oz|z|ltr|l|cn)?(?![a-z])/gi, ' ');
+  s = s.replace(/\b\d+-\d+[a-z]*\b/gi, ' ');
+  s = s.replace(/\b\d+\s*(pk|pack|ct)\b(\s+(box|bottles?|cans?|loose))?/gi, ' ');
+  s = s.replace(/\b\d+(\.\d+)?\s*(ml|l|ltr|litr|oz|z|m|cs)\b/gi, ' ');
+  s = s.replace(/\b(case|cs|bulk|new pkg|nr|cn|litr|ltr|ltrcs|loose)\b/gi, ' ');
+  s = s.replace(/[,\s]+\d{2,3}(\.\d+)?\s*$/, ' ');
+  s = s.replace(/\(\s*\)/g, ' ').replace(/\s*[,\/\-]+\s*$/g, '').replace(/^\s*[,\/\-]+/, '').replace(/\s+,/g, ',').replace(/\s+/g, ' ').trim();
+  if (s && s === s.toUpperCase()) s = s.toLowerCase().replace(/(^|\s)[a-z]/g, c => c.toUpperCase());
+  return s || n;
+}
+function niceName(p){ const n = p.display_name || p.name || ''; return BOOZE.includes((p.category || '').toUpperCase()) ? cleanBoozeName(n) : n; }
+const unitOf = p => p.inventory_unit || p.unit || 'ea';
+
+function pickDir(el){
+  document.querySelectorAll('.dir button').forEach(b => b.classList.toggle('sel', b === el));
+  T.from = el.dataset.from; T.to = el.dataset.to;
+  renderBar();
+}
+
+let _sq = 0;
+async function search(){
+  const q = document.getElementById('q').value.trim(), my = ++_sq, box = document.getElementById('results');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  try {
+    const r = await fetch('/api/transfers/products?q=' + encodeURIComponent(q), {credentials:'include'});
+    if (r.status === 401) { location.href = '/login?next=/transfer'; return; }
+    const rows = await r.json();
+    if (my !== _sq) return;
+    window._res = rows;
+    box.innerHTML = rows.length ? rows.map((p, i) =>
+      '<div class="res" onclick="addLine(' + i + ')"><span>' + esc(niceName(p)) + '</span><span class="u">' + esc(unitOf(p)) + '</span></div>').join('')
+      : '<div class="empty">No product matches “' + esc(q) + '”.</div>';
+  } catch(e) { box.innerHTML = '<div class="empty">Search needs a connection.</div>'; }
+}
+function addLine(i){
+  const p = window._res[i]; if (!p) return;
+  const have = T.lines.find(l => l.id === p.id);
+  if (have) have.qty += 1; else T.lines.push({ id: p.id, name: niceName(p), unit: unitOf(p), qty: 1 });
+  document.getElementById('q').value = ''; document.getElementById('results').innerHTML = '';
+  renderLines();
+}
+function setQty(i, v){ const n = parseFloat(v); T.lines[i].qty = isNaN(n) ? 0 : Math.max(0, n); renderBar(); }
+function step(i, d){ T.lines[i].qty = Math.max(0, Math.round((T.lines[i].qty + d) * 100) / 100); renderLines(); }
+function drop(i){ T.lines.splice(i, 1); renderLines(); }
+function renderLines(){
+  document.getElementById('lines').innerHTML = T.lines.map((l, i) =>
+    '<div class="line"><div class="n">' + esc(l.name) + '<div class="u">' + esc(l.unit) + '</div></div>' +
+    '<button class="step" onclick="step(' + i + ',-1)">−</button>' +
+    '<input class="qty" type="number" inputmode="decimal" step="0.5" value="' + l.qty + '" onfocus="this.select()" oninput="setQty(' + i + ',this.value)">' +
+    '<button class="step" onclick="step(' + i + ',1)">+</button>' +
+    '<button class="x" onclick="drop(' + i + ')">✕</button></div>').join('');
+  renderBar();
+}
+function renderBar(){
+  const b = document.getElementById('send'), n = T.lines.filter(l => l.qty > 0).length;
+  b.disabled = !T.from || !n;
+  b.textContent = !T.from ? 'Pick a direction' : !n ? 'Add what\'s going' :
+    'Send ' + n + ' item' + (n === 1 ? '' : 's') + ' ' + cap(T.from) + ' → ' + cap(T.to);
+  const q = loadQ().length;
+  document.getElementById('conn').textContent = q ? q + ' transfer' + (q === 1 ? '' : 's') + ' waiting to upload' : '';
+}
+
+// Queue on the phone first, then upload in order: works with no signal, and a
+// logged-out reply keeps it queued. transfer_id makes a replay land once.
+function loadQ(){ try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch(e) { return []; } }
+function storeQ(q){ try { localStorage.setItem(QKEY, JSON.stringify(q)); } catch(e) {} }
+let _flushing = false;
+async function flush(){
+  if (_flushing || !navigator.onLine) return false;
+  _flushing = true;
+  try {
+    let q = loadQ();
+    while (q.length) {
+      let ok = false;
+      try {
+        const r = await fetch('/api/transfers', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(q[0])});
+        ok = r.ok && (r.headers.get('content-type') || '').indexOf('json') !== -1;
+        if (!ok && r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) { ok = true; toast('A transfer was rejected by the server', true); }
+      } catch(e) {}
+      if (!ok) break;
+      q = loadQ(); q.shift(); storeQ(q);
+    }
+    return !loadQ().length;
+  } finally { _flushing = false; renderBar(); }
+}
+async function send(){
+  const items = T.lines.filter(l => l.qty > 0);
+  if (!T.from || !items.length) return;
+  const summary = items.map(l => l.qty + ' ' + l.unit + ' ' + l.name).join('\n');
+  if (!confirm(cap(T.from) + ' → ' + cap(T.to) + '\n\n' + summary + '\n\nSend?')) return;
+  const tid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
+  const q = loadQ();
+  q.push({ transfer_id: tid, from_location: T.from, to_location: T.to,
+           items: items.map(l => ({ product_id: l.id, quantity: l.qty, unit: l.unit })) });
+  storeQ(q);
+  T.lines = []; renderLines();
+  const done = await flush();
+  toast(done ? '✓ Transfer saved' : 'Saved on this phone — will upload when back online', !done);
+  loadHistory();
+}
+
+async function loadHistory(){
+  const box = document.getElementById('history');
+  try {
+    const r = await fetch('/api/transfers?days=30', {credentials:'include'});
+    if (r.status === 401) { location.href = '/login?next=/transfer'; return; }
+    const rows = await r.json();
+    box.innerHTML = rows.length ? rows.map(t =>
+      '<div class="hist' + (t.voided ? ' void' : '') + '"><div class="m">' +
+        esc(t.quantity + ' ' + (t.unit || '') + ' ' + niceName(t)) +
+        '<div class="s">' + esc(cap(t.from_location) + ' → ' + cap(t.to_location) + ' · ' + t.transfer_date + (t.created_by ? ' · ' + t.created_by : '') + (t.voided ? ' · undone' : '')) + '</div></div>' +
+        (t.voided ? '' : '<button class="undo" onclick="undo(' + t.id + ')">Undo</button>') + '</div>').join('')
+      : '<div class="empty">No transfers yet.</div>';
+  } catch(e) { box.innerHTML = '<div class="empty">History needs a connection.</div>'; }
+}
+async function undo(id){
+  if (!confirm('Undo this transfer line? Use this only for a mistake.')) return;
+  try {
+    const r = await fetch('/api/transfers/' + id + '/void', {method:'POST', credentials:'include'});
+    if (!r.ok) throw new Error();
+    toast('Undone'); loadHistory();
+  } catch(e) { toast('Could not undo — try again with a connection', true); }
+}
+
+window.addEventListener('online', () => { flush().then(loadHistory); });
+renderBar();
+flush().then(loadHistory);
+</script>
+</body>
+</html>
