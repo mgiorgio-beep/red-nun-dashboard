@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>Red Nun — Transfer Statement</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+  --text:#f5f5f7;--text2:rgba(245,245,247,0.6);--text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;--orange:#FF9F0A}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+.wrap{padding:16px;max-width:1100px;margin:0 auto}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+h1{font-size:20px;font-weight:800;letter-spacing:-.3px}
+.sub{font-size:12px;color:var(--text3);margin-top:2px}
+.ctl{display:flex;gap:8px;align-items:center}
+.btn{padding:9px 12px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text);
+  font:600 13px Inter,sans-serif;text-decoration:none;cursor:pointer}
+.month{font-weight:700;min-width:120px;text-align:center}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+.big{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.even{color:var(--green)}
+.warn{border-color:rgba(255,159,10,.5);color:var(--orange);font-size:14px}
+.h{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid var(--border2)}
+td{padding:9px 6px;border-bottom:1px solid var(--border)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.muted{color:var(--text3);font-size:11px}
+.zero td{color:var(--text3)}
+/* Mobile: product table becomes cards */
+@media (max-width:767px){
+  table.lines thead{display:none}
+  table.lines tr{display:block;padding:10px 0;border-bottom:1px solid var(--border)}
+  table.lines td{display:flex;justify-content:space-between;border:none;padding:2px 0}
+  table.lines td::before{content:attr(data-l);color:var(--text3);font-size:12px}
+  table.lines td.name{font-weight:700}
+  table.lines td.name::before{content:''}
+  .basis{display:none}
+}
+@media print{
+  :root{--bg:#fff;--card:#fff;--text:#000;--text2:#333;--text3:#666;--border:#ccc;--border2:#999}
+  .ctl{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1>Transfer Statement</h1><div class="sub">Stock moved between Chatham and Dennis, netted for the month</div></div>
+    <div class="ctl">
+      <button class="btn" onclick="shift(-1)">‹</button>
+      <div class="month" id="month"></div>
+      <button class="btn" onclick="shift(1)">›</button>
+      <a class="btn" id="csv" href="#">CSV</a>
+      <button class="btn" onclick="print()">Print</button>
+      <a class="btn" href="/transfer">Transfers</a>
+    </div>
+  </div>
+  <div id="out"><div class="card">Loading…</div></div>
+</div>
+<script>
+const P = new URLSearchParams(location.search);
+let month = P.get('month') || new Date().toISOString().slice(0, 7);
+const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+const money = v => (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const qty = v => (Math.round(v * 100) / 100).toString();
+function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+function shift(d){
+  const [y, m] = month.split('-').map(Number), t = new Date(y, m - 1 + d, 1);
+  month = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0');
+  history.replaceState(null, '', '?month=' + month); load();
+}
+async function load(){
+  document.getElementById('month').textContent = new Date(month + '-15').toLocaleDateString(undefined, {month: 'long', year: 'numeric'});
+  document.getElementById('csv').href = '/api/transfers/statement.csv?month=' + month;
+  const out = document.getElementById('out');
+  const r = await fetch('/api/transfers/statement?month=' + month, {credentials: 'include'});
+  if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); return; }
+  const st = await r.json();
+  let h = '<div class="card">' + (st.owes
+    ? '<div class="muted">At month end</div><div class="big">' + cap(st.owes.debtor) + ' owes ' + cap(st.owes.creditor) + ' ' + money(st.owes.amount) + '</div>'
+    : '<div class="big even">' + (st.transfers.length ? 'Even — it all nets to $0.00' : 'No transfers this month') + '</div>') +
+    '<div class="muted" style="margin-top:6px">' + st.transfers.length + ' transfer line' + (st.transfers.length === 1 ? '' : 's') +
+    '. Borrowed-and-returned stock cancels out; what\'s left is stock one house bought and the other kept.</div></div>';
+  if (st.unpriced.length)
+    h += '<div class="card warn">Not in the total — bottles per case unknown: ' + st.unpriced.map(esc).join(', ') + '</div>';
+  if (st.lines.length) {
+    h += '<div class="h">By product</div><table class="lines"><thead><tr><th>Product</th><th class="n">Chatham → Dennis</th><th class="n">Dennis → Chatham</th>' +
+      '<th class="n">Net to Dennis</th><th class="n">Unit cost</th><th class="n">Value</th><th class="basis">Price from</th></tr></thead><tbody>' +
+      st.lines.map(l => '<tr class="' + (l.net ? '' : 'zero') + '">' +
+        '<td class="name">' + esc(l.name) + ' <span class="muted">' + esc(l.unit || '') + '</span></td>' +
+        '<td class="n" data-l="Chatham → Dennis">' + qty(l.chatham_to_dennis) + '</td>' +
+        '<td class="n" data-l="Dennis → Chatham">' + qty(l.dennis_to_chatham) + '</td>' +
+        '<td class="n" data-l="Net to Dennis">' + qty(l.net) + '</td>' +
+        '<td class="n" data-l="Unit cost">' + (l.unit_cost == null ? '<span style="color:var(--orange)">price needed</span>' : money(l.unit_cost)) + '</td>' +
+        '<td class="n" data-l="Value">' + (l.value == null ? '—' : money(l.value)) + '</td>' +
+        '<td class="basis muted">' + esc(l.basis) + '</td></tr>').join('') + '</tbody></table>';
+    h += '<div class="h">Every transfer</div><table><thead><tr><th>Date</th><th>Direction</th><th>Product</th><th class="n">Qty</th><th>By</th></tr></thead><tbody>' +
+      st.transfers.map(t => '<tr><td>' + esc(t.date) + '</td><td>' + cap(t.from_location) + ' → ' + cap(t.to_location) + '</td><td>' + esc(t.product) +
+        '</td><td class="n">' + qty(t.quantity) + ' ' + esc(t.unit || '') + '</td><td class="muted">' + esc(t.by || '') + '</td></tr>').join('') + '</tbody></table>';
+  }
+  out.innerHTML = h;
+}
+load();
+</script>
+</body>
+</html>
