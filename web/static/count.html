@@ -279,6 +279,10 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   font-size:15px;font-weight:700;border:none;cursor:pointer;transition:all 0.15s}
 .save-btn:active{transform:scale(0.97)}
 .save-btn:disabled{opacity:0.35;cursor:not-allowed}
+.save-bar .save-btn{padding:12px 20px}
+.done-btn{padding:12px 14px;border-radius:12px;background:var(--card);color:var(--blue);
+  font-size:14px;font-weight:700;border:1px solid rgba(10,132,255,0.45);cursor:pointer}
+.done-btn:disabled{opacity:0.35}
 .discard-btn{padding:12px 16px;border-radius:12px;background:var(--card);color:var(--red);
   font-size:13px;font-weight:600;border:1px solid rgba(255,69,58,0.3);cursor:pointer}
 
@@ -379,7 +383,8 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   <div class="save-bar">
     <button class="discard-btn" onclick="discardCount()">✕</button>
     <div class="save-info"><b id="counted-num">0</b> of <span id="total-num">0</span> counted <span id="conn-dot" style="font-size:11px;font-weight:700;margin-left:6px"></span></div>
-    <button class="save-btn" id="save-btn" onclick="saveCount()">Save Count</button>
+    <button class="save-btn" id="save-btn" onclick="saveCount()">Save</button>
+    <button class="done-btn" id="done-btn" onclick="completeCount()">Complete</button>
   </div>
 </div>
 
@@ -429,7 +434,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 <button class="look-chip" id="look-chip" onclick="openLookFor()"></button>
 
 <script>
-const S = { location: null, sections: [], counts: {}, lookFor: {}, missed: {}, countId: null, totalProducts: 0 };
+const S = { location: null, sections: [], counts: {}, saved: {}, lookFor: {}, missed: {}, countId: null, totalProducts: 0 };
 
 // Count type comes from the URL (?type=food | ?type=booze). No param = full count (unchanged).
 const URLP = new URLSearchParams(location.search);
@@ -496,7 +501,7 @@ function pickLoc(el) {
 function lsKey(loc){ return 'rn_count_' + loc + '_' + COUNT_TYPE + (LIST === 'weekly' ? '_weekly' : ''); }
 function saveLocal(){
   if (!S.location) return;
-  try { localStorage.setItem(lsKey(S.location), JSON.stringify({ sheet:S.sections, counts:S.counts, lookFor:S.lookFor, missed:S.missed, countId:S.countId, total:S.totalProducts, ts:Date.now() })); } catch(e){}
+  try { localStorage.setItem(lsKey(S.location), JSON.stringify({ sheet:S.sections, counts:S.counts, saved:S.saved, lookFor:S.lookFor, missed:S.missed, countId:S.countId, total:S.totalProducts, ts:Date.now() })); } catch(e){}
 }
 function loadLocal(loc){ try { return JSON.parse(localStorage.getItem(lsKey(loc)) || 'null'); } catch(e){ return null; } }
 function clearLocal(loc){ try { localStorage.removeItem(lsKey(loc)); } catch(e){} }
@@ -568,44 +573,39 @@ window.addEventListener('offline', updateConn);
 async function startCount() {
   if (!S.location) return;
   document.getElementById('count-location-label').textContent = S.location === 'dennis' ? 'DENNIS PORT' : 'CHATHAM';
-
-  // Resume an in-progress count saved on this device (survives reload / dead zone).
-  const saved = loadLocal(S.location);
-  if (saved && saved.counts && Object.keys(saved.counts).length) {
-    if (confirm('You have an in-progress ' + TYPE_LABEL.toLowerCase() + ' count here with ' + Object.keys(saved.counts).length + ' items counted.\n\nResume it?  (Cancel = start a new count)')) {
-      S.sections = saved.sheet || [];
-      S.counts = saved.counts || {};
-      S.lookFor = saved.lookFor || {};
-      S.missed = saved.missed || {};
-      S.countId = saved.countId || null;
-      S.totalProducts = saved.total || S.sections.reduce((s, sec) => s + (sec.products || []).length, 0);
-      S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
-      document.getElementById('setup-screen').style.display = 'none';
-      document.getElementById('count-screen').style.display = 'block';
-      document.getElementById('total-num').textContent = S.totalProducts;
-      render(); updateProgress(); updateConn();
-      return;
-    }
-    clearLocal(S.location);
-  }
+  let saved = loadLocal(S.location);
+  if (saved && saved.ts && Date.now() - saved.ts > 7 * 864e5) { clearLocal(S.location); saved = null; }
 
   // Load count sheet — fall back to the last cached sheet if we're offline.
+  let sheet = null, offline = false;
   try {
     const url = LIST === 'weekly' ? '/api/count-templates/sheet?location=' : '/api/storage/count-sheet?include_empty=1&location=';
     const res = await fetch(url + S.location, {credentials:'include'});
-    if (res.redirected || (res.headers.get('content-type') || '').indexOf('json') === -1) {
+    if (res.status === 401 || res.redirected || (res.headers.get('content-type') || '').indexOf('json') === -1) {
       showToast('Log in first, then open the count again', true);
-      setTimeout(() => { location.href = '/login'; }, 1500);
+      setTimeout(() => { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); }, 1500);
       return;
     }
-    S.sections = await res.json();
-  } catch(e) {
-    if (saved && saved.sheet && saved.sheet.length) { S.sections = saved.sheet; showToast('Offline — using last loaded sheet', true); }
-    else { showToast('Need a connection to load the count sheet the first time', true); return; }
+    sheet = await res.json();
+  } catch(e) { offline = true; }
+  // Shelf changes still waiting to sync are only in the phone's copy of the sheet.
+  if (saved && saved.sheet && saved.sheet.length && (offline || loadOps().length)) sheet = saved.sheet;
+  if (!sheet) { showToast('Need a connection to load the count sheet the first time', true); return; }
+  if (offline) showToast('Offline — using last loaded sheet', true);
+
+  // The open count for this house + count type. It stays open across Saves (area by
+  // area, maybe from another phone) until someone taps Complete.
+  let open = null;
+  if (!offline) {
+    try {
+      const r = await fetch('/api/count-sessions/open?location=' + S.location + '&notes=' + encodeURIComponent(TYPE_NOTE), {credentials:'include'});
+      if (r.ok) open = await r.json();
+    } catch(e) {}
   }
 
-  // Filter to the selected count type (food / booze) and drop areas left empty.
+  // Filter to the selected count type (food / booze).
   // Empty areas stay so any shelf can be opened and filled with "+ Add product".
+  S.sections = sheet;
   if (COUNT_TYPE !== 'all') {
     S.sections = S.sections
       .map(sec => Object.assign({}, sec, { products: (sec.products || []).filter(p => inCountType(p.category)) }))
@@ -616,18 +616,26 @@ async function startCount() {
     setTimeout(() => { location.href = '/count/list?loc=' + S.location; }, 1500);
     return;
   }
-
   if (S.sections.length === 0) {
     const what = COUNT_TYPE !== 'all' ? TYPE_LABEL.toLowerCase() + ' ' : '';
     showToast('No ' + what + 'products assigned to storage areas. Go to Storage Layout to set up.', true);
     return;
   }
 
-  // Session is created on SAVE (not on start). Blank = not counted, 0 = counted-out.
-  S.countId = null;
-  S.counts = {};
-  S.lookFor = {};
-  S.missed = {};
+  // Blank = not counted, 0 = counted-out. Start from what the open count already has.
+  if (open) { S.countId = open.count ? open.count.id : null; S.saved = Object.assign({}, open.items); }
+  else      { S.countId = saved ? (saved.countId || null) : null; S.saved = Object.assign({}, (saved && saved.saved) || {}); }
+  S.counts = Object.assign({}, S.saved);
+  S.lookFor = {}; S.missed = {};
+  // Numbers typed on this phone but not saved yet (dead zone, app closed) come back too.
+  let unsavedN = 0;
+  if (saved && saved.counts && (!saved.countId || !S.countId || saved.countId === S.countId)) {
+    const had = saved.saved || {};
+    Object.keys(saved.counts).forEach(k => { if (saved.counts[k] !== had[k]) { S.counts[k] = saved.counts[k]; unsavedN++; } });
+    Object.keys(had).forEach(k => { if (saved.counts[k] === undefined && S.counts[k] !== undefined) { delete S.counts[k]; unsavedN++; } });
+    S.lookFor = saved.lookFor || {}; S.missed = saved.missed || {};
+  }
+
   S.totalProducts = S.sections.reduce((sum, sec) => sum + sec.products.length, 0);
   S.view = 'areas'; S.areaIdx = null; S.shelfKey = null;
   document.getElementById('setup-screen').style.display = 'none';
@@ -635,6 +643,9 @@ async function startCount() {
   document.getElementById('total-num').textContent = S.totalProducts;
   saveLocal();
   render(); updateProgress(); updateConn();
+  const savedN = Object.keys(S.saved).length;
+  if (savedN || unsavedN)
+    showToast('Picking up this count — ' + savedN + ' saved' + (unsavedN ? ', ' + unsavedN + ' not saved yet' : ''));
 }
 
 function sectionIcon(name) {
@@ -1330,7 +1341,59 @@ function updateProgress() {
 // ============================================
 // SAVE
 // ============================================
-async function saveCount() {
+function unitOf(pid){
+  for (const sec of S.sections) {
+    const prod = sec.products.find(p => p.id == pid);
+    if (prod) return prod.inventory_unit || prod.unit || 'ea';
+  }
+  return 'ea';
+}
+
+// Save = what's been entered so far goes to the open count, which STAYS OPEN.
+// Count an area, Save, go to the next area, Save ... then Complete closes it.
+// Only changed numbers are sent, so two phones on different areas don't overwrite each other.
+async function saveCount(quiet) {
+  const changed = Object.keys(S.counts).filter(k => S.counts[k] !== S.saved[k]);
+  const cleared = Object.keys(S.saved).filter(k => S.counts[k] === undefined);
+  if (!changed.length && !cleared.length) {
+    if (!quiet) showToast(Object.keys(S.saved).length ? 'Already saved — nothing new' : 'No items counted yet', !Object.keys(S.saved).length);
+    return true;
+  }
+  const body = { location: S.location, notes: TYPE_NOTE, cleared: cleared.map(Number),
+                 items: changed.map(k => ({ product_id: parseInt(k), quantity: S.counts[k], unit: unitOf(k) })) };
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  let ok = false;
+  try {
+    const r = await fetch('/api/count-sessions/save', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});
+    if (r.ok && (r.headers.get('content-type') || '').indexOf('json') !== -1) {
+      const d = await r.json();
+      S.countId = d.count ? d.count.id : S.countId;
+      S.saved = Object.assign({}, d.items);
+      // Pick up what another phone saved in the meantime.
+      Object.keys(d.items).forEach(k => { if (S.counts[k] === undefined) S.counts[k] = d.items[k]; });
+      ok = true;
+    }
+  } catch(e) {}
+  if (!ok) {
+    // Offline or logged out: keep it on the phone, upload in order when it can.
+    queueOp({ url: '/api/count-sessions/save', body: body });
+    changed.forEach(k => { S.saved[k] = S.counts[k]; });
+    cleared.forEach(k => { delete S.saved[k]; });
+  }
+  btn.disabled = false; btn.textContent = 'Save';
+  saveLocal(); updateConn();
+  if (!quiet) {
+    showToast(ok ? '✓ Saved ' + changed.length + ' — next area, then Complete when done'
+                 : 'Saved on this phone — will upload when back online');
+    if (!isTablet() && S.view !== 'areas') goAreas(); else render();
+  }
+  updateProgress();
+  return ok;
+}
+
+// Complete = the whole count is done: save anything left, close it, update on-hand.
+async function completeCount() {
   const lost = Object.keys(S.lookFor).filter(pid => S.counts[pid] === undefined);
   if (lost.length) {
     if (confirm(lost.length + ' item' + (lost.length === 1 ? '' : 's') + ' marked Moved never turned up.\n\nOK = count ' + (lost.length === 1 ? 'it' : 'them') + ' as 0 (out)\nCancel = leave ' + (lost.length === 1 ? 'it' : 'them') + ' uncounted'))
@@ -1340,61 +1403,47 @@ async function saveCount() {
   const counted = Object.keys(S.counts).length;
   if (counted === 0) { showToast('No items counted yet', true); return; }
   const missedN = Object.keys(S.missed).filter(pid => S.counts[pid] === undefined).length;
-  if (missedN && !confirm(missedN + ' item' + (missedN === 1 ? ' was' : 's were') + ' missed by voice and still blank (orange "Missed").\n\nSave anyway?')) return;
+  if (missedN && !confirm(missedN + ' item' + (missedN === 1 ? ' was' : 's were') + ' missed by voice and still blank (orange "Missed").\n\nComplete anyway?')) return;
   const blanks = S.totalProducts - counted;
-  if (blanks > 0 && !confirm(blanks + ' item' + (blanks === 1 ? '' : 's') + ' still blank (not counted). Anything you\'re OUT of should be entered as 0, not left blank.\n\nSave anyway?')) return;
+  if (!confirm('Complete the ' + TYPE_LABEL.toLowerCase() + ' count?\n\n' + counted + ' of ' + S.totalProducts + ' counted' +
+               (blanks > 0 ? ', ' + blanks + ' still blank. Anything you\'re OUT of should be 0, not blank.' : '.') +
+               '\n\nThis closes the count for everyone and updates on-hand.')) return;
 
-  const btn = document.getElementById('save-btn');
-  btn.disabled = true; btn.textContent = 'Saving...';
-
-  // Build items first so we can queue them even with no connection.
-  const items = [];
-  for (const [pid, qty] of Object.entries(S.counts)) {
-    let unit = 'ea';
-    for (const sec of S.sections) {
-      const prod = sec.products.find(p => p.id == pid);
-      if (prod) { unit = prod.inventory_unit || prod.unit || 'ea'; break; }
-    }
-    items.push({ product_id: parseInt(pid), quantity: qty, unit });
+  const btn = document.getElementById('done-btn');
+  btn.disabled = true; btn.textContent = 'Closing...';
+  await saveCount(true);
+  queueOp({ url: '/api/count-sessions/complete', body: { location: S.location, notes: TYPE_NOTE } });
+  // queueOp flushes in order (saves first); wait briefly for the close to land.
+  let done = false;
+  for (let t = 0; t < 20 && !done; t++) {
+    await new Promise(r => setTimeout(r, 250));
+    done = !loadOps().some(o => o.url === '/api/count-sessions/complete');
   }
-
-  function finish(msg, err) {
-    showToast(msg, err);
-    clearLocal(S.location);
-    S.counts = {}; S.lookFor = {}; S.missed = {};
-    updateConn(); updateLookChip();
-    setTimeout(() => {
-      document.getElementById('count-screen').style.display = 'none';
-      document.getElementById('setup-screen').style.display = 'block';
-      document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
-      btn.disabled = false; btn.textContent = 'Save Count';
-      loadHistory();
-    }, 1200);
-  }
-
-  try {
-    if (!S.countId) {
-      const cr = await fetch('/api/inventory/counts', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:S.location, notes:TYPE_NOTE})});
-      if (!cr.ok) throw new Error(); S.countId = (await cr.json()).id;
-    }
-    const res = await fetch('/api/inventory/counts/batch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count_id:S.countId, location:S.location, items})});
-    if (!res.ok) throw new Error();
-    finish('✓ ' + counted + ' items saved!');
-  } catch(e) {
-    // Offline or the save failed — keep it on the device and upload when back online.
-    queuePending({ location: S.location, notes: TYPE_NOTE, items: items, ts: Date.now() });
-    finish('Saved on this device — will upload when back online');
-  }
+  showToast(done ? '✓ Count complete — ' + counted + ' items' : 'Will complete when back online', !done);
+  clearLocal(S.location);
+  S.counts = {}; S.saved = {}; S.lookFor = {}; S.missed = {}; S.countId = null;
+  updateConn(); updateLookChip();
+  setTimeout(() => {
+    document.getElementById('count-screen').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'block';
+    document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
+    btn.disabled = false; btn.textContent = 'Complete';
+    loadHistory();
+  }, 1200);
 }
 
 function discardCount() {
-  if (Object.keys(S.counts).length > 0 && !confirm('Discard this count?')) return;
+  const unsaved = Object.keys(S.counts).filter(k => S.counts[k] !== S.saved[k]).length +
+                  Object.keys(S.saved).filter(k => S.counts[k] === undefined).length;
+  const savedN = Object.keys(S.saved).length;
+  if (unsaved && !confirm('Leave the count and throw away ' + unsaved + ' unsaved number' + (unsaved === 1 ? '' : 's') + '?' +
+                          (savedN ? '\n\nThe ' + savedN + ' saved stay saved — the count stays open.' : ''))) return;
   if (S.location) clearLocal(S.location);
   document.getElementById('count-screen').style.display = 'none';
   document.getElementById('setup-screen').style.display = 'block';
   document.getElementById('count-location-label').textContent = 'SELECT LOCATION';
   document.getElementById('search').value = '';
-  S.counts = {}; S.lookFor = {}; S.missed = {};
+  S.counts = {}; S.saved = {}; S.lookFor = {}; S.missed = {}; S.countId = null;
   updateLookChip();
 }
 

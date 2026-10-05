@@ -72,6 +72,7 @@ from routes.daily_sales_routes import daily_sales_bp
 from routes.morning_report_routes import morning_report_bp
 from routes.recipe_fixer_routes import recipe_fixer_bp
 from routes.count_template_routes import count_template_bp
+from routes.count_session_routes import count_session_bp
 from reports.sales_journal import init_sales_journal_tables, run_daily_journal, send_weekly_unresolved_summary
 
 load_dotenv()
@@ -125,6 +126,7 @@ app.register_blueprint(morning_report_bp)
 app.register_blueprint(report_bp)
 app.register_blueprint(recipe_fixer_bp)
 app.register_blueprint(count_template_bp)
+app.register_blueprint(count_session_bp)
 
 @app.before_request
 def _inventory_api_login():
