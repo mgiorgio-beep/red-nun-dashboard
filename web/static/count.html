@@ -808,20 +808,19 @@ function moveItem(pid, dir){
 }
 // Remove an item from this area. Applies on the phone at once and syncs through the
 // shelf-op queue, so it works offline and a refused delete (logged out) retries.
-// In weekly mode it also leaves the weekly list, or it would come back as "Not on a shelf yet".
+// Never touches the weekly list: weekly cost needs the same items counted week over
+// week (start + purchases - end), so the list changes only on /count/list.
 function removeFromShelf(pid, swiped){
   const area = S.sections[S.areaIdx]; if (!area) return;
   const item = area.products.find(p => p.id === pid);
   if (!swiped && !confirm('Remove "' + (item ? niceName(item) : 'this item') + '" from this area?\n\nIt stays in the catalog but won\'t be counted here.')) return;
   if (area.location_id)
     queueOp({ method:'DELETE', url:'/api/storage/locations/' + area.location_id + '/products/' + pid });
-  if (LIST === 'weekly')
-    queueOp({ method:'DELETE', url:'/api/count-templates/' + S.location + '/' + pid });
   const idx = area.products.findIndex(p => p.id === pid);
   if (idx >= 0) { area.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); }
   delete S.counts[pid]; delete S.lookFor[pid]; delete S.missed[pid];
   render(); updateProgress(); saveLocal(); updateLookChip();
-  showToast('Removed ' + (item ? niceName(item) : 'item') + (LIST === 'weekly' ? ' (and off the weekly list)' : ''));
+  showToast('Removed ' + (item ? niceName(item) : 'item') + ' from this area' + (LIST === 'weekly' ? ' — still on the weekly list' : ''));
 }
 function persistOrder(area){
   queueOp({ key: 'reorder-' + area.location_id, url: '/api/storage/locations/' + area.location_id + '/reorder',
