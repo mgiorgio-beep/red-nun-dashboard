@@ -14,6 +14,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from functools import wraps
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 import logging
 
 auth_bp = Blueprint('auth', __name__)
@@ -46,9 +47,18 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            if request.method == 'GET':
+                return redirect('/login?' + urlencode({'next': request.full_path.rstrip('?')}))
             return redirect('/login')
         return f(*args, **kwargs)
     return decorated_function
+
+
+def _safe_next(target):
+    """Only same-site paths ('/count?loc=x'), never '//evil.com' or full URLs."""
+    if target and target.startswith('/') and not target.startswith('//') and '\\' not in target:
+        return target
+    return '/'
 
 
 def admin_required(f):
@@ -144,7 +154,6 @@ def login():
     if request.method == 'POST':
         email = (request.json.get('email') or '').strip().lower()
         password = request.json.get('password')
-        remember = request.json.get('remember', False)
 
         conn = get_connection()
         user = conn.execute(
@@ -156,7 +165,10 @@ def login():
         if user:
             pwd_hash = hash_password(password, user['salt'])
             if pwd_hash == user['password_hash']:
-                session.permanent = remember
+                # Always a 30-day rolling cookie (PERMANENT_SESSION_LIFETIME). A
+                # browser-session cookie is dropped by iOS every time the
+                # home-screen app closes, which meant logging in every time.
+                session.permanent = True
                 session['user_id'] = user['id']
                 session['username'] = user['username']
                 session['email'] = user['email']
@@ -184,7 +196,8 @@ def login():
                 if user['role'] != 'admin':
                     notify_admin_login(user['username'], user['full_name'], user['role'], ip_address)
 
-                return jsonify({'success': True, 'redirect': '/'})
+                return jsonify({'success': True,
+                                'redirect': _safe_next(request.json.get('next'))})
 
         return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
 
@@ -647,12 +660,6 @@ LOGIN_HTML = """
         <label>Password</label>
         <input type="password" id="password" required autocomplete="current-password">
       </div>
-      <div style="margin-bottom: 24px;">
-        <label style="display:flex;align-items:center;cursor:pointer;font-size:14px;">
-          <input type="checkbox" id="remember" style="width:auto;margin-right:8px;">
-          <span>Stay signed in</span>
-        </label>
-      </div>
       <button type="submit" class="btn">Sign In</button>
     </form>
   </div>
@@ -661,7 +668,7 @@ LOGIN_HTML = """
       e.preventDefault();
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
-      const remember = document.getElementById('remember').checked;
+      const next = new URLSearchParams(location.search).get('next') || '/';
       const errorDiv = document.getElementById('error');
       const btn = e.target.querySelector('button[type="submit"]');
       btn.disabled = true; btn.textContent = 'Signing in...';
@@ -669,7 +676,7 @@ LOGIN_HTML = """
       try {
         const r = await fetch('/login', {
           method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({email, password, remember})
+          body: JSON.stringify({email, password, next})
         });
         const data = await r.json();
         if (r.ok && data.success) {
