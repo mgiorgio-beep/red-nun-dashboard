@@ -203,6 +203,13 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .arrange-btns{display:flex;gap:8px;flex-shrink:0}
 .step-btn:disabled{opacity:0.3;cursor:default}
 .rm-btn{color:var(--red);border-color:rgba(255,69,58,0.4)}
+/* Swipe a row left to reveal Remove (takes it off this shelf) */
+.swipe-wrap{position:relative;margin-bottom:8px;border-radius:14px;overflow:hidden}
+.swipe-wrap .product-row{margin-bottom:0;position:relative;z-index:1;transition:transform .18s ease;touch-action:pan-y}
+.swipe-wrap.dragging .product-row{transition:none}
+.swipe-del{position:absolute;top:0;right:0;bottom:0;width:96px;border:0;background:var(--red);color:#fff;
+  font-size:15px;font-weight:700;font-family:inherit;visibility:hidden}
+.swipe-wrap.dragging .swipe-del,.swipe-wrap.open .swipe-del{visibility:visible}
 .rm-btn:active{background:var(--red);border-color:var(--red);color:#fff}
 
 /* iPad / wide: two columns, centered, roomier */
@@ -532,7 +539,9 @@ async function flushOps(){
     while (q.length){
       var op = q[0], ok = false;
       try {
-        var r = await fetch(op.url, {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(op.body)});
+        var m = op.method || 'POST';
+        var r = await fetch(op.url, m === 'DELETE' ? {method:m,credentials:'include'}
+                                                   : {method:m,headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(op.body)});
         ok = r.ok && !r.redirected && (r.headers.get('content-type') || '').indexOf('json') !== -1;
         if (!ok && r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) {
           ok = true;  // rejected for good (e.g. product archived); drop it rather than block the queue
@@ -786,17 +795,22 @@ function moveItem(pid, dir){
   saveLocal();
   persistOrder(area);
 }
-async function removeFromShelf(pid){
+// Remove an item from this area. Applies on the phone at once and syncs through the
+// shelf-op queue, so it works offline and a refused delete (logged out) retries.
+// In weekly mode it also leaves the weekly list, or it would come back as "Not on a shelf yet".
+function removeFromShelf(pid, swiped){
   const area = S.sections[S.areaIdx]; if (!area) return;
   const item = area.products.find(p => p.id === pid);
-  if (!confirm('Remove "' + (item ? niceName(item) : 'this item') + '" from this area?\n\nIt stays in the catalog but won\'t be counted here.')) return;
-  try {
-    await fetch('/api/storage/locations/' + area.location_id + '/products/' + pid, { method:'DELETE', credentials:'include' });
-    const idx = area.products.findIndex(p => p.id === pid);
-    if (idx >= 0) { area.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); delete S.counts[pid]; }
-    render(); updateProgress(); saveLocal();
-    showToast('Removed from area');
-  } catch(e) { showToast('Could not remove', true); }
+  if (!swiped && !confirm('Remove "' + (item ? niceName(item) : 'this item') + '" from this area?\n\nIt stays in the catalog but won\'t be counted here.')) return;
+  if (area.location_id)
+    queueOp({ method:'DELETE', url:'/api/storage/locations/' + area.location_id + '/products/' + pid });
+  if (LIST === 'weekly')
+    queueOp({ method:'DELETE', url:'/api/count-templates/' + S.location + '/' + pid });
+  const idx = area.products.findIndex(p => p.id === pid);
+  if (idx >= 0) { area.products.splice(idx, 1); S.totalProducts = Math.max(0, S.totalProducts - 1); }
+  delete S.counts[pid]; delete S.lookFor[pid]; delete S.missed[pid];
+  render(); updateProgress(); saveLocal(); updateLookChip();
+  showToast('Removed ' + (item ? niceName(item) : 'item') + (LIST === 'weekly' ? ' (and off the weekly list)' : ''));
 }
 function persistOrder(area){
   queueOp({ key: 'reorder-' + area.location_id, url: '/api/storage/locations/' + area.location_id + '/reorder',
@@ -1201,7 +1215,9 @@ function productRowHtml(p, i) {
   const prevHtml = prev !== null && prev !== undefined ? '<span class="product-prev">Last: <b>' + prev + '</b></span>' : '';
   const looking = !!S.lookFor[p.id];
   const missed = !!S.missed[p.id] && !hasVal;
-  return '<div class="product-row fade-up' + (looking ? ' looking' : '') + (missed ? ' missed' : '') + '" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
+  return '<div class="swipe-wrap fade-up" data-pid="' + p.id + '" style="animation-delay:' + Math.min(i * 10, 200) + 'ms">' +
+    '<button class="swipe-del" onclick="removeFromShelf(' + p.id + ',true)">Remove</button>' +
+    '<div class="product-row' + (looking ? ' looking' : '') + (missed ? ' missed' : '') + '">' +
     '<div class="product-info">' +
       '<div class="product-name" onclick="editFromCount(' + p.id + ')" style="cursor:pointer">' + esc(niceName(p)) + ' <span style="color:var(--text3);font-size:11px;font-weight:400">✎</span></div>' +
       '<div class="product-meta">' +
@@ -1221,8 +1237,41 @@ function productRowHtml(p, i) {
       '</div>' +
       '<button class="step-btn" onclick="stepQty(' + p.id + ',1)" aria-label="plus">+</button>' +
     '</div>' +
-  '</div>';
+  '</div></div>';
 }
+
+// Swipe left on a row: slide it open to show Remove. Vertical drags still scroll.
+(function(){
+  let wrap = null, x0 = 0, y0 = 0, dx = 0, mode = null, openWrap = null;
+  const row = w => w.querySelector('.product-row');
+  function close(w){ if (w) { row(w).style.transform = ''; w.classList.remove('open'); if (openWrap === w) openWrap = null; } }
+  document.addEventListener('touchstart', function(e){
+    const w = e.target.closest && e.target.closest('.swipe-wrap');
+    if (openWrap && openWrap !== w) close(openWrap);
+    if (!w || e.target.closest('.swipe-del')) { wrap = null; return; }
+    wrap = w; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; mode = null;
+  }, {passive:true});
+  document.addEventListener('touchmove', function(e){
+    if (!wrap) return;
+    const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+    if (!mode) { if (Math.abs(mx) < 8 && Math.abs(my) < 8) return; mode = Math.abs(mx) > Math.abs(my) ? 'h' : 'v'; }
+    if (mode !== 'h') return;
+    e.preventDefault();
+    const base = openWrap === wrap ? -96 : 0;
+    dx = Math.max(-120, Math.min(0, base + mx));
+    wrap.classList.add('dragging');
+    row(wrap).style.transform = 'translateX(' + dx + 'px)';
+  }, {passive:false});
+  document.addEventListener('touchend', function(){
+    if (!wrap) return;
+    wrap.classList.remove('dragging');
+    if (mode === 'h') {
+      if (dx < -48) { row(wrap).style.transform = 'translateX(-96px)'; wrap.classList.add('open'); openWrap = wrap; }
+      else close(wrap);
+    }
+    wrap = null; mode = null;
+  });
+})();
 
 // Edit a product (count unit, name, conversions, archive) from the count screen — shared card.
 function editFromCount(pid){
