@@ -12,7 +12,7 @@ Weekly key-item count list routes, plus "Say items" matching for the count page.
 from flask import Blueprint, jsonify, request, session, current_app
 from integrations.toast.data_store import get_connection
 from routes.auth_routes import login_required
-from reports.key_items import (ensure_tables, rank_key_items, weekly_product_ids,
+from reports.key_items import (ensure_tables, rank_by_sales, weekly_product_ids,
                                last_weekly_count, group_of, LOCATIONS)
 
 count_template_bp = Blueprint('count_template', __name__)
@@ -103,7 +103,7 @@ def get_list():
             ORDER BY ct.sort_order, ct.id
         """, (location,)).fetchall()
         on_list = {r['product_id'] for r in items}
-        ranked = rank_key_items(conn, location)
+        ranked = rank_by_sales(conn, location)
         spend = {r['product_id']: r['dollars'] for r in ranked}
         items_out = [dict(r, group=group_of(r['category']), dollars=spend.get(r['product_id'], 0)) for r in items]
         suggestions = [r for r in ranked if r['product_id'] not in on_list][:30]

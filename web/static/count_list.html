@@ -77,7 +77,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
       <div class="h">Add a product</div>
       <input class="search" id="q" placeholder="Search any product…" oninput="renderSearch()">
       <div id="found"></div>
-      <div class="h">Big spend, not on the list (last 90 days)</div>
+      <div class="h">Top sellers, not on the list (last 90 days)</div>
       <div id="sugg"></div>
     </div>
   </div>
@@ -120,14 +120,14 @@ function render(){
     (noShelf ? '<br><span style="color:var(--orange)">' + noShelf + ' have no shelf yet</span> — the first walk puts them away (tap “+ Add product” on the shelf).' : '');
   document.getElementById('h-list').textContent = 'On the weekly list (' + items.length + ')';
   const row = i => '<div class="row"><div class="main"><div class="name">' + esc(i.name) + '</div><div class="sub">' +
-    (i.dollars ? money(i.dollars) + ' / 90d · ' : '') + (i.area ? esc(i.area) : '<span class="warn">no shelf yet</span>') +
+    (i.dollars ? money(i.dollars) + (i.group === 'booze' ? ' sold' : ' used') + ' / 90d · ' : '') + (i.area ? esc(i.area) : '<span class="warn">no shelf yet</span>') +
     '</div></div><button class="btn rm" onclick="removeItem(' + i.product_id + ')" aria-label="Remove">✕</button></div>';
   document.getElementById('list').innerHTML =
     (food.length ? '<div class="h">Kitchen</div>' + food.map(row).join('') : '') +
     (bar.length ? '<div class="h">Bar</div>' + bar.map(row).join('') : '') ||
     '<div class="empty">Nothing on the list yet — add from the right.</div>';
   document.getElementById('sugg').innerHTML = d.suggestions.length ? d.suggestions.map(s =>
-    '<div class="row"><div class="main"><div class="name">' + esc(s.name) + '</div><div class="sub">' + money(s.dollars) + ' / 90d · ' +
+    '<div class="row"><div class="main"><div class="name">' + esc(s.name) + '</div><div class="sub">' + money(s.dollars) + (s.group === 'booze' ? ' sold' : ' used') + ' / 90d · ' +
     esc(s.category || '') + '</div></div><button class="btn add" onclick="addItem(' + s.product_id + ')">+ Add</button></div>').join('')
     : '<div class="empty">Nothing big is missing.</div>';
   renderSearch();
