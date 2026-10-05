@@ -290,7 +290,19 @@ def process_invoice_items(invoice_id, conn):
 
     counts = {"auto_matched": 0, "suggestions": 0, "new_products": 0}
 
+    # One item code listed twice on an invoice (5 cases @ $251.88 plus "4 bottles
+    # backorder" @ $1.00, or a deposit line) is one product: only the highest-priced
+    # line sets its price. Otherwise the last line read wins (Tito's at $1.00, 7/10).
+    best_by_code = {}
     for item in items:
+        code = (item["vendor_item_code"] or "").strip()
+        if code and (item["unit_price"] or 0) > (best_by_code.get(code, (None, -1))[1]):
+            best_by_code[code] = (item["id"], item["unit_price"] or 0)
+
+    for item in items:
+        code = (item["vendor_item_code"] or "").strip()
+        if code and best_by_code[code][0] != item["id"]:
+            continue
         item_dict = dict(item)
         result    = match_vendor_item_to_product(item_dict, conn)
 
