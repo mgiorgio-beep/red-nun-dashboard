@@ -640,6 +640,10 @@ async function startCount() {
   const legacy = { dropped: 0 };
   S.saved = upgradeKeys(S.saved);
   S.counts = Object.assign({}, S.saved);
+  // A phone's unsaved numbers belong to the count it was working on. If that count is gone
+  // (cleared, or Completed from another phone) while we're online, they're stale: drop them.
+  const draftIsStale = saved && saved.countId && !offline && saved.countId !== S.countId;
+  if (draftIsStale) { saved = null; clearLocal(S.location); }
   if (saved && saved.counts && (!saved.countId || !S.countId || saved.countId === S.countId)) {
     saved.counts = upgradeKeys(saved.counts, legacy);
     saved.saved = upgradeKeys(saved.saved || {});
