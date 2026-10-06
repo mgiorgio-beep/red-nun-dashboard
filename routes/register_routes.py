@@ -357,6 +357,12 @@ def init_register_tables():
     except Exception as e:
         logger.warning(f"payroll_checks bank_account backfill skipped: {e}")
 
+    # ── vendor_payments: no row may leave the write path without a bank ──
+    try:
+        ensure_vendor_payment_bank_account(conn)
+    except Exception as e:
+        logger.warning(f"vendor_payments bank_account guard skipped: {e}")
+
     conn.commit()
     conn.close()
 
@@ -385,6 +391,71 @@ def init_register_tables():
         backfill_qb_line_mapping_gl()
     except Exception as e:
         logger.warning(f"qb_line_mapping GL backfill skipped: {e}")
+
+
+def ensure_vendor_payment_bank_account(conn) -> dict:
+    """Every vendor_payment with a location gets the bank account that pays it.
+
+    2026-10-06: Dennis checks 9767/9768/9769/9771/9791 (Dennis check stock)
+    and two Dennis card receipts sat in CHATHAM's register. Only the Bill Pay
+    mirror set bank_account_id; the recurring/auto-pay check writer, the
+    receipt poller and the one-off scripts all left it NULL, and the register
+    folds every NULL row into Chatham (the 5975 catch-all). Rather than chase
+    each writer, the database fills it:
+
+      * trigger vp_bank_from_location — on INSERT, and on UPDATE of location,
+        a row with NULL bank_account_id and a known location gets that
+        location's active account. An explicit bank_account_id (an
+        intercompany payment someone recorded on purpose) is never touched.
+      * backfill — existing NULL rows with a location:
+          - not yet cleared  -> the location's account (where it will clear);
+          - already cleared  -> Chatham, because only Chatham's statements
+            could have cleared a NULL row. That keeps every signed-off
+            period exactly as it was signed.
+        Rows with no location stay NULL and keep showing as unassigned.
+
+    Idempotent; runs at startup from init_register_tables.
+    """
+    conn.execute("DROP TRIGGER IF EXISTS vp_bank_from_location")
+    conn.execute("DROP TRIGGER IF EXISTS vp_bank_from_location_upd")
+    fill = """
+        UPDATE vendor_payments
+           SET bank_account_id = (SELECT id FROM bank_accounts
+                                   WHERE location = NEW.location AND active = 1
+                                   ORDER BY sort_order, id LIMIT 1)
+         WHERE id = NEW.id AND bank_account_id IS NULL;
+    """
+    conn.execute(f"""
+        CREATE TRIGGER vp_bank_from_location
+        AFTER INSERT ON vendor_payments
+        WHEN NEW.bank_account_id IS NULL AND NEW.location IS NOT NULL
+        BEGIN {fill} END""")
+    conn.execute(f"""
+        CREATE TRIGGER vp_bank_from_location_upd
+        AFTER UPDATE OF location ON vendor_payments
+        WHEN NEW.bank_account_id IS NULL AND NEW.location IS NOT NULL
+        BEGIN {fill} END""")
+
+    default = conn.execute(
+        "SELECT id FROM bank_accounts WHERE account_last4 = '5975'").fetchone()
+    cleared_n = 0
+    if default:
+        cleared_n = conn.execute(
+            """UPDATE vendor_payments SET bank_account_id = ?
+               WHERE bank_account_id IS NULL AND location IS NOT NULL
+                 AND COALESCE(cleared, 0) = 1""", (default[0],)).rowcount or 0
+    open_n = conn.execute(
+        """UPDATE vendor_payments
+              SET bank_account_id = (SELECT ba.id FROM bank_accounts ba
+                                      WHERE ba.location = vendor_payments.location
+                                        AND ba.active = 1
+                                      ORDER BY ba.sort_order, ba.id LIMIT 1)
+            WHERE bank_account_id IS NULL AND location IS NOT NULL
+              AND COALESCE(cleared, 0) = 0""").rowcount or 0
+    if cleared_n or open_n:
+        logger.warning("vendor_payments bank backfill: %s cleared -> 5975, "
+                       "%s open -> their location's account", cleared_n, open_n)
+    return {"cleared_to_default": cleared_n, "open_to_location": open_n}
 
 
 # ─── GL ACCOUNT SEED ─────────────────────────────────────────────────────────
@@ -873,9 +944,99 @@ def audit_register_invariants(conn=None, location: str | None = None) -> dict:
             "tip-channel rows coded to a labor account (they settle Tip Bank)",
             tip_on_labor)
 
+        # 7. One bank line, two register rows. A statement-imported row and a
+        # book row (bill pay / payroll / deposit) the bank cleared ON THAT
+        # SAME LINE'S DATE for the same amount are the same money twice.
+        # Chatham September 2026 carried 35 of these ($92,499.80) because the
+        # import inserted matched lines AND cleared their partners. The import
+        # can no longer do that; this check catches it if anything else does.
+        add("statement_double_count",
+            "statement lines also present as a cleared book row (counted twice)",
+            audit_statement_double_count(conn, location))
+
         failures = sum(1 for c in checks if not c["ok"])
         return {"ok": failures == 0, "failures": failures,
                 "location": location, "checks": checks}
+    finally:
+        if own:
+            conn.close()
+
+
+def audit_statement_double_count(conn=None, location: str | None = None) -> list[dict]:
+    """Pairs (statement row, book row) that are the same bank movement twice.
+
+    Signature: a manual_bank_entries row created by a statement import, and a
+    cleared vendor_payments / payroll_checks / bank_deposits row on the same
+    account, same signed amount, whose cleared_date IS that statement row's
+    date. The import stamps a matched book row with its statement line's
+    date, so a legitimate pair never leaves both behind. Differing check
+    numbers veto a pair (two different $260 checks clearing the same day).
+    Each statement row is reported once.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
+        loc_clause, loc_params = "", ()
+        if location:
+            loc_clause = " AND ba.location = ?"
+            loc_params = (location,)
+        acct_match = ("(b.bank_account_id = m.bank_account_id OR "
+                      "(b.bank_account_id IS NULL AND ba.account_last4 = '5975'))")
+        ref_ok = ("(m.ref_number IS NULL OR m.ref_number = '' OR {chk} IS NULL "
+                  "OR {chk} = '' OR CAST(m.ref_number AS TEXT) = CAST({chk} AS TEXT))")
+        queries = [
+            ("bill_pay", f"""
+                SELECT m.id AS stmt_id, m.entry_date, m.payee AS stmt_payee,
+                       m.amount, b.id AS book_id, b.vendor AS book_label
+                FROM manual_bank_entries m
+                JOIN bank_accounts ba ON ba.id = m.bank_account_id
+                JOIN vendor_payments b
+                  ON b.cleared = 1 AND b.cleared_date = m.entry_date
+                 AND ABS(b.payment_total + m.amount) < 0.005
+                 AND (b.status IS NULL OR b.status NOT IN ('void', 'failed'))
+                 AND {acct_match}
+                 AND {ref_ok.format(chk='b.check_number')}
+                WHERE m.statement_upload_id IS NOT NULL AND m.amount < 0{loc_clause}"""),
+            ("payroll", f"""
+                SELECT m.id AS stmt_id, m.entry_date, m.payee AS stmt_payee,
+                       m.amount, b.id AS book_id, b.employee_name AS book_label
+                FROM manual_bank_entries m
+                JOIN bank_accounts ba ON ba.id = m.bank_account_id
+                JOIN payroll_checks b
+                  ON b.cleared = 1 AND b.cleared_date = m.entry_date
+                 AND ABS(b.net_pay + m.amount) < 0.005
+                 AND (b.voided IS NULL OR b.voided = 0)
+                 AND b.bank_account_id = m.bank_account_id
+                 AND {ref_ok.format(chk='b.check_number')}
+                WHERE m.statement_upload_id IS NOT NULL AND m.amount < 0{loc_clause}"""),
+            ("deposit", f"""
+                SELECT m.id AS stmt_id, m.entry_date, m.payee AS stmt_payee,
+                       m.amount, b.id AS book_id, b.description AS book_label
+                FROM manual_bank_entries m
+                JOIN bank_accounts ba ON ba.id = m.bank_account_id
+                JOIN bank_deposits b
+                  ON b.cleared = 1 AND b.cleared_date = m.entry_date
+                 AND ABS(b.amount - m.amount) < 0.005
+                 AND b.bank_account_id = m.bank_account_id
+                WHERE m.statement_upload_id IS NOT NULL AND m.amount > 0{loc_clause}"""),
+        ]
+        seen, out = set(), []
+        for source, sql in queries:
+            try:
+                rows = conn.execute(sql, loc_params).fetchall()
+            except Exception as e:      # a missing column must not hide the rest
+                out.append({"source": source, "error": str(e)})
+                continue
+            for r in rows:
+                if r["stmt_id"] in seen:
+                    continue
+                seen.add(r["stmt_id"])
+                d = dict(r)
+                d["book_source"] = source
+                out.append(d)
+        out.sort(key=lambda d: (d.get("entry_date") or "", d.get("stmt_id") or 0))
+        return out
     finally:
         if own:
             conn.close()
@@ -1888,6 +2049,18 @@ def _find_gl_account_for_description(conn, description: str, location: str | Non
     return None
 
 
+@register_bp.route("/api/register/double-count", methods=["GET"])
+@login_required
+def get_double_count():
+    """Read-only: statement lines that also sit in the register as a cleared
+    book row. ?location=chatham|dennis narrows it. Empty list = clean."""
+    loc = request.args.get("location") or None
+    rows = audit_statement_double_count(location=loc)
+    return jsonify({"location": loc, "count": len(rows),
+                    "amount": round(sum(abs(r.get("amount") or 0) for r in rows), 2),
+                    "rows": rows})
+
+
 @register_bp.route("/api/gl-accounts", methods=["GET"])
 @login_required
 def list_gl_accounts():
@@ -2763,6 +2936,10 @@ def build_register_view(conn, account_id, start, end, cleared_filter="all",
     )
     for r in conn.execute(bp_query, (start, end, account_id)).fetchall():
         rows.append(_normalize_row("bill_pay", r, r["bank_account_id"] or (account_id if is_default_account else None)))
+        # The display account above defaults a NULL row onto Chatham, which also
+        # made `unassigned` always False there — unassigned_count read 0 while
+        # Dennis checks sat in Chatham's register (2026-10-06). Flag the truth.
+        rows[-1]["unassigned"] = r["bank_account_id"] is None
 
     # ── payroll ──
     # `payroll_checks` has no `pay_date` column itself — the actual pay date

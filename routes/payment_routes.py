@@ -574,6 +574,14 @@ def api_void_payment(payment_id):
         conn.close()
         return jsonify({"error": "Already voided"}), 400
 
+    from routes.payment_guard import check_or_refuse
+    force = bool((request.get_json(silent=True) or {}).get("force"))
+    refused = check_or_refuse(conn, "vendor_payments", "id = ?", (payment_id,),
+                              "void this payment", force)
+    if refused:
+        conn.close()
+        return jsonify(refused[0]), refused[1]
+
     now = datetime.now().isoformat()
     conn.execute(
         "UPDATE vendor_payments SET status = 'void', updated_at = ? WHERE id = ?",
@@ -846,6 +854,14 @@ def api_delete_payment(payment_id):
     if not vp:
         conn.close()
         return jsonify({"error": "Payment not found"}), 404
+
+    from routes.payment_guard import check_or_refuse
+    force = bool((request.get_json(silent=True) or {}).get("force"))
+    refused = check_or_refuse(conn, "vendor_payments", "id = ?", (payment_id,),
+                              "delete this payment", force)
+    if refused:
+        conn.close()
+        return jsonify(refused[0]), refused[1]
 
     # Delete invoice links first, then the payment
     conn.execute("DELETE FROM vendor_payment_invoices WHERE payment_id = ?", (payment_id,))

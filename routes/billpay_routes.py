@@ -826,6 +826,16 @@ def void_payment(payment_id):
         conn.close()
         return jsonify({"error": "Payment already voided"}), 400
 
+    # Bank lock: the vendor_payments mirror carries the cleared/reconciled state.
+    from routes.payment_guard import check_or_refuse
+    force = bool((request.get_json(silent=True) or {}).get("force"))
+    refused = check_or_refuse(conn, "vendor_payments",
+                              "ap_payment_id = ? AND (status IS NULL OR status != 'void')",
+                              (payment_id,), "void this payment", force)
+    if refused:
+        conn.close()
+        return jsonify(refused[0]), refused[1]
+
     # Reverse linked invoice balances
     links = cursor.execute(
         "SELECT invoice_id, amount_applied FROM ap_payment_invoices WHERE payment_id = ?",
@@ -2056,6 +2066,14 @@ def void_payroll_check(check_id):
     if not existing:
         conn.close()
         return jsonify({"error": "Not found"}), 404
+
+    from routes.payment_guard import check_or_refuse
+    force = bool((request.get_json(silent=True) or {}).get("force"))
+    refused = check_or_refuse(conn, "payroll_checks", "id = ?", (check_id,),
+                              "void this payroll check", force)
+    if refused:
+        conn.close()
+        return jsonify(refused[0]), refused[1]
 
     conn.execute("UPDATE payroll_checks SET voided = 1, voided_at = datetime('now') WHERE id = ?",
                  (check_id,))

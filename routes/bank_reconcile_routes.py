@@ -554,7 +554,7 @@ def upload_statement():
 # ─── IMPORT SELECTED ROWS ────────────────────────────────────────────────────
 
 def _import_upload_rows(conn, upload, indexes=None, also_clear=False,
-                        created_by="statement-import"):
+                        created_by="statement-import", override_indexes=None):
     """Import parsed statement lines from one upload into manual_bank_entries.
 
     THE ONE IMPORT LOOP. /import (the review screen) and /import-all both
@@ -568,6 +568,20 @@ def _import_upload_rows(conn, upload, indexes=None, also_clear=False,
                 register row" — the import-all rule.
     also_clear  stamp the register rows the matcher paired as cleared, on the
                 STATEMENT line's date (the day the bank cleared them).
+    override_indexes
+                matched lines the caller has deliberately judged a WRONG match
+                and wants inserted anyway. Their register partner is then NOT
+                cleared. Anything not listed here that the matcher paired is
+                skipped, whatever `indexes` says.
+
+    ONE LINE, ONE REGISTER ROW (2026-10-06). A statement line the matcher
+    paired with an existing register row is EITHER inserted OR clears that
+    row — never both. Chatham September went in through the review screen
+    with "Select all" + "mark matched rows cleared": all 230 lines were
+    inserted AND the 35 book rows they matched were cleared, so $92,499.80 of
+    payments sat in the register twice. The import-all path (indexes=None)
+    already skipped matched lines; the explicit-index path trusted the
+    browser. It doesn't any more.
 
     Does not commit. Returns counts; the caller owns the transaction.
     """
@@ -597,11 +611,29 @@ def _import_upload_rows(conn, upload, indexes=None, also_clear=False,
     acct_last4 = (_acct["account_last4"] if _acct else "") or ""
     acct_location = _acct["location"] if _acct else None
 
+    override = {i for i in (override_indexes or []) if isinstance(i, int)}
+    inserted_idx = set()
+    skipped_matched = []
+
     inserted = uncoded = skipped_zero = 0
     for idx in indexes:
         if not isinstance(idx, int) or idx < 0 or idx >= len(transactions):
             continue
+        if idx in inserted_idx:
+            continue          # the same index twice in one request
         tx = transactions[idx]
+
+        # Already in the register: clearing the partner is the import.
+        if idx in matched and idx not in override:
+            reg = matched[idx]["register_match"]
+            skipped_matched.append({
+                "index": idx, "date": tx.get("date"),
+                "description": tx.get("description"),
+                "amount": round(float(tx.get("credit") or 0) - float(tx.get("debit") or 0), 2),
+                "register_source": reg.get("source"), "register_id": reg.get("id"),
+                "register_label": reg.get("label"),
+            })
+            continue
 
         # Signed amount: positive = inflow, negative = outflow
         debit = float(tx.get("debit") or 0)
@@ -650,10 +682,13 @@ def _import_upload_rows(conn, upload, indexes=None, also_clear=False,
         )
         if cur.rowcount:
             inserted += 1
+            inserted_idx.add(idx)
 
     cleared_total = 0
     if also_clear:
         for i, m in matched.items():
+            if i in inserted_idx:
+                continue      # inserted on purpose (override): the partner stays as it was
             reg = m["register_match"]
             # Stamp the day the BANK cleared it (the statement line), not the
             # day the check was cut — the tie-out counts by clearing date.
@@ -672,6 +707,7 @@ def _import_upload_rows(conn, upload, indexes=None, also_clear=False,
         "cleared": cleared_total,
         "uncoded": uncoded,
         "skipped_zero": skipped_zero,
+        "skipped_matched": skipped_matched,
         "match_kinds": kinds,
     }
 
@@ -732,14 +768,22 @@ def import_selected():
         "indexes":   [int, …]          // 0-based indexes into parsed.transactions
         "also_clear_matches": bool     // optional — if true, matched register rows
                                        // get cleared = 1 even if not imported
+        "override_match_indexes": [int]// optional — matched lines to insert anyway
+                                       // (a wrong match); their partner is not cleared
     }
+
+    A matched index in `indexes` is SKIPPED unless it is also in
+    override_match_indexes — see _import_upload_rows. Skips come back in
+    `skipped_matched` so the screen can say what it did not import.
     """
     data = request.get_json(silent=True) or {}
     upload_id = data.get("upload_id")
     indexes = data.get("indexes") or []
     also_clear = bool(data.get("also_clear_matches"))
+    override = data.get("override_match_indexes") or []
 
-    if not isinstance(upload_id, int) or not isinstance(indexes, list):
+    if not isinstance(upload_id, int) or not isinstance(indexes, list) \
+            or not isinstance(override, list):
         return jsonify({"error": "upload_id (int) and indexes (list) required"}), 400
 
     conn = get_connection()
@@ -756,7 +800,8 @@ def import_selected():
 
         created_by = session.get("username") or session.get("email") or "statement-import"
         try:
-            res = _import_upload_rows(conn, upload, indexes, also_clear, created_by)
+            res = _import_upload_rows(conn, upload, indexes, also_clear, created_by,
+                                      override_indexes=override)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -770,6 +815,7 @@ def import_selected():
             "inserted": res["inserted"],
             "cleared": res["cleared"],
             "uncoded": res["uncoded"],
+            "skipped_matched": res["skipped_matched"],
             "audit": audit,
             "checks": checks,
         })
