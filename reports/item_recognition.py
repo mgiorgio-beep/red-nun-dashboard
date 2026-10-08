@@ -311,7 +311,7 @@ def card_name(conn, p, house=None):
                     from reports.house_moves import product_size
                     size = product_size(conn, p['id'])
                     if size:
-                        return f"{base} {size.upper().replace('ML', 'ml')}"
+                        return f"{base} {size.upper() if size.endswith('l') and not size.endswith('ml') else size}"
                     break
     return base
 
