@@ -60,15 +60,12 @@ def _rows(conn, start, end, include_voided=False):
 
 
 def month_net(conn, ym):
-    start, end, label = _months(ym)
-    net = 0.0
-    for r in _rows(conn, start, end):
-        if r['is_settlement'] or r['total_cost'] is None:
-            continue
-        net += r['total_cost'] if r['from_location'] == 'chatham' else -r['total_cost']
+    """Running line for the emails: what is open between the houses right now
+    (every transfer, less returns and checks)."""
     import calendar
-    mon = calendar.month_abbr[int(label[5:])]
-    return {'net': round(net, 2), 'label': mon, 'sentence': owes_sentence(net)}
+    _, _, label = _months(ym)
+    net = round(sum(p['cost'] for p in positions(conn).values()), 2)
+    return {'net': net, 'label': calendar.month_abbr[int(label[5:])], 'sentence': owes_sentence(net) + ' open'}
 
 
 def build_statement(conn, ym, include_voided=False):
@@ -133,27 +130,393 @@ def build_statement(conn, ym, include_voided=False):
 
 
 # ---------------------------------------------------------------------------
-# Returns in kind (8H4) — filled in with the settlement tables.
+# Settlement (8H, as Mike set it 2026-10-08)
+#
+# Everyday stock (fries, burgers, oil) is returned in kind: someone says
+# "bringing 2 cases of fries back to Dennis" and the item's open line shrinks.
+# A return is valued at what the open cases cost when they were borrowed, so the
+# item nets to exactly $0 on the intercompany accounts (a price change in between
+# lands in the returning house's food cost, not in intercompany).
+# When Mike presses Reconcile, whatever is still open (minus lines he keeps open)
+# is paid with ONE check from the house that owes, on its own bank and stock.
+#
+# Books (QBO, via the existing JE store + push; Mike pushes):
+#   month close, per house: Dr/Cr <category> COGS against Intercompany (8H1)
+#   settlement:  payer  Dr Intercompany / Cr Cash (its bank)
+#                payee  Dr Cash (its bank) / Cr Intercompany
+# Accounts are resolved by id from move_settings + qb_line_mapping (never by name).
 # ---------------------------------------------------------------------------
 
+CAT_JOURNAL = {'FOOD': 'Food', 'BEER': 'Beer', 'LIQUOR': 'Liquor', 'WINE': 'Wine', 'NA_BEVERAGES': 'NA Beverage'}
+IC_JOURNAL = {'chatham': 'Intercompany: Red Nun Public House', 'dennis': 'Intercompany: Red Buoy'}
+CASH_JOURNAL = {'chatham': 'Intercompany cash: Cape Cod Five (5975)', 'dennis': 'Intercompany cash: Cape Cod Five (2757)'}
+BANK_ACCOUNT = {'chatham': 1, 'dennis': 2}          # bank_accounts.id, checked against location on use
+PAY_BY_DEFAULT = {'LIQUOR', 'WINE'}                 # power buys are paid; the rest usually comes back
+
+
+def ensure_settlement_tables(conn):
+    from reports.moves import ensure_tables
+    ensure_tables(conn)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS intercompany_settlements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            payer TEXT NOT NULL CHECK (payer IN ('chatham', 'dennis')),
+            payee TEXT NOT NULL CHECK (payee IN ('chatham', 'dennis')),
+            amount REAL NOT NULL CHECK (amount > 0),
+            status TEXT NOT NULL DEFAULT 'approved',      -- approved | printed | cleared | voided
+            approved_by TEXT,
+            approved_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            manual_check_id INTEGER,
+            check_number TEXT,
+            payer_register_id INTEGER,                    -- manual_bank_entries: outstanding check
+            payee_register_id INTEGER,                    -- manual_bank_entries: deposit in transit
+            payer_je_id INTEGER,
+            payee_je_id INTEGER,
+            memo TEXT,
+            CHECK (payer <> payee)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS settlement_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            settlement_id INTEGER NOT NULL REFERENCES intercompany_settlements(id),
+            chatham_product_id INTEGER,
+            dennis_product_id INTEGER,
+            item_name TEXT,
+            category_type TEXT,
+            owed_by TEXT NOT NULL,                        -- the house that had the other's stock
+            qty_base REAL,
+            base_unit TEXT,
+            cost REAL NOT NULL,
+            method TEXT NOT NULL DEFAULT 'pay',
+            status TEXT NOT NULL DEFAULT 'paid'
+        )
+    """)
+
+
+def _all_transfers(conn, through=None):
+    ensure_settlement_tables(conn)
+    q = """SELECT t.*, COALESCE(cn.card_name, p.display_name, p.name) AS item_name
+           FROM inventory_transfers t JOIN products p ON p.id = t.from_product_id
+           LEFT JOIN product_card_names cn ON cn.product_id = t.from_product_id AND cn.status = 'approved'
+           WHERE t.status = 'logged'"""
+    args = ()
+    if through:
+        q += " AND t.business_date < ?"
+        args = (through,)
+    return conn.execute(q + " ORDER BY t.business_date, t.id", args).fetchall()
+
+
+def positions(conn):
+    """Every item's open position: + = Dennis has Chatham's stock (Dennis owes)."""
+    pos = {}
+    for r in _all_transfers(conn):
+        k = item_key(r)
+        sign = 1 if r['from_location'] == 'chatham' else -1
+        p = pos.setdefault(k, {'key': k, 'name': r['item_name'], 'category_type': r['category_type'],
+                               'base_unit': r['base_unit'], 'qty': 0.0, 'cost': 0.0, 'unpriced': 0,
+                               'needs_link': False, 'last_date': r['business_date'], 'transfer_ids': []})
+        p['qty'] += sign * (r['qty_base'] or 0)
+        if r['total_cost'] is None:
+            p['unpriced'] += 1
+        else:
+            p['cost'] += sign * r['total_cost']
+        p['needs_link'] |= bool(r['needs_link'])
+        p['last_date'] = max(p['last_date'], r['business_date'])
+        p['transfer_ids'].append(r['id'])
+    for l in conn.execute("SELECT * FROM settlement_lines WHERE status = 'paid'").fetchall():
+        k = (l['chatham_product_id'], l['dennis_product_id'])
+        if k in pos:
+            sign = 1 if l['owed_by'] == 'dennis' else -1
+            pos[k]['qty'] -= sign * (l['qty_base'] or 0)
+            pos[k]['cost'] -= sign * l['cost']
+    for p in pos.values():
+        p['qty'], p['cost'] = round(p['qty'], 4), round(p['cost'], 2)
+    return pos
+
+
+def open_items(conn):
+    """The Reconcile page: items still owed, biggest first, with the suggested method."""
+    out = []
+    for p in positions(conn).values():
+        if abs(p['qty']) < 1e-6 and abs(p['cost']) < 0.005:
+            continue
+        owed_by = 'dennis' if (p['cost'] > 0 or (p['cost'] == 0 and p['qty'] > 0)) else 'chatham'
+        out.append(dict(p, key=list(p['key']), owed_by=owed_by, owed_to=OTHER[owed_by],
+                        abs_qty=abs(p['qty']), abs_cost=abs(p['cost']),
+                        suggested='pay' if (p['category_type'] or '') in PAY_BY_DEFAULT else 'return'))
+    out.sort(key=lambda x: (-x['abs_cost'], x['name']))
+    return out
+
+
+OTHER = {'chatham': 'dennis', 'dennis': 'chatham'}
+
+
 def open_return_for(conn, src, dst, from_pid, to_pid):
-    """An open 'return due' this transfer settles: src owes dst this item."""
-    try:
-        r = conn.execute("""
-            SELECT sl.*, s.month FROM settlement_lines sl JOIN intercompany_settlements s ON s.id = sl.settlement_id
-            WHERE sl.method = 'return' AND sl.status = 'open' AND sl.return_from = ? AND sl.return_to = ?
-              AND (sl.chatham_product_id IN (?, ?) OR sl.dennis_product_id IN (?, ?))
-            ORDER BY sl.id LIMIT 1""", (src, dst, from_pid, to_pid or -1, from_pid, to_pid or -1)).fetchone()
-    except Exception:
+    """A transfer src -> dst of an item src owes dst is a return. Returns the open
+    quantity and the average cost it was borrowed at, or None."""
+    row = {'from_location': src, 'from_product_id': from_pid, 'to_product_id': to_pid}
+    k = item_key(row)
+    p = positions(conn).get(k)
+    if not p or abs(p['qty']) < 1e-6:
         return None
-    return dict(r) if r else None
+    src_owes = (p['qty'] > 0) == (src == 'dennis')      # + = Dennis has Chatham's stock
+    if not src_owes or p['unpriced']:
+        return None
+    return {'id': None, 'open_qty': abs(p['qty']), 'unit_cost_base': abs(p['cost']) / abs(p['qty'])}
 
 
-def close_return(conn, line_id, transfer_id, qty_base):
-    """Caller holds the transaction. Partial returns leave the line open."""
-    line = conn.execute("SELECT * FROM settlement_lines WHERE id = ?", (line_id,)).fetchone()
-    got = (line['returned_qty'] or 0) + (qty_base or 0)
-    done = got >= abs(line['net_qty']) - 1e-6
-    conn.execute("""UPDATE settlement_lines SET returned_qty = ?, status = ?, closed_by_transfer_id = ?,
-                    closed_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE closed_at END WHERE id = ?""",
-                 (got, 'returned' if done else 'open', transfer_id, 1 if done else 0, line_id))
+def value_return(ret, qty_base, current_unit_cost):
+    """Up to the open quantity at the borrowed cost; anything beyond is a new transfer."""
+    q = qty_base or 0
+    inside = min(q, ret['open_qty'])
+    beyond = max(0.0, q - ret['open_qty'])
+    if beyond and current_unit_cost is None:
+        return None
+    return round(inside * ret['unit_cost_base'] + beyond * (current_unit_cost or 0), 2)
+
+
+# --- monthly transfer entries (8H1) -----------------------------------------
+
+def _month_end(ym):
+    import calendar
+    y, m = int(ym[:4]), int(ym[5:7])
+    return f'{y:04d}-{m:02d}-{calendar.monthrange(y, m)[1]:02d}'
+
+
+def _mapping(conn, location):
+    """journal_name -> current QBO id, through gl_accounts (the spine)."""
+    return {r['journal_name']: r['qbo_id'] for r in conn.execute(
+        """SELECT m.journal_name, g.qbo_id FROM qb_line_mapping m
+           JOIN gl_accounts g ON g.id = m.gl_account_id AND g.active = 1 AND g.location = m.location
+           WHERE m.location = ?""", (location,))}
+
+
+def _entry(conn, location, entry_type, entry_date, je_name, lines, note_unpriced=0):
+    mp = _mapping(conn, location)
+    items, dr, cr = [], 0.0, 0.0
+    for i, (jn, d, c) in enumerate(lines, 1):
+        d, c = round(d or 0, 2), round(c or 0, 2)
+        if not d and not c:
+            continue
+        items.append({'journal_name': jn, 'qbo_account': mp.get(jn), 'debit': d or None, 'credit': c or None,
+                      'mapped': bool(mp.get(jn)), 'sort_order': i})
+        dr, cr = dr + d, cr + c
+    balanced = abs(round((dr - cr) * 100)) == 0
+    status = 'ready' if balanced and items and all(li['mapped'] for li in items) and not note_unpriced else 'needs_attention'
+    return {'entry_type': entry_type, 'location': location, 'entry_date': entry_date, 'je_name': je_name,
+            'total_debits': round(dr, 2), 'total_credits': round(cr, 2), 'balanced': balanced, 'status': status,
+            'line_items': items}
+
+
+def build_month_entries(conn, ym, persist=True):
+    """One summary entry per house for the month's transfers (returns included,
+    at their cost). Status 'ready' only when every line maps and nothing is unpriced."""
+    start, end, label = _months(ym)
+    rows = conn.execute("""SELECT * FROM inventory_transfers WHERE status = 'logged'
+                           AND business_date >= ? AND business_date < ?""", (start, end)).fetchall()
+    unpriced = sum(1 for r in rows if r['total_cost'] is None)
+    out = {}
+    for loc in ('chatham', 'dennis'):
+        net_cat = {}
+        for r in rows:
+            if r['total_cost'] is None:
+                continue
+            cat = r['category_type'] if r['category_type'] in CAT_JOURNAL else 'FOOD'
+            if r['to_location'] == loc:
+                net_cat[cat] = net_cat.get(cat, 0) + r['total_cost']     # came in: it's our cost
+            elif r['from_location'] == loc:
+                net_cat[cat] = net_cat.get(cat, 0) - r['total_cost']     # went out: not our cost
+        lines = []
+        for cat, v in sorted(net_cat.items()):
+            jn = f'Intercompany transfers: {CAT_JOURNAL[cat]}'
+            lines.append((jn, v if v > 0 else 0, -v if v < 0 else 0))
+        ic = -sum(net_cat.values())             # sent more than received -> the other house owes us (debit)
+        lines.append((IC_JOURNAL[loc], ic if ic > 0 else 0, -ic if ic < 0 else 0))
+        e = _entry(conn, loc, 'intercompany_transfers', _month_end(label),
+                   f"IC-TRF-{label.replace('-', '')}", lines, unpriced)
+        if not e['line_items']:
+            continue
+        if persist:
+            from reports.sales_journal import persist_journal_entry
+            e['id'] = persist_journal_entry(e)
+        out[loc] = e
+    return out
+
+
+# --- Reconcile: pay what's still open with one check (8H5) ------------------
+
+def preview_reconcile(conn, keep_keys=()):
+    """What pressing Reconcile would do. keep_keys: items Mike is still returning."""
+    keep = {tuple(k) for k in keep_keys}
+    pay = [i for i in open_items(conn) if tuple(i['key']) not in keep and not i['unpriced']]
+    dennis_owes = round(sum(i['cost'] for i in pay), 2)        # + = Dennis owes Chatham
+    if abs(dennis_owes) < 0.005:
+        return {'lines': pay, 'amount': 0.0, 'payer': None, 'payee': None}
+    payer = 'dennis' if dennis_owes > 0 else 'chatham'
+    return {'lines': pay, 'amount': abs(dennis_owes), 'payer': payer, 'payee': OTHER[payer],
+            'payer_entity': ENTITY_FULL[payer], 'payee_entity': ENTITY_FULL[OTHER[payer]],
+            'kept': [i for i in open_items(conn) if tuple(i['key']) in keep]}
+
+
+def _setting_int(conn, key):
+    from reports.item_recognition import get_setting
+    v = get_setting(conn, key)
+    return int(v) if v not in (None, '') else None
+
+
+def reconcile(conn, keep_keys, who, expected_amount):
+    """Mike's one confirm: settlement + lines, the check (existing manual-check
+    table, paying house's own stock), both register rows and both entries.
+    All in one transaction. Refuses on any missing / mismatched house or bank."""
+    from datetime import date
+    pv = preview_reconcile(conn, keep_keys)
+    if not pv['payer']:
+        raise ValueError('Nothing to pay: what is open nets to $0.')
+    if abs(pv['amount'] - float(expected_amount)) > 0.005:
+        raise ValueError(f"The open balance changed (now ${pv['amount']:,.2f}). Reload and check again.")
+    payer, payee, amt = pv['payer'], pv['payee'], pv['amount']
+    for loc in (payer, payee):                     # the check and each register row on that house's OWN bank
+        b = conn.execute("SELECT id, location FROM bank_accounts WHERE id = ?", (BANK_ACCOUNT[loc],)).fetchone()
+        if not b or (b['location'] or '').lower() != loc:
+            raise ValueError(f'Refusing: no {loc} bank account on file (bank_accounts #{BANK_ACCOUNT[loc]}).')
+        if not _setting_int(conn, f'intercompany_gl_{loc}') or not _setting_int(conn, f'intercompany_bank_gl_{loc}'):
+            raise ValueError(f'Refusing: intercompany or bank account not mapped for {loc}.')
+    today = date.today().isoformat()
+    memo = f"Intercompany settlement {today} — transfers"
+    conn.commit()
+    conn.execute('BEGIN IMMEDIATE')
+    try:
+        sid = conn.execute("""INSERT INTO intercompany_settlements (payer, payee, amount, approved_by, memo)
+                              VALUES (?, ?, ?, ?, ?)""", (payer, payee, amt, who, memo)).lastrowid
+        for i in pv['lines']:
+            conn.execute("""INSERT INTO settlement_lines (settlement_id, chatham_product_id, dennis_product_id, item_name,
+                                category_type, owed_by, qty_base, base_unit, cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                         (sid, i['key'][0], i['key'][1], i['name'], i['category_type'], i['owed_by'],
+                          i['abs_qty'], i['base_unit'], i['abs_cost']))
+        # the check: same row the Bill Pay manual-check endpoint writes, on the paying house
+        chk = conn.execute("""INSERT INTO manual_checks (payee_name, amount, memo, location, check_type, created_at, updated_at)
+                              VALUES (?, ?, ?, ?, 'intercompany', datetime('now'), datetime('now'))""",
+                           (ENTITY_FULL[payee], amt, f'{memo} (settlement #{sid})', payer)).lastrowid
+        # register rows: same columns as POST /api/register/<account>/manual, coded to Intercompany
+        out_id = conn.execute("""INSERT INTO manual_bank_entries (bank_account_id, entry_date, entry_type, payee, memo, ref_number,
+                                     amount, cleared, created_by, gl_account_id, gl_source, gl_status)
+                                 VALUES (?, ?, 'other', ?, ?, NULL, ?, 0, ?, ?, 'intercompany', 'confirmed')""",
+                              (BANK_ACCOUNT[payer], today, ENTITY_FULL[payee], f'{memo} (settlement #{sid}, check)', -amt, who,
+                               _setting_int(conn, f'intercompany_gl_{payer}'))).lastrowid
+        in_id = conn.execute("""INSERT INTO manual_bank_entries (bank_account_id, entry_date, entry_type, payee, memo, ref_number,
+                                    amount, cleared, created_by, gl_account_id, gl_source, gl_status)
+                                VALUES (?, ?, 'other', ?, ?, NULL, ?, 0, ?, ?, 'intercompany', 'confirmed')""",
+                             (BANK_ACCOUNT[payee], today, ENTITY_FULL[payer], f'{memo} (settlement #{sid}, deposit)', amt, who,
+                              _setting_int(conn, f'intercompany_gl_{payee}'))).lastrowid
+        conn.execute("""UPDATE intercompany_settlements SET manual_check_id = ?, payer_register_id = ?, payee_register_id = ?
+                        WHERE id = ?""", (chk, out_id, in_id, sid))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    # the two entries, through the existing JE store (Mike pushes them; nothing posts by itself)
+    from reports.sales_journal import persist_journal_entry
+    pe = _entry(conn, payer, 'intercompany_settlement', today, f'IC-SET-{sid}',
+                [(IC_JOURNAL[payer], amt, 0), (CASH_JOURNAL[payer], 0, amt)])
+    re_ = _entry(conn, payee, 'intercompany_settlement', today, f'IC-SET-{sid}',
+                 [(CASH_JOURNAL[payee], amt, 0), (IC_JOURNAL[payee], 0, amt)])
+    pid, rid = persist_journal_entry(pe), persist_journal_entry(re_)
+    conn.execute("UPDATE intercompany_settlements SET payer_je_id = ?, payee_je_id = ? WHERE id = ?", (pid, rid, sid))
+    conn.commit()
+    return settlement(conn, sid)
+
+
+def sync_check_numbers(conn):
+    """When Bill Pay prints the check, carry its number to both register rows so
+    bank rec matches the check and the deposit by number."""
+    ensure_settlement_tables(conn)
+    n = 0
+    for s in conn.execute("""SELECT s.id, s.payer_register_id, s.payee_register_id, mc.check_number, mc.voided
+                             FROM intercompany_settlements s JOIN manual_checks mc ON mc.id = s.manual_check_id
+                             WHERE s.status = 'approved' AND mc.check_number IS NOT NULL""").fetchall():
+        conn.execute("UPDATE manual_bank_entries SET ref_number = ? WHERE id IN (?, ?) AND ref_number IS NULL",
+                     (s['check_number'], s['payer_register_id'], s['payee_register_id']))
+        conn.execute("UPDATE intercompany_settlements SET check_number = ?, status = 'printed' WHERE id = ?",
+                     (s['check_number'], s['id']))
+        n += 1
+    conn.commit()
+    return n
+
+
+def settlement(conn, sid):
+    s = conn.execute("SELECT * FROM intercompany_settlements WHERE id = ?", (sid,)).fetchone()
+    if not s:
+        return None
+    out = dict(s)
+    out['lines'] = [dict(r) for r in conn.execute("SELECT * FROM settlement_lines WHERE settlement_id = ?", (sid,))]
+    out['check'] = dict(conn.execute("SELECT id, check_number, printed_at, voided FROM manual_checks WHERE id = ?",
+                                     (s['manual_check_id'],)).fetchone() or {})
+    regs = {r['id']: dict(r) for r in conn.execute("SELECT id, cleared, cleared_date, ref_number FROM manual_bank_entries WHERE id IN (?, ?)",
+                                                   (s['payer_register_id'], s['payee_register_id']))}
+    out['check_cleared'] = bool(regs.get(s['payer_register_id'], {}).get('cleared'))
+    out['deposit_cleared'] = bool(regs.get(s['payee_register_id'], {}).get('cleared'))
+    out['entries'] = [dict(r) for r in conn.execute("SELECT id, location, je_name, status, qbo_txn_id, qbo_error FROM qb_journal_entries WHERE id IN (?, ?)",
+                                                    (s['payer_je_id'], s['payee_je_id']))]
+    return out
+
+
+# --- Tie-out (8H6): it must be able to fail ---------------------------------
+
+def _ic_balance(conn, location, posted_only=False):
+    """Balance of a house's Intercompany account in our entries (debit +)."""
+    q = """SELECT ROUND(COALESCE(SUM(COALESCE(li.debit, 0) - COALESCE(li.credit, 0)), 0), 2)
+           FROM qb_journal_line_items li JOIN qb_journal_entries e ON e.id = li.entry_id
+           WHERE e.location = ? AND li.journal_name = ?
+             AND e.entry_type IN ('intercompany_transfers', 'intercompany_settlement')"""
+    if posted_only:
+        q += " AND e.status = 'posted'"
+    return conn.execute(q, (location, IC_JOURNAL[location])).fetchone()[0] or 0.0
+
+
+def expected_balance(conn, through):
+    """What Chatham's Intercompany should hold from the records: every transfer
+    before `through` (YYYYMMDD) at its cost, less what checks paid. + = Dennis owes."""
+    net = 0.0
+    for r in _all_transfers(conn, through=through):
+        if r['total_cost'] is not None:
+            net += r['total_cost'] if r['from_location'] == 'chatham' else -r['total_cost']
+    for s in conn.execute("SELECT payer, amount FROM intercompany_settlements WHERE status <> 'voided'"):
+        net -= s['amount'] if s['payer'] == 'dennis' else -s['amount']     # a check from Dennis pays down what Dennis owes
+    return round(net, 2)
+
+
+def tie_out(conn, qbo_balances=None):
+    """Chatham's Intercompany must equal minus Dennis's, and both must equal what the
+    transfers and settlements say through the last closed month. Lists what's missing.
+    qbo_balances: optional {'chatham': x, 'dennis': y} read from QBO (posted truth)."""
+    ensure_settlement_tables(conn)
+    from reports.moves import now_et
+    first = now_et().strftime('%Y%m01')
+    c, d = _ic_balance(conn, 'chatham'), _ic_balance(conn, 'dennis')
+    exp = expected_balance(conn, first)
+    problems = []
+    if abs(c + d) >= 0.01:
+        problems.append(f"Chatham's Intercompany is {c:+,.2f} but Dennis's is {d:+,.2f}; they should be equal and opposite "
+                        f"(off by ${abs(c + d):,.2f}).")
+    if abs(c - exp) >= 0.01:
+        problems.append(f"Chatham's Intercompany entries total {c:+,.2f}; the transfers and checks say {exp:+,.2f} "
+                        f"(off by ${abs(c - exp):,.2f}). A month's entries may be missing or out of date.")
+    # one-sided entries: built / posted on one house only
+    for t in ('intercompany_transfers', 'intercompany_settlement'):
+        rows = conn.execute("""SELECT je_name, entry_date, GROUP_CONCAT(location || ':' || status) AS sides
+                               FROM qb_journal_entries WHERE entry_type = ? GROUP BY je_name, entry_date""", (t,)).fetchall()
+        for r in rows:
+            sides = dict(x.split(':') for x in r['sides'].split(','))
+            if set(sides) != {'chatham', 'dennis'}:
+                problems.append(f"{r['je_name']} ({r['entry_date']}) exists only at {', '.join(sides)}.")
+            elif (sides['chatham'] == 'posted') != (sides['dennis'] == 'posted'):
+                problems.append(f"{r['je_name']} ({r['entry_date']}) is posted at one house only: {r['sides']}.")
+    if qbo_balances:
+        qc, qd = qbo_balances.get('chatham'), qbo_balances.get('dennis')
+        if qc is not None and qd is not None and abs(qc + qd) >= 0.01:
+            problems.append(f"In QuickBooks, Red Buoy's Intercompany is {qc:,.2f} and Red Nun Public House's is {qd:,.2f}; "
+                            f"they should cancel (off by ${abs(qc + qd):,.2f}).")
+    gap = round(c + d, 2)
+    return {'ok': not problems, 'chatham': c, 'dennis': d, 'expected': exp, 'problems': problems,
+            'headline': None if not problems else f"INTERCOMPANY OUT OF BALANCE: ${max(abs(gap), abs(c - exp)):,.2f}"}

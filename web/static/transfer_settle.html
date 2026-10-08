@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000">
+<title>Red Nun — Reconcile Transfers</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+  --text:#f5f5f7;--text2:rgba(245,245,247,0.6);--text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;--orange:#FF9F0A}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+.wrap{padding:16px 16px 120px;max-width:1100px;margin:0 auto}
+h1{font-size:20px;font-weight:800}
+.sub{font-size:12px;color:var(--text3);margin-top:2px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.btn{padding:9px 12px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text);font:600 13px Inter,sans-serif;text-decoration:none;cursor:pointer}
+.btn.go{background:var(--green);color:#000;border:none}
+.btn:disabled{opacity:.4}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+.banner{padding:14px 16px;border-radius:12px;margin-bottom:12px;font-weight:700}
+.banner.bad{background:rgba(255,69,58,.14);color:var(--red);border:1px solid rgba(255,69,58,.5)}
+.banner.ok{background:rgba(48,209,88,.08);color:var(--green);font-weight:600;font-size:13px}
+.banner ul{margin:6px 0 0 18px;font-weight:500;font-size:13px}
+.h{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid var(--border2)}
+td{padding:10px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.muted{color:var(--text3);font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--border2);border-radius:10px;overflow:hidden}
+.seg button{padding:8px 12px;background:var(--card2);border:none;color:var(--text2);font:600 13px Inter,sans-serif;cursor:pointer}
+.seg button.sel.pay{background:var(--green);color:#000}
+.seg button.sel.keep{background:var(--blue);color:#fff}
+.tag{font-size:11px;padding:2px 6px;border-radius:6px;background:var(--card2);color:var(--text2)}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px;background:rgba(10,10,12,.95);border-top:1px solid var(--border)}
+.bar .in{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.big{font-size:20px;font-weight:800}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+.modal .box{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:20px;max-width:560px;width:100%}
+.je{font-size:13px;margin-top:8px;padding:10px;border-radius:10px;background:var(--bg)}
+.je div{display:flex;justify-content:space-between}
+.step{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+.ok{color:var(--green)}
+@media (max-width:767px){ table.items thead{display:none} table.items tr{display:block;padding:10px 0;border-bottom:1px solid var(--border)}
+  table.items td{display:block;border:none;padding:3px 0} table.items td.n{text-align:left} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1>Reconcile Transfers</h1><div class="sub">What Red Buoy (Chatham) and Red Nun Public House (Dennis) still owe each other, by product</div></div>
+    <div class="row"><a class="btn" href="/transfer/statement">Month statement</a> <a class="btn" href="/transfer">Transfers</a> <a class="btn" href="/transfer/admin">Admin</a></div>
+  </div>
+  <div id="tie"></div>
+  <div id="items"><div class="card">Loading…</div></div>
+  <div id="sets"></div>
+  <div id="months"></div>
+</div>
+<div class="bar"><div class="in"><div><div class="big" id="sum">—</div><div class="muted" id="sumsub"></div></div>
+  <button class="btn go" id="rec" disabled onclick="openConfirm()">Reconcile</button></div></div>
+<div class="modal" id="modal"><div class="box" id="mbox"></div></div>
+<script>
+const KEEP = new Set(JSON.parse(localStorage.getItem('rn_settle_keep') || '[]'));
+const HOUSE = {chatham: 'Chatham', dennis: 'Dennis'}, ENT = {chatham: 'Red Buoy Inc.', dennis: 'Red Nun Public House Inc.'};
+let S = null;
+function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+function money(x){ return x == null ? '—' : '$' + Math.abs(x).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+function q(x){ return Math.round(x * 100) / 100; }
+const keyOf = i => i.key.join(':');
+async function J(url, body){
+  const r = await fetch(url, {method: body === undefined ? 'GET' : 'POST', credentials: 'include',
+    headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
+  if (r.status === 401 || r.redirected) { location.href = '/login?next=/transfer/settle'; throw new Error('login'); }
+  const j = await r.json(); if (!r.ok) throw new Error(j.error || 'failed'); return j;
+}
+const keepList = () => S.items.filter(i => KEEP.has(keyOf(i))).map(i => i.key);
+async function load(){
+  S = await J('/api/intercompany/state', {keep: []});
+  // first visit: suggest keeping everyday stock open (it usually comes back); liquor is paid
+  if (!localStorage.getItem('rn_settle_keep')) S.items.forEach(i => { if (i.suggested === 'return') KEEP.add(keyOf(i)); });
+  render(); refreshPreview();
+}
+function render(){
+  const t = S.tie_out;
+  document.getElementById('tie').innerHTML = t.ok
+    ? '<div class="banner ok">✓ Intercompany ties out: Chatham ' + (t.chatham >= 0 ? '+' : '−') + money(t.chatham) + ', Dennis ' + (t.dennis >= 0 ? '+' : '−') + money(t.dennis) + ' (booked through last month).</div>'
+    : '<div class="banner bad">' + esc(t.headline) + '<ul>' + t.problems.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul></div>';
+  const items = S.items;
+  let h = '<div class="card"><div class="muted" style="margin-bottom:6px">Returns happen by just saying it ("bringing 2 cases of fries back to Dennis") — the line shrinks or disappears. ' +
+    'When you\'re ready, press <b>Reconcile</b>: everything set to <b>Pay</b> becomes one check from the house that owes. Lines set to <b>Returning</b> stay open.</div>' +
+    '<table class="items"><thead><tr><th>Item</th><th>Who owes</th><th class="n">Qty</th><th class="n">$</th><th>Last moved</th><th></th></tr></thead><tbody>' +
+    (items.length ? items.map(i => {
+      const k = keyOf(i), keep = KEEP.has(k);
+      return '<tr><td><b>' + esc(i.name) + '</b> <span class="tag">' + esc((i.category_type || '').toLowerCase()) + '</span>' + (i.needs_link ? ' <span class="tag">needs link</span>' : '') +
+        (i.unpriced ? ' <span class="tag" style="color:var(--orange)">no price</span>' : '') + '</td>' +
+        '<td>' + HOUSE[i.owed_by] + ' owes ' + HOUSE[i.owed_to] + '</td><td class="n">' + q(i.abs_qty) + ' ' + esc(i.base_unit || '') + '</td><td class="n">' + money(i.abs_cost) + '</td>' +
+        '<td class="muted">' + i.last_date.slice(4, 6) + '/' + i.last_date.slice(6) + '</td>' +
+        '<td><span class="seg"><button class="pay ' + (keep ? '' : 'sel') + '" onclick="setKeep(\'' + k + '\',false)">Pay</button><button class="keep ' + (keep ? 'sel' : '') + '" onclick="setKeep(\'' + k + '\',true)">Returning</button></span></td></tr>';
+    }).join('') : '<tr><td colspan="6" class="muted">Nothing open — the houses are square.</td></tr>') + '</tbody></table></div>';
+  document.getElementById('items').innerHTML = h;
+  renderSets(); renderMonths();
+}
+function setKeep(k, on){ on ? KEEP.add(k) : KEEP.delete(k); localStorage.setItem('rn_settle_keep', JSON.stringify([...KEEP])); render(); refreshPreview(); }
+async function refreshPreview(){
+  const p = (await J('/api/intercompany/state', {keep: keepList()})).preview;
+  S.preview = p;
+  document.getElementById('sum').textContent = p.payer ? ENT[p.payer] + ' pays ' + ENT[p.payee] + ' ' + money(p.amount) : 'Nothing to pay';
+  document.getElementById('sumsub').textContent = p.payer ? p.lines.length + ' line(s) paid · ' + (p.kept || []).length + ' kept open for return' : (S.items.length ? 'Everything open is set to Returning' : '');
+  document.getElementById('rec').disabled = !p.payer;
+}
+function openConfirm(){
+  const p = S.preview; if (!p.payer) return;
+  const m = document.getElementById('modal');
+  document.getElementById('mbox').innerHTML = '<h2 style="font-size:18px">Reconcile — one confirm</h2>' +
+    '<p class="muted" style="margin:6px 0 12px">Nothing prints or posts until you press Confirm. After that the check is in <b>Print Checks</b> for ' + HOUSE[p.payer] + ' and the two entries wait for you to push.</p>' +
+    '<div class="je"><b>Check</b><div><span>' + esc(ENT[p.payer]) + ' (Cape Cod Five ' + (p.payer === 'chatham' ? '…5975' : '…2757') + ') → pay to ' + esc(ENT[p.payee]) + '</span><b>' + money(p.amount) + '</b></div></div>' +
+    '<div class="je"><b>' + HOUSE[p.payer] + ' books</b><div><span>Dr Intercompany</span><span>' + money(p.amount) + '</span></div><div><span>Cr Cash (Cape Cod Five)</span><span>' + money(p.amount) + '</span></div></div>' +
+    '<div class="je"><b>' + HOUSE[p.payee] + ' books</b><div><span>Dr Cash (Cape Cod Five) — deposit expected in the register</span><span>' + money(p.amount) + '</span></div><div><span>Cr Intercompany</span><span>' + money(p.amount) + '</span></div></div>' +
+    '<div class="je"><b>Paying for</b>' + p.lines.map(l => '<div><span>' + esc(l.name) + ' — ' + q(l.abs_qty) + ' ' + esc(l.base_unit || '') + (l.owed_by === p.payer ? '' : ' (credit)') + '</span><span>' + (l.owed_by === p.payer ? '' : '−') + money(l.abs_cost) + '</span></div>').join('') + '</div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn" onclick="closeM()">Cancel</button><button class="btn go" id="cf" onclick="doReconcile()">Confirm ' + money(p.amount) + '</button></div><div id="merr" style="color:var(--red);margin-top:8px"></div>';
+  m.style.display = 'flex';
+}
+function closeM(){ document.getElementById('modal').style.display = 'none'; }
+async function doReconcile(){
+  const b = document.getElementById('cf'); b.disabled = true;
+  try {
+    await J('/api/intercompany/reconcile', {keep: keepList(), amount: S.preview.amount});
+    closeM(); await load();
+    document.getElementById('sets').scrollIntoView({behavior: 'smooth'});
+  } catch(e) { document.getElementById('merr').textContent = e.message; b.disabled = false; }
+}
+function renderSets(){
+  const sets = S.settlements || [];
+  document.getElementById('sets').innerHTML = !sets.length ? '' : '<div class="h">Settlements</div>' + sets.map(s =>
+    '<div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><b>#' + s.id + ' · ' + esc(ENT[s.payer]) + ' → ' + esc(ENT[s.payee]) + ' ' + money(s.amount) + '</b><span class="muted">' + esc(s.approved_at) + ' · ' + esc(s.approved_by || '') + '</span></div>' +
+    '<div class="step"><span>1. Print the check</span><span>' + (s.check.check_number ? '<span class="ok">✓ #' + esc(s.check.check_number) + '</span>' : '<a class="btn" href="/print-checks">Print Checks ›</a>') + '</span></div>' +
+    (s.entries || []).map(e => '<div class="step"><span>2. ' + HOUSE[e.location] + ' entry ' + esc(e.je_name) + '</span><span>' + (e.status === 'posted' ? '<span class="ok">✓ in QuickBooks</span>' :
+      e.status === 'ready' ? '<button class="btn" onclick="push(' + e.id + ',this)">Push to QuickBooks</button>' : '<span style="color:var(--orange)">' + esc(e.status) + '</span>') + (e.qbo_error ? ' <span class="muted">' + esc(e.qbo_error) + '</span>' : '') + '</span></div>').join('') +
+    '<div class="step"><span>3. Check clears ' + HOUSE[s.payer] + '\'s bank</span><span>' + (s.check_cleared ? '<span class="ok">✓</span>' : '<span class="muted">waiting</span>') + '</span></div>' +
+    '<div class="step" style="border:none"><span>4. Deposit clears ' + HOUSE[s.payee] + '\'s bank</span><span>' + (s.deposit_cleared ? '<span class="ok">✓</span>' : '<span class="muted">waiting</span>') + '</span></div></div>').join('');
+}
+function renderMonths(){
+  const ents = (S.entries || []).filter(e => e.entry_type === 'intercompany_transfers');
+  let h = '<div class="h">Month-end transfer entries (food cost ⇄ Intercompany, per house)</div><div class="card">';
+  h += (S.months_without_entries || []).map(m => '<div class="step"><span>' + m + ' — not booked yet</span><button class="btn go" onclick="buildMonth(\'' + m + '\',this)">Build entries</button></div>').join('');
+  const byM = {}; ents.forEach(e => (byM[e.entry_date.slice(0, 7)] = byM[e.entry_date.slice(0, 7)] || []).push(e));
+  h += Object.keys(byM).sort().reverse().map(m => '<div class="step"><span>' + m + '</span><span>' + byM[m].map(e => HOUSE[e.location] + ': ' + money(e.total_debits) + ' ' +
+    (e.status === 'posted' ? '<span class="ok">✓ posted</span>' : e.status === 'ready' ? '<button class="btn" onclick="push(' + e.id + ',this)">Push</button>' : '<span style="color:var(--orange)">' + esc(e.status) + '</span>')).join(' · ') +
+    (byM[m].every(e => e.status !== 'posted') ? ' <button class="btn" onclick="buildMonth(\'' + m + '\',this)">Rebuild</button>' : '') + '</span></div>').join('');
+  if (!ents.length && !(S.months_without_entries || []).length) h += '<div class="muted">No closed months with transfers yet.</div>';
+  document.getElementById('months').innerHTML = h + '</div>';
+}
+async function buildMonth(m, b){ b.disabled = true; try { await J('/api/intercompany/month-entries', {month: m}); await load(); } catch(e) { alert(e.message); b.disabled = false; } }
+async function push(id, b){
+  if (!confirm('Post this entry to QuickBooks?')) return;
+  b.disabled = true; b.textContent = 'Pushing…';
+  try {
+    const r = await fetch('/api/sales-journal/entries/' + id + '/push', {method: 'POST', credentials: 'include'});
+    const j = await r.json();
+    if (!j.success) alert('Not posted: ' + (j.error || 'unknown error'));
+  } catch(e) { alert('Not posted: ' + e.message); }
+  load();
+}
+load();
+</script>
+</body>
+</html>

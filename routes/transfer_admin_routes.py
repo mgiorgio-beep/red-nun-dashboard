@@ -392,3 +392,78 @@ def test_email():
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
+
+
+# ---------------------------------------------------------------------------
+# Reconcile transfers (settlement, 8H): /transfer/settle
+# ---------------------------------------------------------------------------
+
+@transfer_admin_bp.route('/transfer/settle')
+@admin_required
+def settle_page():
+    return current_app.send_static_file('transfer_settle.html')
+
+
+def _settle_state(conn, keep=()):
+    from reports import intercompany as IC
+    IC.ensure_settlement_tables(conn)
+    IC.sync_check_numbers(conn)
+    items = IC.open_items(conn)
+    months = conn.execute("""SELECT id, location, entry_date, je_name, status, total_debits, qbo_txn_id, qbo_error, entry_type
+                             FROM qb_journal_entries WHERE entry_type IN ('intercompany_transfers', 'intercompany_settlement')
+                             ORDER BY entry_date DESC, location""").fetchall()
+    sets = [IC.settlement(conn, r[0]) for r in conn.execute("SELECT id FROM intercompany_settlements ORDER BY id DESC LIMIT 24")]
+    # months with transfers but no entries yet (closed months only)
+    first = M.now_et().strftime('%Y%m01')
+    have = {r['entry_date'][:7] for r in months if r['entry_type'] == 'intercompany_transfers'}
+    pending = sorted({f"{r[0][:4]}-{r[0][4:6]}" for r in conn.execute(
+        "SELECT DISTINCT substr(business_date, 1, 6) FROM inventory_transfers WHERE status = 'logged' AND business_date < ?",
+        (first,))} - have)
+    return {'items': items, 'preview': IC.preview_reconcile(conn, keep), 'tie_out': IC.tie_out(conn),
+            'entries': [dict(r) for r in months], 'settlements': sets, 'months_without_entries': pending}
+
+
+@transfer_admin_bp.route('/api/intercompany/state', methods=['GET', 'POST'])
+@admin_required
+def settle_state():
+    keep = (request.get_json(silent=True) or {}).get('keep') or []
+    conn = get_connection()
+    try:
+        return jsonify(_settle_state(conn, keep))
+    finally:
+        conn.close()
+
+
+@transfer_admin_bp.route('/api/intercompany/reconcile', methods=['POST'])
+@admin_required
+def do_reconcile():
+    from reports import intercompany as IC
+    d = request.get_json(silent=True) or {}
+    conn = get_connection()
+    try:
+        try:
+            s = IC.reconcile(conn, d.get('keep') or [], _who(), d.get('amount'))
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        return jsonify({'settlement': s, 'tie_out': IC.tie_out(conn)})
+    finally:
+        conn.close()
+
+
+@transfer_admin_bp.route('/api/intercompany/month-entries', methods=['POST'])
+@admin_required
+def month_entries():
+    """Build (or rebuild, until posted) the month-close transfer entries for both houses."""
+    from reports import intercompany as IC
+    month = (request.get_json(silent=True) or {}).get('month') or ''
+    if not re.fullmatch(r'\d{4}-\d{2}', month):
+        return jsonify({'error': 'month=YYYY-MM'}), 400
+    if month.replace('-', '') >= M.now_et().strftime('%Y%m'):
+        return jsonify({'error': 'Only a closed month can be booked.'}), 400
+    conn = get_connection()
+    try:
+        out = IC.build_month_entries(conn, month)
+        return jsonify({'entries': {k: {'id': v.get('id'), 'status': v['status'], 'total': v['total_debits']} for k, v in out.items()},
+                        'tie_out': IC.tie_out(conn)})
+    finally:
+        conn.close()

@@ -558,10 +558,13 @@ def confirm(conn, pending_id, actor):
             ret = settlement_return_for(conn, st, pv)
             row = dict(common, from_location=st['from'], to_location=st['to'], from_product_id=st['product_id'],
                        to_product_id=pv['to_product_id'], needs_link=pv['needs_link'], transferred_at=now.isoformat(),
-                       is_settlement=1 if ret else 0, settlement_line_id=ret['id'] if ret else None)
-            if ret:     # a return in kind is valued at the original transfer cost so the item nets to $0
-                row.update(unit_cost_base=ret['unit_cost_base'], cost_source='settlement',
-                           total_cost=round((pv['qty_base'] or 0) * ret['unit_cost_base'], 2) if ret['unit_cost_base'] is not None else None)
+                       is_settlement=1 if ret else 0)
+            if ret:     # a return is valued at what the open cases cost when borrowed: the item nets to $0
+                from reports.intercompany import value_return
+                v = value_return(ret, pv['qty_base'], pv['unit_cost_base'])
+                row.update(total_cost=v, cost_source='return', unit_cost_base=round(ret['unit_cost_base'], 4),
+                           cost_detail=f"return of {ret['open_qty']:g} {pv['base_unit']} borrowed at "
+                                       f"${ret['unit_cost_base']:,.2f}" + (" (extra at today's cost)" if (pv['qty_base'] or 0) > ret['open_qty'] else ''))
             table = 'inventory_transfers'
         else:
             flag_at = float(R.get_setting(conn, 'waste_flag_usd') or 100)
@@ -573,8 +576,6 @@ def confirm(conn, pending_id, actor):
         cols = ','.join(row)
         cur = conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({','.join('?' * len(row))})", tuple(row.values()))
         new_id = cur.lastrowid
-        if p['kind'] == 'transfer' and row.get('settlement_line_id'):
-            close_settlement_line(conn, row['settlement_line_id'], new_id, pv['qty_base'])
         conn.execute("UPDATE move_pending SET status = 'confirmed', result_id = ? WHERE pending_id = ?", (new_id, pending_id))
         _demote_on_relog(conn, p, st)
         R.touch(conn, _sender(st), st['item'], st['product_id'])
@@ -583,8 +584,8 @@ def confirm(conn, pending_id, actor):
         conn.rollback()
         raise
     say = 'Done.'
-    if p['kind'] == 'transfer' and row.get('settlement_line_id'):
-        say = f"Logged. That clears what {HOUSE[st['from']]} owed {HOUSE[st['to']]}."
+    if p['kind'] == 'transfer' and row.get('is_settlement'):
+        say = f"Logged. That's a return: it clears what {HOUSE[st['from']]} owed {HOUSE[st['to']]} on it."
     from reports import move_notify
     move_notify.queue(p['kind'], new_id, 'logged')
     return {'status': 'logged', 'say': say, 'id': new_id, f"{p['kind']}_id": new_id}
@@ -614,19 +615,10 @@ def void(conn, kind, row_id, who, reason=None):
     return n
 
 
-# Returns in kind (brief 8H4) are wired in reports/intercompany.py; these two hooks
-# keep the voice path from importing the whole settlement module when unused.
+# Returns in kind (8H4): a transfer back of an item the sender owes.
 def settlement_return_for(conn, st, pv):
-    try:
-        from reports.intercompany import open_return_for
-    except ImportError:
-        return None
+    from reports.intercompany import open_return_for
     return open_return_for(conn, st['from'], st['to'], st['product_id'], pv.get('to_product_id'))
-
-
-def close_settlement_line(conn, line_id, transfer_id, qty_base):
-    from reports.intercompany import close_return
-    close_return(conn, line_id, transfer_id, qty_base)
 
 
 def log_direct(conn, kind, client_id, fields, actor):
