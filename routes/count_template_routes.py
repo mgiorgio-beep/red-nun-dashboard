@@ -169,6 +169,29 @@ def voice_match():
     text = (data.get('text') or '')[:2000]
     conn = get_connection()
     try:
-        return jsonify({'items': match_text(conn, location, text, count_type)})
+        items = match_text(conn, location, text, count_type)
+        # Same recognizer as the Transfer/Waste Shortcuts (Mike, 2026-10-08): kitchen
+        # words, Siri mishearings, and what this house really buys. The old matches
+        # stay in the menu below the pick.
+        from reports.item_recognition import recognize
+        from reports.key_items import BOOZE_CATS
+        for it in items:
+            try:
+                r = recognize(conn, location, it['phrase'], allow_ai=False)
+            except Exception:
+                continue
+            rows = [r['product']] if 'product' in r else list(r.get('options') or [])
+            rows = [x for x in rows if count_type == 'all'
+                    or ((x['category'] or '').upper() in BOOZE_CATS) == (count_type == 'booze')]
+            if not rows:
+                continue
+            sure = 'product' in r
+            picked = [{'product_id': x['id'], 'name': x['name'], 'display_name': x['display_name'], 'category': x['category'],
+                       'unit': x['unit'], 'inventory_unit': x['inventory_unit'],
+                       'score': 100 if (sure and k == 0) else 89, 'bought': 0, 'via': r.get('via')}
+                      for k, x in enumerate(rows)]
+            ids = {c['product_id'] for c in picked}
+            it['candidates'] = (picked + [c for c in it['candidates'] if c['product_id'] not in ids])[:8]
+        return jsonify({'items': items})
     finally:
         conn.close()
