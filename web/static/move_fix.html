@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>Red Nun — Fix</title>
+<style>
+/* Walk-in screen: wet hands, gloves, bad light. Big targets, high contrast, portrait. */
+:root{--bg:#000;--card:#16161a;--card2:#24242a;--line:#3a3a44;--text:#fff;--dim:#b8b8c4;--green:#30D158;--red:#FF453A;
+  --blue:#0A84FF;--amber:#FFB020;--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font:600 18px -apple-system,system-ui,sans-serif;min-height:100dvh;
+  padding:calc(var(--safe-t) + 14px) 16px calc(var(--safe-b) + 120px)}
+.kind{font-size:15px;font-weight:800;letter-spacing:1px;color:var(--amber)}
+.said{margin:6px 0 16px;color:var(--dim);font-size:16px;font-weight:500}
+.lab{font-size:13px;font-weight:800;letter-spacing:.8px;color:var(--dim);text-transform:uppercase;margin:18px 0 8px}
+.item{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:72px;padding:14px 16px;
+  border-radius:16px;background:var(--card);border:2px solid var(--line);color:var(--text);font:800 21px -apple-system,sans-serif;text-align:left}
+.item .chg{font-size:15px;color:var(--blue);font-weight:800;white-space:nowrap}
+.opts{display:grid;gap:10px;margin-top:10px}
+.opt{min-height:64px;padding:12px 16px;border-radius:14px;background:var(--card2);border:2px solid var(--line);color:var(--text);
+  font:700 18px -apple-system,sans-serif;text-align:left}
+.opt.sel{border-color:var(--green);background:#0f2a17}
+.search{width:100%;height:60px;margin-top:10px;padding:0 16px;border-radius:14px;background:var(--card);border:2px solid var(--line);
+  color:var(--text);font:600 19px -apple-system,sans-serif;outline:none}
+.qty{display:grid;grid-template-columns:84px 1fr 84px;gap:10px;align-items:center}
+.qty button{height:84px;border-radius:18px;background:var(--card2);border:2px solid var(--line);color:var(--text);font:800 40px -apple-system,sans-serif}
+.qty input{height:84px;width:100%;text-align:center;border-radius:18px;background:var(--card);border:2px solid var(--line);
+  color:var(--text);font:800 38px -apple-system,sans-serif}
+.seg{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.seg button{flex:1 1 30%;min-height:60px;border-radius:14px;background:var(--card2);border:2px solid var(--line);color:var(--text);
+  font:800 18px -apple-system,sans-serif}
+.seg button.sel{border-color:var(--green);background:#0f2a17}
+.dir{display:grid;grid-template-columns:1fr 84px 1fr;gap:10px;align-items:center}
+.dir .h{min-height:72px;border-radius:16px;background:var(--card);border:2px solid var(--line);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font:800 21px -apple-system,sans-serif}
+.dir .h small{font-size:12px;color:var(--dim);font-weight:700}
+.dir button{height:72px;border-radius:16px;background:var(--blue);border:none;color:#fff;font:800 30px -apple-system,sans-serif}
+.reasons{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.reasons button{min-height:64px;border-radius:14px;background:var(--card2);border:2px solid var(--line);color:var(--text);font:800 18px -apple-system,sans-serif}
+.reasons button.sel{border-color:var(--green);background:#0f2a17}
+.cost{margin-top:16px;padding:12px 14px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-size:16px;color:var(--dim)}
+.cost b{color:var(--text);font-size:22px}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(var(--safe-b) + 12px);background:rgba(0,0,0,.94);border-top:1px solid var(--line)}
+.go{display:block;width:100%;height:76px;border:none;border-radius:20px;background:var(--green);color:#000;font:900 26px -apple-system,sans-serif;letter-spacing:1px}
+.go:disabled{opacity:.4}
+.msg{text-align:center;padding:60px 10px}
+.msg .big{font-size:64px}
+.msg h1{font-size:28px;margin:14px 0 8px}
+.msg p{color:var(--dim);font-weight:500}
+.err{color:var(--red);font-size:16px;margin-top:10px;min-height:20px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div id="app"><div class="msg"><p>Loading…</p></div></div>
+<div class="bar hide" id="bar"><div class="err" id="err"></div><button class="go" id="go" onclick="confirmIt()">CONFIRM</button></div>
+<script>
+const Q = new URLSearchParams(location.search);
+const AUTH = 'p=' + encodeURIComponent(Q.get('p') || '') + '&s=' + encodeURIComponent(Q.get('s') || '');
+const HOUSE = {chatham: 'Chatham', dennis: 'Dennis'};
+let V = null, picking = false, busy = false;
+
+function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+function fmt(q){
+  if (q == null) return '';
+  const f = {0.5: '1/2', 0.25: '1/4', 0.75: '3/4'}; if (f[q]) return f[q];
+  return String(Math.round(q * 100) / 100);
+}
+function done(icon, title, text){
+  document.getElementById('bar').classList.add('hide');
+  document.getElementById('app').innerHTML = '<div class="msg"><div class="big">' + icon + '</div><h1>' + esc(title) + '</h1><p>' + esc(text || '') + '</p></div>';
+}
+async function api(path, body){
+  const r = await fetch('/api/moves/fix' + path + '?' + AUTH, body === undefined ? {} :
+    {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 410 || r.status === 404) { done('⏱', 'This link is done', j.say || 'Say it again in the Shortcut.'); throw new Error('gone'); }
+  return j;
+}
+async function load(){ try { V = await api(''); render(); } catch(e) {} }
+async function edit(fields){
+  if (busy) return; busy = true;
+  try {
+    const j = await api('', fields);
+    V = j.view; picking = false;
+    document.getElementById('err').textContent = j.result && j.result.status === 'error' ? j.result.say : '';
+    render();
+  } catch(e) {} finally { busy = false; }
+}
+
+function render(){
+  const v = V, isT = v.kind === 'transfer';
+  const house = isT ? v.from : v.location;
+  let h = '<div class="kind">' + (isT ? 'TRANSFER' : 'WASTE' + (v.location ? ' — ' + esc(HOUSE[v.location]) : '')) + '</div>';
+  h += '<div class="said">You said: “' + esc(v.said) + '”</div>';
+
+  h += '<div class="lab">Item</div>';
+  if (!picking && v.product) {
+    h += '<button class="item" onclick="picking=true;render()"><span>' + esc(v.product.name) + '</span><span class="chg">Change</span></button>';
+  } else {
+    h += '<div class="opts">' + (v.matches || []).map(m =>
+      '<button class="opt' + (v.product && v.product.id === m.id ? ' sel' : '') + '" onclick="edit({product_id:' + m.id + '})">' + esc(m.label) + '</button>').join('') + '</div>';
+    h += '<input class="search" id="q" placeholder="Search…" autocomplete="off" oninput="search(this.value)"><div class="opts" id="found"></div>';
+  }
+
+  h += '<div class="lab">How much</div><div class="qty">' +
+       '<button onclick="bump(-1)">−</button><input id="qty" inputmode="decimal" value="' + fmt(v.qty) + '" onchange="edit({qty:this.value})">' +
+       '<button onclick="bump(1)">+</button></div>';
+  if ((v.units || []).length) {
+    h += '<div class="seg">' + v.units.map(u => '<button class="' + (u === v.unit ? 'sel' : '') + '" onclick="edit({unit:\'' + u + '\'})">' + esc(u) + '</button>').join('') + '</div>';
+  }
+
+  if (isT) {
+    h += '<div class="lab">Direction</div><div class="dir">' +
+         '<div class="h"><small>FROM</small>' + esc(HOUSE[v.from] || '?') + '</div>' +
+         '<button onclick="edit({from:\'' + (v.from === 'chatham' ? 'dennis' : 'chatham') + '\'})">⇄</button>' +
+         '<div class="h"><small>TO</small>' + esc(HOUSE[v.to] || '?') + '</div></div>';
+  } else {
+    h += '<div class="lab">House</div><div class="seg">' + ['chatham', 'dennis'].map(l =>
+      '<button class="' + (l === v.location ? 'sel' : '') + '" onclick="edit({location:\'' + l + '\'})">' + HOUSE[l] + '</button>').join('') + '</div>';
+    h += '<div class="lab">Why</div><div class="reasons">' + v.reasons.map(r =>
+      '<button class="' + (r.code === v.reason ? 'sel' : '') + '" onclick="edit({reason:\'' + (r.code === v.reason ? '' : r.code) + '\'})">' + esc(r.label) + '</button>').join('') + '</div>';
+  }
+  if (v.owner && v.cost) {
+    h += '<div class="cost"><b>' + (v.cost.total == null ? 'no price yet' : '$' + v.cost.total.toFixed(2)) + '</b> · ' + esc(v.cost.source || '') +
+         (v.cost.detail ? '<br>' + esc(v.cost.detail) : '') + '</div>';
+  }
+  document.getElementById('app').innerHTML = h;
+  document.getElementById('bar').classList.remove('hide');
+  document.getElementById('go').disabled = !(v.product && v.qty && (isT ? v.from && v.to : v.location));
+}
+function bump(d){
+  const q = parseFloat(V.qty) || 0;
+  const step = q < 1 || (q + d) < 1 ? 0.5 : 1;
+  edit({qty: Math.max(0.5, Math.round((q + d * step) * 2) / 2)});
+}
+let _st = 0;
+async function search(q){
+  const my = ++_st, box = document.getElementById('found');
+  if (q.trim().length < 2) { box.innerHTML = ''; return; }
+  const r = await fetch('/api/moves/fix/search?' + AUTH + '&q=' + encodeURIComponent(q));
+  const rows = await r.json().catch(() => []);
+  if (my !== _st) return;
+  box.innerHTML = rows.map(m => '<button class="opt" onclick="edit({product_id:' + m.id + '})">' + esc(m.label) + (m.here ? '' : ' <small style="color:var(--amber)">· not stocked here</small>') + '</button>').join('');
+}
+async function confirmIt(){
+  const b = document.getElementById('go'); if (b.disabled || busy) return;
+  b.disabled = true; busy = true;
+  try {
+    const r = await fetch('/api/moves/fix/confirm?' + AUTH, {method: 'POST'});
+    const j = await r.json().catch(() => ({}));
+    if (j.status === 'logged') done('✓', 'Logged', j.say === 'Done.' ? 'You can close this.' : j.say);
+    else if (r.status === 410) done('⏱', 'This link is done', j.say);
+    else { document.getElementById('err').textContent = j.say || 'Could not save — try again.'; b.disabled = false; }
+  } catch(e) { document.getElementById('err').textContent = 'No connection — try again.'; b.disabled = false; }
+  finally { busy = false; }
+}
+load();
+</script>
+</body>
+</html>

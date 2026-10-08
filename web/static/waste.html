@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>Red Nun — Waste</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.15);--text:#f5f5f7;--text2:rgba(245,245,247,0.6);
+  --text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;--orange:#FF9F0A;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;min-height:100dvh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.hdr{position:sticky;top:0;z-index:100;padding:calc(var(--safe-top) + 12px) 16px 12px;
+  background:rgba(10,10,12,0.85);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-logo{width:32px;height:32px;background:linear-gradient(135deg,var(--red),#FF6259);border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff}
+.hdr-title{font-size:17px;font-weight:700;letter-spacing:-0.3px}
+.hdr-sub{font-size:10px;color:var(--text3);font-weight:500}
+.hdr a{color:var(--blue);font-size:14px;font-weight:600;text-decoration:none}
+.wrap{padding:16px 16px calc(var(--safe-bottom) + 110px);max-width:640px;margin:0 auto}
+.label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 8px}
+.dir{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dir button{padding:16px 10px;border-radius:14px;background:var(--card);border:1.5px solid var(--border2);
+  color:var(--text);font:600 15px Inter,sans-serif}
+.dir button.sel{border-color:var(--blue);background:rgba(10,132,255,0.14);color:#fff}
+.search{width:100%;padding:13px 14px;border-radius:12px;background:var(--card);border:1px solid var(--border2);
+  color:var(--text);font:500 16px Inter,sans-serif;outline:none}
+.results{margin-top:6px}
+.res{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:10px}
+.res:active{background:var(--card2)}
+.res .u,.line .u{font-size:11px;color:var(--blue);font-weight:700}
+.line{display:flex;align-items:center;gap:10px;padding:12px;margin-bottom:8px;background:var(--card);
+  border:1px solid var(--border);border-radius:14px}
+.line .n{flex:1;min-width:0;font-weight:600;font-size:15px}
+.step{width:40px;height:40px;border-radius:10px;background:var(--card2);border:1px solid var(--border2);
+  color:var(--text);font-size:20px}
+.qty{width:58px;height:40px;text-align:center;border-radius:10px;background:var(--bg);border:1px solid var(--border2);
+  color:var(--text);font:700 17px Inter,sans-serif}
+.x{background:none;border:none;color:var(--red);font-size:18px;padding:0 4px}
+.empty{color:var(--text3);font-size:14px;padding:10px 2px}
+.bar{position:fixed;bottom:0;left:0;right:0;padding:12px 16px calc(var(--safe-bottom) + 12px);
+  background:rgba(10,10,12,0.92);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);border-top:1px solid var(--border)}
+.send{width:100%;max-width:640px;margin:0 auto;display:block;padding:15px;border-radius:12px;border:none;
+  background:var(--green);color:#000;font:700 16px Inter,sans-serif}
+.send:disabled{opacity:.35}
+.conn{font-size:11px;font-weight:700;text-align:center;margin-bottom:8px;color:var(--orange)}
+.hist{padding:11px 2px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;font-size:14px}
+.hist .m{flex:1;min-width:0}
+.hist .s{font-size:11px;color:var(--text3);margin-top:2px}
+.hist.void .m{text-decoration:line-through;color:var(--text3)}
+.undo{background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:6px 10px;font:600 12px Inter,sans-serif}
+.sayrow{display:flex;gap:8px}
+.sayrow .search{flex:1}
+.saybtn{padding:0 18px;border-radius:12px;border:none;background:var(--blue);color:#fff;font:700 16px Inter,sans-serif}
+.vcard{margin-top:10px;padding:14px;border-radius:14px;background:var(--card);border:1.5px solid var(--border2)}
+.vcard pre{font:700 17px Inter,sans-serif;white-space:pre-wrap;line-height:1.35}
+.vcard .say{font-size:13px;color:var(--text2);margin-top:6px}
+.vbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.vbtns button,.vopt{padding:14px;border-radius:12px;border:1px solid var(--border2);background:var(--card2);color:var(--text);font:700 15px Inter,sans-serif;text-align:left}
+.vbtns .ok{background:var(--green);color:#000;border:none;text-align:center}
+.vbtns .fx{text-align:center}
+.vopt{display:block;width:100%;margin-top:8px}
+.hist .cost{font-size:12px;color:var(--text2);white-space:nowrap}
+.hist.hl{background:rgba(10,132,255,0.12)}
+.toast{position:fixed;left:50%;top:calc(var(--safe-top) + 70px);transform:translateX(-50%);z-index:200;
+  background:var(--card2);border:1px solid var(--border2);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;
+  opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{opacity:1}.toast.err{border-color:var(--red);color:var(--red)}
+.reasons{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.reasons button{padding:12px 6px;border-radius:12px;background:var(--card);border:1.5px solid var(--border2);color:var(--text);font:600 13px Inter,sans-serif}
+.reasons button.sel{border-color:var(--green);background:rgba(48,209,88,0.14)}
+.sum{margin-top:8px;padding:14px;border-radius:14px;background:var(--card);border:1px solid var(--border)}
+.sum h3{font-size:15px;margin-bottom:8px}
+.sum .row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text2)}
+.sum .row b{color:var(--text)}
+.tabs{display:flex;gap:8px}
+.tabs button{flex:1;padding:10px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text2);font:600 13px Inter,sans-serif}
+.tabs button.sel{color:#fff;border-color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-left"><div class="hdr-logo">RN</div>
+    <div><div class="hdr-title">Waste</div><div class="hdr-sub">WHAT GOT THROWN OUT, AND WHY</div></div></div>
+  <a href="/transfer">Transfer ›</a>
+</div>
+<div class="toast" id="toast"></div>
+<div class="wrap">
+  <div class="label">Which house?</div>
+  <div class="dir">
+    <button data-loc="chatham" onclick="pickLoc(this)">Chatham</button>
+    <button data-loc="dennis" onclick="pickLoc(this)">Dennis</button>
+  </div>
+
+  <div class="label">Say it or type it</div>
+  <div class="sayrow">
+    <input class="search" id="say" placeholder="half a case of haddock, went bad" autocomplete="off" enterkeyhint="go"
+           onkeydown="if(event.key==='Enter')sayIt()">
+    <button class="saybtn" onclick="sayIt()">Go</button>
+  </div>
+  <div id="vbox"></div>
+
+  <div class="label" style="margin-top:26px">Or pick it</div>
+  <input class="search" id="q" placeholder="Search a product…" autocomplete="off" oninput="search()">
+  <div class="results" id="results"></div>
+  <div id="pick"></div>
+
+  <div id="summary"></div>
+
+  <div class="label" style="display:flex;justify-content:space-between">Recent <span class="tabs" style="width:160px">
+    <button id="d7" class="sel" onclick="setDays(7)">7 days</button><button id="d30" onclick="setDays(30)">30 days</button></span></div>
+  <div id="history"><div class="empty">Loading…</div></div>
+</div>
+<div class="bar">
+  <div class="conn" id="conn"></div>
+  <button class="send" id="send" disabled onclick="send()">Pick a house</button>
+</div>
+<script>
+const REASONS = [['spoiled','Spoiled'],['dropped','Dropped'],['kitchen_error','Kitchen error'],['overprep','Over-prep'],['bar','Bar'],['staff_meal','Staff meal'],['other','Other']];
+const W = { loc: null, line: null, days: 7, owner: false };
+const QKEY = 'rn_waste_queue';
+const HL = new URLSearchParams(location.search).get('highlight');
+function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+function toast(msg, err){ const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(t._h); t._h = setTimeout(() => t.className = 'toast', 2600); }
+const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+function uuid(){ return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2); }
+function money(x){ return x == null ? '' : '$' + x.toFixed(2); }
+
+function pickLoc(el){
+  document.querySelectorAll('.dir button').forEach(b => b.classList.toggle('sel', b === el));
+  W.loc = el.dataset.loc; try { localStorage.setItem('rn_waste_loc', W.loc); } catch(e) {}
+  renderBar(); loadSummary(); loadHistory();
+}
+let _sq = 0;
+async function search(){
+  const q = document.getElementById('q').value.trim(), my = ++_sq, box = document.getElementById('results');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  try {
+    const r = await fetch('/api/transfers/products?house=' + encodeURIComponent(W.loc || '') + '&q=' + encodeURIComponent(q), {credentials:'include'});
+    if (r.status === 401) { location.href = '/login?next=/waste'; return; }
+    const rows = await r.json(); if (my !== _sq) return;
+    window._res = rows;
+    box.innerHTML = rows.length ? rows.map((p, i) => '<div class="res" onclick="choose(' + i + ')"><span>' + esc(p.label) + '</span></div>').join('')
+      : '<div class="empty">No product matches “' + esc(q) + '”.</div>';
+  } catch(e) { box.innerHTML = '<div class="empty">Search needs a connection.</div>'; }
+}
+function choose(i){
+  const p = window._res[i]; if (!p) return;
+  W.line = { id: p.id, name: p.label, qty: 1, unit: null, reason: null };
+  document.getElementById('q').value = ''; document.getElementById('results').innerHTML = '';
+  renderPick();
+}
+function renderPick(){
+  const l = W.line, box = document.getElementById('pick');
+  if (!l) { box.innerHTML = ''; renderBar(); return; }
+  box.innerHTML = '<div class="line"><div class="n">' + esc(l.name) + '<div class="u">as ordered (case, bag…)</div></div>' +
+    '<button class="step" onclick="stepQ(-0.5)">−</button><input class="qty" type="number" inputmode="decimal" step="0.5" value="' + l.qty + '" oninput="W.line.qty=parseFloat(this.value)||0;renderBar()">' +
+    '<button class="step" onclick="stepQ(0.5)">+</button><button class="x" onclick="W.line=null;renderPick()">✕</button></div>' +
+    '<div class="label">Why?</div><div class="reasons">' + REASONS.map(r =>
+      '<button class="' + (l.reason === r[0] ? 'sel' : '') + '" onclick="W.line.reason=W.line.reason===\'' + r[0] + '\'?null:\'' + r[0] + '\';renderPick()">' + r[1] + '</button>').join('') + '</div>';
+  renderBar();
+}
+function stepQ(d){ W.line.qty = Math.max(0.5, Math.round((W.line.qty + d) * 2) / 2); renderPick(); }
+function renderBar(){
+  const b = document.getElementById('send');
+  b.disabled = !W.loc || !W.line || !(W.line.qty > 0);
+  b.textContent = !W.loc ? 'Pick a house' : !W.line ? 'Say it or pick an item' : 'Log waste at ' + cap(W.loc);
+  const q = loadQ().length;
+  document.getElementById('conn').textContent = q ? q + ' entr' + (q === 1 ? 'y' : 'ies') + ' waiting to upload' : '';
+}
+function loadQ(){ try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch(e) { return []; } }
+function storeQ(q){ try { localStorage.setItem(QKEY, JSON.stringify(q)); } catch(e) {} }
+let _flushing = false;
+async function flush(){
+  if (_flushing || !navigator.onLine) return false;
+  _flushing = true;
+  try {
+    let q = loadQ();
+    while (q.length) {
+      let ok = false;
+      try {
+        const r = await fetch('/api/waste', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(q[0])});
+        ok = r.ok && (r.headers.get('content-type') || '').indexOf('json') !== -1;
+        if (!ok && r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) { ok = true; toast('An entry was rejected by the server', true); }
+      } catch(e) {}
+      if (!ok) break;
+      q = loadQ(); q.shift(); storeQ(q);
+    }
+    return !loadQ().length;
+  } finally { _flushing = false; renderBar(); }
+}
+async function send(){
+  const l = W.line; if (!W.loc || !l) return;
+  const q = loadQ();
+  q.push({ client_id: uuid(), location: W.loc, product_id: l.id, qty: l.qty, unit: l.unit, reason: l.reason });
+  storeQ(q); W.line = null; renderPick();
+  const done = await flush();
+  toast(done ? '✓ Waste logged' : 'Saved on this phone — will upload when back online', !done);
+  loadHistory(); loadSummary();
+}
+function setDays(d){ W.days = d; document.getElementById('d7').classList.toggle('sel', d === 7); document.getElementById('d30').classList.toggle('sel', d === 30); loadHistory(); loadSummary(); }
+async function loadHistory(){
+  const box = document.getElementById('history');
+  try {
+    const r = await fetch('/api/waste?days=' + W.days + (W.loc ? '&location=' + W.loc : ''), {credentials:'include'});
+    if (r.status === 401) { location.href = '/login?next=/waste'; return; }
+    const rows = await r.json();
+    const rl = Object.fromEntries(REASONS);
+    box.innerHTML = rows.length ? rows.map(t => {
+      const v = t.status === 'voided', d = t.business_date.slice(4, 6) + '/' + t.business_date.slice(6);
+      return '<div class="hist' + (v ? ' void' : '') + (String(t.id) === HL ? ' hl' : '') + '" id="w' + t.id + '"><div class="m">' +
+        esc(t.qty_entered + ' ' + (t.unit_entered || '') + ' ' + t.item_name) +
+        '<div class="s">' + esc(cap(t.location) + ' · ' + (rl[t.reason_code] || 'no reason') + ' · ' + d + (t.entered_by ? ' · ' + t.entered_by : '') +
+          (t.flagged ? ' · review' : '') + (v ? ' · voided' + (t.void_reason ? ': ' + t.void_reason : '') : '')) + '</div></div>' +
+        (t.total_cost != null ? '<span class="cost">' + money(t.total_cost) + '</span>' : '') +
+        (v ? '' : '<button class="undo" onclick="undo(' + t.id + ')">Void</button>') + '</div>';
+    }).join('') : '<div class="empty">Nothing logged.</div>';
+    if (HL) { const el = document.getElementById('w' + HL); if (el) el.scrollIntoView({block:'center'});
+      if (new URLSearchParams(location.search).get('void') === '1' && el && !el.classList.contains('void')) undo(+HL); }
+  } catch(e) { box.innerHTML = '<div class="empty">History needs a connection.</div>'; }
+}
+async function loadSummary(){
+  const box = document.getElementById('summary');
+  if (!W.owner) { box.innerHTML = ''; return; }
+  try {
+    const r = await fetch('/api/waste/summary?days=' + W.days + (W.loc ? '&location=' + W.loc : ''), {credentials:'include'});
+    if (!r.ok) { box.innerHTML = ''; return; }
+    const rl = Object.fromEntries(REASONS);
+    box.innerHTML = (await r.json()).map(s =>
+      '<div class="sum"><h3>' + cap(s.location) + ' — last ' + W.days + ' days: ' + money(s.loss) + ' lost' +
+      (s.staff_meal ? ' <span style="color:var(--text2);font-weight:500">+ ' + money(s.staff_meal) + ' staff meal</span>' : '') + '</h3>' +
+      Object.entries(s.by_reason).filter(([k]) => k !== 'staff_meal').map(([k, v]) => '<div class="row"><span>' + esc(rl[k] || 'No reason') + '</span><b>' + money(v) + '</b></div>').join('') +
+      (s.top_items.length ? '<div class="row" style="margin-top:6px"><span>Top items</span><span></span></div>' + s.top_items.slice(0, 3).map(x => '<div class="row"><span>' + esc(x.item) + '</span><b>' + money(x.cost) + '</b></div>').join('') : '') +
+      (s.by_person.length ? '<div class="row" style="margin-top:6px"><span>By person</span><span></span></div>' + s.by_person.map(x => '<div class="row"><span>' + esc(x.person) + '</span><b>' + money(x.cost) + '</b></div>').join('') : '') +
+      (s.unpriced_entries ? '<div class="row"><span>' + s.unpriced_entries + ' without a price</span><span></span></div>' : '') + '</div>').join('');
+  } catch(e) { box.innerHTML = ''; }
+}
+async function undo(id){
+  const reason = prompt('Void this entry? Why (optional):', ''); if (reason === null) return;
+  try {
+    const r = await fetch('/api/waste/' + id + '/void', {method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({reason})});
+    if (!r.ok) throw new Error(); toast('Voided'); loadHistory(); loadSummary();
+  } catch(e) { toast('Could not void — try again with a connection', true); }
+}
+// ---- say / type it: same endpoint and card as the Siri Shortcut
+let VP = null;
+async function voice(body){
+  const r = await fetch('/api/waste/voice', {method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if (r.status === 401) { location.href = '/login?next=/waste'; throw new Error('login'); }
+  return r.json();
+}
+async function sayIt(){
+  let text = document.getElementById('say').value.trim(); if (!text) return;
+  if (W.loc && !/chatham|dennis/i.test(text)) text += ' at ' + W.loc;
+  try { showV(await voice({text, client_id: uuid()})); } catch(e) { if (e.message !== 'login') toast('Needs a connection — use the pickers below', true); }
+}
+function showV(r){
+  VP = r; const box = document.getElementById('vbox');
+  if (r.status === 'confirm') box.innerHTML = '<div class="vcard"><pre>' + esc(r.card) + '</pre><div class="say">' + esc(r.say) + '</div><div class="vbtns"><button class="ok" onclick="vGo({confirm:true})">Confirm</button><button class="fx" onclick="location.href=VP.fix_url">Fix</button></div></div>';
+  else if (r.status === 'choose') box.innerHTML = '<div class="vcard"><div style="font-weight:700">' + esc(r.say) + '</div>' + r.options.map(o => '<button class="vopt" onclick="vGo({choice:\'' + o.id + '\'})">' + esc(o.label) + '</button>').join('') + '</div>';
+  else if (r.status === 'logged') { box.innerHTML = ''; document.getElementById('say').value = ''; toast('✓ ' + (r.say || 'Done.')); loadHistory(); loadSummary(); }
+  else box.innerHTML = '<div class="vcard"><div style="color:var(--orange);font-weight:700">' + esc(r.say || 'Something went wrong') + '</div>' + (r.fix_url ? '<div class="vbtns"><button class="fx" onclick="location.href=VP.fix_url">Open Fix page</button></div>' : '') + '</div>';
+}
+async function vGo(extra){ try { showV(await voice(Object.assign({pending_id: VP.pending_id}, extra))); } catch(e) {} }
+
+window.addEventListener('online', () => { flush().then(loadHistory); });
+(async () => {
+  try {
+    const u = await (await fetch('/api/auth/check', {credentials:'include'})).json();
+    W.owner = u.role === 'admin';
+    let loc = null; try { loc = localStorage.getItem('rn_waste_loc'); } catch(e) {}
+    loc = loc || (['chatham', 'dennis'].includes(u.location) ? u.location : null);
+    const b = loc && document.querySelector('.dir button[data-loc="' + loc + '"]');
+    if (b) pickLoc(b); else { loadHistory(); }
+  } catch(e) { loadHistory(); }
+  renderBar(); flush();
+})();
+</script>
+</body>
+</html>

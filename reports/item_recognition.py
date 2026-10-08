@@ -86,7 +86,7 @@ def ensure_tables(conn):
             raw_text TEXT,                     -- as drafted / said
             product_id INTEGER NOT NULL REFERENCES products(id),
             source TEXT NOT NULL DEFAULT 'learned',   -- seed_claude | seed_rule | learned | admin
-            status TEXT NOT NULL DEFAULT 'proposed',  -- proposed | approved | struck | learned | demoted
+            status TEXT NOT NULL DEFAULT 'proposed',  -- proposed | approved | struck (picks live in voice_picks)
             picks INTEGER NOT NULL DEFAULT 0,
             person TEXT,
             created_by TEXT,
@@ -99,6 +99,20 @@ def ensure_tables(conn):
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS ix_product_aliases_lookup ON product_aliases(location, alias_text)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS voice_picks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location TEXT NOT NULL,
+            alias_text TEXT NOT NULL,          -- alias_key of what was said
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            person TEXT NOT NULL DEFAULT '',
+            picks INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'learned',   -- learned | demoted
+            first_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            last_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(location, alias_text, product_id, person)
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS product_card_names (
             product_id INTEGER PRIMARY KEY REFERENCES products(id),
@@ -215,8 +229,9 @@ def house_context(conn, location):
         SELECT p.id FROM products p JOIN recipes r ON r.id = p.source_recipe_id
         WHERE p.active = 1 AND COALESCE(r.location, 'both') IN (?, 'both')""", (location,))}
     aliased = {r[0] for r in conn.execute("""
-        SELECT product_id FROM product_aliases WHERE location = ? AND (status = 'learned' OR status IN (%s))"""
-        % ','.join('?' * len(LIVE_ALIAS)), (location, *LIVE_ALIAS))}
+        SELECT product_id FROM product_aliases WHERE location = ? AND status IN (%s)"""
+        % ','.join('?' * len(LIVE_ALIAS)), (location, *LIVE_ALIAS))} | \
+        {r[0] for r in conn.execute("SELECT product_id FROM voice_picks WHERE location = ? AND status = 'learned'", (location,))}
     moved = {}
     for t in ('inventory_transfers', 'waste_log'):
         try:
@@ -375,18 +390,18 @@ def recognize(conn, location, phrase, size=None, person=None, allow_ai=True, uni
     ctx = house_context(conn, location)
     trace = []
 
-    # L2 / L6: aliases
-    rows = conn.execute("""SELECT a.id, a.product_id, a.status, a.picks, a.person FROM product_aliases a
-                           JOIN products p ON p.id = a.product_id
-                           WHERE a.location = ? AND a.alias_text = ? AND p.active = 1
-                             AND (a.status = 'learned' OR a.status IN (%s))""" % ','.join('?' * len(LIVE_ALIAS)),
-                        (location, key, *LIVE_ALIAS)).fetchall()
-    approved = [r for r in rows if r['status'] in LIVE_ALIAS]
-    sure = [r for r in rows if r['status'] == 'learned' and r['picks'] >= 2]
-    learned_bonus = {}
-    for r in rows:
-        if r['status'] == 'learned':
-            learned_bonus[r['product_id']] = learned_bonus.get(r['product_id'], 0) + (12.0 if r['person'] == person else 10.0)
+    # L2: approved aliases
+    rows = conn.execute("""SELECT a.product_id FROM product_aliases a JOIN products p ON p.id = a.product_id
+                           WHERE a.location = ? AND a.alias_text = ? AND p.active = 1 AND a.status IN (%s)"""
+                        % ','.join('?' * len(LIVE_ALIAS)), (location, key, *LIVE_ALIAS)).fetchall()
+    approved = rows
+    # L6: what people picked for these words here (picked the same way twice = automatic)
+    picks = conn.execute("""SELECT v.product_id, SUM(v.picks) AS n, MAX(v.person = ?) AS mine
+                            FROM voice_picks v JOIN products p ON p.id = v.product_id
+                            WHERE v.location = ? AND v.alias_text = ? AND v.status = 'learned' AND p.active = 1
+                            GROUP BY v.product_id""", (person or '', location, key)).fetchall()
+    sure = [r for r in picks if r['n'] >= 2]
+    learned_bonus = {r['product_id']: 12.0 if r['mine'] else 10.0 for r in picks}
 
     def sized(pids):
         if not size:
@@ -395,10 +410,9 @@ def recognize(conn, location, phrase, size=None, person=None, allow_ai=True, uni
         return s or pids
 
     m = _matcher(conn, location)
-    if sure and not approved:
-        pids = sized(list(dict.fromkeys(r['product_id'] for r in sure)))
-        if len(pids) == 1:
-            return {'product': _row(conn, pids[0]), 'via': 'learned', 'trace': f'learned alias "{key}"'}
+    if len(sure) == 1 and (not size or product_size(conn, sure[0]['product_id']) in (None, size)):
+        return {'product': _row(conn, sure[0]['product_id']), 'via': 'learned',
+                'trace': f'picked {sure[0]["n"]}x for "{key}"'}
     group = list(dict.fromkeys(r['product_id'] for r in approved)) if approved else []
     # Word matches and alias hits compete together: an alias can point at a dead
     # duplicate row while the house buys another row for the same thing.
@@ -525,21 +539,19 @@ def learn(conn, location, phrase, product_id, person):
     if not key:
         return
     conn.execute("""
-        INSERT INTO product_aliases (location, alias_text, product_id, source, status, picks, person, created_by, last_used_at)
-        VALUES (?, ?, ?, 'learned', 'learned', 1, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(location, alias_text, product_id) DO UPDATE SET
-            picks = CASE WHEN status IN ('learned', 'demoted') THEN picks + 1 ELSE picks END,
-            status = CASE WHEN status = 'demoted' THEN 'learned' ELSE status END,
-            person = excluded.person, last_used_at = CURRENT_TIMESTAMP
-    """, (location, key, product_id, person, person))
+        INSERT INTO voice_picks (location, alias_text, product_id, person, picks) VALUES (?, ?, ?, ?, 1)
+        ON CONFLICT(location, alias_text, product_id, person) DO UPDATE SET
+            picks = CASE WHEN status = 'demoted' THEN 1 ELSE picks + 1 END, status = 'learned',
+            last_at = CURRENT_TIMESTAMP
+    """, (location, key, product_id, person or ''))
     clear_cache()
 
 
 def demote(conn, location, phrase, product_id):
-    """Voided within 15 min and re-logged as something else: that alias was wrong."""
+    """Voided within 15 min and re-logged as something else: that pick was wrong."""
     ensure_tables(conn)
-    conn.execute("""UPDATE product_aliases SET status = 'demoted', picks = 0
-                    WHERE location = ? AND alias_text = ? AND product_id = ? AND status = 'learned'""",
+    conn.execute("""UPDATE voice_picks SET status = 'demoted', picks = 0
+                    WHERE location = ? AND alias_text = ? AND product_id = ?""",
                  (location, alias_key(phrase), product_id))
     clear_cache()
 

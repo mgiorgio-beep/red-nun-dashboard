@@ -59,6 +59,19 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .hist .s{font-size:11px;color:var(--text3);margin-top:2px}
 .hist.void .m{text-decoration:line-through;color:var(--text3)}
 .undo{background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:6px 10px;font:600 12px Inter,sans-serif}
+.sayrow{display:flex;gap:8px}
+.sayrow .search{flex:1}
+.saybtn{padding:0 18px;border-radius:12px;border:none;background:var(--blue);color:#fff;font:700 16px Inter,sans-serif}
+.vcard{margin-top:10px;padding:14px;border-radius:14px;background:var(--card);border:1.5px solid var(--border2)}
+.vcard pre{font:700 17px Inter,sans-serif;white-space:pre-wrap;line-height:1.35}
+.vcard .say{font-size:13px;color:var(--text2);margin-top:6px}
+.vbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.vbtns button,.vopt{padding:14px;border-radius:12px;border:1px solid var(--border2);background:var(--card2);color:var(--text);font:700 15px Inter,sans-serif;text-align:left}
+.vbtns .ok{background:var(--green);color:#000;border:none;text-align:center}
+.vbtns .fx{text-align:center}
+.vopt{display:block;width:100%;margin-top:8px}
+.hist .cost{font-size:12px;color:var(--text2);white-space:nowrap}
+.hist.hl{background:rgba(10,132,255,0.12)}
 .toast{position:fixed;left:50%;top:calc(var(--safe-top) + 70px);transform:translateX(-50%);z-index:200;
   background:var(--card2);border:1px solid var(--border2);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;
   opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
@@ -74,7 +87,15 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 <div class="toast" id="toast"></div>
 
 <div class="wrap">
-  <div class="label">Which way?</div>
+  <div class="label">Say it or type it</div>
+  <div class="sayrow">
+    <input class="search" id="say" placeholder="2 cases of Tito's to Dennis" autocomplete="off" enterkeyhint="go"
+           onkeydown="if(event.key==='Enter')sayIt()">
+    <button class="saybtn" onclick="sayIt()">Go</button>
+  </div>
+  <div id="vbox"></div>
+
+  <div class="label" style="margin-top:26px">Or pick — which way?</div>
   <div class="dir">
     <button data-from="chatham" data-to="dennis" onclick="pickDir(this)">Chatham → Dennis</button>
     <button data-from="dennis" data-to="chatham" onclick="pickDir(this)">Dennis → Chatham</button>
@@ -85,7 +106,9 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   <div class="results" id="results"></div>
   <div id="lines" style="margin-top:12px"></div>
 
-  <div class="label" style="display:flex;justify-content:space-between">Last 30 days <a href="/transfer/statement" style="color:var(--blue);text-decoration:none;text-transform:none;letter-spacing:0">Month statement ›</a></div>
+  <div class="label" style="display:flex;justify-content:space-between">Last 30 days <span>
+    <a href="/transfer/statement" style="color:var(--blue);text-decoration:none;text-transform:none;letter-spacing:0">Month statement ›</a>
+    <a href="/transfer/admin" id="adminlink" style="display:none;color:var(--blue);text-decoration:none;text-transform:none;letter-spacing:0;margin-left:10px">Admin ›</a></span></div>
   <div id="history"><div class="empty">Loading…</div></div>
 </div>
 
@@ -133,20 +156,20 @@ async function search(){
   const q = document.getElementById('q').value.trim(), my = ++_sq, box = document.getElementById('results');
   if (q.length < 2) { box.innerHTML = ''; return; }
   try {
-    const r = await fetch('/api/transfers/products?q=' + encodeURIComponent(q), {credentials:'include'});
+    const r = await fetch('/api/transfers/products?house=' + encodeURIComponent(T.from || '') + '&q=' + encodeURIComponent(q), {credentials:'include'});
     if (r.status === 401) { location.href = '/login?next=/transfer'; return; }
     const rows = await r.json();
     if (my !== _sq) return;
     window._res = rows;
     box.innerHTML = rows.length ? rows.map((p, i) =>
-      '<div class="res" onclick="addLine(' + i + ')"><span>' + esc(niceName(p)) + '</span><span class="u">' + esc(unitOf(p)) + '</span></div>').join('')
+      '<div class="res" onclick="addLine(' + i + ')"><span>' + esc(p.label) + '</span><span class="u">' + (p.here ? '' : 'not stocked here') + '</span></div>').join('')
       : '<div class="empty">No product matches “' + esc(q) + '”.</div>';
   } catch(e) { box.innerHTML = '<div class="empty">Search needs a connection.</div>'; }
 }
 function addLine(i){
   const p = window._res[i]; if (!p) return;
   const have = T.lines.find(l => l.id === p.id);
-  if (have) have.qty += 1; else T.lines.push({ id: p.id, name: niceName(p), unit: unitOf(p), qty: 1 });
+  if (have) have.qty += 1; else T.lines.push({ id: p.id, name: p.label, unit: null, qty: 1 });
   document.getElementById('q').value = ''; document.getElementById('results').innerHTML = '';
   renderLines();
 }
@@ -155,7 +178,7 @@ function step(i, d){ T.lines[i].qty = Math.max(0, Math.round((T.lines[i].qty + d
 function drop(i){ T.lines.splice(i, 1); renderLines(); }
 function renderLines(){
   document.getElementById('lines').innerHTML = T.lines.map((l, i) =>
-    '<div class="line"><div class="n">' + esc(l.name) + '<div class="u">' + esc(l.unit) + '</div></div>' +
+    '<div class="line"><div class="n">' + esc(l.name) + '<div class="u">' + esc(l.unit || 'as ordered') + '</div></div>' +
     '<button class="step" onclick="step(' + i + ',-1)">−</button>' +
     '<input class="qty" type="number" inputmode="decimal" step="0.5" value="' + l.qty + '" onfocus="this.select()" oninput="setQty(' + i + ',this.value)">' +
     '<button class="step" onclick="step(' + i + ',1)">+</button>' +
@@ -197,12 +220,12 @@ async function flush(){
 async function send(){
   const items = T.lines.filter(l => l.qty > 0);
   if (!T.from || !items.length) return;
-  const summary = items.map(l => l.qty + ' ' + l.unit + ' ' + l.name).join('\n');
+  const summary = items.map(l => l.qty + ' ' + (l.unit || '') + ' ' + l.name).join('\n');
   if (!confirm(cap(T.from) + ' → ' + cap(T.to) + '\n\n' + summary + '\n\nSend?')) return;
   const tid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
   const q = loadQ();
   q.push({ transfer_id: tid, from_location: T.from, to_location: T.to,
-           items: items.map(l => ({ product_id: l.id, quantity: l.qty, unit: l.unit })) });
+           items: items.map(l => ({ product_id: l.id, quantity: l.qty, unit: l.unit || null })) });
   storeQ(q);
   T.lines = []; renderLines();
   const done = await flush();
@@ -210,32 +233,85 @@ async function send(){
   loadHistory();
 }
 
+const HL = new URLSearchParams(location.search).get('highlight');
 async function loadHistory(){
   const box = document.getElementById('history');
   try {
     const r = await fetch('/api/transfers?days=30', {credentials:'include'});
     if (r.status === 401) { location.href = '/login?next=/transfer'; return; }
     const rows = await r.json();
-    box.innerHTML = rows.length ? rows.map(t =>
-      '<div class="hist' + (t.voided ? ' void' : '') + '"><div class="m">' +
-        esc(t.quantity + ' ' + (t.unit || '') + ' ' + niceName(t)) +
-        '<div class="s">' + esc(cap(t.from_location) + ' → ' + cap(t.to_location) + ' · ' + t.transfer_date + (t.created_by ? ' · ' + t.created_by : '') + (t.voided ? ' · undone' : '')) + '</div></div>' +
-        (t.voided ? '' : '<button class="undo" onclick="undo(' + t.id + ')">Undo</button>') + '</div>').join('')
-      : '<div class="empty">No transfers yet.</div>';
+    window._hist = rows;
+    box.innerHTML = rows.length ? rows.map((t, i) => {
+      const v = t.status === 'voided';
+      const d = t.business_date ? t.business_date.slice(4, 6) + '/' + t.business_date.slice(6) : '';
+      return '<div class="hist' + (v ? ' void' : '') + (String(t.id) === HL ? ' hl' : '') + '" id="t' + t.id + '"><div class="m">' +
+        esc(t.qty_entered + ' ' + (t.unit_entered || '') + ' ' + t.item_name) +
+        '<div class="s">' + esc(cap(t.from_location) + ' → ' + cap(t.to_location) + ' · ' + d + (t.entered_by ? ' · ' + t.entered_by : '') +
+          (t.entered_via === 'siri' ? ' · Siri' : '') + (t.is_settlement ? ' · return' : '') + (t.needs_link ? ' · needs link' : '') +
+          (v ? ' · voided' + (t.void_reason ? ': ' + t.void_reason : '') : '')) + '</div></div>' +
+        (t.total_cost != null ? '<span class="cost">$' + t.total_cost.toFixed(2) + '</span>' : '') +
+        (v ? '' : '<button class="undo" onclick="editRow(' + i + ')">Edit</button><button class="undo" onclick="undo(' + t.id + ')">Void</button>') + '</div>';
+    }).join('') : '<div class="empty">No transfers yet.</div>';
+    if (HL) { const el = document.getElementById('t' + HL); if (el) el.scrollIntoView({block: 'center'});
+      if (new URLSearchParams(location.search).get('void') === '1' && el && !el.classList.contains('void')) undo(+HL); }
   } catch(e) { box.innerHTML = '<div class="empty">History needs a connection.</div>'; }
 }
-async function undo(id){
-  if (!confirm('Undo this transfer line? Use this only for a mistake.')) return;
+async function undo(id, reason){
+  reason = reason || prompt('Void this transfer? Why (optional):', '');
+  if (reason === null) return;
   try {
-    const r = await fetch('/api/transfers/' + id + '/void', {method:'POST', credentials:'include'});
+    const r = await fetch('/api/transfers/' + id + '/void', {method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({reason: reason})});
     if (!r.ok) throw new Error();
-    toast('Undone'); loadHistory();
-  } catch(e) { toast('Could not undo — try again with a connection', true); }
+    toast('Voided'); loadHistory();
+  } catch(e) { toast('Could not void — try again with a connection', true); }
 }
+// Edit = void the line and put it back in the picker to re-send (the record keeps both).
+async function editRow(i){
+  const t = window._hist[i]; if (!t) return;
+  if (!confirm('Edit: this voids the line and puts it back below to change and re-send.')) return;
+  await undo(t.id, 'edited');
+  const btn = document.querySelector('.dir button[data-from="' + t.from_location + '"]'); if (btn) pickDir(btn);
+  T.lines = [{ id: t.from_product_id, name: t.item_name, unit: t.unit_entered, qty: t.qty_entered }];
+  renderLines(); window.scrollTo({top: document.getElementById('lines').offsetTop - 120, behavior: 'smooth'});
+}
+
+// ---- say / type it: same endpoint and card as the Siri Shortcut
+let VP = null;
+function uuid(){ return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2); }
+async function voice(body){
+  const r = await fetch('/api/transfers/voice', {method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if (r.status === 401) { location.href = '/login?next=/transfer'; throw new Error('login'); }
+  return r.json();
+}
+async function sayIt(){
+  const text = document.getElementById('say').value.trim(); if (!text) return;
+  try { showV(await voice({text: text, client_id: uuid()})); } catch(e) { if (e.message !== 'login') toast('Needs a connection — use the pickers below', true); }
+}
+function showV(r){
+  VP = r; const box = document.getElementById('vbox');
+  if (r.status === 'confirm') {
+    box.innerHTML = '<div class="vcard"><pre>' + esc(r.card) + '</pre><div class="say">' + esc(r.say) + '</div>' +
+      '<div class="vbtns"><button class="ok" onclick="vConfirm()">Confirm</button><button class="fx" onclick="location.href=VP.fix_url">Fix</button></div></div>';
+  } else if (r.status === 'choose') {
+    box.innerHTML = '<div class="vcard"><div style="font-weight:700">' + esc(r.say) + '</div>' +
+      r.options.map(o => '<button class="vopt" onclick="vPick(\'' + o.id + '\')">' + esc(o.label) + '</button>').join('') + '</div>';
+  } else if (r.status === 'logged') {
+    box.innerHTML = ''; document.getElementById('say').value = ''; toast('✓ ' + (r.say || 'Done.')); loadHistory();
+  } else {
+    box.innerHTML = '<div class="vcard"><div style="color:var(--orange);font-weight:700">' + esc(r.say || 'Something went wrong') + '</div>' +
+      (r.fix_url ? '<div class="vbtns"><button class="fx" onclick="location.href=VP.fix_url">Open Fix page</button></div>' : '') + '</div>';
+  }
+}
+async function vPick(id){ try { showV(await voice({pending_id: VP.pending_id, choice: id})); } catch(e) {} }
+async function vConfirm(){ try { showV(await voice({pending_id: VP.pending_id, confirm: true})); } catch(e) {} }
 
 window.addEventListener('online', () => { flush().then(loadHistory); });
 renderBar();
 flush().then(loadHistory);
+fetch('/api/auth/check', {credentials:'include'}).then(r => r.ok ? r.json() : null).then(u => {
+  if (u && u.role === 'admin') document.getElementById('adminlink').style.display = '';
+}).catch(() => {});
 </script>
 </body>
 </html>

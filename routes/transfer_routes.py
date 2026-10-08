@@ -1,54 +1,172 @@
 """
-Stock moved between the houses (Chatham <-> Dennis).
+Stock moved between the houses (Chatham <-> Dennis), and the shared voice/Fix plumbing.
 
-  GET  /transfer                         the phone page
-  GET  /api/transfers/products?q=        product search for the page
+  POST /api/transfers/voice              Siri Shortcut "Transfer" (Bearer token or login)
+  POST /api/waste/voice                  Siri Shortcut "Waste" (same, routes/waste_routes.py page)
+  GET  /transfer/fix, /waste/fix         Fix page (signed link from the card, no login)
+  GET/POST /api/moves/fix[...]           its API (signed link)
+  GET  /transfer                         phone page (login): say/type it, or pick; list with Edit/Void
   GET  /api/transfers?days=30            recent transfers, both directions
-  POST /api/transfers                    {transfer_id, from_location, to_location, items:[{product_id, quantity, unit}]}
-  POST /api/transfers/<id>/void          undo one line entered by mistake
-  GET  /transfer/statement               month-end statement page (?month=YYYY-MM)
-  GET  /api/transfers/statement[.csv]    netted by product, valued, who owes whom
+  POST /api/transfers                    web picker {transfer_id, from_location, to_location, items:[{product_id, quantity, unit}]}
+  POST /api/transfers/<id>/void          {reason}
+  GET  /transfer/statement               month statement (?month=YYYY-MM), CSV at /api/transfers/statement.csv
 
-A transfer is not on any invoice, so without it the sending house's usage looks
-high and the receiving house's stock appears from nowhere. Weekly cost uses it:
-out of a house reduces that house's usage, into a house counts like a delivery.
-Quantities are in the count unit (bottles for liquor and wine), the same as counts.
-`transfer_id` comes from the phone, so an offline replay is applied once.
+The logic lives in reports/moves.py (state machine), reports/item_recognition.py
+(which product), reports/house_moves.py (words, units, cost) and
+reports/intercompany.py (who owes whom). Nothing is written before Confirm.
 
-Not accounting: the two houses are separate companies (Red Buoy Inc / Red Nun
-Public House). Whether a transfer is billed intercompany is a books decision this
-log does not make.
+A transfer token only opens the two voice endpoints. It is not a login: every
+other route here keeps @login_required.
 """
 
-from flask import Blueprint, current_app, jsonify, request, session
+from functools import wraps
+
+from flask import Blueprint, current_app, g, jsonify, request, session
+
 from integrations.toast.data_store import get_connection
+from reports import moves as M
 from routes.auth_routes import login_required
 
 transfer_bp = Blueprint('transfer', __name__)
 
 LOCATIONS = ('chatham', 'dennis')
+NOT_SET_UP = "This phone isn't set up. Ask Mike."
 
 
-def ensure_table(conn):
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS inventory_transfers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            transfer_id TEXT NOT NULL,
-            from_location TEXT NOT NULL,
-            to_location TEXT NOT NULL,
-            product_id INTEGER NOT NULL REFERENCES products(id),
-            quantity REAL NOT NULL,
-            unit TEXT,
-            transfer_date TEXT NOT NULL,
-            created_by TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            voided INTEGER DEFAULT 0,
-            voided_by TEXT,
-            voided_at TEXT,
-            UNIQUE(transfer_id, product_id)
-        )
-    """)
+def voice_auth(f):
+    """Session OR an active per-person transfer token. Nothing else."""
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        auth = request.headers.get('Authorization', '')
+        if auth.lower().startswith('bearer '):
+            conn = get_connection()
+            try:
+                t = M.check_token(conn, auth[7:].strip())
+            finally:
+                conn.close()
+            if not t:
+                return jsonify({'status': 'error', 'say': NOT_SET_UP}), 401
+            g.actor = M.actor_from_token(t)
+        elif 'user_id' in session:
+            g.actor = M.actor_from_session(session)
+        else:
+            return jsonify({'status': 'error', 'say': NOT_SET_UP}), 401
+        return f(*args, **kwargs)
+    return wrapped
 
+
+def _truthy(v):
+    return v is True or str(v).strip().lower() in ('1', 'true', 'yes', 'confirm')
+
+
+def handle_voice(kind):
+    """Shared by /api/transfers/voice and /api/waste/voice."""
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    conn = get_connection()
+    try:
+        pid = (data.get('pending_id') or '').strip()
+        if pid:
+            p = conn.execute("SELECT kind, person, token_id FROM move_pending WHERE pending_id = ?", (pid,)).fetchone()
+            if not p or p['kind'] != kind:
+                return jsonify(M._err("I lost that one. Say it again."))
+            if g.actor.get('token_id') and p['token_id'] and p['token_id'] != g.actor['token_id']:
+                return jsonify(M._err("That one belongs to another phone.")), 403
+            if _truthy(data.get('cancel')):
+                return jsonify(M.cancel(conn, pid))
+            if _truthy(data.get('confirm')):
+                return jsonify(M.confirm(conn, pid, g.actor))
+            if data.get('choice') not in (None, ''):
+                return jsonify(M.answer(conn, pid, data['choice'], g.actor))
+            p = conn.execute("SELECT * FROM move_pending WHERE pending_id = ?", (pid,)).fetchone()
+            return jsonify(M.respond(conn, p, g.actor))
+        return jsonify(M.start(conn, kind, data.get('text'), data.get('client_id'), g.actor))
+    except Exception as e:
+        current_app.logger.exception(f'{kind} voice failed')
+        return jsonify(M._err("Something broke on our end. It's not logged. Try the transfer page.", detail=str(e)[:200])), 500
+    finally:
+        conn.close()
+
+
+@transfer_bp.route('/api/transfers/voice', methods=['POST'])
+@voice_auth
+def transfer_voice():
+    return handle_voice('transfer')
+
+
+# ---------------------------------------------------------------------------
+# Fix page (signed link; no login so staff can use it from the card)
+# ---------------------------------------------------------------------------
+
+@transfer_bp.route('/transfer/fix')
+@transfer_bp.route('/waste/fix')
+def fix_page():
+    return current_app.send_static_file('move_fix.html')
+
+
+def _signed(conn):
+    p, why = M.load_signed(conn, request.args.get('p'), request.args.get('s'))
+    if not p:
+        return None, None, (jsonify({'status': 'error', 'say': why}), 410)
+    actor = {'person': p['person'], 'token_id': p['token_id'], 'role': p['role'], 'home': p['home'], 'via': p['via']}
+    return p, actor, None
+
+
+@transfer_bp.route('/api/moves/fix', methods=['GET'])
+def fix_get():
+    conn = get_connection()
+    try:
+        p, actor, bad = _signed(conn)
+        if bad:
+            return bad
+        return jsonify(M.fix_view(conn, p, actor))
+    finally:
+        conn.close()
+
+
+@transfer_bp.route('/api/moves/fix/search', methods=['GET'])
+def fix_search():
+    conn = get_connection()
+    try:
+        p, actor, bad = _signed(conn)
+        if bad:
+            return bad
+        import json
+        st = json.loads(p['state'])
+        house = st.get('from') if p['kind'] == 'transfer' else st.get('location')
+        return jsonify(M.search_products(conn, house, request.args.get('q')))
+    finally:
+        conn.close()
+
+
+@transfer_bp.route('/api/moves/fix', methods=['POST'])
+def fix_post():
+    conn = get_connection()
+    try:
+        p, actor, bad = _signed(conn)
+        if bad:
+            return bad
+        res = M.fix(conn, p, request.get_json(silent=True) or {}, actor)
+        p = conn.execute("SELECT * FROM move_pending WHERE pending_id = ?", (p['pending_id'],)).fetchone()
+        return jsonify({'result': res, 'view': M.fix_view(conn, p, actor)})
+    finally:
+        conn.close()
+
+
+@transfer_bp.route('/api/moves/fix/confirm', methods=['POST'])
+def fix_confirm():
+    conn = get_connection()
+    try:
+        p, actor, bad = _signed(conn)
+        if bad:
+            return bad
+        return jsonify(M.confirm(conn, p['pending_id'], actor))
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Web page (login)
+# ---------------------------------------------------------------------------
 
 @transfer_bp.route('/transfer')
 @login_required
@@ -59,23 +177,10 @@ def transfer_page():
 @transfer_bp.route('/api/transfers/products', methods=['GET'])
 @login_required
 def search_products():
-    q = (request.args.get('q') or '').strip()
-    if len(q) < 2:
-        return jsonify([])
+    house = (request.args.get('house') or '').lower()
     conn = get_connection()
     try:
-        words = q.split()
-        where = ' AND '.join(["(p.name LIKE ? OR COALESCE(p.display_name, '') LIKE ?)"] * len(words))
-        params = [x for w in words for x in (f'%{w}%', f'%{w}%')]
-        rows = conn.execute(f"""
-            SELECT p.id, p.name, p.display_name, p.category, p.unit, p.inventory_unit,
-                   EXISTS (SELECT 1 FROM product_storage_locations psl WHERE psl.product_id = p.id) AS shelved
-            FROM products p
-            WHERE p.active = 1 AND {where}
-            ORDER BY shelved DESC, LENGTH(COALESCE(p.display_name, p.name))
-            LIMIT 25
-        """, params).fetchall()
-        return jsonify([dict(r) for r in rows])
+        return jsonify(M.search_products(conn, house if house in LOCATIONS else None, request.args.get('q')))
     finally:
         conn.close()
 
@@ -84,18 +189,26 @@ def search_products():
 @login_required
 def list_transfers():
     days = max(1, min(int(request.args.get('days', 30)), 366))
+    owner = session.get('role') == 'admin'
     conn = get_connection()
     try:
-        ensure_table(conn)
+        M.ensure_tables(conn)
         rows = conn.execute("""
-            SELECT t.id, t.transfer_id, t.from_location, t.to_location, t.product_id, t.quantity, t.unit,
-                   t.transfer_date, t.created_by, t.created_at, t.voided,
-                   p.name, p.display_name, p.category
-            FROM inventory_transfers t JOIN products p ON p.id = t.product_id
-            WHERE t.transfer_date >= date('now', 'localtime', ?)
-            ORDER BY t.created_at DESC, t.id DESC
+            SELECT t.id, t.from_location, t.to_location, t.from_product_id, t.to_product_id, t.qty_entered, t.unit_entered,
+                   t.qty_base, t.base_unit, t.total_cost, t.cost_source, t.business_date, t.transferred_at, t.entered_by,
+                   t.entered_via, t.raw_text, t.status, t.voided_by, t.void_reason, t.needs_link, t.is_settlement,
+                   COALESCE(cn.card_name, p.display_name, p.name) AS item_name, p.category
+            FROM inventory_transfers t JOIN products p ON p.id = t.from_product_id
+            LEFT JOIN product_card_names cn ON cn.product_id = t.from_product_id AND cn.status = 'approved'
+            WHERE t.business_date >= strftime('%Y%m%d', 'now', 'localtime', ?)
+            ORDER BY t.transferred_at DESC, t.id DESC
         """, (f'-{days} day',)).fetchall()
-        return jsonify([dict(r) for r in rows])
+        out = [dict(r) for r in rows]
+        if not owner:
+            for r in out:
+                r.pop('total_cost', None)
+                r.pop('cost_source', None)
+        return jsonify(out)
     finally:
         conn.close()
 
@@ -103,6 +216,8 @@ def list_transfers():
 @transfer_bp.route('/api/transfers', methods=['POST'])
 @login_required
 def create_transfer():
+    """Web pickers. One client_id per line ({transfer_id}:{product_id}) so an
+    offline replay lands once."""
     data = request.json or {}
     tid = (data.get('transfer_id') or '').strip()
     src = (data.get('from_location') or '').strip().lower()
@@ -110,25 +225,21 @@ def create_transfer():
     items = data.get('items') or []
     if not tid or src not in LOCATIONS or dst not in LOCATIONS or src == dst or not items:
         return jsonify({'error': 'transfer_id, two different houses and items required'}), 400
+    actor = M.actor_from_session(session)
     conn = get_connection()
     try:
-        ensure_table(conn)
-        added = 0
+        ids = []
         for it in items:
             qty = float(it.get('quantity') or 0)
-            pid = int(it['product_id'])
             if qty <= 0:
                 continue
-            if not conn.execute("SELECT 1 FROM products WHERE id = ?", (pid,)).fetchone():
-                return jsonify({'error': f'unknown product {pid}'}), 400
-            added += conn.execute("""
-                INSERT OR IGNORE INTO inventory_transfers
-                    (transfer_id, from_location, to_location, product_id, quantity, unit, transfer_date, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, date('now', 'localtime')), ?)
-            """, (tid, src, dst, pid, qty, it.get('unit') or 'ea', data.get('transfer_date'),
-                  session.get('username'))).rowcount
-        conn.commit()
-        return jsonify({'success': True, 'added': added})
+            res = M.log_direct(conn, 'transfer', f"{tid}:{int(it['product_id'])}",
+                               {'from': src, 'to': dst, 'product_id': it['product_id'], 'qty': qty,
+                                'unit': it.get('unit'), 'raw_text': it.get('raw_text'), 'notes': it.get('notes')}, actor)
+            if res.get('status') != 'logged':
+                return jsonify({'error': res.get('say'), 'result': res}), 400
+            ids.append(res['id'])
+        return jsonify({'success': True, 'added': len(ids), 'ids': ids})
     finally:
         conn.close()
 
@@ -136,15 +247,11 @@ def create_transfer():
 @transfer_bp.route('/api/transfers/<int:row_id>/void', methods=['POST'])
 @login_required
 def void_transfer(row_id):
+    reason = ((request.get_json(silent=True) or {}).get('reason') or '').strip()[:200] or None
     conn = get_connection()
     try:
-        ensure_table(conn)
-        conn.execute("""
-            UPDATE inventory_transfers SET voided = 1, voided_by = ?, voided_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND voided = 0
-        """, (session.get('username'), row_id))
-        conn.commit()
-        return jsonify({'success': True})
+        n = M.void(conn, 'transfer', row_id, session.get('full_name') or session.get('username'), reason)
+        return jsonify({'success': bool(n)})
     finally:
         conn.close()
 
@@ -152,58 +259,10 @@ def void_transfer(row_id):
 # ---------------------------------------------------------------------------
 # Month-end statement
 # ---------------------------------------------------------------------------
-# Borrow-and-return (take 2 Tito's from Dennis, send 2 back) nets to zero.
-# A bulk buy at one house shipped to the other and never returned leaves a
-# balance: the house that received the stock owes the house that bought it.
-# Nobody tags a transfer as a loan or a sale; the netting says which it was.
 
-def _month_bounds(month):
+def _month_ok(month):
     import re
-    if not re.fullmatch(r'\d{4}-\d{2}', month or ''):
-        return None, None
-    y, m = int(month[:4]), int(month[5:])
-    nxt = f'{y + (m == 12):04d}-{(m % 12) + 1:02d}-01'
-    return f'{month}-01', nxt
-
-
-def build_statement(conn, month):
-    from reports.count_units import unit_cost
-    start, end = _month_bounds(month)
-    ensure_table(conn)
-    rows = conn.execute("""
-        SELECT t.*, p.name, p.display_name, p.category
-        FROM inventory_transfers t JOIN products p ON p.id = t.product_id
-        WHERE t.voided = 0 AND t.transfer_date >= ? AND t.transfer_date < ?
-        ORDER BY t.transfer_date, t.id
-    """, (start, end)).fetchall()
-    by = {}
-    for r in rows:
-        line = by.setdefault(r['product_id'], {'product_id': r['product_id'], 'name': r['display_name'] or r['name'],
-                                               'category': r['category'], 'unit': r['unit'],
-                                               'chatham_to_dennis': 0.0, 'dennis_to_chatham': 0.0})
-        line['chatham_to_dennis' if r['from_location'] == 'chatham' else 'dennis_to_chatham'] += r['quantity']
-    lines, unpriced, total = [], [], 0.0      # total > 0: Dennis owes Chatham
-    for line in by.values():
-        net = round(line['chatham_to_dennis'] - line['dennis_to_chatham'], 4)
-        uc = unit_cost(conn, line['product_id'], line['unit'])
-        line.update(net=net, unit_cost=uc['cost'], basis=uc['basis'],
-                    value=round(net * uc['cost'], 2) if uc['cost'] is not None else None)
-        if net and uc['cost'] is None:
-            unpriced.append(line)
-        elif line['value']:
-            total += line['value']
-        lines.append(line)
-    lines.sort(key=lambda l: (-abs(l['value'] or 0), l['name']))
-    total = round(total, 2)
-    owes = None
-    if abs(total) >= 0.01:
-        owes = {'debtor': 'dennis' if total > 0 else 'chatham', 'creditor': 'chatham' if total > 0 else 'dennis',
-                'amount': abs(total)}
-    return {'month': month, 'lines': lines, 'net_value': total, 'owes': owes,
-            'unpriced': [l['name'] for l in unpriced],
-            'transfers': [dict(product=r['display_name'] or r['name'], date=r['transfer_date'],
-                               from_location=r['from_location'], to_location=r['to_location'],
-                               quantity=r['quantity'], unit=r['unit'], by=r['created_by']) for r in rows]}
+    return bool(re.fullmatch(r'\d{4}-\d{2}', month or ''))
 
 
 @transfer_bp.route('/transfer/statement')
@@ -215,12 +274,13 @@ def statement_page():
 @transfer_bp.route('/api/transfers/statement', methods=['GET'])
 @login_required
 def statement():
+    from reports.intercompany import build_statement
     month = request.args.get('month') or ''
-    if not _month_bounds(month)[0]:
+    if not _month_ok(month):
         return jsonify({'error': 'month=YYYY-MM required'}), 400
     conn = get_connection()
     try:
-        return jsonify(build_statement(conn, month))
+        return jsonify(build_statement(conn, month, include_voided=request.args.get('voided') == '1'))
     finally:
         conn.close()
 
@@ -228,34 +288,40 @@ def statement():
 @transfer_bp.route('/api/transfers/statement.csv', methods=['GET'])
 @login_required
 def statement_csv():
-    import csv, io
+    import csv
+    import io
     from flask import Response
+    from reports.intercompany import build_statement
     month = request.args.get('month') or ''
-    if not _month_bounds(month)[0]:
+    if not _month_ok(month):
         return jsonify({'error': 'month=YYYY-MM required'}), 400
     conn = get_connection()
     try:
-        st = build_statement(conn, month)
+        st = build_statement(conn, month, include_voided=request.args.get('voided') == '1')
     finally:
         conn.close()
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow([f'Red Nun stock transfers {month}'])
-    if st['owes']:
-        w.writerow([f"{st['owes']['debtor'].title()} owes {st['owes']['creditor'].title()}", f"{st['owes']['amount']:.2f}"])
-    else:
-        w.writerow(['Even (nets to $0.00)'])
+    w.writerow([st['sentence'].capitalize() if st['owes'] else 'Even (nets to $0.00)'])
     if st['unpriced']:
-        w.writerow(['Not priced (bottles per case unknown)', '; '.join(st['unpriced'])])
+        w.writerow(['Not priced', '; '.join(u['item'] for u in st['unpriced'])])
     w.writerow([])
-    w.writerow(['Product', 'Unit', 'Chatham -> Dennis', 'Dennis -> Chatham', 'Net to Dennis', 'Unit cost', 'Value', 'Price basis'])
+    w.writerow(['Category', 'Chatham -> Dennis $', 'Dennis -> Chatham $', 'Net (+ = Dennis owes Chatham)'])
+    for c in st['categories']:
+        w.writerow([c['category'], f"{c['chatham_to_dennis']:.2f}", f"{c['dennis_to_chatham']:.2f}", f"{c['net']:.2f}"])
+    w.writerow([])
+    w.writerow(['Item', 'Category', 'Chatham -> Dennis qty', 'Dennis -> Chatham qty', 'Net qty', 'Count unit',
+                'Chatham -> Dennis $', 'Dennis -> Chatham $', 'Net $', 'Needs link'])
     for l in st['lines']:
-        w.writerow([l['name'], l['unit'], l['chatham_to_dennis'], l['dennis_to_chatham'], l['net'],
-                    '' if l['unit_cost'] is None else f"{l['unit_cost']:.2f}",
-                    '' if l['value'] is None else f"{l['value']:.2f}", l['basis']])
+        w.writerow([l['name'], l['category'], l['c2d_qty'], l['d2c_qty'], l['net_qty'], l['base_unit'],
+                    f"{l['c2d_cost']:.2f}", f"{l['d2c_cost']:.2f}", f"{l['net_cost']:.2f}", 'yes' if l['needs_link'] else ''])
     w.writerow([])
-    w.writerow(['Date', 'From', 'To', 'Product', 'Quantity', 'Unit', 'By'])
-    for t in st['transfers']:
-        w.writerow([t['date'], t['from_location'], t['to_location'], t['product'], t['quantity'], t['unit'], t['by']])
+    w.writerow(['Date', 'From', 'To', 'Item', 'Qty', 'Unit', 'Count qty', 'Count unit', '$', 'Cost source', 'By', 'Said',
+                'Status'])
+    for t in st['detail']:
+        w.writerow([t['date'], t['from_location'], t['to_location'], t['item'], t['qty'], t['unit'], t['qty_base'],
+                    t['base_unit'], '' if t['cost'] is None else f"{t['cost']:.2f}", t['cost_source'], t['by'], t['said'],
+                    t['status'] + (' (return)' if t['is_settlement'] else '')])
     return Response(out.getvalue(), mimetype='text/csv',
                     headers={'Content-Disposition': f'attachment; filename=transfers_{month}.csv'})
