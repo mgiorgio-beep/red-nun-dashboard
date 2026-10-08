@@ -39,9 +39,9 @@ function esc(s){ const d = document.createElement('div'); d.textContent = s == n
   const k = '#k=' + encodeURIComponent(tok);
   app.innerHTML =
     '<h1>Hi ' + esc(u.person) + ' 👋</h1><p>This phone is set up for <b>Transfer</b> and <b>Waste</b>' + (u.home ? ' at ' + esc(u.home === 'chatham' ? 'Chatham' : 'Dennis') : '') + '. No dashboard login needed.</p>' +
-    '<div class="card"><h2>1. Siri: "Transfer" and "Waste"</h2><p>Install both Shortcuts. When one asks for your key, paste this:</p>' +
+    '<div class="card"><h2>1. Siri: "Log Transfer" and "Log Waste"</h2><p>Install both Shortcuts. When one asks for your key, paste this:</p>' +
     '<p><code id="key">' + esc(tok) + '</code></p><a class="btn alt" href="#" onclick="navigator.clipboard.writeText(\'' + esc(tok) + '\');this.textContent=\'Copied ✓\';return false">Copy my key</a>' +
-    '<p style="margin-top:10px">Then say <b>"Hey Siri, transfer"</b> or <b>"Hey Siri, waste"</b>.</p></div>' +
+    '<p style="margin-top:10px">Then say <b>"Hey Siri, log transfer"</b> or <b>"Hey Siri, log waste"</b>.</p></div>' +
     '<div class="card"><h2>2. Or tap it in (no signal needed)</h2>' +
     '<a class="btn" href="/transfer' + k + '">Open Transfer</a><a class="btn" href="/waste' + k + '">Open Waste</a>' +
     '<ol><li>Open one, tap Share, then <b>Add to Home Screen</b>.</li><li>Use that icon from now on — it stays set up.</li></ol></div>';
