@@ -66,6 +66,26 @@ def _truthy(v):
     return v is True or str(v).strip().lower() in ('1', 'true', 'yes', 'confirm')
 
 
+def _one_tap(conn, pid, choice):
+    """The straight-line Shortcut sends only the menu item picked (no pending_id):
+    Confirm logs it, Fix opens the Fix page, OK closes, and picking one of the
+    'Which one?' lines (which spell out the whole card) logs it in one tap. If
+    something is still missing after the pick, open the Fix page to finish."""
+    p = conn.execute("SELECT * FROM move_pending WHERE pending_id = ?", (pid,)).fetchone()
+    if choice == 'OK':
+        return {'status': 'cancelled', 'say': ''}
+    if choice == 'Fix':
+        return {'status': 'fix', 'say': 'Opening the fix page.', 'open_url': M.fix_url(p)}
+    if choice == 'Confirm':
+        return M.confirm(conn, pid, g.actor)
+    r = M.answer(conn, pid, choice, g.actor)
+    if r.get('status') == 'confirm':
+        return M.confirm(conn, pid, g.actor)
+    if r.get('status') in ('choose', 'error') and p:
+        return {'status': 'fix', 'say': 'One more thing. Opening the fix page.', 'open_url': M.fix_url(p)}
+    return r
+
+
 def handle_voice(kind):
     """Shared by /api/transfers/voice and /api/waste/voice."""
     data = request.get_json(silent=True) or request.form.to_dict() or {}
@@ -76,6 +96,7 @@ def handle_voice(kind):
     conn = get_connection()
     try:
         pid = str(data.get('pending_id') or '').strip()
+        one_tap = not pid and not data.get('text') and data.get('choice') not in (None, '')
         if not pid and not data.get('text') and (data.get('choice') not in (None, '') or _truthy(data.get('confirm'))):
             # The phone answered a question without saying which one (iOS's shortcut
             # builder drops pending_id): it's that phone's latest open dictation.
@@ -100,9 +121,14 @@ def handle_voice(kind):
                     ch = ch[0] if ch else ''
                 if isinstance(ch, dict):
                     ch = ch.get('label') or ch.get('id') or ''
-                return jsonify(M.answer(conn, pid, str(ch).strip(), g.actor))
+                ch = str(ch).strip()
+                if one_tap:
+                    return jsonify(_one_tap(conn, pid, ch))
+                return jsonify(M.answer(conn, pid, ch, g.actor))
             p = conn.execute("SELECT * FROM move_pending WHERE pending_id = ?", (pid,)).fetchone()
             return jsonify(M.respond(conn, p, g.actor))
+        if one_tap:          # a pick, but this phone has nothing open
+            return jsonify({'status': 'error', 'say': 'That one timed out. Say it again.' if data['choice'] not in ('OK',) else ''})
         return jsonify(M.start(conn, kind, data.get('text'), data.get('client_id'), g.actor))
     except Exception as e:
         current_app.logger.exception(f'{kind} voice failed')

@@ -415,7 +415,9 @@ def card(conn, st, owner):
         lines = [f"WASTE — {HOUSE[st['location']]}", pv['card_name'], qty_line,
                  f"Reason: {R_LABEL(st['reason'])}"]
     if owner:
-        lines.append(money(pv['total_cost']) + (f" ({pv['cost_source']})" if pv['total_cost'] is not None else 'no price yet'))
+        src = {'last_invoice': 'last invoice', 'deal': 'deal price', 'catalog': 'catalog price', 'recipe': 'recipe cost',
+               'manual': 'set by hand', 'return': 'borrowed cost'}.get(pv['cost_source'], pv['cost_source'])
+        lines.append(f"{money(pv['total_cost'])} ({src})" if pv['total_cost'] is not None else 'no price yet')
     return '\n'.join(lines), pv
 
 
@@ -423,18 +425,52 @@ def R_LABEL(code):
     return H.REASONS.get(code, 'none given') if code else 'none given'
 
 
+def _menu_labels(conn, st, ask):
+    """Choices that say everything the card would, so one tap can log it
+    ("Fries, Battered 3/8 — 2 cases → Chatham")."""
+    house_to = HOUSE.get(st.get('to')) if st['kind'] == 'transfer' else None
+    tail = f" → {house_to}" if house_to else (f", {R_LABEL(st.get('reason'))}" if st['kind'] == 'waste' and st.get('reason') else '')
+    item = None
+    if st.get('product_id'):
+        item = R.card_name(conn, _product(conn, st['product_id']), _sender(st) if (st.get('from') or st.get('location')) else None)
+    out = []
+    house = _sender(st) if (st.get('from') or st.get('location')) else None
+    for o in ask['options']:
+        w = ask['what']
+        if w == 'product':
+            o = dict(o, label=R.card_name(conn, _product(conn, o['value']), house))
+        if w == 'product' and st.get('qty') is not None:
+            u = st.get('unit') or ''
+            lab = f"{o['label']} — {H.fmt_qty(st['qty'])} {H.plural(st['qty'], u)}{tail}".replace('  ', ' ')
+        elif w == 'product':
+            lab = f"{o['label']}{tail}"
+        elif w in ('qty', 'unit') and item:
+            lab = f"{o['label']} {item}{tail}"
+        else:
+            lab = o['label']
+        out.append(lab)
+    return out
+
+
 def respond(conn, p, actor):
-    """The answer for a pending row: the next question, or the confirm card."""
+    """The answer for a pending row: the next question, or the confirm card.
+    Every reply carries 'card' (text to show) and 'menu' (what to offer), so the
+    Shortcut is one straight line: show menu with card, send back the pick."""
     st = json.loads(p['state'])
     owner = (actor or {}).get('role') == 'owner' or p['role'] == 'owner'
     ask = _resolve(conn, p, st, actor or {})
+    if ask and ask.get('options'):
+        for o, ml in zip(ask['options'], _menu_labels(conn, st, ask)):
+            o['menu_label'] = ml
     p = _save(conn, p, st, ask)
     if ask and ask['what'] == 'none':
-        return _err(ask['say'], pending_id=p['pending_id'], fix_url=fix_url(p))
+        return _err(ask['say'], pending_id=p['pending_id'], fix_url=fix_url(p), card=ask['say'], menu=['OK', 'Fix'])
     if ask:
+        menu = [o['menu_label'] for o in ask['options']]
         return {'status': 'choose', 'say': ask['say'], 'pending_id': p['pending_id'],
                 'options': [{'id': o['id'], 'label': o['label']} for o in ask['options']],
-                'option_labels': [o['label'] for o in ask['options']],   # Shortcuts: Choose from List, send the label back
+                'option_labels': [o['label'] for o in ask['options']],
+                'card': f"{ask['say']} (picking one logs it)", 'menu': menu + ['Fix'],
                 'fix_url': fix_url(p)}
     text, pv = card(conn, st, owner)
     unit_note = '' if st['unit_said'] else f" ({H.plural(st['qty'], st['unit'])})"
@@ -445,7 +481,7 @@ def respond(conn, p, actor):
     if owner and pv['total_cost'] is not None:
         say += f" {money(pv['total_cost'])}."
     return {'status': 'confirm', 'card': text, 'say': say, 'pending_id': p['pending_id'], 'fix_url': fix_url(p),
-            'unit_assumed': not st['unit_said'], 'unit_note': unit_note.strip()}
+            'menu': ['Confirm', 'Fix'], 'unit_assumed': not st['unit_said'], 'unit_note': unit_note.strip()}
 
 
 def answer(conn, pending_id, choice, actor):
@@ -460,7 +496,7 @@ def answer(conn, pending_id, choice, actor):
     st, ask = json.loads(p['state']), json.loads(p['ask'] or 'null')
     if not ask:
         return respond(conn, p, actor)
-    opt = next((o for o in ask['options'] if o['id'] == str(choice) or o['label'] == str(choice)), None)
+    opt = next((o for o in ask['options'] if str(choice) in (o['id'], o['label'], o.get('menu_label'))), None)
     if not opt:
         return {'status': 'choose', 'say': ask['say'], 'pending_id': p['pending_id'],
                 'options': [{'id': o['id'], 'label': o['label']} for o in ask['options']],
@@ -585,7 +621,9 @@ def confirm(conn, pending_id, actor):
     except Exception:
         conn.rollback()
         raise
-    say = 'Done.'
+    what = f"{H.fmt_qty(st['qty'])} {H.plural(st['qty'], st['unit'])} {pv['card_name']}"
+    say = (f"Done. {what} to {HOUSE[st['to']]}." if p['kind'] == 'transfer'
+           else f"Done. {what} logged as waste at {HOUSE[st['location']]}.")
     if p['kind'] == 'transfer' and row.get('is_settlement'):
         say = f"Logged. That's a return: it clears what {HOUSE[st['from']]} owed {HOUSE[st['to']]} on it."
     from reports import move_notify
