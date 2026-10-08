@@ -520,3 +520,52 @@ def tie_out(conn, qbo_balances=None):
     gap = round(c + d, 2)
     return {'ok': not problems, 'chatham': c, 'dennis': d, 'expected': exp, 'problems': problems,
             'headline': None if not problems else f"INTERCOMPANY OUT OF BALANCE: ${max(abs(gap), abs(c - exp)):,.2f}"}
+
+
+# --- Open problems: banner, Friday open items, the monthly email ------------
+
+def open_problems(conn):
+    """[{level: 'red'|'amber', text, link}] — what needs Mike."""
+    from datetime import date, timedelta
+    from reports import move_notify
+    ensure_settlement_tables(conn)
+    out = []
+    t = tie_out(conn)
+    if not t['ok']:
+        out.append({'level': 'red', 'text': t['headline'] + ' — ' + ' '.join(t['problems']), 'link': '/transfer/settle'})
+    fails = move_notify.failures(conn)
+    if fails:
+        out.append({'level': 'red', 'text': f"{len(fails)} transfer/waste email(s) failed to send (entries are saved)",
+                    'link': '/transfer/admin#problems'})
+    n = conn.execute("SELECT COUNT(*) FROM inventory_transfers WHERE needs_link = 1 AND status = 'logged'").fetchone()[0]
+    if n:
+        out.append({'level': 'amber', 'text': f'{n} transfer(s) need a product link', 'link': '/transfer/admin#links'})
+    today = date.today()
+    first = today.strftime('%Y%m01')
+    old14 = (today - timedelta(days=14)).strftime('%Y%m%d')
+    items = open_items(conn)
+    prior = [i for i in items if i['last_date'] < first]
+    if prior:
+        tot = sum(i['cost'] for i in prior)
+        out.append({'level': 'amber', 'text': f"{len(prior)} item(s) from before this month still open between the houses "
+                                              f"({owes_sentence(round(tot, 2))})", 'link': '/transfer/settle'})
+    stale = [i for i in items if i['suggested'] == 'return' and i['last_date'] < old14]
+    if stale:
+        out.append({'level': 'amber', 'text': f"{len(stale)} return(s) open more than 14 days: "
+                                              + ', '.join(f"{i['name']} ({HOUSE[i['owed_by']]} owes)" for i in stale[:4])
+                                              + ' — bring back or switch to Pay', 'link': '/transfer/settle'})
+    ten = (today - timedelta(days=10)).isoformat()
+    for s in conn.execute("""SELECT s.id, s.payee, s.amount, s.approved_at FROM intercompany_settlements s
+                             JOIN manual_bank_entries m ON m.id = s.payee_register_id
+                             WHERE s.status <> 'voided' AND COALESCE(m.cleared, 0) = 0 AND s.approved_at < ?""", (ten,)):
+        out.append({'level': 'amber', 'text': f"Settlement #{s['id']}: ${s['amount']:,.2f} not deposited at {HOUSE[s['payee']]} after 10 days",
+                    'link': '/transfer/settle'})
+    have = {r[0][:7] for r in conn.execute("SELECT entry_date FROM qb_journal_entries WHERE entry_type = 'intercompany_transfers'")}
+    for (ym,) in conn.execute("""SELECT DISTINCT substr(business_date, 1, 6) FROM inventory_transfers
+                                 WHERE status = 'logged' AND business_date < ?""", (first,)):
+        if f'{ym[:4]}-{ym[4:]}' not in have:
+            out.append({'level': 'amber', 'text': f"{ym[:4]}-{ym[4:]} transfers not booked to QuickBooks yet", 'link': '/transfer/settle'})
+    w = conn.execute("SELECT COUNT(*) FROM waste_log WHERE flagged = 1 AND reviewed_at IS NULL AND status = 'logged'").fetchone()[0]
+    if w:
+        out.append({'level': 'amber', 'text': f'{w} waste entr{"y" if w == 1 else "ies"} over the review threshold', 'link': '/transfer/admin#waste'})
+    return out

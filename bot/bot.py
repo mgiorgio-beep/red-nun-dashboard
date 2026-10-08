@@ -76,6 +76,28 @@ def _dash_db():
     return conn
 
 
+def _move_period(period):
+    """(start, end) business dates YYYYMMDD for the transfer/waste tools (4 AM ET day)."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    today = (datetime.now(ZoneInfo("America/New_York")) - timedelta(hours=4)).date()
+    if period == "today":
+        s = e = today
+    elif period == "last_week":
+        e = today - timedelta(days=today.weekday() + 1)
+        s = e - timedelta(days=6)
+    elif period == "mtd":
+        s, e = today.replace(day=1), today
+    elif period == "last_month":
+        e = today.replace(day=1) - timedelta(days=1)
+        s = e.replace(day=1)
+    elif period == "last_30_days":
+        s, e = today - timedelta(days=29), today
+    else:  # this_week, Monday start
+        s, e = today - timedelta(days=today.weekday()), today
+    return s.strftime("%Y%m%d"), e.strftime("%Y%m%d")
+
+
 def _bd(day):
     """business_date is stored Toast-style (YYYYMMDD int) in some tables and
     ISO ('YYYY-MM-DD') in others — return both forms for IN/BETWEEN queries."""
@@ -732,6 +754,28 @@ TOOLS = [
         },
     },
     {
+        "name": "get_transfers",
+        "description": "Stock moved between the houses (Chatham <-> Dennis) and who owes whom. Answers 'what did we move to Dennis this week', 'how much does Dennis owe Chatham'. Read-only.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string", "enum": ["dennis", "chatham"], "description": "optional: moves into or out of this house"},
+                "period": {"type": "string", "enum": ["today", "this_week", "last_week", "mtd", "last_month", "last_30_days"], "description": "default this_week"},
+            },
+        },
+    },
+    {
+        "name": "get_waste",
+        "description": "Logged waste at a house: $ by reason, top items, who logged it. Staff meal is separate from loss. Read-only.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string", "enum": ["dennis", "chatham"], "description": "optional, default both"},
+                "period": {"type": "string", "enum": ["today", "this_week", "last_week", "mtd", "last_month", "last_30_days"], "description": "default this_week"},
+            },
+        },
+    },
+    {
         "name": "get_open_items",
         "description": "Read the cost-tracking project ledger (RED_NUN_COST_TRACKING_BRIEF.md) — open action steps, blockers, what's waiting on Mike. Use when Mike asks what's open/stalled/next.",
         "input_schema": {"type": "object", "properties": {}},
@@ -1191,12 +1235,65 @@ def execute_tool(name: str, args: dict) -> str:
         except Exception as e:
             return json.dumps({"error": f"dashboard DB: {e}"})
 
+    elif name in ("get_transfers", "get_waste"):
+        try:
+            start, end = _move_period(args.get("period", "this_week"))
+            loc = args.get("location")
+            conn = _dash_db()
+            try:
+                if name == "get_transfers":
+                    q = """SELECT t.business_date, t.from_location, t.to_location, t.qty_entered, t.unit_entered,
+                                  t.total_cost, t.entered_by, t.is_settlement, COALESCE(p.display_name, p.name) AS item
+                           FROM inventory_transfers t JOIN products p ON p.id = t.from_product_id
+                           WHERE t.status = 'logged' AND t.business_date BETWEEN ? AND ?"""
+                    a = [start, end]
+                    if loc:
+                        q += " AND (t.from_location = ? OR t.to_location = ?)"
+                        a += [loc, loc]
+                    rows = [dict(r) for r in conn.execute(q + " ORDER BY t.business_date", a)]
+                    c2d = sum(r["total_cost"] or 0 for r in rows if r["from_location"] == "chatham")
+                    d2c = sum(r["total_cost"] or 0 for r in rows if r["from_location"] == "dennis")
+                    return json.dumps({"period": [start, end], "transfers": rows[:60], "count": len(rows),
+                                       "chatham_to_dennis_dollars": round(c2d, 2), "dennis_to_chatham_dollars": round(d2c, 2),
+                                       "note": "Who owes whom overall (after returns and checks) is on /transfer/settle."})
+                q = """SELECT w.location, COALESCE(w.reason_code, 'none') AS reason, w.qty_entered, w.unit_entered,
+                              w.total_cost, w.entered_by, w.business_date, COALESCE(p.display_name, p.name) AS item
+                       FROM waste_log w JOIN products p ON p.id = w.product_id
+                       WHERE w.status = 'logged' AND w.business_date BETWEEN ? AND ?"""
+                a = [start, end]
+                if loc:
+                    q += " AND w.location = ?"
+                    a.append(loc)
+                rows = [dict(r) for r in conn.execute(q, a)]
+                out = {}
+                for r in rows:
+                    h = out.setdefault(r["location"], {"loss": 0.0, "staff_meal": 0.0, "by_reason": {}, "items": {}})
+                    c = r["total_cost"] or 0
+                    if r["reason"] == "staff_meal":
+                        h["staff_meal"] += c
+                        continue
+                    h["loss"] += c
+                    h["by_reason"][r["reason"]] = round(h["by_reason"].get(r["reason"], 0) + c, 2)
+                    h["items"][r["item"]] = round(h["items"].get(r["item"], 0) + c, 2)
+                for h in out.values():
+                    h["loss"], h["staff_meal"] = round(h["loss"], 2), round(h["staff_meal"], 2)
+                    h["top_items"] = sorted(h.pop("items").items(), key=lambda x: -x[1])[:3]
+                return json.dumps({"period": [start, end], "houses": out, "entries": len(rows)})
+            finally:
+                conn.close()
+        except Exception as e:
+            if "no such table" in str(e):
+                return json.dumps({"period": args.get("period"), "note": "Nothing logged yet."})
+            return json.dumps({"error": f"dashboard DB: {e}"})
+
     elif name == "get_food_cost":
         return json.dumps({
             "location": args.get("location"),
             "period": args.get("period", "wtd"),
             "food_cost_pct": 31.2, "bev_cost_pct": 19.8,
-            "note": "⚠️ STUB — wire up cost tracking",
+            "note": "⚠️ STUB — wire up cost tracking. These numbers are placeholders, not real. "
+                    "They also do not net transfers between the houses or show logged waste "
+                    "(use get_transfers / get_waste).",
         })
 
     elif name == "check_sync_status":

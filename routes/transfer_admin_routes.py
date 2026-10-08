@@ -467,3 +467,22 @@ def month_entries():
                         'tie_out': IC.tie_out(conn)})
     finally:
         conn.close()
+
+
+@transfer_admin_bp.route('/api/moves/banner', methods=['GET'])
+def moves_banner():
+    """For the sidebar on every dashboard page: admins only, quiet otherwise."""
+    if session.get('role') != 'admin':
+        return jsonify([])
+    from reports.intercompany import open_problems
+    conn = get_connection()
+    try:
+        probs = open_problems(conn)
+        amber = sum(1 for p in probs if p['level'] == 'amber')
+        return jsonify([p for p in probs if p['level'] == 'red'] +
+                       ([{'level': 'amber', 'text': f"{amber} transfer/waste item(s) need you", 'link': '/transfer/settle'}] if amber else []))
+    except Exception as e:
+        current_app.logger.exception('moves banner')
+        return jsonify([{'level': 'red', 'text': f'Transfer checks could not run: {e}', 'link': '/transfer/settle'}])
+    finally:
+        conn.close()

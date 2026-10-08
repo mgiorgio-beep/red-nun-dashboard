@@ -165,6 +165,7 @@ def get_pour_cost(location, start_date, end_date, manual_bwl=None):
     sd = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
     ed = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
 
+    transfers_net = 0.0
     if manual_bwl is not None:
         total_bev_cogs = manual_bwl
         beer_cogs = 0
@@ -186,6 +187,18 @@ def get_pour_cost(location, start_date, end_date, manual_bwl=None):
             beer_cogs = sum(r["cost"] or 0 for r in rows if r["category_type"] == "BEER")
             liquor_cogs = sum(r["cost"] or 0 for r in rows if r["category_type"] == "LIQUOR")
             wine_cogs = sum(r["cost"] or 0 for r in rows if r["category_type"] == "WINE")
+            # Adjusted purchases: stock carried to / from the other house (transfers page)
+            from reports.move_numbers import transfers
+            tr = transfers(conn, location, sd, ed, ("BEER", "LIQUOR", "WINE"))
+            for cat, v in tr["by_category"].items():
+                adj = v["in"] - v["out"]
+                if cat == "BEER":
+                    beer_cogs += adj
+                elif cat == "LIQUOR":
+                    liquor_cogs += adj
+                elif cat == "WINE":
+                    wine_cogs += adj
+            transfers_net = tr["net"]
             total_bev_cogs = beer_cogs + liquor_cogs + wine_cogs
             period_label = f"{start_date} to {end_date}"
 
@@ -215,6 +228,7 @@ def get_pour_cost(location, start_date, end_date, manual_bwl=None):
         "liquor_pour_pct": round(liquor_cogs / bev["liquor_rev"] * 100, 1) if bev["liquor_rev"] > 0 else 0,
         "wine_pour_pct": round(wine_cogs / bev["wine_rev"] * 100, 1) if bev["wine_rev"] > 0 else 0,
         "period_label": period_label,
+        "transfers_net": round(transfers_net, 2),   # included above: + = more came in than went out
     }
 
 

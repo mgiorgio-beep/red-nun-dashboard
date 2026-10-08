@@ -36,6 +36,9 @@ var sections=[
   {id:'nav-foodcount',label:'Food Count',page:'/count?type=food'},
   {id:'nav-boozecount',label:'Booze Count',page:'/count?type=booze'},
   {id:'nav-orderguide',label:'Order Guide',page:'/order-guide'},
+  {id:'nav-transfers',label:'Transfers',page:'/transfer'},
+  {id:'nav-waste',label:'Waste',page:'/waste'},
+  {id:'nav-transfersettle',label:'Reconcile Transfers',page:'/transfer/settle'},
   {id:'nav-aicount',label:'Smart Count',page:'/ai-inventory',mobileOnly:true},
   {id:'nav-specials',label:'Specials Board',page:'/specials-admin'}
 ]},
@@ -123,6 +126,9 @@ if(path==='/recipes/fixer')return 'nav-recipefixer';
 if(path==='/order-guide')return 'nav-orderguide';
 if(path==='/specials-admin')return 'nav-specials';
 if(path==='/payments')return 'nav-payments';
+if(path==='/transfer'||path==='/transfer/statement'||path==='/transfer/admin')return 'nav-transfers';
+if(path==='/waste')return 'nav-waste';
+if(path==='/transfer/settle')return 'nav-transfersettle';
 if(path==='/print-checks')return 'nav-bp-printchecks';
 if(path==='/bank-transactions')return 'nav-acct-banktx';
 if(path==='/registers')return 'nav-acct-registers';
@@ -396,6 +402,23 @@ fetch('/api/invoices/pending-count').then(function(r){return r.json()}).then(fun
 }
 setInterval(pollBadges,30000);
 setTimeout(pollBadges,500);
+
+// Transfers / intercompany: a banner on every page when something needs Mike
+// (out-of-balance intercompany, emails that didn't go). Admin-only server side.
+function pollMovesBanner(){
+  fetch('/api/moves/banner',{credentials:'include'}).then(function(r){return r.ok?r.json():[]}).then(function(list){
+    var el=document.getElementById('rn-moves-banner');
+    if(!list||!list.length){if(el)el.remove();return;}
+    if(!el){el=document.createElement('div');el.id='rn-moves-banner';
+      el.style.cssText='position:sticky;top:0;z-index:999;font:600 13px -apple-system,sans-serif;';
+      var main=document.querySelector('.rn-main,main,.main-content')||document.body;main.insertBefore(el,main.firstChild);}
+    el.innerHTML=list.map(function(p){var red=p.level==='red';
+      return '<a href="'+p.link+'" style="display:block;padding:9px 14px;text-decoration:none;color:'+(red?'#fff':'#000')+';background:'+(red?'#dc2626':'#f59e0b')+'">'+
+        p.text.replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c]})+' \u203a</a>';}).join('');
+  }).catch(function(){});
+}
+setTimeout(pollMovesBanner,800);
+setInterval(pollMovesBanner,300000);
 })();
 
 /* Red Nun — load universal sortable-tables script */

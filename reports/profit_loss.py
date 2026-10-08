@@ -748,6 +748,21 @@ def cogs(conn, location: str, start: str, end: str) -> dict:
         if r["confidence"] == "approximate":
             approximate.append({"category": r["category"], "amount": amt,
                                 "note": r["note"]})
+    # Stock moved between the houses (transfers page): what came in is this
+    # house's cost, what went out is not. Same amounts the month-close
+    # intercompany entries book against Intercompany.
+    from reports.move_numbers import transfers
+    tr = transfers(conn, location, start, end)
+    for cat, v in sorted(tr["by_category"].items()):
+        amt = _r2(v["in"] - v["out"])
+        if not amt:
+            continue
+        lines.append({"category": cat, "name": f"Transfers between houses ({cat.title().replace('_', ' ')})",
+                      "amount": amt, "confidence": "exact", "drill": {"source": "transfers", "key": cat}})
+        if cat in FNB_COGS_CATEGORIES:
+            fnb += amt
+        else:
+            non_fnb += amt
     return {"lines": lines, "fnb_subtotal": _r2(fnb),
             "non_fnb_subtotal": _r2(non_fnb), "total": _r2(fnb + non_fnb),
             "approximate": approximate}
@@ -1128,7 +1143,7 @@ def footnotes(conn, location: str, start: str, end: str, parts: dict) -> list[st
 # back what the engine gave it rather than re-deriving how a line was built.
 
 DRILL_SOURCES = ("revenue", "cogs", "opex_invoiced", "opex_banked",
-                 "labor", "labor_runs", "labor_tips")
+                 "labor", "labor_runs", "labor_tips", "transfers")
 
 
 def drill(conn, location: str, start: str, end: str,
@@ -1216,6 +1231,24 @@ def drill(conn, location: str, start: str, end: str,
                  "reference": f"{x['share'] * 100:.1f}% of the pay period in range",
                  "amount": _r2(x[field])}
                 for x in _run_labor(conn, location, start, end)["rows"]]
+        cols = ["date", "detail", "reference", "amount"]
+
+    # ── Transfers between the houses, behind a "Transfers between houses" COGS line.
+    elif source == "transfers":
+        rows = conn.execute(
+            """
+            SELECT t.business_date AS date,
+                   COALESCE(p.display_name, p.name) || ' — ' || t.qty_entered || ' ' || COALESCE(t.unit_entered, '') AS detail,
+                   CASE WHEN t.to_location = ? THEN 'in from ' || t.from_location ELSE 'out to ' || t.to_location END AS reference,
+                   t.id AS row_id,
+                   ROUND(CASE WHEN t.to_location = ? THEN t.total_cost ELSE -t.total_cost END, 2) AS amount
+            FROM inventory_transfers t JOIN products p ON p.id = t.from_product_id
+            WHERE t.status = 'logged' AND (t.from_location = ? OR t.to_location = ?)
+              AND t.business_date BETWEEN ? AND ? AND t.category_type = ?
+            ORDER BY t.business_date, t.id
+            """,
+            (location, location, location, location, start.replace('-', ''), end.replace('-', ''), str(key)),
+        ).fetchall()
         cols = ["date", "detail", "reference", "amount"]
 
     # ── The tip-disbursement adjustment: the rows it nets out.

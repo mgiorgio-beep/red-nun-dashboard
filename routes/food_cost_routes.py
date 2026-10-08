@@ -395,8 +395,17 @@ def calculate_food_cost():
             net_sales = round(net_sales_row["net_sales"] or 0, 2)
             num_days  = net_sales_row["num_days"] or 0
 
+        # ── Transfers between the houses + logged waste (brief 8B, 8F) ─────
+        # Stock carried to the other house is not this house's cost; stock
+        # carried in is. Waste is already inside purchases: shown, never added.
+        from reports import move_numbers as MN
+        cats = {"food": ("FOOD",), "beverage": MN.BEV}.get(cost_type)
+        tr = MN.transfers(conn, location, begin_date_iso, end_date_iso, cats)
+        adjusted_purchases = MN.adjusted_purchases(purchases_total, tr)
+        waste = MN.waste(conn, location, begin_date_iso, end_date_iso, cats)
+
         # ── Calculations ───────────────────────────────────────────────────
-        food_cost     = round(begin_value + purchases_total - end_value, 2)
+        food_cost     = round(begin_value + adjusted_purchases - end_value, 2)
         food_cost_pct = round((food_cost / net_sales * 100), 1) if net_sales > 0 else 0.0
 
         return jsonify({
@@ -414,7 +423,13 @@ def calculate_food_cost():
                 "total":         purchases_total,
                 "invoice_count": purchases_invoices,
                 "invoices":      invoices_list,
+                "transfers_in":  tr["in"],
+                "transfers_out": tr["out"],
+                "transfers_count": tr["count"],
+                "adjusted_total": adjusted_purchases,
+                "label": "Adjusted purchases = invoices + transfers in - transfers out",
             },
+            "waste": waste,
             "net_sales":      net_sales,
             "num_days":       num_days,
             "food_cost":      food_cost,

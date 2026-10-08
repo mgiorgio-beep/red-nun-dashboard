@@ -59,6 +59,26 @@ def house_status(conn, loc, now):
     }
 
 
+def waste_html(conn, now):
+    """Last week's logged waste per house + top 3 items (brief 8F). Empty when none."""
+    from reports.move_numbers import waste, top_waste_items
+    end = (now - timedelta(days=1)).strftime('%Y%m%d')
+    start = (now - timedelta(days=7)).strftime('%Y%m%d')
+    lines = []
+    for loc, name in HOUSES:
+        w = waste(conn, loc, start, end)
+        if not w['entries']:
+            continue
+        top = top_waste_items(conn, loc, start, end)
+        lines.append(f"<p style='margin:4px 0;font-size:14px'><b>{name}</b>: ${w['loss']:,.2f} wasted"
+                     + (f" (+ ${w['staff_meal']:,.2f} staff meal)" if w['staff_meal'] else '')
+                     + (' — ' + ', '.join(f"{t['item']} ${t['cost']:,.2f}" for t in top) if top else '') + '</p>')
+    if not lines:
+        return ''
+    return ("<h3 style='margin:20px 0 6px;font-size:15px'>Last week's waste</h3>" + ''.join(lines)
+            + f"<p style='font-size:12px;color:#94a3b8;margin:4px 0'>Details: <a href='{BASE_URL}/waste'>{BASE_URL.replace('https://', '')}/waste</a></p>")
+
+
 def build(now, houses, nudge):
     btn = ('display:block;padding:16px 20px;margin:10px 0;border-radius:12px;background:#22c55e;color:#000;'
            'font:800 18px -apple-system,Segoe UI,sans-serif;text-decoration:none;text-align:center')
@@ -93,6 +113,7 @@ def build(now, houses, nudge):
 <h2 style="margin:0 0 6px">Weekly key-item count</h2>
 <p style="margin:0 0 16px;color:#334155">{intro}</p>
 {''.join(rows)}
+{houses.get('_waste_html', '')}
 <p style="margin-top:22px;font-size:12px;color:#94a3b8">Blank means not counted; out of it = 0.
 Change what's on the list: <a href="{BASE_URL}/count/list">{BASE_URL.replace('https://', '')}/count/list</a></p>
 </div>"""
@@ -120,6 +141,7 @@ if __name__ == "__main__":
     conn = get_connection()
     try:
         houses = {loc: house_status(conn, loc, now) for loc, _ in HOUSES}
+        houses['_waste_html'] = '' if nudge else waste_html(conn, now)
     finally:
         conn.close()
     subject, html = build(now, houses, nudge)

@@ -21,7 +21,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
 
-from integrations.toast.data_store import get_connection
+if __name__ == '__main__':          # cron: .env must load BEFORE data_store reads DB_PATH
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'))
+
+from integrations.toast.data_store import get_connection  # noqa: E402
 
 logger = logging.getLogger(__name__)
 TO = os.getenv('MOVES_EMAIL_TO', 'mgiorgio@rednun.com')
@@ -260,8 +264,6 @@ def send_digest(day=None):
 
 if __name__ == '__main__':
     import sys
-    from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'))
     logging.basicConfig(level=logging.INFO)
     if '--digest' in sys.argv:
         print('digest entries sent:', send_digest())
