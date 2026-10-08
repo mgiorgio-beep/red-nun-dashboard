@@ -82,7 +82,7 @@ async function J(url, body){
 }
 const keepList = () => S.items.filter(i => KEEP.has(keyOf(i))).map(i => i.key);
 async function load(){
-  S = await J('/api/intercompany/state', {keep: []});
+  S = await J('/api/intercompany/state');
   // first visit: suggest keeping everyday stock open (it usually comes back); liquor is paid
   if (!localStorage.getItem('rn_settle_keep')) S.items.forEach(i => { if (i.suggested === 'return') KEEP.add(keyOf(i)); });
   render(); refreshPreview();
@@ -109,7 +109,7 @@ function render(){
 }
 function setKeep(k, on){ on ? KEEP.add(k) : KEEP.delete(k); localStorage.setItem('rn_settle_keep', JSON.stringify([...KEEP])); render(); refreshPreview(); }
 async function refreshPreview(){
-  const p = (await J('/api/intercompany/state', {keep: keepList()})).preview;
+  const p = (await J('/api/intercompany/state?keep=' + encodeURIComponent(keepList().map(k => k.join(':')).join(',')))).preview;
   S.preview = p;
   document.getElementById('sum').textContent = p.payer ? ENT[p.payer] + ' pays ' + ENT[p.payee] + ' ' + money(p.amount) : 'Nothing to pay';
   document.getElementById('sumsub').textContent = p.payer ? p.lines.length + ' line(s) paid · ' + (p.kept || []).length + ' kept open for return' : (S.items.length ? 'Everything open is set to Returning' : '');

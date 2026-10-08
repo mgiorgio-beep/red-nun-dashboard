@@ -426,7 +426,9 @@ def _settle_state(conn, keep=()):
 @transfer_admin_bp.route('/api/intercompany/state', methods=['GET', 'POST'])
 @admin_required
 def settle_state():
-    keep = (request.get_json(silent=True) or {}).get('keep') or []
+    """Read-only preview. GET ?keep=chatham_pid:dennis_pid,... (POST kept for old pages)."""
+    keep = (request.get_json(silent=True) or {}).get('keep') or [
+        [int(x) for x in k.split(':')] for k in (request.args.get('keep') or '').split(',') if ':' in k]
     conn = get_connection()
     try:
         return jsonify(_settle_state(conn, keep))

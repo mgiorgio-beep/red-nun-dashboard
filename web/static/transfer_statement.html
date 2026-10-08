@@ -102,7 +102,7 @@ async function load(){
       '</td><td class="n" data-l="Net">' + (l.net_qty === 0 ? 'even' : q(Math.abs(l.net_qty)) + ' ' + esc(pl(l.net_qty, l.base_unit)) + (l.net_qty > 0 ? ' to Dennis' : ' to Chatham')) + '</td><td class="n" data-l="Net $">' + money(l.net_cost) + '</td></tr>').join('')
       : '<tr><td colspan="5" class="muted">No transfers this month.</td></tr>') + '</tbody></table></div>';
   if (s.returns.length) h += '<div class="h">Returns in kind (already counted above)</div><div class="card"><table><tbody>' +
-    s.returns.map(r => '<tr><td>' + esc(r.date) + '</td><td>' + esc(r.qty + ' ' + pl(r.qty, r.unit) + ' ' + r.item) + '</td><td class="n">' + money(r.cost) + '</td></tr>').join('') + '</tbody></table></div>';
+    s.returns.map(r => '<tr><td>' + esc(r.date.slice(4, 6) + '/' + r.date.slice(6)) + '</td><td>' + esc(r.qty + ' ' + pl(r.qty, r.unit) + ' ' + r.item) + '</td><td class="n">' + money(r.cost) + '</td></tr>').join('') + '</tbody></table></div>';
   h += '<div class="h" style="display:flex;justify-content:space-between">Line detail <label class="muted" style="text-transform:none;letter-spacing:0"><input type="checkbox" ' + (SHOW_VOID ? 'checked' : '') + ' onchange="SHOW_VOID=this.checked;load()"> show voided</label></div>' +
     '<div class="card"><table class="lines"><thead><tr><th>Date</th><th>Way</th><th>Item</th><th class="n">Qty</th><th class="n">$</th><th>By</th><th>Said</th></tr></thead><tbody>' +
     s.detail.map(d => '<tr style="' + (d.status === 'voided' ? 'text-decoration:line-through;color:var(--text3)' : '') + '"><td data-l="Date">' + d.date.slice(4, 6) + '/' + d.date.slice(6) + '</td><td data-l="Way">' +

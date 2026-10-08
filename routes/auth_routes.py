@@ -554,10 +554,10 @@ def view_logins():
             ll.*,
             u.full_name,
             u.role,
-            datetime(ll.login_time, 'localtime') as login_time_local
+            datetime(ll.created_at, 'localtime') as login_time_local
         FROM login_log ll
         LEFT JOIN users u ON ll.user_id = u.id
-        ORDER BY ll.login_time DESC
+        ORDER BY ll.created_at DESC
         LIMIT 100
     """).fetchall()
     conn.close()
@@ -568,7 +568,7 @@ def view_logins():
         role_color = {
             'admin': '#10b981',
             'manager': '#f59e0b',
-            'manager': '#6b7280'
+            'accountant': '#3b82f6'
         }.get(log['role'], '#6b7280')
 
         rows.append(f"""

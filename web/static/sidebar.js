@@ -40,7 +40,8 @@ var sections=[
   {id:'nav-waste',label:'Waste',page:'/waste'},
   {id:'nav-transfersettle',label:'Reconcile Transfers',page:'/transfer/settle'},
   {id:'nav-aicount',label:'Smart Count',page:'/ai-inventory',mobileOnly:true},
-  {id:'nav-specials',label:'Specials Board',page:'/specials-admin'}
+  {id:'nav-specials',label:'Specials Board',page:'/staff/specials/edit'},
+  {id:'nav-tvcontrol',label:'TV Control',page:'/staff'}
 ]},
 {id:'sec-products',label:'Products',icon:'products',children:[
   {id:'nav-products',label:'Products',page:'/manage',tab:'products'},
@@ -57,7 +58,7 @@ var sections=[
 ]},
 {id:'sec-invoices',label:'Invoices',icon:'invoices',children:[
   {id:'nav-invhistory',label:'Invoice History',page:'/invoices',tab:'history'},
-  {id:'nav-scan',label:'Scan Invoice',page:'/invoices',tab:'scan'},
+  {id:'nav-scan',label:'Scan Invoice',page:'/invoices',tab:'scan',mobileOnly:true},
   {id:'nav-pending',label:'Pending Review',page:'/invoices',tab:'pending'},
   {id:'nav-vendorstatus',label:'Vendor Scrapers',page:'/vendor-status'}
 ]},
@@ -84,8 +85,7 @@ var sections=[
 ]},
 {id:'sec-setup',label:'Setup',icon:'mgmt',children:[
   {id:'nav-acct-openbal',label:'Opening Balances',page:'/opening-balances'},
-  {id:'nav-acct-mapping',label:'Sales Mapping',page:'/sales-mapping'},
-  {id:'nav-acct-payaccts',label:'Payment Accounts',page:'/payment-accounts'}
+  {id:'nav-acct-mapping',label:'Sales Mapping',page:'/sales-mapping'}
 ]}];
 function buildSidebar(){
 var h='<div class="rn-sb-logo"><div class="rn-sb-logo-icon">RN</div><div><div class="rn-sb-logo-text">Red Nun</div><div class="rn-sb-logo-sub">Dashboard</div></div></div>';
@@ -125,6 +125,9 @@ if(path==='/ai-inventory')return 'nav-aicount';
 if(path==='/recipes/fixer')return 'nav-recipefixer';
 if(path==='/order-guide')return 'nav-orderguide';
 if(path==='/specials-admin')return 'nav-specials';
+if(path==='/profit-loss')return 'nav-acct-pl';
+if(path==='/vendor-status')return 'nav-vendorstatus';
+if(path==='/change-password'||path==='/catalog'||path==='/product-mapping')return null;
 if(path==='/payments')return 'nav-payments';
 if(path==='/transfer'||path==='/transfer/statement'||path==='/transfer/admin')return 'nav-transfers';
 if(path==='/waste')return 'nav-waste';
@@ -337,8 +340,6 @@ fetch('/api/auth/check').then(function(r){return r.json()}).then(function(u){
     // Hide Sales Mapping, Payment Accounts, Export (admin only)
     var sm=document.getElementById('nav-acct-mapping');
     if(sm)sm.style.display='none';
-    var pa=document.getElementById('nav-acct-payaccts');
-    if(pa)pa.style.display='none';
     var ex=document.getElementById('nav-acct-export');
     if(ex)ex.style.display='none';
     // Manager: hide Bill Pay entirely
