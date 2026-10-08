@@ -28,9 +28,9 @@ def norm(s):
     return ' '.join(w for w in s.split() if w not in _NOISE and not re.fullmatch(r'\d+[a-z]*', w))
 
 
-def _catalog(conn, location, count_type):
+def _catalog(conn, location, count_type, only_ids=None):
     rows = conn.execute("""
-        SELECT id, name, display_name, category, unit, inventory_unit, current_price, location
+        SELECT id, name, display_name, category, unit, inventory_unit, current_price, location, source_recipe_id
         FROM products WHERE active = 1
     """).fetchall()
     out = []
@@ -40,6 +40,8 @@ def _catalog(conn, location, count_type):
             continue
         out.append(dict(r))
     spend = {x['product_id']: x['dollars'] for x in rank_key_items(conn, location, days=365)}
+    if only_ids is not None:
+        out = [p for p in out if p['id'] in only_ids]
     for p in out:
         p['label'] = p['display_name'] or p['name']
         p['bought'] = max(0, round(spend.get(p['id'], 0)))  # credits can net negative
@@ -74,9 +76,14 @@ def _tok_match(t, u):
 
 
 class Matcher:
-    def __init__(self, conn, location, count_type='all'):
-        self.products = _catalog(conn, location, count_type)
-        self.toks = [sorted(set((norm(p['label']) + ' ' + norm(p['name'])).split())) for p in self.products]
+    def __init__(self, conn, location, count_type='all', only_ids=None, extra_bonus=None, extra_text=None):
+        """only_ids: limit to these products. extra_bonus: {id: points}. extra_text:
+        {id: more words the product answers to (a short card name)}."""
+        self.products = _catalog(conn, location, count_type, only_ids)
+        for p in self.products:
+            p['bonus'] += (extra_bonus or {}).get(p['id'], 0)
+        self.toks = [sorted(set((norm(p['label']) + ' ' + norm(p['name']) + ' '
+                                 + norm((extra_text or {}).get(p['id'], ''))).split())) for p in self.products]
         self.by_prefix = {}
         for i, ts in enumerate(self.toks):
             for u in ts:
@@ -108,8 +115,9 @@ class Matcher:
             self._cache[key] = [{'product_id': p['id'], 'name': p['name'], 'display_name': p['display_name'],
                                  'category': p['category'],
                                  'unit': p['unit'], 'inventory_unit': p['inventory_unit'],
-                                 'score': round(cover), 'bought': p['bought']}
-                                for _, cover, p in scored[:10]]
+                                 'score': round(cover), 'bought': p['bought'], 'rank': round(total, 2),
+                                 'source_recipe_id': p['source_recipe_id']}
+                                for total, cover, p in scored[:10]]
         return self._cache[key][:limit]
 
     def _best(self, words):

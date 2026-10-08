@@ -1,0 +1,2460 @@
+[
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of burger patties to dennis",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of patties",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "burgers, 3 cases",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "dropped a case of patties on the floor",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "bringing over 2 cases of hamburger patties",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of burger patties to chatham",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of patties",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "burgers, 3 cases",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "dropped a case of patties on the floor",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "bringing over 2 cases of hamburger patties",
+"expect": [
+484
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of cod to dennis",
+"expect": [
+765,
+1266
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of cod fillets",
+"expect": [
+765,
+1266
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "cod went bad, half a case",
+"expect": [
+765,
+1266
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "codfish 1 case",
+"expect": [
+765,
+1266
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of cod to chatham",
+"expect": [
+765,
+1266
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of cod fillets",
+"expect": [
+765,
+1266
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "cod went bad, half a case",
+"expect": [
+765,
+1266
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "codfish 1 case",
+"expect": [
+765,
+1266
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "3 cases of wings to dennis",
+"expect": [
+257,
+321
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of chicken wings",
+"expect": [
+257,
+321
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "jumbo wings 2 cases",
+"expect": [
+257,
+321
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "tossed half a case of wings, freezer burn",
+"expect": [
+257,
+321
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "3 cases of wings to chatham",
+"expect": [
+257,
+321
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of chicken wings",
+"expect": [
+257,
+321
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "jumbo wings 2 cases",
+"expect": [
+257,
+321
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "tossed half a case of wings, freezer burn",
+"expect": [
+257,
+321
+],
+"never": [
+113,
+539,
+764
+],
+"ambiguous": true
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of bacon to dennis",
+"expect": [
+242,
+485
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of sliced bacon",
+"expect": [
+242,
+485
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "bacon expired, 1 case",
+"expect": [
+242,
+485
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of bacon to chatham",
+"expect": [
+242,
+485
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of sliced bacon",
+"expect": [
+242,
+485
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "bacon expired, 1 case",
+"expect": [
+242,
+485
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of steak tips to dennis",
+"expect": [
+319
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of tips",
+"expect": [
+319
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "bourbon steak tips 1 case",
+"expect": [
+319
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "flap meat a case",
+"expect": [
+319
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of steak tips to chatham",
+"expect": [
+319
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of tips",
+"expect": [
+319
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "bourbon steak tips 1 case",
+"expect": [
+319
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "flap meat a case",
+"expect": [
+319
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of fries to dennis",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of fries",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "fry 3 cases",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "french fries 2 cases",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "the battered fries 1 case",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "dropped half a case of fries",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of the frys",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of fries to chatham",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of fries",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "fry 3 cases",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "french fries 2 cases",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "the battered fries 1 case",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "dropped half a case of fries",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of the frys",
+"expect": [
+314
+],
+"never": [
+113,
+539,
+764
+],
+"ambiguous": true
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of 6 ounce chicken breast",
+"expect": [
+98,
+937
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "6 oz chicken breast a case to dennis",
+"expect": [
+98,
+937
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of 6 ounce chicken breast",
+"expect": [
+98
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "6 oz chicken breast a case to chatham",
+"expect": [
+98
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "7 ounce chicken breasts 1 case",
+"expect": [
+488
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of the 7 oz chicken",
+"expect": [
+488
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "7 ounce chicken breasts 1 case",
+"expect": [
+488
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of the 7 oz chicken",
+"expect": [
+488
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of brioche buns to dennis",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of buns",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "brioche rolls 3 cases",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "burger buns 2 cases",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "buns went moldy, a case",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of brioche buns to chatham",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of buns",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "brioche rolls 3 cases",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "burger buns 2 cases",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "buns went moldy, a case",
+"expect": [
+544
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of captain parker's chowder",
+"expect": [
+811,
+1226,
+1589
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of the captain parker chowder",
+"expect": [
+811,
+1226,
+1589
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of captain parker's chowder",
+"expect": [
+811,
+1226,
+1589
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of the captain parker chowder",
+"expect": [
+811,
+1226,
+1589
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of chicken tenders to dennis",
+"expect": [
+114,
+926,
+1389,
+1503
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "tenders 2 cases",
+"expect": [
+114,
+926,
+1389,
+1503
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "chicken fingers 1 case",
+"expect": [
+114,
+926,
+1389,
+1503
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "burnt 2 lb of tenders",
+"expect": [
+114,
+926,
+1389,
+1503
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of chicken tenders to chatham",
+"expect": [
+114,
+926,
+1389,
+1503
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "tenders 2 cases",
+"expect": [
+114,
+926,
+1389,
+1503
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "chicken fingers 1 case",
+"expect": [
+114,
+926,
+1389,
+1503
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "burnt 2 lb of tenders",
+"expect": [
+114,
+926,
+1389,
+1503
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of mozz sticks to dennis",
+"expect": [
+496
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of mozzarella sticks",
+"expect": [
+496
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "dropped a bag of mozz sticks",
+"expect": [
+496
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of mozz sticks to chatham",
+"expect": [
+496
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of mozzarella sticks",
+"expect": [
+496
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "dropped a bag of mozz sticks",
+"expect": [
+496
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of sliced tomatoes",
+"expect": [
+1528
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "tomatoes 1 case to dennis",
+"expect": [
+255,
+960,
+1528
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of sliced tomatoes",
+"expect": [
+1528
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "tomatoes 1 case to chatham",
+"expect": [
+255,
+960,
+1528
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of lemons to dennis",
+"expect": [
+244
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases lemons",
+"expect": [
+244
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "lemons went bad, half a case",
+"expect": [
+244
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of lemons to chatham",
+"expect": [
+244
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases lemons",
+"expect": [
+244
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "lemons went bad, half a case",
+"expect": [
+244
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of strip steaks to dennis",
+"expect": [
+229
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "strip steak 1 case",
+"expect": [
+229
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "overcooked 2 strip steaks",
+"expect": [
+229
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of strip steaks to chatham",
+"expect": [
+229
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "strip steak 1 case",
+"expect": [
+229
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "overcooked 2 strip steaks",
+"expect": [
+229
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of breaded chicken breast",
+"expect": [
+259,
+281
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "breaded chicken fillets 2 cases",
+"expect": [
+259,
+281,
+1755
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of breaded chicken breast",
+"expect": [
+259,
+281
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "breaded chicken fillets 2 cases",
+"expect": [
+259,
+281,
+1755
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of chili to dennis",
+"expect": [
+97
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of the beef chili",
+"expect": [
+97
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "half a case of chili, made too much",
+"expect": [
+97
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of chili to chatham",
+"expect": [
+97
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of the beef chili",
+"expect": [
+97
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "half a case of chili, made too much",
+"expect": [
+97
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of fry oil to dennis",
+"expect": [
+153,
+462
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 jugs of fryer oil",
+"expect": [
+153,
+462
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "frialator oil 3 cases",
+"expect": [
+153,
+462
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "canola oil 2 cases",
+"expect": [
+153,
+462
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "the fryolator oil a case",
+"expect": [
+153,
+462
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of fry oil to chatham",
+"expect": [
+153,
+462
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 jugs of fryer oil",
+"expect": [
+153,
+462
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "frialator oil 3 cases",
+"expect": [
+153,
+462
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "canola oil 2 cases",
+"expect": [
+153,
+462
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "the fryolator oil a case",
+"expect": [
+153,
+462
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a keg of maine lunch to dennis",
+"expect": [
+136
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "lunch keg",
+"expect": [
+136
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "maine beer lunch 1 keg",
+"expect": [
+136
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a keg of maine lunch to chatham",
+"expect": [
+136
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "lunch keg",
+"expect": [
+136
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "maine beer lunch 1 keg",
+"expect": [
+136
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a keg of kona to dennis",
+"expect": [
+277
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "kona big wave keg",
+"expect": [
+277
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "big wave 1 keg",
+"expect": [
+277
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a keg of kona to chatham",
+"expect": [
+277
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "kona big wave keg",
+"expect": [
+277
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "big wave 1 keg",
+"expect": [
+277
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a keg of guinness to dennis",
+"expect": [
+122
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "guiness keg",
+"expect": [
+122
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "bad keg of guinness, foamy",
+"expect": [
+122
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a keg of guinness to chatham",
+"expect": [
+122
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "guiness keg",
+"expect": [
+122
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "bad keg of guinness, foamy",
+"expect": [
+122
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a keg of fiddlehead to dennis",
+"expect": [
+129
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "fiddlehead ipa keg",
+"expect": [
+129
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a keg of fiddlehead to chatham",
+"expect": [
+129
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "fiddlehead ipa keg",
+"expect": [
+129
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of mich ultra to dennis",
+"expect": [
+127
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of michelob ultra",
+"expect": [
+127
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "ultra 3 cases",
+"expect": [
+127
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "mick ultra 1 case",
+"expect": [
+127
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of mich ultra to chatham",
+"expect": [
+127
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of michelob ultra",
+"expect": [
+127
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "ultra 3 cases",
+"expect": [
+127
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "mick ultra 1 case",
+"expect": [
+127
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a keg of devil's purse to dennis",
+"expect": [
+816
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "handline kolsch keg",
+"expect": [
+816
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "devils purse 1 keg",
+"expect": [
+816
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a keg of devil's purse to chatham",
+"expect": [
+816
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "handline kolsch keg",
+"expect": [
+816
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "devils purse 1 keg",
+"expect": [
+816
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of tito's to dennis",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of titos",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "tidos 2 cases",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "titus vodka a case",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "bringing 6 bottles of tito's to dennis",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "broken bottle of titos",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of tito's to chatham",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of titos",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "tidos 2 cases",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "titus vodka a case",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "bringing 6 bottles of tito's to chatham",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "broken bottle of titos",
+"expect": [
+619
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of prosecco to dennis",
+"expect": [
+634
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "maschio prosecco 2 cases",
+"expect": [
+634
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of prosecco to chatham",
+"expect": [
+634
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "maschio prosecco 2 cases",
+"expect": [
+634
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of kim crawford to dennis",
+"expect": [
+644
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "kim crawford sauv blanc 2 cases",
+"expect": [
+644
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of kim crawford to chatham",
+"expect": [
+644
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "kim crawford sauv blanc 2 cases",
+"expect": [
+644
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of josh chardonnay to dennis",
+"expect": [
+627
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "josh chard 1 case",
+"expect": [
+627
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of josh chardonnay to chatham",
+"expect": [
+627
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "josh chard 1 case",
+"expect": [
+627
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of pinot grigio to dennis",
+"expect": [
+608
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "mezzacorona 2 cases",
+"expect": [
+608
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of pinot grigio to chatham",
+"expect": [
+608
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "mezzacorona 2 cases",
+"expect": [
+608
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of the basic french fries",
+"expect": [
+402
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "basic fries 1 case",
+"expect": [
+402
+],
+"never": [
+113,
+539,
+764
+]
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of scallops to dennis",
+"expect": [
+504,
+792
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of sea scallops",
+"expect": [
+504,
+792
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "waste",
+"text": "scallops spoiled, half a case",
+"expect": [
+504,
+792
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of pretzels to dennis",
+"expect": [
+293
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "soft pretzels 2 cases",
+"expect": [
+293
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of potstickers to dennis",
+"expect": [
+964,
+1607
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "pot stickers 2 cases",
+"expect": [
+964,
+1607
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of chicken breast 7 ounce single",
+"expect": [
+488
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of high noon lemon to dennis",
+"expect": [
+618
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "high noon lemon 2 cases",
+"expect": [
+618
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of high noon peach to dennis",
+"expect": [
+948
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "peach high noon 1 case",
+"expect": [
+948
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a keg of high life to dennis",
+"expect": [
+231
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "miller high life keg",
+"expect": [
+231
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a keg of miller lite to dennis",
+"expect": [
+236,
+814
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "miller light keg",
+"expect": [
+236,
+814
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a keg of sam summer to dennis",
+"expect": [
+870
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "sam adams summer ale keg",
+"expect": [
+870
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "summer ale keg",
+"expect": [
+870
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "2 cases of bud light bottles to dennis",
+"expect": [
+133
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "bud light 2 cases",
+"expect": [
+133
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of well vodka to dennis",
+"expect": [
+1354
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "common well vodka 1 case",
+"expect": [
+1354
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of 13 celsius to dennis",
+"expect": [
+605
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "celsius sauvignon blanc a case",
+"expect": [
+605
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of scallops to chatham",
+"expect": [
+504,
+792
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "dry scallops 2 cases",
+"expect": [
+504,
+792
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of tahini to chatham",
+"expect": [
+894,
+1582
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "tahini sauce 1 case",
+"expect": [
+894,
+1582
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "10 pounds of pork butt to chatham",
+"expect": [
+920,
+1603
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of boston butt",
+"expect": [
+920,
+1603
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "waste",
+"text": "dropped a pork butt",
+"expect": [
+920,
+1603
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of shredded cheddar to chatham",
+"expect": [
+100,
+263
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "cheddar cheese 2 cases",
+"expect": [
+100,
+263
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of baked potatoes to chatham",
+"expect": [
+107
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "baked potato 2 cases",
+"expect": [
+107
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a keg of bud light to chatham",
+"expect": [
+123
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "bud light keg",
+"expect": [
+123
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "bud lite keg",
+"expect": [
+123
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a keg of cape cod blonde to chatham",
+"expect": [
+945
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "cape cod beer blonde ale keg",
+"expect": [
+945
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a keg of cloud candy to chatham",
+"expect": [
+1319
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "mighty squirrel keg",
+"expect": [
+1319
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "mighty squirrel cloud candy",
+"expect": [
+1319
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "2 cases of corona to chatham",
+"expect": [
+128
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "corona extra 1 case",
+"expect": [
+128
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of sun cruiser to chatham",
+"expect": [
+115,
+589,
+1734
+],
+"never": [],
+"ambiguous": true
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "sun cruiser half and half",
+"expect": [
+115
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of high noon pineapple to chatham",
+"expect": [
+640
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "pineapple high noon 2 cases",
+"expect": [
+640
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of josh cab to chatham",
+"expect": [
+600
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "josh cabernet 1 case",
+"expect": [
+600
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "a case of sweet potato fries to dennis",
+"expect": [
+539,
+764,
+113
+],
+"never": []
+},
+{
+"house": "chatham",
+"kind": "transfer",
+"text": "sweet fries 1 case",
+"expect": [
+539,
+764,
+113
+],
+"never": []
+},
+{
+"house": "dennis",
+"kind": "transfer",
+"text": "a case of sweet potato fries to chatham",
+"expect": [
+1224,
+113,
+539,
+764
+],
+"never": []
+}
+]
