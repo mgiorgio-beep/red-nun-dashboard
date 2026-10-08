@@ -75,6 +75,7 @@ let SHOW_VOID = false;
 function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
 function money(x){ return x == null ? '—' : (x < 0 ? '−$' : '$') + Math.abs(x).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 function q(x){ return Math.round(x * 100) / 100; }
+function pl(n, u){ u = u || ''; return (Math.abs(n) === 1 || !u || /s$/.test(u) || u === 'each') ? u : (u === 'box' ? 'boxes' : u + 's'); }
 function shift(n){ const [y, m] = M.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); M = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); load(); }
 async function load(){
   history.replaceState(null, '', '?month=' + M);
@@ -97,15 +98,15 @@ async function load(){
   }
   h += '<div class="h">Netted by item</div><div class="card"><table class="lines"><thead><tr><th>Item</th><th class="n">Chatham → Dennis</th><th class="n">Dennis → Chatham</th><th class="n">Net</th><th class="n">Net $</th></tr></thead><tbody>' +
     (s.lines.length ? s.lines.map(l => '<tr class="' + (l.net_cost === 0 && l.net_qty === 0 ? 'zero' : '') + '"><td class="name" data-l="">' + esc(l.name) + (l.needs_link ? ' <span class="muted">needs link</span>' : '') +
-      '<div class="muted">' + esc(l.category) + '</div></td><td class="n" data-l="Chatham → Dennis">' + q(l.c2d_qty) + ' ' + esc(l.base_unit || '') + '</td><td class="n" data-l="Dennis → Chatham">' + q(l.d2c_qty) + ' ' + esc(l.base_unit || '') +
-      '</td><td class="n" data-l="Net">' + (l.net_qty === 0 ? 'even' : q(Math.abs(l.net_qty)) + ' ' + esc(l.base_unit || '') + (l.net_qty > 0 ? ' to Dennis' : ' to Chatham')) + '</td><td class="n" data-l="Net $">' + money(l.net_cost) + '</td></tr>').join('')
+      '<div class="muted">' + esc(l.category) + '</div></td><td class="n" data-l="Chatham → Dennis">' + q(l.c2d_qty) + ' ' + esc(pl(l.c2d_qty, l.base_unit)) + '</td><td class="n" data-l="Dennis → Chatham">' + q(l.d2c_qty) + ' ' + esc(pl(l.d2c_qty, l.base_unit)) +
+      '</td><td class="n" data-l="Net">' + (l.net_qty === 0 ? 'even' : q(Math.abs(l.net_qty)) + ' ' + esc(pl(l.net_qty, l.base_unit)) + (l.net_qty > 0 ? ' to Dennis' : ' to Chatham')) + '</td><td class="n" data-l="Net $">' + money(l.net_cost) + '</td></tr>').join('')
       : '<tr><td colspan="5" class="muted">No transfers this month.</td></tr>') + '</tbody></table></div>';
-  if (s.returns.length) h += '<div class="h">Returns in kind (settle earlier months — not new activity)</div><div class="card"><table><tbody>' +
-    s.returns.map(r => '<tr><td>' + esc(r.date) + '</td><td>' + esc(r.qty + ' ' + (r.unit || '') + ' ' + r.item) + '</td><td class="n">' + money(r.cost) + '</td></tr>').join('') + '</tbody></table></div>';
+  if (s.returns.length) h += '<div class="h">Returns in kind (already counted above)</div><div class="card"><table><tbody>' +
+    s.returns.map(r => '<tr><td>' + esc(r.date) + '</td><td>' + esc(r.qty + ' ' + pl(r.qty, r.unit) + ' ' + r.item) + '</td><td class="n">' + money(r.cost) + '</td></tr>').join('') + '</tbody></table></div>';
   h += '<div class="h" style="display:flex;justify-content:space-between">Line detail <label class="muted" style="text-transform:none;letter-spacing:0"><input type="checkbox" ' + (SHOW_VOID ? 'checked' : '') + ' onchange="SHOW_VOID=this.checked;load()"> show voided</label></div>' +
     '<div class="card"><table class="lines"><thead><tr><th>Date</th><th>Way</th><th>Item</th><th class="n">Qty</th><th class="n">$</th><th>By</th><th>Said</th></tr></thead><tbody>' +
     s.detail.map(d => '<tr style="' + (d.status === 'voided' ? 'text-decoration:line-through;color:var(--text3)' : '') + '"><td data-l="Date">' + d.date.slice(4, 6) + '/' + d.date.slice(6) + '</td><td data-l="Way">' +
-      (d.from_location === 'chatham' ? 'C → D' : 'D → C') + (d.is_settlement ? ' (return)' : '') + '</td><td class="name" data-l="">' + esc(d.item) + '</td><td class="n" data-l="Qty">' + d.qty + ' ' + esc(d.unit || '') +
+      (d.from_location === 'chatham' ? 'C → D' : 'D → C') + (d.is_settlement ? ' (return)' : '') + '</td><td class="name" data-l="">' + esc(d.item) + '</td><td class="n" data-l="Qty">' + d.qty + ' ' + esc(pl(d.qty, d.unit)) +
       '</td><td class="n" data-l="$">' + money(d.cost) + '</td><td data-l="By">' + esc(d.by || '') + '</td><td class="muted" data-l="Said">' + esc(d.said || '') + '</td></tr>').join('') + '</tbody></table></div>';
   document.getElementById('out').innerHTML = h;
 }

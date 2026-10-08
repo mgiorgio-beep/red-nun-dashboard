@@ -171,6 +171,7 @@ const REASONS = [['spoiled','Spoiled'],['dropped','Dropped'],['kitchen_error','K
 const W = { loc: null, line: null, days: 7, owner: false };
 const QKEY = 'rn_waste_queue';
 const HL = new URLSearchParams(location.search).get('highlight');
+function pl(n, u){ u = u || ''; return (Math.abs(n) === 1 || !u || /s$/.test(u) || u === 'each' || n < 1) ? u : (u === 'box' ? 'boxes' : u + 's'); }
 function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
 function toast(msg, err){ const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(t._h); t._h = setTimeout(() => t.className = 'toast', 2600); }
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
@@ -260,7 +261,7 @@ async function loadHistory(){
     box.innerHTML = rows.length ? rows.map(t => {
       const v = t.status === 'voided', d = t.business_date.slice(4, 6) + '/' + t.business_date.slice(6);
       return '<div class="hist' + (v ? ' void' : '') + (String(t.id) === HL ? ' hl' : '') + '" id="w' + t.id + '"><div class="m">' +
-        esc(t.qty_entered + ' ' + (t.unit_entered || '') + ' ' + t.item_name) +
+        esc(t.qty_entered + ' ' + pl(t.qty_entered, t.unit_entered) + ' ' + t.item_name) +
         '<div class="s">' + esc(cap(t.location) + ' · ' + (rl[t.reason_code] || 'no reason') + ' · ' + d + (t.entered_by ? ' · ' + t.entered_by : '') +
           (t.flagged ? ' · review' : '') + (v ? ' · voided' + (t.void_reason ? ': ' + t.void_reason : '') : '')) + '</div></div>' +
         (t.total_cost != null ? '<span class="cost">' + money(t.total_cost) + '</span>' : '') +
