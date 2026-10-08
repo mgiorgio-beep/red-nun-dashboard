@@ -95,6 +95,7 @@ def handle_voice(kind):
 
 
 @transfer_bp.route('/api/transfers/voice', methods=['POST'])
+@transfer_bp.route('/API/transfers/voice', methods=['POST'])   # iOS's shortcut builder capitalizes "api"
 @voice_auth
 def transfer_voice():
     return handle_voice('transfer')

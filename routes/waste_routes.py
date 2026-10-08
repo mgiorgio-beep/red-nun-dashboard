@@ -25,6 +25,7 @@ LOCATIONS = ('chatham', 'dennis')
 
 
 @waste_bp.route('/api/waste/voice', methods=['POST'])
+@waste_bp.route('/API/waste/voice', methods=['POST'])         # iOS's shortcut builder capitalizes "api"
 @voice_auth
 def waste_voice():
     return handle_voice('waste')
