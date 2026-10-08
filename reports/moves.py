@@ -434,6 +434,7 @@ def respond(conn, p, actor):
     if ask:
         return {'status': 'choose', 'say': ask['say'], 'pending_id': p['pending_id'],
                 'options': [{'id': o['id'], 'label': o['label']} for o in ask['options']],
+                'option_labels': [o['label'] for o in ask['options']],   # Shortcuts: Choose from List, send the label back
                 'fix_url': fix_url(p)}
     text, pv = card(conn, st, owner)
     unit_note = '' if st['unit_said'] else f" ({H.plural(st['qty'], st['unit'])})"
@@ -462,7 +463,8 @@ def answer(conn, pending_id, choice, actor):
     opt = next((o for o in ask['options'] if o['id'] == str(choice) or o['label'] == str(choice)), None)
     if not opt:
         return {'status': 'choose', 'say': ask['say'], 'pending_id': p['pending_id'],
-                'options': [{'id': o['id'], 'label': o['label']} for o in ask['options']], 'fix_url': fix_url(p)}
+                'options': [{'id': o['id'], 'label': o['label']} for o in ask['options']],
+                'option_labels': [o['label'] for o in ask['options']], 'fix_url': fix_url(p)}
     w = ask['what']
     if w == 'direction':
         st['from'], st['to'] = opt['value']
