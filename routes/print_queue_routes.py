@@ -198,7 +198,7 @@ def _due_recurring_for_queue(conn, location):
     Mirrors the logic of /api/billpay/recurring/due so the UI is consistent.
     """
     # Local import to avoid circular import at module load
-    from routes.billpay_routes import _is_due_on
+    from routes.billpay_routes import _is_due_on, _missed_recurring_periods
 
     where = ["active = 1", "COALESCE(payment_method, 'check') = 'check'"]
     params = []
@@ -239,6 +239,15 @@ def _due_recurring_for_queue(conn, location):
             ).fetchone()
             if existing:
                 continue
+            pairs.append((b, due_str))
+
+        # Catch-up: earlier periods that passed unpaid (otherwise they drop
+        # off the queue as soon as the next period's due date arrives).
+        for due_str in _missed_recurring_periods(conn, b, today):
+            key = (b["id"], due_str)
+            if key in seen:
+                continue
+            seen.add(key)
             pairs.append((b, due_str))
 
     pairs.sort(key=lambda p: p[1])  # oldest due first

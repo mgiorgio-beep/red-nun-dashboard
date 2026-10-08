@@ -2626,6 +2626,48 @@ def _is_due_on(bill, target_date_str):
     return candidate.isoformat()
 
 
+def _missed_recurring_periods(conn, bill, through_date):
+    """Due dates for `bill` that have already passed and were never paid or
+    skipped — but only periods AFTER the latest non-voided payment/skip row.
+
+    Why: _is_due_on returns only the LATEST due date <= a target, so once the
+    next period's due date arrives the previous unpaid period silently drops
+    out of the Print Queue, the Recurring tab and auto-print. That is how the
+    Dennisport Village Sept 2026 rent vanished on Oct 1 with nothing flagging
+    it. Anchoring on the last recorded payment keeps catch-up from
+    resurrecting old periods that were paid outside the recurring table
+    (e.g. May 2026 rent was paid by a Bill Pay check, not a recurring row).
+    A bill with no payment history at all gets no catch-up.
+    """
+    from datetime import date as ddate, timedelta
+    if isinstance(through_date, str):
+        through_date = ddate.fromisoformat(through_date)
+    last = conn.execute(
+        "SELECT MAX(due_date) FROM recurring_bill_payments "
+        "WHERE bill_id = ? AND COALESCE(status, 'paid') != 'voided'",
+        (bill["id"],),
+    ).fetchone()[0]
+    if not last:
+        return []
+    try:
+        d = ddate.fromisoformat(last) + timedelta(days=1)
+    except ValueError:
+        return []
+    found = []
+    while d <= through_date:
+        due_str = _is_due_on(bill, d.isoformat())
+        if due_str and due_str > last and due_str not in found:
+            exists = conn.execute(
+                "SELECT id FROM recurring_bill_payments WHERE bill_id=? AND due_date=? "
+                "AND COALESCE(status, 'paid') != 'voided'",
+                (bill["id"], due_str),
+            ).fetchone()
+            if not exists:
+                found.append(due_str)
+        d += timedelta(days=1)
+    return found
+
+
 @billpay_bp.route("/api/billpay/recurring", methods=["GET"])
 @admin_or_accountant_required
 def get_recurring_bills():
@@ -2775,6 +2817,19 @@ def get_recurring_due():
             ).fetchone()
             if existing:
                 continue
+            entry = dict(b)
+            entry['due_date'] = due_date_str
+            entry['lines'] = _get_lines(conn, b['id'])
+            if entry['lines']:
+                entry['amount'] = sum(l['amount'] for l in entry['lines'])
+            result.append(entry)
+
+        # Catch-up: unpaid periods that already passed (see _missed_recurring_periods)
+        for due_date_str in _missed_recurring_periods(conn, b, start):
+            key = (b['id'], due_date_str)
+            if key in seen:
+                continue
+            seen.add(key)
             entry = dict(b)
             entry['due_date'] = due_date_str
             entry['lines'] = _get_lines(conn, b['id'])
