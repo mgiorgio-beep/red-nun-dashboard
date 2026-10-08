@@ -1229,14 +1229,20 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
         })
 
     # Manual entries (already in register)
+    # A statement row is cleared on its own date by definition, so a row an
+    # EARLIER statement created is cleared_elsewhere like any book row. Without
+    # this, Dennis's 9/01 Cozzini $20.90 paired with August's 8/25 Cozzini
+    # $20.90 line and would have been skipped (2026-10-08) — September short.
     for r in conn.execute(
         """SELECT id, entry_date AS date, amount, payee, memo, ref_number,
-                  COALESCE(statement_upload_id, 0) AS statement_upload_id
+                  COALESCE(statement_upload_id, 0) AS statement_upload_id,
+                  cleared, cleared_date
            FROM manual_bank_entries
            WHERE bank_account_id = ? AND entry_date >= ? AND entry_date <= ?""",
         (account_id, start, end),
     ).fetchall():
         amt = float(r["amount"] or 0)
+        cd = r["cleared_date"] or (r["date"] if r["statement_upload_id"] else None)
         rows.append({
             "source": "manual",
             "id": r["id"],
@@ -1246,6 +1252,9 @@ def _load_register_rows_for_period(conn, account_id: int, parsed: dict) -> list[
             "ref": r["ref_number"] or "",
             "label": r["payee"] or "Manual",
             "statement_upload_id": r["statement_upload_id"],
+            "cleared": int(r["cleared"] or 0),
+            "cleared_date": cd,
+            "cleared_elsewhere": _cleared_elsewhere(r["cleared"] or bool(r["statement_upload_id"]), cd),
         })
 
     return rows
@@ -1381,15 +1390,16 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
         [{ parsed_index: int, register_match: {...}|None, match_kind: str,
            payee_check: str }, …]
     """
-    results: list[dict] = []
-    used_register_ids: set[tuple[str, int]] = set()  # don't re-use a register row
-
+    # Every (line, register row) candidate is scored first, then pairs are
+    # assigned best score first. Greedy in statement order let the 9/01 line
+    # of a weekly charge take the 9/15 row and strand the 9/15 line.
     def parse_d(s: str | None):
         try:
             return datetime.strptime(s or "", "%Y-%m-%d").date()
         except (ValueError, TypeError):
             return None
 
+    cands = []   # (score, -day_diff, i, reg, kind, payee)
     for i, tx in enumerate(parsed_txs):
         debit = float(tx.get("debit") or 0)
         credit = float(tx.get("credit") or 0)
@@ -1398,15 +1408,7 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
         tx_ref = (tx.get("ref") or "").lstrip("0")
         tx_date = parse_d(tx.get("date"))
 
-        best = None
-        best_kind = "none"
-        best_score = -1
-        best_payee = None
-
         for reg in register_rows:
-            key = (reg["source"], reg["id"])
-            if key in used_register_ids:
-                continue
             if reg.get("cleared_elsewhere"):
                 continue
             if reg["direction"] != direction:
@@ -1416,6 +1418,11 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
 
             reg_date = parse_d(reg.get("date"))
             day_diff = abs((tx_date - reg_date).days) if (tx_date and reg_date) else 99
+
+            # A row a statement import created IS a statement line: it can
+            # only be this same line (same date), never a neighbour.
+            if reg["source"] == "manual" and reg.get("statement_upload_id") and day_diff != 0:
+                continue
 
             reg_ref = (reg.get("ref") or "").lstrip("0")
             ref_match = bool(tx_ref) and tx_ref == reg_ref
@@ -1441,27 +1448,29 @@ def _match_transactions(parsed_txs: list[dict], register_rows: list[dict]) -> li
                 kind, score = "likely", 50 - day_diff
             elif payee == "unknown" and day_diff <= 7:
                 kind, score = "likely", 30 - day_diff
+            if kind != "none":
+                cands.append((score, -day_diff, i, reg, kind, payee))
 
-            if score > best_score:
-                best, best_kind, best_score = reg, kind, score
-                best_payee = payee
+    # Best evidence first; ties go to the closer date, then statement order.
+    cands.sort(key=lambda c: (-c[0], -c[1], c[2]))
+    taken_lines: dict[int, tuple] = {}
+    used_register_ids: set[tuple[str, int]] = set()  # don't re-use a register row
+    for score, _nd, i, reg, kind, payee in cands:
+        key = (reg["source"], reg["id"])
+        if i in taken_lines or key in used_register_ids:
+            continue
+        taken_lines[i] = (reg, kind, payee)
+        used_register_ids.add(key)
 
-        if best and best_kind != "none":
-            used_register_ids.add((best["source"], best["id"]))
-            results.append({
-                "parsed_index": i,
-                "register_match": best,
-                "match_kind": best_kind,
-                "payee_check": best_payee,
-            })
+    results: list[dict] = []
+    for i in range(len(parsed_txs)):
+        if i in taken_lines:
+            reg, kind, payee = taken_lines[i]
+            results.append({"parsed_index": i, "register_match": reg,
+                            "match_kind": kind, "payee_check": payee})
         else:
-            results.append({
-                "parsed_index": i,
-                "register_match": None,
-                "match_kind": "none",
-                "payee_check": None,
-            })
-
+            results.append({"parsed_index": i, "register_match": None,
+                            "match_kind": "none", "payee_check": None})
     return results
 
 
