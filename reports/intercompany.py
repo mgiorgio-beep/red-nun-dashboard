@@ -46,10 +46,23 @@ def owes_sentence(net):
     return f"{ENTITY[debtor]} owes {ENTITY[creditor]} ${abs(net):,.2f}"
 
 
+def short_names(conn, rows, house_of=lambda r: r['from_location'], pid_of=lambda r: r['from_product_id']):
+    """{row id: card name} — the same short names as the confirm card."""
+    from reports.item_recognition import card_name
+    cache, out = {}, {}
+    for r in rows:
+        k = (pid_of(r), house_of(r))
+        if k not in cache:
+            p = conn.execute("SELECT * FROM products WHERE id = ?", (k[0],)).fetchone()
+            cache[k] = card_name(conn, p, k[1]) if p else r['item_name']
+        out[r['id']] = cache[k]
+    return out
+
+
 def _rows(conn, start, end, include_voided=False):
     from reports.moves import ensure_tables
     ensure_tables(conn)
-    return conn.execute(f"""
+    rows = conn.execute(f"""
         SELECT t.*, COALESCE(cn.card_name, p.display_name, p.name) AS item_name
         FROM inventory_transfers t
         JOIN products p ON p.id = t.from_product_id
@@ -57,6 +70,8 @@ def _rows(conn, start, end, include_voided=False):
         WHERE t.business_date >= ? AND t.business_date < ? {'' if include_voided else "AND t.status = 'logged'"}
         ORDER BY t.business_date, t.id
     """, (start, end)).fetchall()
+    names = short_names(conn, rows)
+    return [dict(r, item_name=names[r['id']]) for r in rows]
 
 
 def month_net(conn, ym):
@@ -72,7 +87,9 @@ def build_statement(conn, ym, include_voided=False):
     start, end, label = _months(ym)
     rows = _rows(conn, start, end, include_voided=True)
     live = [r for r in rows if r['status'] == 'logged']
-    activity = [r for r in live if not r['is_settlement']]
+    # Returns count as activity in the month they happen (the month-close entries
+    # book them too), so a borrow and its return in the same month net to even.
+    activity = live
     returns = [r for r in live if r['is_settlement']]
     by_cat = defaultdict(lambda: {'chatham_to_dennis': 0.0, 'dennis_to_chatham': 0.0})
     items = {}
@@ -204,7 +221,9 @@ def _all_transfers(conn, through=None):
     if through:
         q += " AND t.business_date < ?"
         args = (through,)
-    return conn.execute(q + " ORDER BY t.business_date, t.id", args).fetchall()
+    rows = conn.execute(q + " ORDER BY t.business_date, t.id", args).fetchall()
+    names = short_names(conn, rows)
+    return [dict(r, item_name=names[r['id']]) for r in rows]
 
 
 def positions(conn):

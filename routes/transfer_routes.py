@@ -269,7 +269,9 @@ def list_transfers():
             WHERE t.business_date >= strftime('%Y%m%d', 'now', 'localtime', ?)
             ORDER BY t.transferred_at DESC, t.id DESC
         """, (f'-{days} day',)).fetchall()
-        out = [dict(r) for r in rows]
+        from reports.intercompany import short_names
+        names = short_names(conn, rows)
+        out = [dict(r, item_name=names[r['id']]) for r in rows]
         if not owner:
             for r in out:
                 r.pop('total_cost', None)

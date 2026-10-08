@@ -59,7 +59,9 @@ def list_waste():
               {'AND w.location = ?' if loc in LOCATIONS else ''}
             ORDER BY w.logged_at DESC, w.id DESC
         """, (f'-{days} day', *([loc] if loc in LOCATIONS else []))).fetchall()
-        out = [dict(r) for r in rows]
+        from reports.intercompany import short_names
+        names = short_names(conn, rows, house_of=lambda r: r['location'], pid_of=lambda r: r['product_id'])
+        out = [dict(r, item_name=names[r['id']]) for r in rows]
         if not is_owner():
             for r in out:
                 r.pop('total_cost', None)

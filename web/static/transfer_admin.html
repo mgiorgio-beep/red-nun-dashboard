@@ -8,8 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
-:root{--bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
-  --text:#f5f5f7;--text2:rgba(245,245,247,0.6);--text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;--orange:#FF9F0A}
+:root{--bg:#020617;--card:#0f172a;--card2:#1e293b;--border:#1e293b;--border2:#334155;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--red:#ef4444;--green:#22c55e;--blue:#38bdf8;--orange:#f59e0b}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
 .wrap{padding:16px;max-width:1100px;margin:0 auto}
@@ -17,7 +16,7 @@ h1{font-size:20px;font-weight:800}
 .sub{font-size:12px;color:var(--text3);margin-top:2px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0}
 .tabs button{padding:9px 13px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text2);font:600 13px Inter,sans-serif;cursor:pointer}
-.tabs button.sel{color:#fff;border-color:var(--blue);background:rgba(10,132,255,.14)}
+.tabs button.sel{color:var(--blue);border-color:var(--blue);background:rgba(37,99,235,.08)}
 .tabs .n{background:var(--orange);color:#000;border-radius:8px;padding:0 6px;margin-left:4px;font-size:11px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
 .h{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px}
@@ -25,7 +24,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid var(--border2)}
 td{padding:8px 6px;border-bottom:1px solid var(--border);vertical-align:top}
 input,select{padding:9px 10px;border-radius:9px;background:var(--bg);border:1px solid var(--border2);color:var(--text);font:500 14px Inter,sans-serif}
-.btn{padding:8px 12px;border-radius:9px;background:var(--card2);border:1px solid var(--border2);color:var(--text);font:600 13px Inter,sans-serif;cursor:pointer}
+.btn{text-decoration:none;padding:8px 12px;border-radius:9px;background:var(--card2);border:1px solid var(--border2);color:var(--text);font:600 13px Inter,sans-serif;cursor:pointer}
 .btn.go{background:var(--green);color:#000;border:none}
 .btn.bad{color:var(--red)}
 .muted{color:var(--text3);font-size:12px}
@@ -45,7 +44,13 @@ input,select{padding:9px 10px;border-radius:9px;background:var(--bg);border:1px 
 #qr{background:#fff;padding:10px;display:inline-block;border-radius:8px;margin-top:10px}
 @media (max-width:767px){ table.resp thead{display:none} table.resp tr{display:block;border-bottom:1px solid var(--border);padding:8px 0}
   table.resp td{display:block;border:none;padding:2px 0} }
+/* inside the dashboard sidebar layout */
+.rn-main .wrap{max-width:1100px;margin:0;padding:24px}
+@media (min-width:768px){ .bar{left:var(--sb-width,230px)} }
+.bar{background:#fff !important;border-top:1px solid #e5e7eb !important}
+.btn.go,.seg button.sel.pay{color:#fff}
 </style>
+<link rel="stylesheet" href="/static/sidebar.css">
 </head>
 <body>
 <div class="wrap">
@@ -219,5 +224,6 @@ async function problems(){
   go(TABS.some(t => t[0] === TAB) ? TAB : 'people');
 })();
 </script>
+<script src="/static/sidebar.js"></script>
 </body>
 </html>

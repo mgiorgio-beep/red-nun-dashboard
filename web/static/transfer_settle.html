@@ -7,8 +7,7 @@
 <title>Red Nun — Reconcile Transfers</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
-  --text:#f5f5f7;--text2:rgba(245,245,247,0.6);--text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;--orange:#FF9F0A}
+:root{--bg:#020617;--card:#0f172a;--card2:#1e293b;--border:#1e293b;--border2:#334155;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--red:#ef4444;--green:#22c55e;--blue:#38bdf8;--orange:#f59e0b}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
 .wrap{padding:16px 16px 120px;max-width:1100px;margin:0 auto}
@@ -45,7 +44,13 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .ok{color:var(--green)}
 @media (max-width:767px){ table.items thead{display:none} table.items tr{display:block;padding:10px 0;border-bottom:1px solid var(--border)}
   table.items td{display:block;border:none;padding:3px 0} table.items td.n{text-align:left} }
+/* inside the dashboard sidebar layout */
+.rn-main .wrap{max-width:1100px;margin:0;padding:24px}
+@media (min-width:768px){ .bar{left:var(--sb-width,230px)} }
+.bar{background:#fff !important;border-top:1px solid #e5e7eb !important}
+.btn.go,.seg button.sel.pay{color:#fff}
 </style>
+<link rel="stylesheet" href="/static/sidebar.css">
 </head>
 <body>
 <div class="wrap">
@@ -165,5 +170,6 @@ async function push(id, b){
 }
 load();
 </script>
+<script src="/static/sidebar.js"></script>
 </body>
 </html>

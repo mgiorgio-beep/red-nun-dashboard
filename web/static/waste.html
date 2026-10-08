@@ -79,6 +79,14 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   color:var(--text2);font:600 15px Inter,sans-serif;text-decoration:none}
 .nav a.on{background:var(--blue);border-color:var(--blue);color:#fff}
 .nav a.own{display:none}
+/* PC with dashboard login (deskMode): dashboard palette + sidebar */
+body.desk .hdr,body.desk .nav{display:none}
+body.desk .wrap{max-width:1100px;margin:0;padding:24px 24px 110px}
+body.desk .bar{left:var(--sb-width,230px);background:#fff;border-top:1px solid #e5e7eb;backdrop-filter:none;-webkit-backdrop-filter:none}
+body.desk .send{color:#fff}
+body.desk .dir button.sel{background:#eff6ff;color:#1d4ed8}
+body.desk .vcard pre{color:#111827}
+body.desk .send{max-width:1100px;margin:0}
 .toast{position:fixed;left:50%;top:calc(var(--safe-top) + 70px);transform:translateX(-50%);z-index:200;
   background:var(--card2);border:1px solid var(--border2);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;
   opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
@@ -92,7 +100,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .sum .row b{color:var(--text)}
 .tabs{display:flex;gap:8px}
 .tabs button{flex:1;padding:10px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text2);font:600 13px Inter,sans-serif}
-.tabs button.sel{color:#fff;border-color:var(--blue)}
+.tabs button.sel{color:var(--blue);border-color:var(--blue);background:rgba(37,99,235,.08)}
 </style>
 </head>
 <body>
@@ -142,6 +150,16 @@ function authFetch(url, opts){
   const t = moveToken();
   if (t) opts.headers = Object.assign({}, opts.headers || {}, {Authorization: 'Bearer ' + t});
   return fetch(url, opts);
+}
+
+// On a PC with a dashboard login, look like every other dashboard page:
+// the sidebar, the dashboard's colors, no phone header. Phones and staff keys
+// keep the phone layout (staff have no dashboard login for the sidebar).
+function deskMode(u){
+  if (!u || u.via_token || window.innerWidth < 768) return;
+  document.body.classList.add('desk');
+  const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/static/sidebar.css'; document.head.appendChild(l);
+  const sc = document.createElement('script'); sc.src = '/static/sidebar.js'; document.body.appendChild(sc);
 }
 function notSetUp(){
   document.querySelector('.wrap').innerHTML = '<div style="padding:60px 10px;text-align:center"><div style="font-size:48px">📱</div>' +
@@ -302,6 +320,7 @@ window.addEventListener('online', () => { flush().then(loadHistory); });
     const r = await authFetch('/api/moves/whoami');
     if (r.status === 401) { notSetUp(); return; }
     const u = await r.json();
+    deskMode(u);
     if (u.owner) document.querySelectorAll('.nav a.own').forEach(a => a.style.display = 'block');
     W.owner = u.owner && !u.via_token;      // the $ summary is a dashboard (login) view
     let loc = null; try { loc = localStorage.getItem('rn_waste_loc'); } catch(e) {}
