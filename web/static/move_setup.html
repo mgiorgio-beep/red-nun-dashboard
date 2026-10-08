@@ -28,6 +28,17 @@ code{background:#222;padding:2px 6px;border-radius:6px;color:#fff;word-break:bre
 <script>
 const TKEY = 'rn_move_token';
 const tok = decodeURIComponent((/[#&]k=([^&]+)/.exec(location.hash) || /^#(rn_[\w-]+)$/.exec(location.hash) || [])[1] || '');
+function desc(kind){
+  const t = kind === 'transfer';
+  return 'Call it ' + (t ? 'Log Transfer' : 'Log Waste') + '. Do these steps in order, with no other checks:\n' +
+    '1. Dictate text with the prompt "' + (t ? 'What\'s moving, and to which house?' : 'What got wasted, how much, and why?') + '", stop listening after a pause.\n' +
+    '2. POST JSON {"text": the dictated text} to https://dashboard.rednun.com/api/' + (t ? 'transfers' : 'waste') + '/voice with header Authorization: Bearer ' + tok + '.\n' +
+    '3. Choose from a list: the list is the "menu" value from that response, and the prompt is the "card" value from that response.\n' +
+    '4. POST JSON {"choice": the chosen item} to the same URL with the same header.\n' +
+    '5. Speak the "say" value from that second response.\n' +
+    '6. If the second response has an "open_url" value, open that URL.';
+}
+function cp(el, text){ navigator.clipboard.writeText(text).then(() => { el.textContent = 'Copied ✓ — now paste it in Shortcuts'; }); return false; }
 function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
 (async () => {
   const app = document.getElementById('app');
@@ -39,9 +50,12 @@ function esc(s){ const d = document.createElement('div'); d.textContent = s == n
   const k = '#k=' + encodeURIComponent(tok);
   app.innerHTML =
     '<h1>Hi ' + esc(u.person) + ' 👋</h1><p>This phone is set up for <b>Transfer</b> and <b>Waste</b>' + (u.home ? ' at ' + esc(u.home === 'chatham' ? 'Chatham' : 'Dennis') : '') + '. No dashboard login needed.</p>' +
-    '<div class="card"><h2>1. Siri: "Log Transfer" and "Log Waste"</h2><p>Install both Shortcuts. When one asks for your key, paste this:</p>' +
-    '<p><code id="key">' + esc(tok) + '</code></p><a class="btn alt" href="#" onclick="navigator.clipboard.writeText(\'' + esc(tok) + '\');this.textContent=\'Copied ✓\';return false">Copy my key</a>' +
-    '<p style="margin-top:10px">Then say <b>"Hey Siri, log transfer"</b> or <b>"Hey Siri, log waste"</b>.</p></div>' +
+    '<div class="card"><h2>1. Siri: "Log Transfer" and "Log Waste"</h2>' +
+    '<p>For each one: tap <b>Copy</b>, open the Shortcuts app, tap <b>+</b>, and paste into <b>Describe a shortcut</b>. Your key is already in it — don\'t share it.</p>' +
+    '<a class="btn alt" href="#" onclick="return cp(this, desc(\'transfer\'))">Copy “Log Transfer”</a>' +
+    '<a class="btn alt" href="#" onclick="return cp(this, desc(\'waste\'))">Copy “Log Waste”</a>' +
+    '<p style="margin-top:10px">Run each once by tapping it and press <b>Allow</b> for dashboard.rednun.com. ' +
+    'Then hold the side button and say <b>"log transfer"</b> or <b>"log waste"</b>.</p></div>' +
     '<div class="card"><h2>2. Or tap it in (no signal needed)</h2>' +
     '<a class="btn" href="/transfer' + k + '">Open Transfer</a><a class="btn" href="/waste' + k + '">Open Waste</a>' +
     '<ol><li>Open one, tap Share, then <b>Add to Home Screen</b>.</li><li>Use that icon from now on — it stays set up.</li></ol></div>';
