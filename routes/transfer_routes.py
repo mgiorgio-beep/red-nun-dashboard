@@ -15,8 +15,11 @@ The logic lives in reports/moves.py (state machine), reports/item_recognition.py
 (which product), reports/house_moves.py (words, units, cost) and
 reports/intercompany.py (who owes whom). Nothing is written before Confirm.
 
-A transfer token only opens the two voice endpoints. It is not a login: every
-other route here keeps @login_required.
+Staff never log in to the dashboard (Mike, 2026-10-08). Their per-person token
+(the same one the Shortcut uses) opens: the voice endpoints, the /transfer and
+/waste phone pages and their list / pick / void calls. The pages are static and
+send the token from the phone (set once by the setup link /transfer/setup#<token>).
+The month statement, settlement, $ summaries and admin stay login-only.
 """
 
 from functools import wraps
@@ -53,6 +56,10 @@ def voice_auth(f):
             return jsonify({'status': 'error', 'say': NOT_SET_UP}), 401
         return f(*args, **kwargs)
     return wrapped
+
+
+def is_owner():
+    return (getattr(g, 'actor', None) or {}).get('role') == 'owner'
 
 
 def _truthy(v):
@@ -169,13 +176,28 @@ def fix_confirm():
 # ---------------------------------------------------------------------------
 
 @transfer_bp.route('/transfer')
-@login_required
 def transfer_page():
+    # static shell; every call it makes carries a login or the phone's token
     return current_app.send_static_file('transfer.html')
 
 
+@transfer_bp.route('/transfer/setup')
+def setup_page():
+    """Opened from the link Mike texts: stores the token on the phone (it rides in
+    the #fragment, so it never reaches a server log) and opens /transfer."""
+    return current_app.send_static_file('move_setup.html')
+
+
+@transfer_bp.route('/api/moves/whoami', methods=['GET'])
+@voice_auth
+def whoami():
+    a = g.actor
+    return jsonify({'person': a.get('person'), 'home': a.get('home'), 'owner': a.get('role') == 'owner',
+                    'via_token': bool(a.get('token_id'))})
+
+
 @transfer_bp.route('/api/transfers/products', methods=['GET'])
-@login_required
+@voice_auth
 def search_products():
     house = (request.args.get('house') or '').lower()
     conn = get_connection()
@@ -186,10 +208,10 @@ def search_products():
 
 
 @transfer_bp.route('/api/transfers', methods=['GET'])
-@login_required
+@voice_auth
 def list_transfers():
     days = max(1, min(int(request.args.get('days', 30)), 366))
-    owner = session.get('role') == 'admin'
+    owner = is_owner()
     conn = get_connection()
     try:
         M.ensure_tables(conn)
@@ -214,7 +236,7 @@ def list_transfers():
 
 
 @transfer_bp.route('/api/transfers', methods=['POST'])
-@login_required
+@voice_auth
 def create_transfer():
     """Web pickers. One client_id per line ({transfer_id}:{product_id}) so an
     offline replay lands once."""
@@ -225,7 +247,7 @@ def create_transfer():
     items = data.get('items') or []
     if not tid or src not in LOCATIONS or dst not in LOCATIONS or src == dst or not items:
         return jsonify({'error': 'transfer_id, two different houses and items required'}), 400
-    actor = M.actor_from_session(session)
+    actor = dict(g.actor, via='web')
     conn = get_connection()
     try:
         ids = []
@@ -245,12 +267,12 @@ def create_transfer():
 
 
 @transfer_bp.route('/api/transfers/<int:row_id>/void', methods=['POST'])
-@login_required
+@voice_auth
 def void_transfer(row_id):
     reason = ((request.get_json(silent=True) or {}).get('reason') or '').strip()[:200] or None
     conn = get_connection()
     try:
-        n = M.void(conn, 'transfer', row_id, session.get('full_name') or session.get('username'), reason)
+        n = M.void(conn, 'transfer', row_id, g.actor.get('person'), reason)
         return jsonify({'success': bool(n)})
     finally:
         conn.close()

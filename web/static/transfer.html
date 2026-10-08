@@ -118,6 +118,22 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 </div>
 
 <script>
+// Staff don't log in: the phone carries its person's token (from the setup link).
+const TKEY = 'rn_move_token';
+(function(){ const m = /[#&]k=([^&]+)/.exec(location.hash); if (m) { try { localStorage.setItem(TKEY, decodeURIComponent(m[1])); } catch(e) {} } })();
+function moveToken(){ try { return localStorage.getItem(TKEY) || ''; } catch(e) { return ''; } }
+function authFetch(url, opts){
+  opts = Object.assign({credentials: 'include'}, opts || {});
+  const t = moveToken();
+  if (t) opts.headers = Object.assign({}, opts.headers || {}, {Authorization: 'Bearer ' + t});
+  return fetch(url, opts);
+}
+function notSetUp(){
+  document.querySelector('.wrap').innerHTML = '<div style="padding:60px 10px;text-align:center"><div style="font-size:48px">📱</div>' +
+    '<h2 style="margin:12px 0 8px">This phone isn\'t set up.</h2><p style="color:var(--text2)">Ask Mike for your setup link.</p>' +
+    '<p style="margin-top:24px;font-size:13px"><a style="color:var(--blue)" href="/login?next=' + encodeURIComponent(location.pathname) + '">Dashboard login</a></p></div>';
+  const b = document.querySelector('.bar'); if (b) b.style.display = 'none';
+}
 const BOOZE = ['BEER', 'LIQUOR', 'WINE'];
 const T = { from: null, to: null, lines: [] };   // lines: {id, name, unit, qty}
 const QKEY = 'rn_transfer_queue';
@@ -156,8 +172,8 @@ async function search(){
   const q = document.getElementById('q').value.trim(), my = ++_sq, box = document.getElementById('results');
   if (q.length < 2) { box.innerHTML = ''; return; }
   try {
-    const r = await fetch('/api/transfers/products?house=' + encodeURIComponent(T.from || '') + '&q=' + encodeURIComponent(q), {credentials:'include'});
-    if (r.status === 401) { location.href = '/login?next=/transfer'; return; }
+    const r = await authFetch('/api/transfers/products?house=' + encodeURIComponent(T.from || '') + '&q=' + encodeURIComponent(q));
+    if (r.status === 401) { notSetUp(); return; }
     const rows = await r.json();
     if (my !== _sq) return;
     window._res = rows;
@@ -207,7 +223,7 @@ async function flush(){
     while (q.length) {
       let ok = false;
       try {
-        const r = await fetch('/api/transfers', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(q[0])});
+        const r = await authFetch('/api/transfers', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(q[0])});
         ok = r.ok && (r.headers.get('content-type') || '').indexOf('json') !== -1;
         if (!ok && r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) { ok = true; toast('A transfer was rejected by the server', true); }
       } catch(e) {}
@@ -237,8 +253,8 @@ const HL = new URLSearchParams(location.search).get('highlight');
 async function loadHistory(){
   const box = document.getElementById('history');
   try {
-    const r = await fetch('/api/transfers?days=30', {credentials:'include'});
-    if (r.status === 401) { location.href = '/login?next=/transfer'; return; }
+    const r = await authFetch('/api/transfers?days=30');
+    if (r.status === 401) { notSetUp(); return; }
     const rows = await r.json();
     window._hist = rows;
     box.innerHTML = rows.length ? rows.map((t, i) => {
@@ -260,7 +276,7 @@ async function undo(id, reason){
   reason = reason || prompt('Void this transfer? Why (optional):', '');
   if (reason === null) return;
   try {
-    const r = await fetch('/api/transfers/' + id + '/void', {method:'POST', credentials:'include',
+    const r = await authFetch('/api/transfers/' + id + '/void', {method:'POST',
       headers:{'Content-Type':'application/json'}, body: JSON.stringify({reason: reason})});
     if (!r.ok) throw new Error();
     toast('Voided'); loadHistory();
@@ -280,8 +296,8 @@ async function editRow(i){
 let VP = null;
 function uuid(){ return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2); }
 async function voice(body){
-  const r = await fetch('/api/transfers/voice', {method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  if (r.status === 401) { location.href = '/login?next=/transfer'; throw new Error('login'); }
+  const r = await authFetch('/api/transfers/voice', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if (r.status === 401) { notSetUp(); throw new Error('login'); }
   return r.json();
 }
 async function sayIt(){
@@ -309,8 +325,11 @@ async function vConfirm(){ try { showV(await voice({pending_id: VP.pending_id, c
 window.addEventListener('online', () => { flush().then(loadHistory); });
 renderBar();
 flush().then(loadHistory);
-fetch('/api/auth/check', {credentials:'include'}).then(r => r.ok ? r.json() : null).then(u => {
-  if (u && u.role === 'admin') document.getElementById('adminlink').style.display = '';
+authFetch('/api/moves/whoami').then(r => { if (r.status === 401) { notSetUp(); return null; } return r.ok ? r.json() : null; }).then(u => {
+  if (!u) return;
+  if (u.owner && !u.via_token) document.getElementById('adminlink').style.display = '';
+  // default the direction to "from my house"
+  const b = u.home && document.querySelector('.dir button[data-from="' + u.home + '"]'); if (b && !T.from) pickDir(b);
 }).catch(() => {});
 </script>
 </body>

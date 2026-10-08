@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000">
+<title>Red Nun — Transfer Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--bg:#0a0a0c;--card:#1a1a1e;--card2:#222226;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+  --text:#f5f5f7;--text2:rgba(245,245,247,0.6);--text3:rgba(245,245,247,0.35);--red:#FF453A;--green:#30D158;--blue:#0A84FF;--orange:#FF9F0A}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+.wrap{padding:16px;max-width:1100px;margin:0 auto}
+h1{font-size:20px;font-weight:800}
+.sub{font-size:12px;color:var(--text3);margin-top:2px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0}
+.tabs button{padding:9px 13px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text2);font:600 13px Inter,sans-serif;cursor:pointer}
+.tabs button.sel{color:#fff;border-color:var(--blue);background:rgba(10,132,255,.14)}
+.tabs .n{background:var(--orange);color:#000;border-radius:8px;padding:0 6px;margin-left:4px;font-size:11px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+.h{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid var(--border2)}
+td{padding:8px 6px;border-bottom:1px solid var(--border);vertical-align:top}
+input,select{padding:9px 10px;border-radius:9px;background:var(--bg);border:1px solid var(--border2);color:var(--text);font:500 14px Inter,sans-serif}
+.btn{padding:8px 12px;border-radius:9px;background:var(--card2);border:1px solid var(--border2);color:var(--text);font:600 13px Inter,sans-serif;cursor:pointer}
+.btn.go{background:var(--green);color:#000;border:none}
+.btn.bad{color:var(--red)}
+.muted{color:var(--text3);font-size:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:4px;margin:3px 4px 3px 0;padding:4px 8px;border-radius:8px;background:var(--card2);border:1px solid var(--border2);font-size:12px;cursor:pointer;user-select:none}
+.chip.off{text-decoration:line-through;opacity:.45}
+.chip .loc{color:var(--text3);font-size:10px}
+.chip.grp{border-color:rgba(255,159,10,.6)}
+.prod{padding:12px 0;border-bottom:1px solid var(--border)}
+.prod .nm{font-weight:700}
+.prod input.cn{width:280px;max-width:100%}
+.gate{padding:12px 14px;border-radius:12px;margin-bottom:12px;font-weight:600}
+.gate.ok{background:rgba(48,209,88,.12);color:var(--green)}
+.gate.no{background:rgba(255,159,10,.12);color:var(--orange)}
+.newtok{padding:14px;border-radius:12px;background:rgba(48,209,88,.08);border:1px solid rgba(48,209,88,.4);margin-top:12px}
+.newtok code{word-break:break-all;color:#fff}
+#qr{background:#fff;padding:10px;display:inline-block;border-radius:8px;margin-top:10px}
+@media (max-width:767px){ table.resp thead{display:none} table.resp tr{display:block;border-bottom:1px solid var(--border);padding:8px 0}
+  table.resp td{display:block;border:none;padding:2px 0} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between">
+    <div><h1>Transfer & Waste — Admin</h1><div class="sub">People, the words Siri listens for, product links, settings</div></div>
+    <div class="row"><a class="btn" href="/transfer">Transfers</a><a class="btn" href="/waste">Waste</a><a class="btn" href="/transfer/statement">Statement</a></div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div id="out"></div>
+</div>
+<script>
+const TABS = [['people','People'],['words','Words'],['links','Links'],['learned','Learned'],['waste','Waste review'],['settings','Settings'],['problems','Problems']];
+let TAB = (location.hash || '#people').slice(1);
+function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+async function J(url, body, method){
+  const r = await fetch(url, body === undefined && !method ? {credentials:'include'} :
+    {method: method || 'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: body === undefined ? null : JSON.stringify(body)});
+  if (r.status === 401 || r.redirected) { location.href = '/login?next=/transfer/admin'; throw new Error('login'); }
+  return r.json();
+}
+let COUNTS = {};
+function tabs(){
+  document.getElementById('tabs').innerHTML = TABS.map(([k, l]) => '<button class="' + (k === TAB ? 'sel' : '') + '" onclick="go(\'' + k + '\')">' + l +
+    (COUNTS[k] ? '<span class="n">' + COUNTS[k] + '</span>' : '') + '</button>').join('');
+}
+function go(t){ TAB = t; location.hash = t; tabs(); ({people, words, links, learned, waste, settings, problems})[t](); }
+const out = h => document.getElementById('out').innerHTML = h;
+
+// ---------------- People
+async function people(){
+  const rows = await J('/api/transfer-admin/people');
+  out('<div class="card"><div class="h" style="margin-top:0">Add a person</div><div class="row">' +
+    '<input id="pn" placeholder="Name"><select id="ph"><option value="">Home house…</option><option value="chatham">Chatham</option><option value="dennis">Dennis</option></select>' +
+    '<select id="pr"><option value="staff">Staff (no $)</option><option value="owner">Owner (sees $)</option></select>' +
+    '<button class="btn go" onclick="addPerson()">Create key</button></div><div id="newtok"></div></div>' +
+    '<div class="card"><table class="resp"><thead><tr><th>Person</th><th>Home</th><th>Role</th><th>Last used</th><th>Logged</th><th></th></tr></thead><tbody>' +
+    (rows.length ? rows.map(r => '<tr style="' + (r.active ? '' : 'opacity:.45') + '"><td><b>' + esc(r.person_name) + '</b></td><td>' + esc(r.home_location || '—') + '</td><td>' + esc(r.role) +
+      '</td><td>' + esc(r.last_used_at || 'never') + '</td><td>' + r.transfers + ' transfers · ' + r.waste + ' waste</td><td>' +
+      (r.active ? '<button class="btn bad" onclick="revoke(' + r.id + ',\'' + esc(r.person_name) + '\')">Turn off</button>' : 'off ' + esc(r.revoked_at || '')) + '</td></tr>').join('')
+      : '<tr><td colspan="6" class="muted">Nobody yet.</td></tr>') + '</tbody></table>' +
+    '<div class="muted" style="margin-top:10px">A key is shown once. Lost it? Turn it off and make a new one. Turning one off stops that phone right away.</div></div>');
+}
+async function addPerson(){
+  const person = document.getElementById('pn').value.trim(); if (!person) return;
+  const r = await J('/api/transfer-admin/people', {person, home: document.getElementById('ph').value, role: document.getElementById('pr').value});
+  if (r.error) { alert(r.error); return; }
+  const link = location.origin + '/transfer/setup#k=' + encodeURIComponent(r.token);
+  const sms = 'sms:&body=' + encodeURIComponent('Red Nun transfers & waste — open this on your phone to set it up: ' + link);
+  await people();
+  document.getElementById('newtok').innerHTML = '<div class="newtok"><b>' + esc(r.person) + '</b> — send this once (it\'s their key; shown only now):<br>' +
+    '<code>' + esc(link) + '</code><div class="row" style="margin-top:10px"><button class="btn" onclick="navigator.clipboard.writeText(\'' + link + '\');this.textContent=\'Copied ✓\'">Copy link</button>' +
+    '<a class="btn" href="' + sms + '">Text it</a></div><div id="qr"></div><div class="muted" style="margin-top:6px">Or they scan this with the phone camera.</div></div>';
+  try { new QRCode(document.getElementById('qr'), {text: link, width: 180, height: 180}); } catch(e) { document.getElementById('qr').style.display = 'none'; }
+}
+async function revoke(id, name){ if (!confirm('Turn off ' + name + '\'s key? That phone stops working right away.')) return; await J('/api/transfer-admin/people/' + id + '/revoke', {}); people(); }
+
+// ---------------- Words (aliases + card names)
+let WS = {status: 'proposed', q: '', page: 0}, WD = null, OFF = new Set();
+async function words(){
+  WD = await J('/api/transfer-admin/words?status=' + WS.status + '&q=' + encodeURIComponent(WS.q) + '&page=' + WS.page);
+  OFF = new Set();
+  const ac = WD.alias_counts, pages = Math.ceil(WD.total / WD.per);
+  let h = '<div id="gate"></div><div class="card"><div class="row" style="justify-content:space-between">' +
+    '<div class="row"><select onchange="WS.status=this.value;WS.page=0;words()">' + ['proposed','approved','struck','all'].map(s => '<option ' + (s === WS.status ? 'selected' : '') + '>' + s + '</option>').join('') + '</select>' +
+    '<input placeholder="Search product or word" value="' + esc(WS.q) + '" onchange="WS.q=this.value;WS.page=0;words()"></div>' +
+    '<div class="muted">words: ' + (ac.proposed || 0) + ' to review · ' + (ac.approved || 0) + ' approved · ' + (ac.struck || 0) + ' struck</div></div>' +
+    '<div class="muted" style="margin-top:8px">Tap a word to strike it (tap again to keep). Orange border = the word names several products at that house (a group — the one that house buys most gets picked, else "Which one?"). Fix the short name if it\'s not how the kitchen says it. Then <b>Approve this page</b>.</div></div>';
+  h += '<div class="card">' + (WD.products.length ? WD.products.map(p =>
+    '<div class="prod"><div class="row" style="justify-content:space-between"><div><div class="nm">' + esc(p.display_name || p.name) + '</div>' +
+    '<div class="muted">' + esc(p.name) + ' · ' + esc(p.category || '') + ' · bought 90d: C $' + p.spend90.chatham + ' / D $' + p.spend90.dennis + '</div></div>' +
+    '<div>Card name <input class="cn" data-pid="' + p.product_id + '" value="' + esc(p.card_name || '') + '"></div></div><div style="margin-top:6px">' +
+    p.aliases.map(a => '<span class="chip' + (a.group > 1 ? ' grp' : '') + (a.status === 'struck' ? ' off' : '') + '" data-id="' + a.id + '" onclick="toggle(this)">' + esc(a.alias_text) +
+      ' <span class="loc">' + (a.location === 'chatham' ? 'C' : 'D') + (a.group > 1 ? '·' + a.group : '') + '</span></span>').join('') +
+    '<span class="chip" onclick="addWord(' + p.product_id + ')">+ word</span></div></div>').join('') : '<div class="muted">Nothing here.</div>') + '</div>';
+  h += '<div class="row" style="justify-content:space-between"><div class="row"><button class="btn" ' + (WS.page ? '' : 'disabled') + ' onclick="WS.page--;words()">‹ Prev</button>' +
+    '<span class="muted">page ' + (WS.page + 1) + ' of ' + Math.max(1, pages) + ' (' + WD.total + ' products)</span>' +
+    '<button class="btn" ' + (WS.page + 1 < pages ? '' : 'disabled') + ' onclick="WS.page++;words()">Next ›</button></div>' +
+    '<div class="row"><button class="btn" onclick="score()">Run the test set</button><button class="btn go" onclick="approvePage()">Approve this page</button></div></div>';
+  out(h);
+}
+function toggle(el){ const id = +el.dataset.id; el.classList.toggle('off'); if (el.classList.contains('off')) OFF.add(id); else OFF.delete(id); }
+async function approvePage(){
+  const approve = [], strike = [];
+  document.querySelectorAll('.chip[data-id]').forEach(c => (c.classList.contains('off') ? strike : approve).push(+c.dataset.id));
+  const cards = {};
+  document.querySelectorAll('input.cn').forEach(i => { if (i.value.trim()) cards[i.dataset.pid] = {name: i.value.trim(), status: 'approved'}; });
+  await J('/api/transfer-admin/words', {approve, strike, cards});
+  if (WS.status === 'proposed') WS.page = 0; else WS.page++;
+  words();
+}
+async function addWord(pid){
+  const w = prompt('Word the kitchen says for this:'); if (!w) return;
+  const loc = prompt('At which house? (chatham / dennis / both)', 'both'); if (!loc) return;
+  const locs = loc.toLowerCase().startsWith('b') ? ['chatham', 'dennis'] : [loc.toLowerCase().startsWith('c') ? 'chatham' : 'dennis'];
+  await J('/api/transfer-admin/words', {add: locs.map(l => ({location: l, alias: w, product_id: pid}))});
+  words();
+}
+async function score(){
+  const g = document.getElementById('gate'); g.innerHTML = '<div class="gate no">Running the test set…</div>';
+  const r = await J('/api/transfer-admin/score', {});
+  g.innerHTML = '<div class="gate ' + (r.gate_passed ? 'ok' : 'no') + '">' + (r.gate_passed ? '✓ Ready for staff. ' : 'Not ready for staff yet. ') +
+    'Right on the card: ' + r.main.auto_pct + '% (need 95) · in the list: ' + r.main.list_pct + '% (need 100) · sweet-potato-for-fries: ' + r.main.never_hits +
+    ' · held-out phrases: ' + r.holdout.auto_pct + '% / ' + r.holdout.list_pct + '%</div>';
+}
+
+// ---------------- Links
+async function links(){
+  const d = await J('/api/transfer-admin/links');
+  out('<div class="card"><div class="h" style="margin-top:0">Transfers waiting on a link (' + d.needs_link.length + ')</div>' +
+    (d.needs_link.length ? '<table><tbody>' + d.needs_link.map(t => '<tr><td>' + esc(t.business_date) + '</td><td>' + esc(t.qty_entered + ' ' + (t.unit_entered || '') + ' ' + t.item_name) +
+      '</td><td>' + esc(t.from_location + ' → ' + t.to_location) + '</td><td><button class="btn" onclick="sameAtBoth(' + t.from_product_id + ')">Same product at both houses</button></td></tr>').join('') + '</tbody></table>'
+      : '<div class="muted">None. (Most products are one row bought by both houses, so they need no link.)</div>') + '</div>' +
+    '<div class="card"><div class="h" style="margin-top:0">Suggested pairs — each house buys its own row for the same thing</div>' +
+    (d.suggested.length ? '<table class="resp"><thead><tr><th>Chatham row</th><th>Dennis row</th><th>Match</th><th></th></tr></thead><tbody>' + d.suggested.map(s =>
+      '<tr><td>' + esc(s.chatham_name) + ' <span class="muted">#' + s.chatham_product_id + '</span></td><td>' + esc(s.dennis_name) + ' <span class="muted">#' + s.dennis_product_id +
+      '</span></td><td>' + Math.round(s.score * 100) + '%</td><td><button class="btn go" onclick="link(' + s.chatham_product_id + ',' + s.dennis_product_id + ',\'confirmed\')">Same item</button> ' +
+      '<button class="btn" onclick="link(' + s.chatham_product_id + ',' + s.dennis_product_id + ',\'rejected\')">Not the same</button></td></tr>').join('') + '</tbody></table>' : '<div class="muted">No suggestions.</div>') + '</div>' +
+    '<div class="card"><div class="h" style="margin-top:0">Links (' + d.links.length + ')</div>' + d.links.map(l => '<div class="muted">' + esc(l.chatham_name) + ' ⇄ ' + esc(l.dennis_name) + ' — ' + esc(l.status) + '</div>').join('') + '</div>');
+}
+async function link(c, d, status){ const r = await J('/api/transfer-admin/links', {chatham_product_id: c, dennis_product_id: d, status}); if (r.transfers_updated) alert(r.transfers_updated + ' transfer(s) updated'); links(); }
+async function sameAtBoth(pid){ await link(pid, pid, 'confirmed'); }
+
+// ---------------- Learned
+async function learned(){
+  const rows = await J('/api/transfer-admin/learned');
+  out('<div class="card"><div class="muted" style="margin-bottom:8px">What people picked for what they said. Picked the same way twice = used automatically. Delete a wrong one.</div><table class="resp"><thead><tr><th>House</th><th>They said</th><th>Picked</th><th>Times</th><th>Who</th><th>Last</th><th></th></tr></thead><tbody>' +
+    (rows.length ? rows.map(r => '<tr style="' + (r.status === 'demoted' ? 'opacity:.45' : '') + '"><td>' + esc(r.location) + '</td><td>“' + esc(r.alias_text) + '”</td><td>' + esc(r.item_name) + '</td><td>' + r.picks +
+      (r.status === 'demoted' ? ' (demoted)' : '') + '</td><td>' + esc(r.person) + '</td><td>' + esc(r.last_at) + '</td><td><button class="btn bad" onclick="delLearned(' + r.id + ')">Delete</button></td></tr>').join('')
+      : '<tr><td colspan="7" class="muted">Nothing learned yet.</td></tr>') + '</tbody></table></div>');
+}
+async function delLearned(id){ await J('/api/transfer-admin/learned/' + id, undefined, 'DELETE'); learned(); }
+
+// ---------------- Waste review
+async function waste(){
+  const rows = await J('/api/transfer-admin/waste-review');
+  out('<div class="card"><table class="resp"><thead><tr><th>Date</th><th>House</th><th>Item</th><th>$</th><th>Why</th><th>Who</th><th>They said</th><th></th></tr></thead><tbody>' +
+    (rows.length ? rows.map(w => '<tr><td>' + esc(w.business_date) + '</td><td>' + esc(w.location) + '</td><td>' + esc(w.qty_entered + ' ' + (w.unit_entered || '') + ' ' + w.item_name) + '</td><td>$' + (w.total_cost || 0).toFixed(2) +
+      '</td><td>' + esc(w.reason_code || 'none') + '</td><td>' + esc(w.entered_by) + '</td><td class="muted">' + esc(w.raw_text) + '</td><td><button class="btn" onclick="reviewed(' + w.id + ')">Seen</button></td></tr>').join('')
+      : '<tr><td colspan="8" class="muted">Nothing over the threshold.</td></tr>') + '</tbody></table></div>');
+}
+async function reviewed(id){ await J('/api/transfer-admin/waste-review/' + id, {}); waste(); }
+
+// ---------------- Settings
+async function settings(save){
+  const s = save ? await J('/api/transfer-admin/settings', save) : await J('/api/transfer-admin/settings');
+  out('<div class="card"><div class="h" style="margin-top:0">Claude fallback (only when the word matching can\'t tell — picks from this house\'s list or says "unknown")</div><div class="row">' +
+    '<select id="ai"><option value="on" ' + (s.ai_fallback === 'on' ? 'selected' : '') + '>On</option><option value="off" ' + (s.ai_fallback === 'off' ? 'selected' : '') + '>Off</option></select>' +
+    'Monthly cap $<input id="cap" type="number" step="1" value="' + s.ai_monthly_cap_usd + '" style="width:90px"><span class="muted">spent this month: $' + s.ai_spend_month.toFixed(4) + ' · model ' + esc(s.ai_model) + '</span></div>' +
+    '<div class="h">Email me</div><select id="em">' + [['per_entry','Every entry'],['daily_digest','Daily digest'],['off','Off']].map(([v, l]) => '<option value="' + v + '" ' + (s.email_mode === v ? 'selected' : '') + '>' + l + '</option>').join('') + '</select> ' +
+    '<button class="btn" onclick="testEmail(this)">Send a test email</button>' +
+    '<div class="h">Flag waste over</div>$<input id="wf" type="number" step="5" value="' + s.waste_flag_usd + '" style="width:90px">' +
+    '<div style="margin-top:16px"><button class="btn go" onclick="settings({ai_fallback: ai.value, ai_monthly_cap_usd: cap.value, email_mode: em.value, waste_flag_usd: wf.value})">Save</button></div></div>');
+}
+async function testEmail(b){ b.textContent = 'Sending…'; const r = await J('/api/transfer-admin/test-email', {}); b.textContent = r.success ? 'Sent ✓' : 'Failed: ' + r.error; }
+
+// ---------------- Problems
+async function problems(){
+  const p = await J('/api/transfer-admin/problems');
+  out('<div class="card"><div class="h" style="margin-top:0">Emails that didn\'t go (' + p.email_failures.length + ')</div>' +
+    (p.email_failures.length ? p.email_failures.map(f => '<div class="muted">' + esc(f.kind + ' #' + f.entry_id + ' ' + f.event + ' — ' + f.attempts + ' tries — ' + (f.error || '')) + '</div>').join('') : '<div class="muted">None.</div>') +
+    '<div class="h">Claude fallback calls (latest 50)</div><table class="resp"><tbody>' + (p.ai_calls.length ? p.ai_calls.map(c => '<tr><td>' + esc(c.created_at) + '</td><td>' + esc(c.purpose) + '</td><td>' + esc(c.location || '') +
+      '</td><td>“' + esc(c.phrase || '') + '”</td><td>$' + (c.cost_usd || 0).toFixed(4) + '</td><td>' + (c.latency_ms || '') + ' ms</td><td class="muted">' + esc(c.error || c.result || '') + '</td></tr>').join('') : '<tr><td class="muted">None.</td></tr>') + '</tbody></table></div>');
+}
+
+(async () => {
+  try {
+    const p = await J('/api/transfer-admin/problems');
+    COUNTS = {links: p.needs_link, waste: p.waste_to_review, problems: p.email_failures.length};
+    const w = await J('/api/transfer-admin/words?status=proposed&page=0'); COUNTS.words = w.total;
+  } catch(e) {}
+  go(TABS.some(t => t[0] === TAB) ? TAB : 'people');
+})();
+</script>
+</body>
+</html>

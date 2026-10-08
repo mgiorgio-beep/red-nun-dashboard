@@ -126,6 +126,22 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   <button class="send" id="send" disabled onclick="send()">Pick a house</button>
 </div>
 <script>
+// Staff don't log in: the phone carries its person's token (from the setup link).
+const TKEY = 'rn_move_token';
+(function(){ const m = /[#&]k=([^&]+)/.exec(location.hash); if (m) { try { localStorage.setItem(TKEY, decodeURIComponent(m[1])); } catch(e) {} } })();
+function moveToken(){ try { return localStorage.getItem(TKEY) || ''; } catch(e) { return ''; } }
+function authFetch(url, opts){
+  opts = Object.assign({credentials: 'include'}, opts || {});
+  const t = moveToken();
+  if (t) opts.headers = Object.assign({}, opts.headers || {}, {Authorization: 'Bearer ' + t});
+  return fetch(url, opts);
+}
+function notSetUp(){
+  document.querySelector('.wrap').innerHTML = '<div style="padding:60px 10px;text-align:center"><div style="font-size:48px">📱</div>' +
+    '<h2 style="margin:12px 0 8px">This phone isn\'t set up.</h2><p style="color:var(--text2)">Ask Mike for your setup link.</p>' +
+    '<p style="margin-top:24px;font-size:13px"><a style="color:var(--blue)" href="/login?next=' + encodeURIComponent(location.pathname) + '">Dashboard login</a></p></div>';
+  const b = document.querySelector('.bar'); if (b) b.style.display = 'none';
+}
 const REASONS = [['spoiled','Spoiled'],['dropped','Dropped'],['kitchen_error','Kitchen error'],['overprep','Over-prep'],['bar','Bar'],['staff_meal','Staff meal'],['other','Other']];
 const W = { loc: null, line: null, days: 7, owner: false };
 const QKEY = 'rn_waste_queue';
@@ -146,8 +162,8 @@ async function search(){
   const q = document.getElementById('q').value.trim(), my = ++_sq, box = document.getElementById('results');
   if (q.length < 2) { box.innerHTML = ''; return; }
   try {
-    const r = await fetch('/api/transfers/products?house=' + encodeURIComponent(W.loc || '') + '&q=' + encodeURIComponent(q), {credentials:'include'});
-    if (r.status === 401) { location.href = '/login?next=/waste'; return; }
+    const r = await authFetch('/api/transfers/products?house=' + encodeURIComponent(W.loc || '') + '&q=' + encodeURIComponent(q));
+    if (r.status === 401) { notSetUp(); return; }
     const rows = await r.json(); if (my !== _sq) return;
     window._res = rows;
     box.innerHTML = rows.length ? rows.map((p, i) => '<div class="res" onclick="choose(' + i + ')"><span>' + esc(p.label) + '</span></div>').join('')
@@ -189,7 +205,7 @@ async function flush(){
     while (q.length) {
       let ok = false;
       try {
-        const r = await fetch('/api/waste', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(q[0])});
+        const r = await authFetch('/api/waste', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(q[0])});
         ok = r.ok && (r.headers.get('content-type') || '').indexOf('json') !== -1;
         if (!ok && r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) { ok = true; toast('An entry was rejected by the server', true); }
       } catch(e) {}
@@ -212,8 +228,8 @@ function setDays(d){ W.days = d; document.getElementById('d7').classList.toggle(
 async function loadHistory(){
   const box = document.getElementById('history');
   try {
-    const r = await fetch('/api/waste?days=' + W.days + (W.loc ? '&location=' + W.loc : ''), {credentials:'include'});
-    if (r.status === 401) { location.href = '/login?next=/waste'; return; }
+    const r = await authFetch('/api/waste?days=' + W.days + (W.loc ? '&location=' + W.loc : ''));
+    if (r.status === 401) { notSetUp(); return; }
     const rows = await r.json();
     const rl = Object.fromEntries(REASONS);
     box.innerHTML = rows.length ? rows.map(t => {
@@ -233,7 +249,7 @@ async function loadSummary(){
   const box = document.getElementById('summary');
   if (!W.owner) { box.innerHTML = ''; return; }
   try {
-    const r = await fetch('/api/waste/summary?days=' + W.days + (W.loc ? '&location=' + W.loc : ''), {credentials:'include'});
+    const r = await authFetch('/api/waste/summary?days=' + W.days + (W.loc ? '&location=' + W.loc : ''));
     if (!r.ok) { box.innerHTML = ''; return; }
     const rl = Object.fromEntries(REASONS);
     box.innerHTML = (await r.json()).map(s =>
@@ -248,15 +264,15 @@ async function loadSummary(){
 async function undo(id){
   const reason = prompt('Void this entry? Why (optional):', ''); if (reason === null) return;
   try {
-    const r = await fetch('/api/waste/' + id + '/void', {method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({reason})});
+    const r = await authFetch('/api/waste/' + id + '/void', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({reason})});
     if (!r.ok) throw new Error(); toast('Voided'); loadHistory(); loadSummary();
   } catch(e) { toast('Could not void — try again with a connection', true); }
 }
 // ---- say / type it: same endpoint and card as the Siri Shortcut
 let VP = null;
 async function voice(body){
-  const r = await fetch('/api/waste/voice', {method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  if (r.status === 401) { location.href = '/login?next=/waste'; throw new Error('login'); }
+  const r = await authFetch('/api/waste/voice', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if (r.status === 401) { notSetUp(); throw new Error('login'); }
   return r.json();
 }
 async function sayIt(){
@@ -276,10 +292,12 @@ async function vGo(extra){ try { showV(await voice(Object.assign({pending_id: VP
 window.addEventListener('online', () => { flush().then(loadHistory); });
 (async () => {
   try {
-    const u = await (await fetch('/api/auth/check', {credentials:'include'})).json();
-    W.owner = u.role === 'admin';
+    const r = await authFetch('/api/moves/whoami');
+    if (r.status === 401) { notSetUp(); return; }
+    const u = await r.json();
+    W.owner = u.owner && !u.via_token;      // the $ summary is a dashboard (login) view
     let loc = null; try { loc = localStorage.getItem('rn_waste_loc'); } catch(e) {}
-    loc = loc || (['chatham', 'dennis'].includes(u.location) ? u.location : null);
+    loc = loc || u.home;
     const b = loc && document.querySelector('.dir button[data-loc="' + loc + '"]');
     if (b) pickLoc(b); else { loadHistory(); }
   } catch(e) { loadHistory(); }

@@ -75,6 +75,7 @@ from routes.count_template_routes import count_template_bp
 from routes.count_session_routes import count_session_bp
 from routes.transfer_routes import transfer_bp
 from routes.waste_routes import waste_bp
+from routes.transfer_admin_routes import transfer_admin_bp
 from reports.sales_journal import init_sales_journal_tables, run_daily_journal, send_weekly_unresolved_summary
 
 load_dotenv()
@@ -131,6 +132,7 @@ app.register_blueprint(count_template_bp)
 app.register_blueprint(count_session_bp)
 app.register_blueprint(transfer_bp)
 app.register_blueprint(waste_bp)
+app.register_blueprint(transfer_admin_bp)
 
 @app.before_request
 def _inventory_api_login():
