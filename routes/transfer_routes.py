@@ -69,9 +69,21 @@ def _truthy(v):
 def handle_voice(kind):
     """Shared by /api/transfers/voice and /api/waste/voice."""
     data = request.get_json(silent=True) or request.form.to_dict() or {}
+    current_app.logger.info('%s voice from %s: %s', kind, g.actor.get('person'),
+                            {k: type(v).__name__ for k, v in data.items()} if isinstance(data, dict) else type(data).__name__)
+    if not isinstance(data, dict):
+        data = {}
     conn = get_connection()
     try:
-        pid = (data.get('pending_id') or '').strip()
+        pid = str(data.get('pending_id') or '').strip()
+        if not pid and not data.get('text') and (data.get('choice') not in (None, '') or _truthy(data.get('confirm'))):
+            # The phone answered a question without saying which one (iOS's shortcut
+            # builder drops pending_id): it's that phone's latest open dictation.
+            who = ('token_id = ?', g.actor['token_id']) if g.actor.get('token_id') else ('person = ?', g.actor.get('person'))
+            row = conn.execute(f"""SELECT pending_id FROM move_pending WHERE kind = ? AND {who[0]} AND status = 'open'
+                                    AND expires_at > ? ORDER BY created_at DESC LIMIT 1""",
+                               (kind, who[1], M.now_et().isoformat())).fetchone()
+            pid = row['pending_id'] if row else ''
         if pid:
             p = conn.execute("SELECT kind, person, token_id FROM move_pending WHERE pending_id = ?", (pid,)).fetchone()
             if not p or p['kind'] != kind:
@@ -83,7 +95,12 @@ def handle_voice(kind):
             if _truthy(data.get('confirm')):
                 return jsonify(M.confirm(conn, pid, g.actor))
             if data.get('choice') not in (None, ''):
-                return jsonify(M.answer(conn, pid, data['choice'], g.actor))
+                ch = data['choice']
+                if isinstance(ch, list):
+                    ch = ch[0] if ch else ''
+                if isinstance(ch, dict):
+                    ch = ch.get('label') or ch.get('id') or ''
+                return jsonify(M.answer(conn, pid, str(ch).strip(), g.actor))
             p = conn.execute("SELECT * FROM move_pending WHERE pending_id = ?", (pid,)).fetchone()
             return jsonify(M.respond(conn, p, g.actor))
         return jsonify(M.start(conn, kind, data.get('text'), data.get('client_id'), g.actor))
