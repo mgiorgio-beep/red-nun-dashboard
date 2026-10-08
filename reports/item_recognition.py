@@ -264,12 +264,56 @@ def card_names(conn):
                          % ','.join('?' * len(LIVE_ALIAS)), LIVE_ALIAS)}
 
 
-def card_name(conn, p):
-    """Short name for cards: approved card name, else the display name."""
+_NOISE_RES = [
+    re.compile(r'\([^)]*\)'),                                             # (Kettle Cuisine), (case of 6)
+    re.compile(r"\b\d+(\.\d+)?\s*(°|'|’|proof|pf)(?=\W|$)", re.I),        # 80°, 80'
+    re.compile(r'\bK-\d+(\.\d+)?\s*(gal|liter|l)?\b|\bB-\d+\b', re.I),       # K-15.5 GAL, B-24
+    re.compile(r'\b\d+\s*/\s*\d+(\.\d+)?\s*(lt|l|ml|oz|z|lb)\b', re.I),       # 12/1LT, 20/8 OZ (not 3/8" cut)
+    re.compile(r'\b\d+\s*/\s*(cs|c|case)\b', re.I),                          # 6/C, 24/CS
+    re.compile(r'\b\d+\s*(pk|pack|ct|count)\b', re.I),                       # 24pk, 95ct
+    re.compile(r'\b(hb|sb|cs|case|loose|new pkg|single)\b', re.I),
+]
+_SIZE_RE = re.compile(r'(?<![-\d.])\b\d+(\.\d+)?\s*(ml|l|lt|ltr|liter|oz|z|lb|gal)\b', re.I)   # not ranges (8-10oz)
+
+
+def _clean(name):
+    s = name or ''
+    for rx in _NOISE_RES:
+        s = rx.sub(' ', s)
+    s = _SIZE_RE.sub(' ', s)
+    s = re.sub(r'\s*,\s*$', '', re.sub(r'\s+', ' ', s)).strip(' ,-/')
+    s = re.sub(r'\s+,', ',', s)
+    if s and s == s.upper():
+        s = s.title()
+    return s or (name or '')
+
+
+def card_name(conn, p, house=None):
+    """Short name for the confirm card, emails and lists.
+    An approved card name (Words review) wins. Otherwise the product name minus
+    proof marks, pack codes and sizes; the size comes back only when this house
+    stocks two sizes of the same thing (so it can still tell them apart)."""
     ensure_tables(conn)
-    r = conn.execute("SELECT card_name FROM product_card_names WHERE product_id = ? AND status = 'approved'",
+    r = conn.execute("SELECT card_name, status FROM product_card_names WHERE product_id = ? AND status <> 'struck'",
                      (p['id'],)).fetchone()
-    return r['card_name'] if r else (p['display_name'] or p['name'])
+    if r and r['status'] == 'approved':
+        return r['card_name']
+    # the unreviewed draft is a far better label than an invoice string (display only;
+    # matching never trusts a draft)
+    base = _clean(r['card_name'] if r else (p['display_name'] or p['name']))
+    if house:
+        ctx = house_context(conn, house)
+        twins = [q for q in ctx['live'] if q != p['id']]
+        if twins:
+            ph = ','.join('?' * len(twins))
+            for o in conn.execute(f"SELECT name, display_name FROM products WHERE id IN ({ph})", twins):
+                if _clean(o['display_name'] or o['name']).lower() == base.lower():
+                    from reports.house_moves import product_size
+                    size = product_size(conn, p['id'])
+                    if size:
+                        return f"{base} {size.upper().replace('ML', 'ml')}"
+                    break
+    return base
 
 
 def _alias_words(conn, location):

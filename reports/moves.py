@@ -380,7 +380,7 @@ def preview(conn, st):
     src = 'manual' if cost is not None else ec['source']
     unit_cost = cost if cost is not None else ec['cost']
     total = round(qb[0] * unit_cost, 2) if (qb and unit_cost is not None) else None
-    out = {'product': prod, 'card_name': R.card_name(conn, prod), 'qty_base': qb[0] if qb else None,
+    out = {'product': prod, 'card_name': R.card_name(conn, prod, house), 'qty_base': qb[0] if qb else None,
            'base_unit': qb[1] if qb else None, 'conv': qb[2] if qb else None,
            'unit_cost_base': unit_cost, 'total_cost': total, 'cost_source': src, 'cost_detail': ec.get('detail'),
            'category_type': (prod['category'] or '').upper()}
