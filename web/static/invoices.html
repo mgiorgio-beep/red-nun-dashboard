@@ -2531,7 +2531,7 @@ function generateCategoryReport() {
     return `
       <div class="report-card animate-in" style="animation-delay:${i*0.04}s">
         <div class="report-card-header">
-          <div class="report-card-title"><span class="rv-category cat-${cat}">${cat.replace('_',' ')}</span></div>
+          <div class="report-card-title"><span class="rv-category cat-${cat}">${rnCatLabel(cat)}</span></div>
           <div class="report-card-value">${fmt(total)}</div>
         </div>
         <div class="report-bar">
@@ -2568,7 +2568,7 @@ function generateItemsReport() {
         <div class="report-bar">
           <div class="report-bar-fill" style="width:${pct}%"></div>
         </div>
-        <div class="report-meta">${data.qty.toFixed(1)} units · <span class="rv-category cat-${data.cat}">${data.cat}</span></div>
+        <div class="report-meta">${data.qty.toFixed(1)} units · <span class="rv-category cat-${data.cat}">${rnCatLabel(data.cat)}</span></div>
       </div>
     `;
   }).join('');
@@ -2596,6 +2596,7 @@ zone.addEventListener('drop', ev => {
 </script>
   </div><!-- /main-content -->
 </div><!-- /layout -->
+<script src="/static/rn-labels.js"></script>
 <script src="/static/sidebar.js"></script>
 
 <script>
@@ -3006,7 +3007,7 @@ function reconRenderItems(items) {
     var expected = Math.round(qty * up * 100) / 100;
     var mathErr = (Math.abs(expected - tp) > 0.02 && qty > 0 && up > 0);
     var catOpts = RECON_CATS.map(function(c) {
-      return '<option value="' + c + '"' + (c === cat ? ' selected' : '') + '>' + c.replace(/_/g, ' ') + '</option>';
+      return '<option value="' + c + '"' + (c === cat ? ' selected' : '') + '>' + rnCatLabel(c) + '</option>';
     }).join('');
     return '<tr data-idx="' + i + '"' + (mathErr ? ' class="math-err"' : '') + '>' +
       '<td><input value="' + escHtml(item.product_name || '') + '" onchange="reconUpdateItem(' + i + ',\'product_name\',this.value)"></td>' +
@@ -3519,7 +3520,7 @@ function ciSetLoc(loc) {
 
 function ciCatSelect() {
   var opts = '';
-  CI_CATEGORIES.forEach(function(c) { opts += '<option value="' + c + '">' + c + '</option>'; });
+  CI_CATEGORIES.forEach(function(c) { opts += '<option value="' + c + '">' + rnCatLabel(c) + '</option>'; });
   return opts;
 }
 

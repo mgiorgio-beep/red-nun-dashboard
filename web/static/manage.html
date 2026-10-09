@@ -234,6 +234,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 .rp-ac-item .rp-ac-cost{font-size:11px;color:var(--text3);font-weight:600}
 </style>
 <link rel="stylesheet" href="/static/sidebar.css">
+<script src="/static/rn-labels.js"></script>
 </head>
 <body>
 
@@ -2584,7 +2585,7 @@ async function loadProducts() {
       return '<tr style="cursor:pointer" onclick="psDetail(' + p.id + ')">' +
         '<td><strong>' + (p.display_name || p.name || '') + '</strong>' +
           (p.display_name && p.display_name !== p.name ? '<div style="font-size:11px;color:var(--text3)">' + p.name + '</div>' : '') + '</td>' +
-        '<td><span class="tag ' + tagClass + '">' + (p.category || '--') + '</span></td>' +
+        '<td><span class="tag ' + tagClass + '">' + (rnCatLabel(p.category) || '--') + '</span></td>' +
         '<td>' + (p.active_vendor_name || '--') + '</td>' +
         '<td>' + price + '</td>' +
         '<td>' + pack + '</td>' +

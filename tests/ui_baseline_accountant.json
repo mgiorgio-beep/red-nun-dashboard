@@ -24,11 +24,11 @@
    "failed": [],
    "writes": [],
    "url": "/count?type=food",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-foodcount",
    "title": "\ud83c\udf74 Food Count",
-   "text": 348,
+   "text": 693,
    "problems": []
   },
   {
@@ -39,11 +39,26 @@
    "failed": [],
    "writes": [],
    "url": "/count?type=booze",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-boozecount",
    "title": "\ud83c\udf78 Booze Count",
-   "text": 372,
+   "text": 717,
+   "problems": []
+  },
+  {
+   "id": "nav-weeklylist",
+   "label": "Weekly List",
+   "visible": false,
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/count/list?loc=chatham",
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-weeklylist",
+   "title": "Weekly Count List",
+   "text": 4815,
    "problems": []
   },
   {
@@ -127,10 +142,10 @@
    "visible": false,
    "console": [
     "Failed to load resource: net::ERR_FAILED",
-    "Failed to load resource: net::ERR_FAILED",
-    "Failed to load resource: net::ERR_FAILED",
-    "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: the server responded with a status of 404 ()"
    ],
    "failed": [],
@@ -157,7 +172,7 @@
    "sidebar_ok": true,
    "active": "nav-invhistory",
    "title": "",
-   "text": 32572,
+   "text": 32568,
    "problems": []
   },
   {
@@ -172,7 +187,7 @@
    "sidebar_ok": true,
    "active": "nav-pending",
    "title": "",
-   "text": 649,
+   "text": 492,
    "problems": []
   },
   {
@@ -187,7 +202,7 @@
    "sidebar_ok": true,
    "active": "nav-invhistory",
    "title": "",
-   "text": 32572,
+   "text": 32568,
    "problems": []
   },
   {
@@ -221,7 +236,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-outstanding",
    "title": "Bills to Pay",
-   "text": 4915,
+   "text": 4740,
    "problems": []
   },
   {
@@ -405,7 +420,7 @@
    "sidebar_ok": true,
    "active": "nav-labor",
    "title": "",
-   "text": 447,
+   "text": 412,
    "problems": []
   },
   {
@@ -530,7 +545,7 @@
    "sidebar_ok": true,
    "active": "nav-recipeviewer",
    "title": "Recipe Viewer",
-   "text": 17066,
+   "text": 17067,
    "problems": []
   },
   {
@@ -556,11 +571,11 @@
    "failed": [],
    "writes": [],
    "url": "/voice-recipe",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-voicerecipe",
    "title": "Voice Recipe Builder",
-   "text": 124,
+   "text": 456,
    "problems": []
   },
   {
@@ -590,7 +605,7 @@
    "sidebar_ok": true,
    "active": "nav-products",
    "title": "Products",
-   "text": 133912,
+   "text": 134553,
    "problems": []
   },
   {
@@ -605,7 +620,7 @@
    "sidebar_ok": true,
    "active": "nav-prodsetup",
    "title": "Product Setup",
-   "text": 86596,
+   "text": 86916,
    "problems": []
   },
   {
@@ -646,11 +661,11 @@
    "failed": [],
    "writes": [],
    "url": "/storage",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-storage",
    "title": "Storage Layout",
-   "text": 87883,
+   "text": 88447,
    "problems": []
   },
   {
@@ -661,11 +676,11 @@
    "failed": [],
    "writes": [],
    "url": "/unit-setup",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-unitsetup",
    "title": "Unit Setup",
-   "text": 128568,
+   "text": 129080,
    "problems": []
   },
   {
@@ -802,7 +817,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 388,
+   "text": 733,
    "problems": []
   },
   {
@@ -812,7 +827,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 4463,
+   "text": 4815,
    "problems": []
   },
   {
@@ -822,7 +837,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 411,
+   "text": 756,
    "problems": []
   },
   {
@@ -832,7 +847,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 87883,
+   "text": 88447,
    "problems": []
   },
   {
@@ -842,7 +857,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 128568,
+   "text": 129080,
    "problems": []
   },
   {
@@ -852,7 +867,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 124,
+   "text": 456,
    "problems": []
   },
   {

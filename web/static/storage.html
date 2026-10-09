@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="/static/rn-frame.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Red Nun — Storage Layout</title>
@@ -34,10 +35,11 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
 
 /* Layout */
-.layout{display:flex;height:calc(100vh - 65px)}
+.sl-layout{display:flex;height:calc(100vh - 65px)}
+html.rn-framed .sl-layout{height:calc(100vh - 122px)}
 
 /* Left: Storage locations */
-.sidebar{width:280px;border-right:1px solid var(--border);overflow-y:auto;background:var(--card)}
+.sl-side{width:280px;border-right:1px solid var(--border);overflow-y:auto;background:var(--card)}
 .loc-header{padding:16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;
   color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;
   display:flex;justify-content:space-between;align-items:center}
@@ -188,7 +190,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
   </div>
   <div class="hdr-right">
     <a href="/count" class="btn btn-primary">📋 Count Inventory</a>
-    <a href="/manage" class="btn btn-secondary">← Manage</a>
+    <a href="/manage" class="btn btn-secondary rn-frame-back">← Manage</a>
   </div>
 </div>
 
@@ -238,9 +240,9 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
   </div>
 </div>
 
-<div class="layout">
+<div class="sl-layout">
   <!-- Sidebar: Storage Locations -->
-  <div class="sidebar">
+  <div class="sl-side">
     <div class="rest-toggle">
       <button class="rest-btn sel" data-loc="dennis" onclick="pickRest(this)">Dennis Port</button>
       <button class="rest-btn" data-loc="chatham" onclick="pickRest(this)">Chatham</button>

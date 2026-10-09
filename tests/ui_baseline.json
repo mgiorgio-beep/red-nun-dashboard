@@ -13,7 +13,7 @@
    "sidebar_ok": true,
    "active": "nav-dashboard",
    "title": "Dashboard",
-   "text": 1252,
+   "text": 1264,
    "problems": []
   },
   {
@@ -24,11 +24,11 @@
    "failed": [],
    "writes": [],
    "url": "/count?type=food",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-foodcount",
    "title": "\ud83c\udf74 Food Count",
-   "text": 348,
+   "text": 1109,
    "problems": []
   },
   {
@@ -39,11 +39,26 @@
    "failed": [],
    "writes": [],
    "url": "/count?type=booze",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-boozecount",
    "title": "\ud83c\udf78 Booze Count",
-   "text": 372,
+   "text": 1133,
+   "problems": []
+  },
+  {
+   "id": "nav-weeklylist",
+   "label": "Weekly List",
+   "visible": true,
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/count/list?loc=chatham",
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-weeklylist",
+   "title": "Weekly Count List",
+   "text": 5231,
    "problems": []
   },
   {
@@ -58,7 +73,7 @@
    "sidebar_ok": true,
    "active": "nav-inventory",
    "title": "Inventory",
-   "text": 7987,
+   "text": 7999,
    "problems": []
   },
   {
@@ -73,7 +88,7 @@
    "sidebar_ok": true,
    "active": "nav-orderguide",
    "title": "\ud83d\uded2 Order Guide",
-   "text": 1030,
+   "text": 1042,
    "problems": []
   },
   {
@@ -88,7 +103,7 @@
    "sidebar_ok": true,
    "active": "nav-transfers",
    "title": "Transfer",
-   "text": 1180,
+   "text": 1192,
    "problems": []
   },
   {
@@ -103,7 +118,7 @@
    "sidebar_ok": true,
    "active": "nav-waste",
    "title": "Waste",
-   "text": 866,
+   "text": 878,
    "problems": []
   },
   {
@@ -129,11 +144,14 @@
     "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: the server responded with a status of 404 ()",
     "Failed to load resource: the server responded with a status of 404 ()"
    ],
    "failed": [],
-   "writes": [],
+   "writes": [
+    "POST /staff/api/tvs/sync"
+   ],
    "url": "/staff",
    "sidebar": false,
    "sidebar_ok": false,
@@ -154,7 +172,7 @@
    "sidebar_ok": true,
    "active": "nav-invhistory",
    "title": "",
-   "text": 32985,
+   "text": 32984,
    "problems": []
   },
   {
@@ -169,7 +187,7 @@
    "sidebar_ok": true,
    "active": "nav-pending",
    "title": "",
-   "text": 1053,
+   "text": 908,
    "problems": []
   },
   {
@@ -184,7 +202,7 @@
    "sidebar_ok": true,
    "active": "nav-invhistory",
    "title": "",
-   "text": 32985,
+   "text": 32984,
    "problems": []
   },
   {
@@ -199,7 +217,7 @@
    "sidebar_ok": true,
    "active": "nav-vendorstatus",
    "title": "Vendor Scrapers",
-   "text": 1863,
+   "text": 1875,
    "problems": []
   },
   {
@@ -214,7 +232,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-outstanding",
    "title": "Bills to Pay",
-   "text": 5319,
+   "text": 5331,
    "problems": []
   },
   {
@@ -229,7 +247,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-printchecks",
    "title": "Print Checks",
-   "text": 1090,
+   "text": 1102,
    "problems": []
   },
   {
@@ -244,7 +262,7 @@
    "sidebar_ok": true,
    "active": "nav-payments",
    "title": "Payments",
-   "text": 46744,
+   "text": 46935,
    "problems": []
   },
   {
@@ -259,7 +277,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-payroll",
    "title": "Payroll",
-   "text": 3196,
+   "text": 3208,
    "problems": []
   },
   {
@@ -274,7 +292,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-import",
    "title": "Import Statement",
-   "text": 2548,
+   "text": 2560,
    "problems": []
   },
   {
@@ -289,7 +307,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-banktx",
    "title": "Bank Transactions",
-   "text": 386300,
+   "text": 386312,
    "problems": []
   },
   {
@@ -304,7 +322,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-registers",
    "title": "Bank Register",
-   "text": 1534,
+   "text": 1611,
    "problems": []
   },
   {
@@ -319,7 +337,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-bankrec",
    "title": "Bank Reconcile",
-   "text": 1555,
+   "text": 1567,
    "problems": []
   },
   {
@@ -334,7 +352,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-entries",
    "title": "Sales Journal",
-   "text": 1672,
+   "text": 1684,
    "problems": []
   },
   {
@@ -345,11 +363,11 @@
    "failed": [],
    "writes": [],
    "url": "/sales-journal?tab=export",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-export",
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
    "title": "Sales Journal",
-   "text": 1024,
+   "text": 300,
    "problems": []
   },
   {
@@ -364,7 +382,7 @@
    "sidebar_ok": true,
    "active": "nav-transfersettle",
    "title": "Reconcile Transfers",
-   "text": 1427,
+   "text": 1439,
    "problems": []
   },
   {
@@ -379,7 +397,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-pl",
    "title": "Profit & Loss",
-   "text": 4830,
+   "text": 4842,
    "problems": []
   },
   {
@@ -394,7 +412,7 @@
    "sidebar_ok": true,
    "active": "nav-labor",
    "title": "",
-   "text": 851,
+   "text": 828,
    "problems": []
   },
   {
@@ -415,7 +433,7 @@
    "sidebar_ok": true,
    "active": "nav-bevcost",
    "title": "",
-   "text": 854,
+   "text": 866,
    "problems": [
     "failed: 404 /api/cogs/pourcost?start=20261009&end=20261009; 404 /api/cogs/pourcost?start=20261009&end=20261009"
    ]
@@ -442,7 +460,7 @@
    "sidebar_ok": true,
    "active": "nav-foodcost",
    "title": "",
-   "text": 816,
+   "text": 828,
    "problems": [
     "failed: 404 /api/cogs/summary?start=20261009&end=20261009; 404 /api/cogs/vendors?start=20261009&end=20261009"
    ]
@@ -459,7 +477,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-reports",
    "title": "",
-   "text": 6218,
+   "text": 6230,
    "problems": []
   },
   {
@@ -474,7 +492,7 @@
    "sidebar_ok": true,
    "active": "nav-recipes",
    "title": "Recipes",
-   "text": 7254,
+   "text": 7266,
    "problems": []
   },
   {
@@ -489,7 +507,7 @@
    "sidebar_ok": true,
    "active": "nav-prepared",
    "title": "Prepared Items",
-   "text": 1093,
+   "text": 1105,
    "problems": []
   },
   {
@@ -504,7 +522,7 @@
    "sidebar_ok": true,
    "active": "nav-menuanalysis",
    "title": "Menu Analysis",
-   "text": 4587,
+   "text": 4599,
    "problems": []
   },
   {
@@ -519,7 +537,7 @@
    "sidebar_ok": true,
    "active": "nav-recipeviewer",
    "title": "Recipe Viewer",
-   "text": 17470,
+   "text": 17483,
    "problems": []
   },
   {
@@ -534,7 +552,7 @@
    "sidebar_ok": true,
    "active": "nav-recipefixer",
    "title": "Recipe Cost Fixer",
-   "text": 1529,
+   "text": 1541,
    "problems": []
   },
   {
@@ -545,11 +563,11 @@
    "failed": [],
    "writes": [],
    "url": "/voice-recipe",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-voicerecipe",
    "title": "Voice Recipe Builder",
-   "text": 124,
+   "text": 872,
    "problems": []
   },
   {
@@ -564,7 +582,7 @@
    "sidebar_ok": true,
    "active": "nav-pmixmapping",
    "title": "PMIX Mapping",
-   "text": 274991,
+   "text": 275003,
    "problems": []
   },
   {
@@ -579,7 +597,7 @@
    "sidebar_ok": true,
    "active": "nav-products",
    "title": "Products",
-   "text": 134316,
+   "text": 134969,
    "problems": []
   },
   {
@@ -594,7 +612,7 @@
    "sidebar_ok": true,
    "active": "nav-prodsetup",
    "title": "Product Setup",
-   "text": 87000,
+   "text": 87332,
    "problems": []
   },
   {
@@ -609,7 +627,7 @@
    "sidebar_ok": true,
    "active": "nav-vendors",
    "title": "Vendors",
-   "text": 2857,
+   "text": 2869,
    "problems": []
   },
   {
@@ -624,7 +642,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-vendors",
    "title": "Vendor Bill Pay Setup",
-   "text": 3879,
+   "text": 3891,
    "problems": []
   },
   {
@@ -635,11 +653,11 @@
    "failed": [],
    "writes": [],
    "url": "/storage",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-storage",
    "title": "Storage Layout",
-   "text": 87883,
+   "text": 88863,
    "problems": []
   },
   {
@@ -650,11 +668,11 @@
    "failed": [],
    "writes": [],
    "url": "/unit-setup",
-   "sidebar": false,
-   "sidebar_ok": false,
-   "active": null,
+   "sidebar": true,
+   "sidebar_ok": true,
+   "active": "nav-unitsetup",
    "title": "Unit Setup",
-   "text": 128568,
+   "text": 129496,
    "problems": []
   },
   {
@@ -669,7 +687,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-recurring",
    "title": "Recurring Bills",
-   "text": 940,
+   "text": 952,
    "problems": []
   },
   {
@@ -684,7 +702,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-checksetup",
    "title": "Check Printer",
-   "text": 1187,
+   "text": 1199,
    "problems": []
   },
   {
@@ -699,7 +717,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-openbal",
    "title": "Opening Balances",
-   "text": 3943,
+   "text": 3955,
    "problems": []
   },
   {
@@ -714,7 +732,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-mapping",
    "title": "Sales Mapping",
-   "text": 70708,
+   "text": 70720,
    "problems": []
   },
   {
@@ -729,7 +747,7 @@
    "sidebar_ok": true,
    "active": "nav-transferadmin",
    "title": "Transfer & Waste \u2014 Admin",
-   "text": 1220,
+   "text": 1232,
    "problems": []
   },
   {
@@ -744,7 +762,7 @@
    "sidebar_ok": true,
    "active": "nav-users",
    "title": "",
-   "text": 1715,
+   "text": 1727,
    "problems": []
   },
   {
@@ -771,7 +789,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 388,
+   "text": 1149,
    "problems": []
   },
   {
@@ -781,7 +799,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 4463,
+   "text": 5231,
    "problems": []
   },
   {
@@ -791,7 +809,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 411,
+   "text": 1172,
    "problems": []
   },
   {
@@ -801,7 +819,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 87883,
+   "text": 88863,
    "problems": []
   },
   {
@@ -811,7 +829,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 128568,
+   "text": 129496,
    "problems": []
   },
   {
@@ -821,7 +839,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 124,
+   "text": 872,
    "problems": []
   },
   {
@@ -831,7 +849,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 1180,
+   "text": 1192,
    "problems": []
   },
   {
@@ -841,7 +859,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 866,
+   "text": 878,
    "problems": []
   },
   {
@@ -849,10 +867,10 @@
    "label": "/staff",
    "console": [
     "Failed to load resource: net::ERR_FAILED",
-    "Failed to load resource: net::ERR_FAILED",
-    "Failed to load resource: net::ERR_FAILED",
-    "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: the server responded with a status of 404 ()"
    ],
    "failed": [],

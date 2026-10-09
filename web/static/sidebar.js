@@ -29,6 +29,7 @@ var sections=[
 {id:'sec-stock',label:'Count & Stock',icon:'inventory',children:[
   {id:'nav-foodcount',label:'Food Count',page:'/count?type=food',roles:[A,M]},
   {id:'nav-boozecount',label:'Booze Count',page:'/count?type=booze',roles:[A,M]},
+  {id:'nav-weeklylist',label:'Weekly List',page:'/count/list',roles:[A,M]},
   {id:'nav-inventory',label:'Inventory',page:'/manage',tab:'inv',roles:[A,M]},
   {id:'nav-orderguide',label:'Order Guide',page:'/order-guide',roles:[A,M]},
   {id:'nav-transfers',label:'Transfers',page:'/transfer',roles:[A,M]},
@@ -154,6 +155,8 @@ if(path==='/reports')return 'nav-acct-reports';
 if(path==='/sales-mapping')return 'nav-acct-mapping';
 if(path==='/storage')return 'nav-storage';
 if(path==='/unit-setup')return 'nav-unitsetup';
+if(path==='/count/list')return 'nav-weeklylist';
+if(path==='/voice-recipe')return 'nav-voicerecipe';
 if(path==='/count'){var ct=(new URLSearchParams(window.location.search).get('type')||'').toLowerCase();return ct==='booze'?'nav-boozecount':'nav-foodcount';}
 return 'nav-dashboard';
 }

@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="/static/rn-frame.js"></script>
+<script src="/static/rn-labels.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Red Nun — Unit Setup</title>
@@ -36,6 +38,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 .cell-sel{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 7px;font-size:12px;width:110px}
 .cell-num{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 7px;font-size:12px;width:80px}
 .hint{font-size:11px;color:var(--purple)}
+html.rn-framed .applybar{background:rgba(255,255,255,0.95)}
 .applybar{position:fixed;bottom:0;left:0;right:0;padding:14px 24px;background:rgba(10,10,12,0.95);backdrop-filter:blur(30px);border-top:1px solid var(--border);display:flex;align-items:center;gap:14px;z-index:90}
 .applybar .info{flex:1;font-size:13px;color:var(--text2)}
 .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--green);color:#000;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:700;opacity:0;transition:all .3s;z-index:200;pointer-events:none}
@@ -116,7 +119,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 <div class="wrap">
   <div class="note">
     Parsed from each product's vendor description and pack data. <b>Count unit</b> = how you inventory it; <b>Conversion</b> = how many of that count unit are in one purchase unit (e.g. 6 packages per case, 9 lb per case, 288 each per case).
-    Review and edit any row, then <b>Apply checked</b> — only checked rows are written (to <code>inventory_unit</code> and <code>unit_conversion</code>); everything else on the product is left untouched. The slice/recipe hint is informational only (needs a separate recipe-conversion field, not written here).
+    Nothing is checked to start. Review and edit any row, tick it, then <b>Apply checked</b> — only checked rows are written (to <code>inventory_unit</code> and <code>unit_conversion</code>); everything else on the product is left untouched. The slice/recipe hint is informational only (needs a separate recipe-conversion field, not written here).
   </div>
 
   <div class="controls">
@@ -139,7 +142,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   </table>
 </div>
 
-<div class="applybar">
+<div class="applybar rn-frame-bottom">
   <div class="info" id="applyinfo">—</div>
   <button class="btn-primary" id="applybtn" onclick="applyChecked()" disabled>Apply checked</button>
 </div>
@@ -198,7 +201,7 @@ async function load(){
       const v=vi.find(x=>x.id===p.active_vendor_item_id)||vi.find(x=>x.pack_contains)||vi[0]||{};
       const rec={cat:p.category,name:p.name,vdesc:v.vendor_description,pcontains:v.pack_contains,cunit:v.contains_unit,ppu:v.price_per_unit,price:p.current_price};
       const parsed=parsePack(rec), sug=suggest(rec,parsed);
-      DATA.push({prod:p,rec,parsed,sug,unit:p.inventory_unit||sug.unit,conv:(p.unit_conversion&&p.unit_conversion!=1)?p.unit_conversion:sug.conv,conf:sug.conf,checked:sug.conf==='high'});
+      DATA.push({prod:p,rec,parsed,sug,unit:p.inventory_unit||sug.unit,conv:(p.unit_conversion&&p.unit_conversion!=1)?p.unit_conversion:sug.conv,conf:sug.conf,checked:false});
     });
     document.getElementById('summary').textContent='Parsed '+DATA.length+'/'+P.length+'…';
   }
@@ -233,7 +236,7 @@ function render(){
     return '<tr>'+
       '<td><input type="checkbox" '+(d.checked?'checked':'')+' onchange="DATA['+i+'].checked=this.checked;upd()"></td>'+
       '<td><div class="pname pname-link" onclick="openProductEditor('+d.prod.id+',{onSaved:rnpeSaved})" title="Edit product">'+esc(d.prod.display_name||d.prod.name)+' <span style="color:var(--text3);font-size:11px">✎</span></div><div class="pdesc">'+esc(d.rec.vdesc||'')+'</div></td>'+
-      '<td><span class="cat-pill">'+esc(d.prod.category||'')+'</span></td>'+
+      '<td><span class="cat-pill">'+esc(rnCatLabel(d.prod.category))+'</span></td>'+
       '<td style="font-size:11px;color:var(--text2)">'+esc(packTxt||'—')+'</td>'+
       '<td style="font-size:11px;color:var(--text3)">'+esc(d.prod.inventory_unit||'(none)')+'</td>'+
       '<td><select class="cell-sel" onchange="DATA['+i+'].unit=this.value">'+opts+'</select></td>'+

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="/static/rn-frame.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -270,6 +271,11 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .jump-pill.active{border-color:var(--blue);background:rgba(10,132,255,0.12);color:var(--blue)}
 
 /* Save bar */
+/* On a PC (rn-frame.js): light bars instead of the dark glass ones. */
+html.rn-framed .hdr,html.rn-framed .section-header,html.rn-framed .nav-bar,html.rn-framed .save-bar,html.rn-framed .vc-sum{background:rgba(255,255,255,0.94)}
+/* ...and the dashboard top bar (59px) already sticks to the top: the header scrolls away, the rail sits below it. */
+html.rn-framed .hdr{position:static}
+html.rn-framed #md-rail{top:75px;max-height:calc(100dvh - 190px)}
 .save-bar{position:fixed;bottom:0;left:0;right:0;padding:12px 16px calc(var(--safe-bottom) + 12px);
   background:rgba(10,10,12,0.92);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
   border-top:1px solid var(--border);display:flex;gap:10px;align-items:center;z-index:99}
@@ -331,7 +337,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
         <div class="hdr-sub" id="count-location-label">SELECT LOCATION</div>
       </div>
     </div>
-    <a href="/manage" class="back-btn" id="hdr-back">← Back</a>
+    <a href="/manage" class="back-btn rn-frame-back" id="hdr-back">← Back</a>
   </div>
 </div>
 
@@ -387,7 +393,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   <!-- iPad master-detail (≥768px) -->
   <div id="md-layout"><div id="md-rail"></div><div id="md-main"></div></div>
 
-  <div class="save-bar">
+  <div class="save-bar rn-frame-bottom">
     <button class="discard-btn" onclick="discardCount()">✕</button>
     <div class="save-info"><b id="counted-num">0</b> of <span id="total-num">0</span> counted <span id="conn-dot" style="font-size:11px;font-weight:700;margin-left:6px"></span></div>
     <button class="save-btn" id="save-btn" onclick="saveCount()">Save</button>
@@ -1620,6 +1626,15 @@ if (navigator.onLine) { flushOps(); flushPending(); }
   new MutationObserver(sync).observe(cs, { attributes: true, attributeFilter: ['style'] });
   sync();
 })();
+// On a PC the sidebar can leave mid-count: ask first when numbers aren't saved (they're
+// also kept on this device and offered back when the count is reopened).
+window.addEventListener('beforeunload', function(e){
+  if (!document.documentElement.classList.contains('rn-framed')) return;
+  if (document.getElementById('count-screen').style.display !== 'block') return;
+  const unsaved = Object.keys(S.counts).filter(k => S.counts[k] !== S.saved[k]).length +
+                  Object.keys(S.saved).filter(k => S.counts[k] === undefined).length;
+  if (unsaved) { e.preventDefault(); e.returnValue = ''; }
+});
 // The Tuesday email links /week?loc=chatham -> /count?list=weekly&loc=chatham: start straight away.
 (function(){
   const loc = URLP.get('loc');

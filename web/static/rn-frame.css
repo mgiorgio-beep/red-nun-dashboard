@@ -1,0 +1,15 @@
+/* Light dashboard colours for the standalone pages on a PC (loaded by rn-frame.js
+   only when framed). The pages draw from these variables. */
+html.rn-framed{
+  --bg:#f5f7fa;--card:#ffffff;--card2:#f3f4f6;
+  --border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.15);
+  --text:#0F0F11;--text2:rgba(15,15,17,0.6);--text3:rgba(15,15,17,0.45);
+}
+html.rn-framed body{background:#f5f7fa;color:var(--text)}
+/* The sidebar replaces each page's own way back to the dashboard. */
+html.rn-framed .rn-frame-back{display:none!important}
+/* Bars pinned to the bottom start after the sidebar. */
+html.rn-framed .rn-frame-bottom{left:var(--sb-width)!important}
+/* The sidebar layout fills the window; page padding moves inside it. */
+html.rn-framed body{margin:0!important;padding:0!important}
+html.rn-framed .rn-frame-pad{padding:20px 24px}
