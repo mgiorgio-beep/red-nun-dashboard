@@ -385,8 +385,8 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             <div id="dash-home-sales" style="color:var(--text3);font-size:13px">Loading...</div>
           </div>
 
-          <!-- Card 2: Pending Invoices -->
-          <div class="card" style="padding:20px;cursor:pointer" onclick="showView('billpay')">
+          <!-- Card 2: Pending Invoices (bill pay: admin and accountant only) -->
+          <div class="card rn-role-ac" style="padding:20px;cursor:pointer" onclick="showView('billpay')">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
               <div style="width:32px;height:32px;border-radius:8px;background:rgba(10,132,255,0.12);display:flex;align-items:center;justify-content:center;font-size:15px">&#128196;</div>
               <div style="font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">Pending Invoices</div>
@@ -458,6 +458,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
         <div class="card">
           <div class="card-header">
             <div class="card-title">Vendors</div>
+            <span class="rn-role-ac" style="margin-left:auto;margin-right:12px;font-size:13px"><a href="javascript:void(0)" onclick="showView('bp-vendors')" style="color:var(--blue,#0a84ff)">Remit addresses &amp; bill pay settings &rsaquo;</a></span>
             <button class="btn btn-primary" onclick="openVendorModal()">Add Vendor</button>
           </div>
           <table class="data-table">
@@ -1891,6 +1892,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
           <div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;align-items:center;gap:12px">
             <input type="text" id="bp-vendor-search" placeholder="Search vendors..." oninput="bpFilterVendorList()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px;width:100%;max-width:300px">
             <button onclick="openVendorModal()" style="padding:8px 18px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap">+ Add Vendor</button>
+            <a href="javascript:void(0)" onclick="showView('vendors')" style="margin-left:auto;font-size:13px;color:var(--blue,#0a84ff);white-space:nowrap">Vendor contacts &amp; categories &rsaquo;</a>
           </div>
           <div class="card">
             <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -2542,12 +2544,12 @@ function showView(view) {
     'recipe-analysis': 'Menu Analysis',
     prodsetup: 'Product Setup',
     'pmix-mapping': 'PMIX Mapping',
-    'billpay': 'Bill Pay — Outstanding',
+    'billpay': 'Bills to Pay',
     'bp-payments': 'Bill Pay — Payments',
-    'bp-vendors': 'Bill Pay — Vendor Setup',
-    'bp-checksetup': 'Bill Pay — Check Setup',
-    'bp-payroll': 'Bill Pay — Payroll',
-    'bp-recurring': 'Bill Pay — Recurring Bills'
+    'bp-vendors': 'Vendor Bill Pay Setup',
+    'bp-checksetup': 'Check Printer',
+    'bp-payroll': 'Payroll',
+    'bp-recurring': 'Recurring Bills'
   };
   document.getElementById('pageTitle').textContent = titles[view] || view;
 
@@ -4615,12 +4617,12 @@ function initPage() {
     'recipe-analysis': 'Menu Analysis',
     prodsetup: 'Product Setup',
     'pmix-mapping': 'PMIX Mapping',
-    'billpay': 'Bill Pay — Outstanding',
+    'billpay': 'Bills to Pay',
     'bp-payments': 'Bill Pay — Payments',
-    'bp-vendors': 'Bill Pay — Vendor Setup',
-    'bp-checksetup': 'Bill Pay — Check Setup',
-    'bp-payroll': 'Bill Pay — Payroll',
-    'bp-recurring': 'Bill Pay — Recurring Bills'
+    'bp-vendors': 'Vendor Bill Pay Setup',
+    'bp-checksetup': 'Check Printer',
+    'bp-payroll': 'Payroll',
+    'bp-recurring': 'Recurring Bills'
   };
   document.getElementById('pageTitle').textContent = titles[savedView] || savedView;
 

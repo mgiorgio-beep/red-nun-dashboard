@@ -1,19 +1,23 @@
 {
- "role": "admin",
+ "role": "manager",
  "sidebar": [
   {
    "id": "nav-dashboard",
    "label": "Dashboard",
    "visible": true,
-   "console": [],
-   "failed": [],
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/billpay/invoices?payment_status=unpaid"
+   ],
    "writes": [],
    "url": "/manage",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-dashboard",
    "title": "Dashboard",
-   "text": 1252,
+   "text": 833,
    "problems": []
   },
   {
@@ -58,7 +62,7 @@
    "sidebar_ok": true,
    "active": "nav-inventory",
    "title": "Inventory",
-   "text": 7977,
+   "text": 7613,
    "problems": []
   },
   {
@@ -73,7 +77,7 @@
    "sidebar_ok": true,
    "active": "nav-orderguide",
    "title": "\ud83d\uded2 Order Guide",
-   "text": 1030,
+   "text": 666,
    "problems": []
   },
   {
@@ -88,7 +92,7 @@
    "sidebar_ok": true,
    "active": "nav-transfers",
    "title": "Transfer",
-   "text": 1180,
+   "text": 785,
    "problems": []
   },
   {
@@ -103,7 +107,7 @@
    "sidebar_ok": true,
    "active": "nav-waste",
    "title": "Waste",
-   "text": 866,
+   "text": 502,
    "problems": []
   },
   {
@@ -157,7 +161,7 @@
    "sidebar_ok": true,
    "active": "nav-invhistory",
    "title": "",
-   "text": 32985,
+   "text": 32621,
    "problems": []
   },
   {
@@ -172,7 +176,7 @@
    "sidebar_ok": true,
    "active": "nav-pending",
    "title": "",
-   "text": 1053,
+   "text": 689,
    "problems": []
   },
   {
@@ -187,202 +191,265 @@
    "sidebar_ok": true,
    "active": "nav-scan",
    "title": "",
-   "text": 32985,
+   "text": 32621,
    "problems": []
   },
   {
    "id": "nav-vendorstatus",
    "label": "Vendor Scrapers",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /vendor-status"
+   ],
    "writes": [],
    "url": "/vendor-status",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-vendorstatus",
-   "title": "Vendor Scrapers",
-   "text": 1877,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 34,
    "problems": []
   },
   {
    "id": "nav-bp-outstanding",
    "label": "Bills to Pay",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "Aging load error: TypeError: Cannot read properties of undefined (reading 'current')\n    at bpLoadAging (http://127.0.0.1:8080/manage:5779:3",
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "Vendor load error: TypeError: Cannot read properties of undefined (reading 'filter')\n    at bpRenderVendorList (http://127.0.0.1:8080/manage",
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "BP invoices error: TypeError: Cannot read properties of undefined (reading 'length')\n    at bpRenderSorted (http://127.0.0.1:8080/manage:602"
+   ],
+   "failed": [
+    "403 /api/billpay/aging-summary?location=dennis",
+    "403 /api/billpay/vendors",
+    "403 /api/billpay/vendors?location=dennis",
+    "403 /api/billpay/invoices?payment_status=unpaid&location=dennis"
+   ],
    "writes": [],
    "url": "/manage",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-outstanding",
    "title": "Bills to Pay",
-   "text": 5319,
+   "text": 580,
    "problems": []
   },
   {
    "id": "nav-bp-printchecks",
    "label": "Print Checks",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /print-checks"
+   ],
    "writes": [],
    "url": "/print-checks",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-bp-printchecks",
-   "title": "Print Checks",
-   "text": 1090,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-payments",
    "label": "Payments",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /payments"
+   ],
    "writes": [],
    "url": "/payments",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-payments",
-   "title": "Payments",
-   "text": 46744,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-bp-payroll",
    "label": "Payroll",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/payroll/runs?location=chatham",
+    "403 /api/payroll/orphan-checks?location=chatham"
+   ],
    "writes": [],
    "url": "/manage",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-payroll",
    "title": "Payroll",
-   "text": 3196,
+   "text": 575,
    "problems": []
   },
   {
    "id": "nav-acct-import",
    "label": "Import Statement",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /import-statement"
+   ],
    "writes": [],
    "url": "/import-statement",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-import",
-   "title": "Import Statement",
-   "text": 2548,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-acct-banktx",
    "label": "Bank Transactions",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /bank-transactions"
+   ],
    "writes": [],
    "url": "/bank-transactions",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-banktx",
-   "title": "Bank Transactions",
-   "text": 386300,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-acct-registers",
    "label": "Bank Register",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /registers"
+   ],
    "writes": [],
    "url": "/registers",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-registers",
-   "title": "Bank Register",
-   "text": 1534,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-acct-bankrec",
    "label": "Bank Reconcile",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /bank-reconcile"
+   ],
    "writes": [],
    "url": "/bank-reconcile",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-bankrec",
-   "title": "Bank Reconcile",
-   "text": 1555,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-acct-entries",
    "label": "Sales Journal",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /sales-journal"
+   ],
    "writes": [],
    "url": "/sales-journal",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-entries",
-   "title": "Sales Journal",
-   "text": 1672,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-acct-export",
    "label": "QuickBooks Failures",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /sales-journal?tab=export"
+   ],
    "writes": [],
    "url": "/sales-journal?tab=export",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-export",
-   "title": "Sales Journal",
-   "text": 1024,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-transfersettle",
    "label": "Reconcile Transfers",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /transfer/settle"
+   ],
    "writes": [],
    "url": "/transfer/settle",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-transfersettle",
-   "title": "Reconcile Transfers",
-   "text": 1427,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 34,
    "problems": []
   },
   {
    "id": "nav-acct-pl",
    "label": "Profit & Loss",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /profit-loss"
+   ],
    "writes": [],
    "url": "/profit-loss",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-pl",
-   "title": "Profit & Loss",
-   "text": 4830,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
@@ -397,7 +464,7 @@
    "sidebar_ok": true,
    "active": "nav-labor",
    "title": "",
-   "text": 851,
+   "text": 487,
    "problems": []
   },
   {
@@ -418,7 +485,7 @@
    "sidebar_ok": true,
    "active": "nav-bevcost",
    "title": "",
-   "text": 854,
+   "text": 490,
    "problems": [
     "failed: 404 /api/cogs/pourcost?start=20261009&end=20261009; 404 /api/cogs/pourcost?start=20261009&end=20261009"
    ]
@@ -445,7 +512,7 @@
    "sidebar_ok": true,
    "active": "nav-foodcost",
    "title": "",
-   "text": 816,
+   "text": 452,
    "problems": [
     "failed: 404 /api/cogs/summary?start=20261009&end=20261009; 404 /api/cogs/vendors?start=20261009&end=20261009"
    ]
@@ -453,16 +520,20 @@
   {
    "id": "nav-acct-reports",
    "label": "All Reports",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /reports"
+   ],
    "writes": [],
    "url": "/reports",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-reports",
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
    "title": "",
-   "text": 6218,
+   "text": 69,
    "problems": []
   },
   {
@@ -477,7 +548,7 @@
    "sidebar_ok": true,
    "active": "nav-recipes",
    "title": "Recipes",
-   "text": 7254,
+   "text": 6890,
    "problems": []
   },
   {
@@ -492,7 +563,7 @@
    "sidebar_ok": true,
    "active": "nav-prepared",
    "title": "Prepared Items",
-   "text": 1093,
+   "text": 729,
    "problems": []
   },
   {
@@ -507,7 +578,7 @@
    "sidebar_ok": true,
    "active": "nav-menuanalysis",
    "title": "Menu Analysis",
-   "text": 4587,
+   "text": 4223,
    "problems": []
   },
   {
@@ -522,7 +593,7 @@
    "sidebar_ok": true,
    "active": "nav-recipeviewer",
    "title": "Recipe Viewer",
-   "text": 17470,
+   "text": 17106,
    "problems": []
   },
   {
@@ -537,7 +608,7 @@
    "sidebar_ok": true,
    "active": "nav-recipefixer",
    "title": "Recipe Cost Fixer",
-   "text": 1529,
+   "text": 1165,
    "problems": []
   },
   {
@@ -567,7 +638,7 @@
    "sidebar_ok": true,
    "active": "nav-pmixmapping",
    "title": "PMIX Mapping",
-   "text": 274991,
+   "text": 274627,
    "problems": []
   },
   {
@@ -582,7 +653,7 @@
    "sidebar_ok": true,
    "active": "nav-products",
    "title": "Products",
-   "text": 134316,
+   "text": 133952,
    "problems": []
   },
   {
@@ -597,7 +668,7 @@
    "sidebar_ok": true,
    "active": "nav-prodsetup",
    "title": "Product Setup",
-   "text": 87000,
+   "text": 86636,
    "problems": []
   },
   {
@@ -612,22 +683,27 @@
    "sidebar_ok": true,
    "active": "nav-vendors",
    "title": "Vendors",
-   "text": 2857,
+   "text": 2455,
    "problems": []
   },
   {
    "id": "nav-bp-vendors",
    "label": "Vendor Bill Pay Setup",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "Vendor load error: TypeError: Cannot read properties of undefined (reading 'filter')\n    at bpRenderVendorList (http://127.0.0.1:8080/manage"
+   ],
+   "failed": [
+    "403 /api/billpay/vendors"
+   ],
    "writes": [],
    "url": "/manage",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-vendors",
    "title": "Vendor Bill Pay Setup",
-   "text": 3879,
+   "text": 511,
    "problems": []
   },
   {
@@ -648,7 +724,7 @@
   {
    "id": "nav-unitsetup",
    "label": "Unit Setup",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -663,106 +739,135 @@
   {
    "id": "nav-bp-recurring",
    "label": "Recurring Bills",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "rcLoadQueue error: Error: Server error 403\n    at rcLoadQueue (http://127.0.0.1:8080/manage:7232:22)"
+   ],
+   "failed": [
+    "403 /api/billpay/recurring/due?date=2026-10-09&days=14"
+   ],
    "writes": [],
    "url": "/manage",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-recurring",
    "title": "Recurring Bills",
-   "text": 940,
+   "text": 582,
    "problems": []
   },
   {
    "id": "nav-bp-checksetup",
    "label": "Check Printer",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/billpay/check-config?location=chatham"
+   ],
    "writes": [],
    "url": "/manage",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-checksetup",
    "title": "Check Printer",
-   "text": 1187,
+   "text": 823,
    "problems": []
   },
   {
    "id": "nav-acct-openbal",
    "label": "Opening Balances",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /opening-balances"
+   ],
    "writes": [],
    "url": "/opening-balances",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-openbal",
-   "title": "Opening Balances",
-   "text": 3943,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-acct-mapping",
    "label": "Sales Mapping",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /sales-mapping"
+   ],
    "writes": [],
    "url": "/sales-mapping",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-mapping",
-   "title": "Sales Mapping",
-   "text": 70708,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 69,
    "problems": []
   },
   {
    "id": "nav-transferadmin",
    "label": "Transfer & Waste Admin",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /transfer/admin"
+   ],
    "writes": [],
-   "url": "/transfer/admin#people",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-transferadmin",
-   "title": "Transfer & Waste \u2014 Admin",
-   "text": 1220,
+   "url": "/transfer/admin",
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 34,
    "problems": []
   },
   {
    "id": "nav-users",
    "label": "User Accounts",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /admin/users"
+   ],
    "writes": [],
    "url": "/admin/users",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-users",
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
    "title": "",
-   "text": 1715,
+   "text": 34,
    "problems": []
   },
   {
    "id": "nav-logins",
    "label": "Login History",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /admin/logins"
+   ],
    "writes": [],
    "url": "/admin/logins",
    "sidebar": false,
    "sidebar_ok": false,
    "active": null,
-   "title": "Login History",
-   "text": 8046,
+   "title": "",
+   "text": 26,
    "problems": []
   }
  ],
@@ -834,7 +939,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 1180,
+   "text": 785,
    "problems": []
   },
   {
@@ -844,7 +949,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 866,
+   "text": 502,
    "problems": []
   },
   {
@@ -854,8 +959,8 @@
     "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: net::ERR_FAILED",
-    "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: the server responded with a status of 404 ()"
    ],
    "failed": [],
@@ -927,6 +1032,150 @@
    "problems": []
   }
  ],
- "refused": [],
- "home_bill_card_hidden": null
+ "refused": [
+  {
+   "id": "refuse /payments",
+   "label": "refuse /payments",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /print-checks",
+   "label": "refuse /print-checks",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /registers",
+   "label": "refuse /registers",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /profit-loss",
+   "label": "refuse /profit-loss",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /opening-balances",
+   "label": "refuse /opening-balances",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /reconcile",
+   "label": "refuse /reconcile",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /import-statement",
+   "label": "refuse /import-statement",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /bank-reconcile",
+   "label": "refuse /bank-reconcile",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /bank-transactions",
+   "label": "refuse /bank-transactions",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /sales-journal",
+   "label": "refuse /sales-journal",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /sales-mapping",
+   "label": "refuse /sales-mapping",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /reports",
+   "label": "refuse /reports",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /transfer/settle",
+   "label": "refuse /transfer/settle",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/billpay/invoices",
+   "label": "refuse /api/billpay/invoices",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/payments",
+   "label": "refuse /api/payments",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/print-queue",
+   "label": "refuse /api/print-queue",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/register/accounts",
+   "label": "refuse /api/register/accounts",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/gl-accounts",
+   "label": "refuse /api/gl-accounts",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/bank-reconcile/uploads",
+   "label": "refuse /api/bank-reconcile/uploads",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/sales-journal/entries",
+   "label": "refuse /api/sales-journal/entries",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/reports/profit-loss",
+   "label": "refuse /api/reports/profit-loss",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/payroll/runs",
+   "label": "refuse /api/payroll/runs",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "refuse /api/intercompany/state",
+   "label": "refuse /api/intercompany/state",
+   "status": 403,
+   "problems": []
+  },
+  {
+   "id": "home bill card",
+   "label": "home bill card hidden",
+   "problems": []
+  }
+ ],
+ "home_bill_card_hidden": true
 }

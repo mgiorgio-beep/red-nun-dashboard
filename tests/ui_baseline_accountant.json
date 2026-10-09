@@ -1,5 +1,5 @@
 {
- "role": "admin",
+ "role": "accountant",
  "sidebar": [
   {
    "id": "nav-dashboard",
@@ -13,13 +13,13 @@
    "sidebar_ok": true,
    "active": "nav-dashboard",
    "title": "Dashboard",
-   "text": 1252,
+   "text": 848,
    "problems": []
   },
   {
    "id": "nav-foodcount",
    "label": "Food Count",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -34,7 +34,7 @@
   {
    "id": "nav-boozecount",
    "label": "Booze Count",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -49,7 +49,7 @@
   {
    "id": "nav-inventory",
    "label": "Inventory",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -58,13 +58,13 @@
    "sidebar_ok": true,
    "active": "nav-inventory",
    "title": "Inventory",
-   "text": 7977,
+   "text": 7573,
    "problems": []
   },
   {
    "id": "nav-orderguide",
    "label": "Order Guide",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -73,13 +73,13 @@
    "sidebar_ok": true,
    "active": "nav-orderguide",
    "title": "\ud83d\uded2 Order Guide",
-   "text": 1030,
+   "text": 626,
    "problems": []
   },
   {
    "id": "nav-transfers",
    "label": "Transfers",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -88,13 +88,13 @@
    "sidebar_ok": true,
    "active": "nav-transfers",
    "title": "Transfer",
-   "text": 1180,
+   "text": 745,
    "problems": []
   },
   {
    "id": "nav-waste",
    "label": "Waste",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -103,13 +103,13 @@
    "sidebar_ok": true,
    "active": "nav-waste",
    "title": "Waste",
-   "text": 866,
+   "text": 462,
    "problems": []
   },
   {
    "id": "nav-specials",
    "label": "Edit Specials",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -124,7 +124,7 @@
   {
    "id": "nav-tvcontrol",
    "label": "TV Control",
-   "visible": true,
+   "visible": false,
    "console": [
     "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: net::ERR_FAILED",
@@ -157,7 +157,7 @@
    "sidebar_ok": true,
    "active": "nav-invhistory",
    "title": "",
-   "text": 32985,
+   "text": 32581,
    "problems": []
   },
   {
@@ -172,7 +172,7 @@
    "sidebar_ok": true,
    "active": "nav-pending",
    "title": "",
-   "text": 1053,
+   "text": 649,
    "problems": []
   },
   {
@@ -187,22 +187,26 @@
    "sidebar_ok": true,
    "active": "nav-scan",
    "title": "",
-   "text": 32985,
+   "text": 32581,
    "problems": []
   },
   {
    "id": "nav-vendorstatus",
    "label": "Vendor Scrapers",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /vendor-status"
+   ],
    "writes": [],
    "url": "/vendor-status",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-vendorstatus",
-   "title": "Vendor Scrapers",
-   "text": 1877,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 34,
    "problems": []
   },
   {
@@ -217,7 +221,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-outstanding",
    "title": "Bills to Pay",
-   "text": 5319,
+   "text": 4915,
    "problems": []
   },
   {
@@ -232,7 +236,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-printchecks",
    "title": "Print Checks",
-   "text": 1090,
+   "text": 686,
    "problems": []
   },
   {
@@ -247,7 +251,7 @@
    "sidebar_ok": true,
    "active": "nav-payments",
    "title": "Payments",
-   "text": 46744,
+   "text": 46340,
    "problems": []
   },
   {
@@ -262,7 +266,7 @@
    "sidebar_ok": true,
    "active": "nav-bp-payroll",
    "title": "Payroll",
-   "text": 3196,
+   "text": 2792,
    "problems": []
   },
   {
@@ -277,7 +281,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-import",
    "title": "Import Statement",
-   "text": 2548,
+   "text": 2144,
    "problems": []
   },
   {
@@ -292,7 +296,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-banktx",
    "title": "Bank Transactions",
-   "text": 386300,
+   "text": 385896,
    "problems": []
   },
   {
@@ -307,7 +311,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-registers",
    "title": "Bank Register",
-   "text": 1534,
+   "text": 1130,
    "problems": []
   },
   {
@@ -322,7 +326,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-bankrec",
    "title": "Bank Reconcile",
-   "text": 1555,
+   "text": 1151,
    "problems": []
   },
   {
@@ -337,13 +341,13 @@
    "sidebar_ok": true,
    "active": "nav-acct-entries",
    "title": "Sales Journal",
-   "text": 1672,
+   "text": 1172,
    "problems": []
   },
   {
    "id": "nav-acct-export",
    "label": "QuickBooks Failures",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -352,22 +356,26 @@
    "sidebar_ok": true,
    "active": "nav-acct-export",
    "title": "Sales Journal",
-   "text": 1024,
+   "text": 620,
    "problems": []
   },
   {
    "id": "nav-transfersettle",
    "label": "Reconcile Transfers",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /transfer/settle"
+   ],
    "writes": [],
    "url": "/transfer/settle",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-transfersettle",
-   "title": "Reconcile Transfers",
-   "text": 1427,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 34,
    "problems": []
   },
   {
@@ -382,7 +390,7 @@
    "sidebar_ok": true,
    "active": "nav-acct-pl",
    "title": "Profit & Loss",
-   "text": 4830,
+   "text": 4426,
    "problems": []
   },
   {
@@ -397,7 +405,7 @@
    "sidebar_ok": true,
    "active": "nav-labor",
    "title": "",
-   "text": 851,
+   "text": 447,
    "problems": []
   },
   {
@@ -418,7 +426,7 @@
    "sidebar_ok": true,
    "active": "nav-bevcost",
    "title": "",
-   "text": 854,
+   "text": 450,
    "problems": [
     "failed: 404 /api/cogs/pourcost?start=20261009&end=20261009; 404 /api/cogs/pourcost?start=20261009&end=20261009"
    ]
@@ -445,7 +453,7 @@
    "sidebar_ok": true,
    "active": "nav-foodcost",
    "title": "",
-   "text": 816,
+   "text": 412,
    "problems": [
     "failed: 404 /api/cogs/summary?start=20261009&end=20261009; 404 /api/cogs/vendors?start=20261009&end=20261009"
    ]
@@ -462,13 +470,13 @@
    "sidebar_ok": true,
    "active": "nav-acct-reports",
    "title": "",
-   "text": 6218,
+   "text": 5814,
    "problems": []
   },
   {
    "id": "nav-recipes",
    "label": "Recipes",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -477,13 +485,13 @@
    "sidebar_ok": true,
    "active": "nav-recipes",
    "title": "Recipes",
-   "text": 7254,
+   "text": 6850,
    "problems": []
   },
   {
    "id": "nav-prepared",
    "label": "Prepared Items",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -492,13 +500,13 @@
    "sidebar_ok": true,
    "active": "nav-prepared",
    "title": "Prepared Items",
-   "text": 1093,
+   "text": 689,
    "problems": []
   },
   {
    "id": "nav-menuanalysis",
    "label": "Menu Analysis",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -507,13 +515,13 @@
    "sidebar_ok": true,
    "active": "nav-menuanalysis",
    "title": "Menu Analysis",
-   "text": 4587,
+   "text": 4183,
    "problems": []
   },
   {
    "id": "nav-recipeviewer",
    "label": "Recipe Viewer",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -522,13 +530,13 @@
    "sidebar_ok": true,
    "active": "nav-recipeviewer",
    "title": "Recipe Viewer",
-   "text": 17470,
+   "text": 17066,
    "problems": []
   },
   {
    "id": "nav-recipefixer",
    "label": "Recipe Fixer",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -537,13 +545,13 @@
    "sidebar_ok": true,
    "active": "nav-recipefixer",
    "title": "Recipe Cost Fixer",
-   "text": 1529,
+   "text": 1125,
    "problems": []
   },
   {
    "id": "nav-voicerecipe",
    "label": "Voice Recipe",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -558,7 +566,7 @@
   {
    "id": "nav-pmixmapping",
    "label": "PMIX Mapping",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -567,13 +575,13 @@
    "sidebar_ok": true,
    "active": "nav-pmixmapping",
    "title": "PMIX Mapping",
-   "text": 274991,
+   "text": 274587,
    "problems": []
   },
   {
    "id": "nav-products",
    "label": "Products",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -582,13 +590,13 @@
    "sidebar_ok": true,
    "active": "nav-products",
    "title": "Products",
-   "text": 134316,
+   "text": 133912,
    "problems": []
   },
   {
    "id": "nav-prodsetup",
    "label": "Product Setup",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -597,7 +605,7 @@
    "sidebar_ok": true,
    "active": "nav-prodsetup",
    "title": "Product Setup",
-   "text": 87000,
+   "text": 86596,
    "problems": []
   },
   {
@@ -612,7 +620,7 @@
    "sidebar_ok": true,
    "active": "nav-vendors",
    "title": "Vendors",
-   "text": 2857,
+   "text": 2453,
    "problems": []
   },
   {
@@ -627,13 +635,13 @@
    "sidebar_ok": true,
    "active": "nav-bp-vendors",
    "title": "Vendor Bill Pay Setup",
-   "text": 3879,
+   "text": 3475,
    "problems": []
   },
   {
    "id": "nav-storage",
    "label": "Storage Layout",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -648,7 +656,7 @@
   {
    "id": "nav-unitsetup",
    "label": "Unit Setup",
-   "visible": true,
+   "visible": false,
    "console": [],
    "failed": [],
    "writes": [],
@@ -672,22 +680,26 @@
    "sidebar_ok": true,
    "active": "nav-bp-recurring",
    "title": "Recurring Bills",
-   "text": 940,
+   "text": 536,
    "problems": []
   },
   {
    "id": "nav-bp-checksetup",
    "label": "Check Printer",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/billpay/check-config?location=chatham"
+   ],
    "writes": [],
    "url": "/manage",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-checksetup",
    "title": "Check Printer",
-   "text": 1187,
+   "text": 783,
    "problems": []
   },
   {
@@ -702,67 +714,83 @@
    "sidebar_ok": true,
    "active": "nav-acct-openbal",
    "title": "Opening Balances",
-   "text": 3943,
+   "text": 3539,
    "problems": []
   },
   {
    "id": "nav-acct-mapping",
    "label": "Sales Mapping",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /sales-mapping"
+   ],
    "writes": [],
    "url": "/sales-mapping",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-acct-mapping",
-   "title": "Sales Mapping",
-   "text": 70708,
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 34,
    "problems": []
   },
   {
    "id": "nav-transferadmin",
    "label": "Transfer & Waste Admin",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /transfer/admin"
+   ],
    "writes": [],
-   "url": "/transfer/admin#people",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-transferadmin",
-   "title": "Transfer & Waste \u2014 Admin",
-   "text": 1220,
+   "url": "/transfer/admin",
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
+   "title": "",
+   "text": 34,
    "problems": []
   },
   {
    "id": "nav-users",
    "label": "User Accounts",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /admin/users"
+   ],
    "writes": [],
    "url": "/admin/users",
-   "sidebar": true,
-   "sidebar_ok": true,
-   "active": "nav-users",
+   "sidebar": false,
+   "sidebar_ok": false,
+   "active": null,
    "title": "",
-   "text": 1715,
+   "text": 34,
    "problems": []
   },
   {
    "id": "nav-logins",
    "label": "Login History",
-   "visible": true,
-   "console": [],
-   "failed": [],
+   "visible": false,
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /admin/logins"
+   ],
    "writes": [],
    "url": "/admin/logins",
    "sidebar": false,
    "sidebar_ok": false,
    "active": null,
-   "title": "Login History",
-   "text": 8046,
+   "title": "",
+   "text": 26,
    "problems": []
   }
  ],
@@ -834,7 +862,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 1180,
+   "text": 745,
    "problems": []
   },
   {
@@ -844,7 +872,7 @@
    "failed": [],
    "writes": [],
    "status": 200,
-   "text": 866,
+   "text": 462,
    "problems": []
   },
   {

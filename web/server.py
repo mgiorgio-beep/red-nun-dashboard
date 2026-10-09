@@ -141,6 +141,38 @@ def _inventory_api_login():
         return jsonify({"error": "Authentication required"}), 401
 
 
+# Managers don't see the books or bill pay (Mike, 2026-10-08; UI plan Phase 2). This
+# only ADDS a refusal: login_required and the per-route admin checks still apply.
+_NO_MANAGER = ('/payments', '/print-checks', '/registers', '/profit-loss', '/opening-balances',
+               '/reconcile', '/import-statement', '/bank-reconcile', '/bank-transactions',
+               '/sales-journal', '/sales-mapping', '/reports',
+               '/api/billpay', '/api/payments', '/api/print-queue', '/api/register', '/api/gl-accounts',
+               '/api/bank-reconcile', '/api/bank-transactions', '/api/sales-journal', '/api/reports',
+               '/api/payroll', '/api/intercompany')
+
+
+def _under(path, prefixes):
+    return any(path == p or path.startswith(p + '/') for p in prefixes)
+
+
+@app.before_request
+def _role_gate():
+    # payment_routes.py had no login check at all (found 2026-10-09). Same rule as the
+    # invoice blueprint: a session, or on-box automation (import_payments.py posts to
+    # 127.0.0.1 with no X-Forwarded-For; real web traffic always carries one).
+    if request.blueprint == payment_bp.name and 'user_id' not in session:
+        if request.remote_addr == '127.0.0.1' and not request.headers.get('X-Forwarded-For'):
+            return None
+        return jsonify({"error": "Authentication required"}), 401
+    if session.get('role') == 'manager' and _under(request.path, _NO_MANAGER):
+        if request.path.startswith('/api/'):
+            return jsonify({"error": "Not available for managers"}), 403
+        return ('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
+                '<body style="font:16px -apple-system,sans-serif;padding:40px;color:#111">'
+                '<p>This page is for the owner and the accountant.</p><p><a href="/manage">Back to the dashboard</a></p>',
+                403)
+
+
 # Initialize database
 init_db()
 # Initialize invoice scanner tables

@@ -21,71 +21,74 @@ accounting:'<svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0
 billpay:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>'
 };
 var chevron='<svg class="rn-chevron" viewBox="0 0 20 20" fill="currentColor"><path d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"/></svg>';
+// Grouped by the job someone is doing (UI plan Phase 2, 2026-10-09). roles = who sees
+// the item: A admin, M manager, C accountant (default: everyone). Hiding here is only
+// the menu; web/server.py _role_gate refuses managers the books and bill pay.
+var A='admin',M='manager',C='accountant';
 var sections=[
-
-{id:'sec-analytics',label:'Analytics',icon:'analytics',children:[
-  {id:'nav-labor',label:'Labor',page:'/',tab:'labor'},
-  {id:'nav-bevcost',label:'Bev Cost',page:'/',tab:'pourcost'},
-  {id:'nav-foodcost',label:'Food Cost',page:'/',tab:'cogs'}
+{id:'sec-stock',label:'Count & Stock',icon:'inventory',children:[
+  {id:'nav-foodcount',label:'Food Count',page:'/count?type=food',roles:[A,M]},
+  {id:'nav-boozecount',label:'Booze Count',page:'/count?type=booze',roles:[A,M]},
+  {id:'nav-inventory',label:'Inventory',page:'/manage',tab:'inv',roles:[A,M]},
+  {id:'nav-orderguide',label:'Order Guide',page:'/order-guide',roles:[A,M]},
+  {id:'nav-transfers',label:'Transfers',page:'/transfer',roles:[A,M]},
+  {id:'nav-waste',label:'Waste',page:'/waste',roles:[A,M]}
 ]},
-{id:'sec-mgmt',label:'Management',icon:'mgmt',children:[
-  {id:'nav-vendors',label:'Vendors',page:'/manage',tab:'vendors'},
-  {id:'nav-inventory',label:'Inventory',page:'/manage',tab:'inv'},
-  {id:'nav-storage',label:'Storage Layout',page:'/storage'},
-  {id:'nav-unitsetup',label:'Unit Setup',page:'/unit-setup'},
-  {id:'nav-foodcount',label:'Food Count',page:'/count?type=food'},
-  {id:'nav-boozecount',label:'Booze Count',page:'/count?type=booze'},
-  {id:'nav-orderguide',label:'Order Guide',page:'/order-guide'},
-  {id:'nav-transfers',label:'Transfers',page:'/transfer'},
-  {id:'nav-waste',label:'Waste',page:'/waste'},
-  {id:'nav-transfersettle',label:'Reconcile Transfers',page:'/transfer/settle'},
-  {id:'nav-aicount',label:'Smart Count',page:'/ai-inventory',mobileOnly:true},
-  {id:'nav-specials',label:'Specials Board',page:'/staff/specials/edit'},
-  {id:'nav-tvcontrol',label:'TV Control',page:'/staff'}
-]},
-{id:'sec-products',label:'Products',icon:'products',children:[
-  {id:'nav-products',label:'Products',page:'/manage',tab:'products'},
-  {id:'nav-prodsetup',label:'Product Setup',page:'/manage',tab:'prodsetup'}
-]},
-{id:'sec-recipes',label:'Recipes',icon:'recipes',children:[
-  {id:'nav-recipes',label:'Menu Items',page:'/manage',tab:'recipes'},
-  {id:'nav-prepared',label:'Prepared Items',page:'/manage',tab:'prepared-items'},
-  {id:'nav-menuanalysis',label:'Menu Analysis',page:'/manage',tab:'recipe-analysis'},
-  {id:'nav-recipeviewer',label:'Recipe Viewer',page:'/manage',tab:'recipe-viewer'},
-  {id:'nav-recipefixer',label:'Recipe Fixer',page:'/recipes/fixer'},
-  {id:'nav-voicerecipe',label:'Voice Recipe',page:'/voice-recipe'},
-  {id:'nav-pmixmapping',label:'PMIX Mapping',page:'/manage',tab:'pmix-mapping'}
+{id:'sec-specials',label:'Specials & TVs',icon:'overview',children:[
+  {id:'nav-specials',label:'Edit Specials',page:'/staff/specials/edit',roles:[A,M]},
+  {id:'nav-tvcontrol',label:'TV Control',page:'/staff',roles:[A,M]}
 ]},
 {id:'sec-invoices',label:'Invoices',icon:'invoices',children:[
-  {id:'nav-invhistory',label:'Invoice History',page:'/invoices',tab:'history'},
-  {id:'nav-scan',label:'Scan Invoice',page:'/invoices',tab:'scan',mobileOnly:true},
+  {id:'nav-invhistory',label:'Invoices',page:'/invoices',tab:'history'},
   {id:'nav-pending',label:'Pending Review',page:'/invoices',tab:'pending'},
-  {id:'nav-vendorstatus',label:'Vendor Scrapers',page:'/vendor-status'}
+  {id:'nav-scan',label:'Scan Invoice',page:'/invoices',tab:'scan',mobileOnly:true},
+  {id:'nav-vendorstatus',label:'Vendor Scrapers',page:'/vendor-status',roles:[A]}
 ]},
-{id:'sec-billpay',label:'Bill Pay',icon:'billpay',children:[
-  {id:'nav-bp-outstanding',label:'Outstanding',page:'/manage',tab:'billpay'},
-  {id:'nav-bp-reconcile',label:'Portal Reconcile',page:'/reconcile'},
-  {id:'nav-payments',label:'Payments',page:'/payments'},
-  {id:'nav-bp-printchecks',label:'Print Checks',page:'/print-checks'},
-  {id:'nav-bp-vendors',label:'Vendor Setup',page:'/manage',tab:'bp-vendors'},
-  {id:'nav-bp-recurring',label:'Recurring Bills',page:'/manage',tab:'bp-recurring'},
-  {id:'nav-bp-checksetup',label:'Check Setup',page:'/manage',tab:'bp-checksetup'},
-  {id:'nav-bp-payroll',label:'Payroll',page:'/manage',tab:'bp-payroll'}
-]}
-,
-{id:'sec-accounting',label:'Accounting',icon:'accounting',children:[
-  {id:'nav-acct-banktx',label:'Bank Transactions',page:'/bank-transactions'},
-  {id:'nav-acct-import',label:'Statements',page:'/import-statement'},
-  {id:'nav-acct-registers',label:'Register',page:'/registers'},
-  {id:'nav-acct-bankrec',label:'Month-End Close',page:'/bank-reconcile'},
-  {id:'nav-acct-entries',label:'Sales Journal',page:'/sales-journal'},
-  {id:'nav-acct-export',label:'Post to QuickBooks',page:'/sales-journal?tab=export'},
-  {id:'nav-acct-pl',label:'Profit & Loss',page:'/profit-loss'},
-  {id:'nav-acct-reports',label:'Reports',page:'/reports'}
+{id:'sec-billpay',label:'Pay Bills',icon:'billpay',children:[
+  {id:'nav-bp-outstanding',label:'Bills to Pay',page:'/manage',tab:'billpay',roles:[A,C]},
+  {id:'nav-bp-printchecks',label:'Print Checks',page:'/print-checks',roles:[A,C]},
+  {id:'nav-payments',label:'Payments',page:'/payments',roles:[A,C]},
+  {id:'nav-bp-payroll',label:'Payroll',page:'/manage',tab:'bp-payroll',roles:[A,C]}
+]},
+{id:'sec-accounting',label:'Books',icon:'accounting',children:[
+  {id:'nav-acct-import',label:'Import Statement',page:'/import-statement',roles:[A,C]},
+  {id:'nav-acct-banktx',label:'Bank Transactions',page:'/bank-transactions',roles:[A,C]},
+  {id:'nav-acct-registers',label:'Bank Register',page:'/registers',roles:[A,C]},
+  {id:'nav-acct-bankrec',label:'Bank Reconcile',page:'/bank-reconcile',roles:[A,C]},
+  {id:'nav-acct-entries',label:'Sales Journal',page:'/sales-journal',roles:[A,C]},
+  {id:'nav-acct-export',label:'QuickBooks Failures',page:'/sales-journal?tab=export',roles:[A]},
+  {id:'nav-transfersettle',label:'Reconcile Transfers',page:'/transfer/settle',roles:[A]}
+]},
+{id:'sec-reports',label:'Reports',icon:'analytics',children:[
+  {id:'nav-acct-pl',label:'Profit & Loss',page:'/profit-loss',roles:[A,C]},
+  {id:'nav-labor',label:'Labor',page:'/',tab:'labor'},
+  {id:'nav-bevcost',label:'Bev Cost',page:'/',tab:'pourcost'},
+  {id:'nav-foodcost',label:'Food Cost',page:'/',tab:'cogs'},
+  {id:'nav-acct-reports',label:'All Reports',page:'/reports',roles:[A,C]}
+]},
+{id:'sec-recipes',label:'Menu & Recipes',icon:'recipes',children:[
+  {id:'nav-recipes',label:'Recipes',page:'/manage',tab:'recipes',roles:[A,M]},
+  {id:'nav-prepared',label:'Prepared Items',page:'/manage',tab:'prepared-items',roles:[A,M]},
+  {id:'nav-menuanalysis',label:'Menu Analysis',page:'/manage',tab:'recipe-analysis',roles:[A,M]},
+  {id:'nav-recipeviewer',label:'Recipe Viewer',page:'/manage',tab:'recipe-viewer',roles:[A,M]},
+  {id:'nav-recipefixer',label:'Recipe Fixer',page:'/recipes/fixer',roles:[A,M]},
+  {id:'nav-voicerecipe',label:'Voice Recipe',page:'/voice-recipe',roles:[A,M]},
+  {id:'nav-pmixmapping',label:'PMIX Mapping',page:'/manage',tab:'pmix-mapping',roles:[A,M]}
 ]},
 {id:'sec-setup',label:'Setup',icon:'mgmt',children:[
-  {id:'nav-acct-openbal',label:'Opening Balances',page:'/opening-balances'},
-  {id:'nav-acct-mapping',label:'Sales Mapping',page:'/sales-mapping'}
+  {id:'nav-products',label:'Products',page:'/manage',tab:'products',roles:[A,M]},
+  {id:'nav-prodsetup',label:'Product Setup',page:'/manage',tab:'prodsetup',roles:[A,M]},
+  {id:'nav-vendors',label:'Vendors',page:'/manage',tab:'vendors'},
+  {id:'nav-bp-vendors',label:'Vendor Bill Pay Setup',page:'/manage',tab:'bp-vendors',roles:[A,C]},
+  {id:'nav-storage',label:'Storage Layout',page:'/storage',roles:[A,M]},
+  {id:'nav-unitsetup',label:'Unit Setup',page:'/unit-setup',roles:[A]},
+  {id:'nav-bp-recurring',label:'Recurring Bills',page:'/manage',tab:'bp-recurring',roles:[A,C]},
+  {id:'nav-bp-checksetup',label:'Check Printer',page:'/manage',tab:'bp-checksetup',roles:[A]},
+  {id:'nav-acct-openbal',label:'Opening Balances',page:'/opening-balances',roles:[A,C]},
+  {id:'nav-acct-mapping',label:'Sales Mapping',page:'/sales-mapping',roles:[A]},
+  {id:'nav-transferadmin',label:'Transfer & Waste Admin',page:'/transfer/admin',roles:[A]},
+  {id:'nav-users',label:'User Accounts',page:'/admin/users',roles:[A]},
+  {id:'nav-logins',label:'Login History',page:'/admin/logins',roles:[A]}
 ]}];
 function buildSidebar(){
 var h='<div class="rn-sb-logo"><div class="rn-sb-logo-icon">RN</div><div><div class="rn-sb-logo-text">Red Nun</div><div class="rn-sb-logo-sub">Dashboard</div></div></div>';
@@ -121,17 +124,18 @@ if(path==='/manage'){
   return vm[view]||'nav-dashboard';
 }
 if(path==='/invoices'){var iv=localStorage.getItem('invoiceView')||'history';var ivm={history:'nav-invhistory',scan:'nav-scan',pending:'nav-pending'};return ivm[iv]||'nav-invhistory';}
-if(path==='/ai-inventory')return 'nav-aicount';
 if(path==='/recipes/fixer')return 'nav-recipefixer';
 if(path==='/order-guide')return 'nav-orderguide';
-if(path==='/specials-admin')return 'nav-specials';
 if(path==='/profit-loss')return 'nav-acct-pl';
 if(path==='/vendor-status')return 'nav-vendorstatus';
-if(path==='/change-password'||path==='/catalog'||path==='/product-mapping')return null;
+if(path==='/change-password'||path==='/catalog'||path==='/product-mapping'||path==='/ai-inventory'||path==='/reconcile'||path==='/specials-admin')return null;
+if(path==='/admin/users')return 'nav-users';
+if(path==='/admin/logins')return 'nav-logins';
+if(path==='/transfer/admin')return 'nav-transferadmin';
 if(path==='/payments')return 'nav-payments';
-if(path==='/transfer'||path==='/transfer/statement'||path==='/transfer/admin')return 'nav-transfers';
+if(path==='/transfer')return 'nav-transfers';
 if(path==='/waste')return 'nav-waste';
-if(path==='/transfer/settle')return 'nav-transfersettle';
+if(path==='/transfer/settle'||path==='/transfer/statement')return 'nav-transfersettle';
 if(path==='/print-checks')return 'nav-bp-printchecks';
 if(path==='/bank-transactions')return 'nav-acct-banktx';
 if(path==='/registers')return 'nav-acct-registers';
@@ -145,6 +149,26 @@ if(path==='/storage')return 'nav-storage';
 if(path==='/unit-setup')return 'nav-unitsetup';
 if(path==='/count'){var ct=(new URLSearchParams(window.location.search).get('type')||'').toLowerCase();return ct==='booze'?'nav-boozecount':'nav-foodcount';}
 return 'nav-dashboard';
+}
+// Hide what this role doesn't use: the menu items, any section left empty, and page
+// bits marked rn-role-ac (bill pay: admin + accountant only).
+function applyRoles(role){
+if(!role)return;
+for(var i=0;i<sections.length;i++){
+  var shown=0;
+  for(var j=0;j<sections[i].children.length;j++){
+    var c=sections[i].children[j],el=document.getElementById(c.id);
+    var ok=!c.roles||c.roles.indexOf(role)>=0;
+    if(el)el.style.display=ok?'':'none';
+    if(ok&&!c.mobileOnly)shown++;
+  }
+  var g=document.getElementById(sections[i].id);
+  if(g)g.style.display=shown?'':'none';
+}
+document.querySelectorAll('.rn-role-ac').forEach(function(el){
+  if(role!=='admin'&&role!=='accountant')el.style.display='none';
+});
+setActiveItem(getActiveId());
 }
 function setActiveItem(id){
 document.querySelectorAll('.rn-sb-child').forEach(function(el){el.classList.toggle('active',el.id===id)});
@@ -242,6 +266,7 @@ document.querySelectorAll('.rn-sb-child').forEach(function(el){
   });
 });
 setActiveItem(getActiveId());
+try{applyRoles(localStorage.getItem('rnRole'))}catch(e){}
 // Re-trigger page init after sidebar restructured the DOM
 var path=window.location.pathname;
 if(path==='/manage'){
@@ -332,52 +357,8 @@ fetch('/api/auth/check').then(function(r){return r.json()}).then(function(u){
     });
   }
 
-  // Hide restricted sections for non-admin roles
-  if(u.role!=='admin'){
-    // Hide Vendor Scrapers nav item (admin only)
-    var vs=document.getElementById('nav-vendorstatus');
-    if(vs)vs.style.display='none';
-    // Hide Sales Mapping, Payment Accounts, Export (admin only)
-    var sm=document.getElementById('nav-acct-mapping');
-    if(sm)sm.style.display='none';
-    var ex=document.getElementById('nav-acct-export');
-    if(ex)ex.style.display='none';
-    // Manager: hide Bill Pay entirely
-    if(u.role==='manager'){
-      var bp=document.getElementById('sec-billpay');
-      if(bp)bp.style.display='none';
-    }
-    // Re-run active item highlighting after hiding so section stays open
-    setActiveItem(getActiveId());
-  }
-
-  // Admin sidebar section
-  if(u.role==='admin'){
-    var nav=document.querySelector('.rn-sb-nav');
-    if(nav){
-      var adminHtml='<div class="rn-sb-group" id="sec-admin">'
-        +'<div class="rn-sb-parent" data-section="sec-admin">'+icons.mgmt+'<span>Admin</span>'+chevron+'</div>'
-        +'<div class="rn-sb-children">'
-        +'<a class="rn-sb-child" id="nav-users" data-page="/admin/users" href="javascript:void(0)"><span>User Accounts</span></a>'
-        +'<a class="rn-sb-child" id="nav-logins" data-page="/admin/logins" href="javascript:void(0)"><span>Login History</span></a>'
-        +'</div></div>';
-      nav.insertAdjacentHTML('beforeend',adminHtml);
-      // Bind toggle
-      var adminParent=document.querySelector('#sec-admin .rn-sb-parent');
-      if(adminParent)adminParent.addEventListener('click',function(){document.getElementById('sec-admin').classList.toggle('open')});
-      // Bind nav clicks
-      ['nav-users','nav-logins'].forEach(function(id){
-        var el=document.getElementById(id);
-        if(el)el.addEventListener('click',function(e){
-          e.preventDefault();
-          window.location.href=el.dataset.page;
-        });
-      });
-      // Highlight active if on admin page
-      if(window.location.pathname==='/admin/users'){setActiveItem('nav-users');document.getElementById('sec-admin').classList.add('open');}
-      if(window.location.pathname==='/admin/logins'){setActiveItem('nav-logins');document.getElementById('sec-admin').classList.add('open');}
-    }
-  }
+  try{localStorage.setItem('rnRole',u.role||'')}catch(e){}
+  applyRoles(u.role);
 }).catch(function(e){console.error('sidebar avatar error:',e)});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();

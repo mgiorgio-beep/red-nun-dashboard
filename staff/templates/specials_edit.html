@@ -277,14 +277,14 @@ function init() {
   document.getElementById('soup-desc').value = soup.desc || '';
   document.getElementById('soup-price').value = soup.price || '';
   document.getElementById('soup-86').checked = !!soup.eightySixed;
-  if (soup.eightySixed) toggle86Section('soup');
+  if (soup.eightySixed) toggle86Section('soup', true);
   // Appetizer
   var app = data.appetizer || {};
   document.getElementById('app-name').value = app.name || '';
   document.getElementById('app-desc').value = app.desc || '';
   document.getElementById('app-price').value = app.price || '';
   document.getElementById('app-86').checked = !!app.eightySixed;
-  if (app.eightySixed) toggle86Section('app');
+  if (app.eightySixed) toggle86Section('app', true);
   // Font
   document.getElementById('board-font').value = data.font || 'Fredericka the Great';
   updateFontPreview();
@@ -416,7 +416,7 @@ function toggle86Item(idx, checked) {
   saveSpecials();
 }
 
-function toggle86Section(section) {
+function toggle86Section(section, displayOnly) {  // displayOnly: opening the page must not publish
   var cardId = section + '-card';
   var checkId = section + '-86';
   var labelId = section + '-86-label';
@@ -430,7 +430,7 @@ function toggle86Section(section) {
     card.style.opacity = '1';
     label.classList.remove('active');
   }
-  saveSpecials();
+  if (!displayOnly) saveSpecials();
 }
 
 function clearAll() {
