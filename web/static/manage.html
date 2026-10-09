@@ -119,13 +119,6 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
   .form-grid{grid-template-columns:1fr}
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:12px}
 
-  /* Mobile Navigation */
-  .mobile-nav{display:flex;gap:4px;padding:8px 16px;background:var(--sidebar-bg);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;position:sticky;top:44px;z-index:98}
-  .mobile-nav::-webkit-scrollbar{display:none}
-  .mobile-nav-item{padding:8px 14px;border-radius:8px;background:transparent;border:1px solid transparent;color:var(--text2);font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;transition:all .2s}
-  .mobile-nav-item.active{background:rgba(255,69,58,0.1);border-color:rgba(255,69,58,0.3);color:var(--red)}
-  .mobile-nav-item:hover{background:var(--card-bg)}
-
   /* Adjust modals for mobile */
   .modal-content{width:95%;max-width:none;padding:20px}
   .form-input,.form-select{font-size:16px}
@@ -140,9 +133,6 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 }
 @media(min-width:769px){
   .dash-mobile-only{display:none!important}
-}
-@media(min-width:1025px){
-  .mobile-nav{display:none}
 }
 
 /* Storage Layout */
@@ -347,21 +337,11 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
       </select>
     </nav>
 
-    <!-- Mobile Navigation (hidden on desktop) -->
-    <div class="mobile-nav">
-      <div class="mobile-nav-item active" onclick="showView('dashboard')">Dashboard</div>
-      <div class="mobile-nav-item" onclick="showView('prodsetup')">Products</div>
-      <div class="mobile-nav-item" onclick="showView('vendors')">Vendors</div>
-      <div class="mobile-nav-item" onclick="showView('inv')">Inventory</div>
-      <div class="mobile-nav-item" onclick="showView('recipes')">Recipes</div>
-    </div>
-
     <!-- Top Bar -->
     <div class="top-bar">
       <div class="page-title" id="pageTitle">Dashboard</div>
       <div class="top-actions">
         <input type="text" class="search-bar" placeholder="Search..." id="globalSearch">
-        <button class="btn btn-primary" id="primaryAction" style="display:none;">Add New</button>
       </div>
     </div>
 
@@ -377,7 +357,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
         <!-- Row 1: Sales Today + Pending Invoices -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
           <!-- Card 1: Sales Today -->
-          <div class="card" style="padding:20px;cursor:pointer" onclick="showView('analytics')">
+          <div class="card" style="padding:20px;cursor:pointer" onclick="window.location.href='/'">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
               <div style="width:32px;height:32px;border-radius:8px;background:rgba(48,209,88,0.12);display:flex;align-items:center;justify-content:center;font-size:16px">$</div>
               <div style="font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">Sales Today</div>
@@ -404,7 +384,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
           </div>
 
           <!-- Card 4: Low Inventory Alerts -->
-          <div class="card" style="padding:20px;cursor:pointer" onclick="showView('inventory')">
+          <div class="card" style="padding:20px;cursor:pointer" onclick="showView('inv')">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
               <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,159,10,0.12);display:flex;align-items:center;justify-content:center;font-size:15px">&#128230;</div>
               <div style="font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">Inventory Alerts</div>
@@ -2465,25 +2445,11 @@ window.currentLocation = localStorage.getItem('globalLocation') || 'dennis';
 function setGlobalLocation(v) {
   window.currentLocation = v;
   localStorage.setItem('globalLocation', v);
-  // Preserve current view and sub-tab across reload
-  if (typeof currentView !== 'undefined') {
-    localStorage.setItem('lastView', currentView);
-  }
-  var activeInvTab = document.querySelector('.inv-tab.active');
-  if (activeInvTab) {
-    localStorage.setItem('lastInvTab', activeInvTab.dataset.tab);
-  }
-  location.reload();
+  location.reload();   // the view is in the address (?tab=), so the reload keeps it
 }
 document.addEventListener('DOMContentLoaded', function() {
   var s = document.getElementById('global-location');
   if (s) s.value = window.currentLocation;
-  // Restore last view after location switch
-  var lastView = localStorage.getItem('lastView');
-  if (lastView) {
-    localStorage.removeItem('lastView');
-    setTimeout(function() { showView(lastView); }, 50);
-  }
 });
 
 // State
@@ -2491,67 +2457,68 @@ let currentView = 'dashboard';
 const fmt = n => '$' + (n||0).toFixed(2);
 
 // View Management
-function showView(view) {
-  // Auto-expand recipe subnav when viewing recipe pages
-  if (view === 'recipes' || view === 'recipe-edit' || view === 'recipe-analysis' || view === 'recipe-viewer' || view === 'prepared-items' || view === 'prepared-edit') {
-    const sub = document.getElementById('recipe-subnav');
-    const chev = document.getElementById('recipe-nav-chevron');
-    if (sub) { sub.style.display = 'block'; }
-    if (chev) { chev.style.transform = 'rotate(90deg)'; }
-  }
+// The view is in the address: /manage?tab=<view>, plus &id=<n> for the recipe and
+// prepared-item editors (UI plan Phase 3), so Back, Refresh and bookmarks work.
+// localStorage 'manageView' is only the fallback for a bare /manage.
+const VIEW_TITLES = {
+  dashboard: 'Dashboard',
+  products: 'Products',
+  vendors: 'Vendors',
+  inv: 'Inventory',
+  orderguide: 'Order Guide',
+  settings: 'Settings',
+  recipes: 'Recipes',
+  'recipe-edit': 'Edit Recipe',
+  'prepared-items': 'Prepared Items',
+  'prepared-edit': 'Edit Prepared Item',
+  'recipe-viewer': 'Recipe Viewer',
+  'recipe-analysis': 'Menu Analysis',
+  prodsetup: 'Product Setup',
+  'pmix-mapping': 'PMIX Mapping',
+  'billpay': 'Bills to Pay',
+  'bp-payments': 'Bill Pay — Payments',
+  'bp-vendors': 'Vendor Bill Pay Setup',
+  'bp-checksetup': 'Check Printer',
+  'bp-payroll': 'Payroll',
+  'bp-recurring': 'Recurring Bills'
+};
+// Views whose list is a plain .data-table the top-bar Search box can filter.
+const SEARCH_VIEWS = ['products', 'vendors', 'recipes', 'prepared-items'];
+
+function viewUrl(view) {
+  var id = view === 'recipe-edit' ? currentEditRecipeId : view === 'prepared-edit' ? currentPrepId : null;
+  return '/manage?tab=' + encodeURIComponent(view) + (id ? '&id=' + id : '');
+}
+
+// opts.fromHistory: Back/Forward already set the address. opts.replace: correct the
+// address without adding a Back step (first load, old links).
+function showView(view, opts) {
+  opts = opts || {};
+  if (!document.getElementById('view-' + view)) view = 'dashboard';
   console.log('showView called with:', view);
   currentView = view;
 
-  // Save current view to localStorage
-  localStorage.setItem('currentView', view);
-  if (view !== 'recipe-edit') localStorage.removeItem('currentRecipeId');
+  // Leaving a view clears the Search box (and the rows it hid).
+  const search = document.getElementById('globalSearch');
+  if (search && search.value) { search.value = ''; search.dispatchEvent(new Event('input')); }
 
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
 
-  const viewElement = document.getElementById('view-' + view);
-  if (viewElement) {
-    viewElement.classList.add('active');
+  const topBar = document.querySelector('.top-bar');
+  if (topBar) topBar.style.display = view === 'dashboard' ? 'none' : '';   // Home has its own header
+  if (search) search.style.display = SEARCH_VIEWS.indexOf(view) >= 0 ? '' : 'none';
+  document.getElementById('pageTitle').textContent = VIEW_TITLES[view] || view;
+
+  try { localStorage.setItem('manageView', view === 'recipe-edit' ? 'recipes' : view === 'prepared-edit' ? 'prepared-items' : view); } catch (e) {}
+  if (!opts.fromHistory) {
+    var url = viewUrl(view);
+    if (location.pathname + location.search !== url) {
+      if (opts.replace || !new URLSearchParams(location.search).get('tab')) history.replaceState(null, '', url);
+      else history.pushState(null, '', url);
+    }
   }
-
-  // Update active state for the clicked nav item
-  document.querySelectorAll('.nav-item').forEach(n => {
-    if (n.getAttribute('onclick') && n.getAttribute('onclick') === "showView('" + view + "')") {
-      n.classList.add('active');
-    }
-  });
-  document.querySelectorAll('.mobile-nav-item').forEach(n => {
-    if (n.getAttribute('onclick') && n.getAttribute('onclick') === "showView('" + view + "')") {
-      n.classList.add('active');
-    }
-  });
-
-  const titles = {
-    dashboard: 'Dashboard',
-    products: 'Products',
-    vendors: 'Vendors',
-    inventory: 'Inventory',
-    storage: 'Storage Locations',
-    storagelayout: 'Storage Layout',
-    countsheet: 'Count Sheet',
-    inv: 'Inventory',
-    recipes: 'Recipes',
-    'recipe-edit': 'Edit Recipe',
-    'prepared-items': 'Prepared Items',
-    'prepared-edit': 'Edit Prepared Item',
-    'recipe-viewer': 'Recipe Viewer',
-    'recipe-analysis': 'Menu Analysis',
-    prodsetup: 'Product Setup',
-    'pmix-mapping': 'PMIX Mapping',
-    'billpay': 'Bills to Pay',
-    'bp-payments': 'Bill Pay — Payments',
-    'bp-vendors': 'Vendor Bill Pay Setup',
-    'bp-checksetup': 'Check Printer',
-    'bp-payroll': 'Payroll',
-    'bp-recurring': 'Recurring Bills'
-  };
-  document.getElementById('pageTitle').textContent = titles[view] || view;
+  if (window.rnSyncNav) window.rnSyncNav();
 
   // Load data
   switch(view) {
@@ -2559,6 +2526,7 @@ function showView(view) {
     case 'products': loadProducts(); break;
     case 'vendors': loadVendors(); break;
     case 'inv': invInit(); break;
+    case 'orderguide': if (typeof loadOrderGuide === 'function') loadOrderGuide(); break;
     case 'recipe-viewer': rvLoadRecipes(); break;
     case 'recipes': loadRecipes(); break;
     case 'prepared-items': loadPreparedItems(); break;
@@ -2574,6 +2542,28 @@ function showView(view) {
     case 'bp-recurring': rcInit(); break;
   }
 }
+
+// Open a view from an address. The editors need their id; without one they fall
+// back to their list.
+function openViewFromUrl(view, opts) {
+  var id = parseInt(new URLSearchParams(location.search).get('id'), 10);
+  if (view === 'recipe-edit') { if (id) return openRecipePage(id); view = 'recipes'; }
+  if (view === 'prepared-edit') { if (id) return openPrepPage(id); view = 'prepared-items'; }
+  showView(view, opts);
+}
+
+function manageStart() {
+  var q = new URLSearchParams(location.search);
+  var view = q.get('tab') || location.hash.replace('#', '').split('.')[0];   // old /manage#view links
+  if (view === 'inventory') view = 'inv';
+  if (q.get('product')) view = 'prodsetup';
+  if (!view) { try { view = localStorage.getItem('manageView') || localStorage.getItem('currentView') || ''; } catch (e) {} }
+  openViewFromUrl(view || 'dashboard', {replace: true});
+}
+window.addEventListener('popstate', function() {
+  var tab = new URLSearchParams(location.search).get('tab');
+  if (tab && location.pathname === '/manage') openViewFromUrl(tab, {fromHistory: true});
+});
 
 // Products
 async function loadProducts() {
@@ -3494,7 +3484,6 @@ let currentEditRecipeId = null;
 async function openRecipePage(recipeId) {
   currentEditRecipeId = recipeId;
   currentRecipeId = recipeId;
-  localStorage.setItem('currentRecipeId', recipeId);
   showView('recipe-edit');
 
   try {
@@ -4578,78 +4567,6 @@ async function loadStorageLocationCheckboxes(productId) {
   }
 }
 
-// Init - Restore last viewed tab
-function initPage() {
-  var savedView = localStorage.getItem('currentView') || 'dashboard';
-  // Redirect old 'products' view to 'prodsetup'
-  if (savedView === 'products') savedView = 'prodsetup';
-  currentView = savedView;
-
-  // Set active view
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  var viewEl = document.getElementById('view-' + savedView);
-  if (viewEl) viewEl.classList.add('active');
-
-  // Set active nav item — match by onclick attribute
-  document.querySelectorAll('.nav-item').forEach(n => {
-    n.classList.remove('active');
-    if (n.getAttribute('onclick') === "showView('" + savedView + "')") n.classList.add('active');
-  });
-  document.querySelectorAll('.mobile-nav-item').forEach(n => {
-    n.classList.remove('active');
-    if (n.getAttribute('onclick') === "showView('" + savedView + "')") n.classList.add('active');
-  });
-
-  // Set page title
-  const titles = {
-    dashboard: 'Dashboard',
-    products: 'Products',
-    vendors: 'Vendors',
-    inventory: 'Inventory',
-    storage: 'Storage Locations',
-    countsheet: 'Count Sheet',
-    inv: 'Inventory',
-    recipes: 'Recipes',
-    'recipe-edit': 'Edit Recipe',
-    'prepared-items': 'Prepared Items',
-    'prepared-edit': 'Edit Prepared Item',
-    'recipe-viewer': 'Recipe Viewer',
-    'recipe-analysis': 'Menu Analysis',
-    prodsetup: 'Product Setup',
-    'pmix-mapping': 'PMIX Mapping',
-    'billpay': 'Bills to Pay',
-    'bp-payments': 'Bill Pay — Payments',
-    'bp-vendors': 'Vendor Bill Pay Setup',
-    'bp-checksetup': 'Check Printer',
-    'bp-payroll': 'Payroll',
-    'bp-recurring': 'Recurring Bills'
-  };
-  document.getElementById('pageTitle').textContent = titles[savedView] || savedView;
-
-  // Load data for the view
-  var savedRecipeId = localStorage.getItem('currentRecipeId');
-  if (savedView === 'recipe-edit' && savedRecipeId) {
-    openRecipePage(parseInt(savedRecipeId));
-  } else {
-    if (savedView === 'recipe-edit') { savedView = 'recipes'; currentView = 'recipes'; }
-    switch(savedView) {
-      case 'dashboard': if (typeof loadDashboard === 'function') loadDashboard(); break;
-      case 'vendors': if (typeof loadVendors === 'function') loadVendors(); break;
-      case 'inv': if (typeof invInit === 'function') invInit(); break;
-      case 'recipes': if (typeof loadRecipes === 'function') loadRecipes(); break;
-      case 'prodsetup': if (typeof loadProductSetup === 'function') loadProductSetup(); break;
-      case 'settings': if (typeof loadSettings === 'function') loadSettings(); break;
-      case 'orderguide': if (typeof loadOrderGuide === 'function') loadOrderGuide(); break;
-      case 'billpay': if (typeof bpInit === 'function') bpInit(); break;
-      case 'bp-payments': if (typeof bpLoadPayments === 'function') bpLoadPayments(); break;
-      case 'bp-vendors': if (typeof bpLoadVendors === 'function') bpLoadVendors(); break;
-      case 'bp-checksetup': if (typeof bpLoadCheckConfig === 'function') bpLoadCheckConfig(); break;
-      case 'bp-payroll': if (typeof prLoadPayrollChecks === 'function') prLoadPayrollChecks(); break;
-      case 'bp-recurring': if (typeof rcInit === 'function') rcInit(); break;
-    }
-  }
-}
-
 // Initialize immediately (script is at end of body)
 console.log('Script running, initializing navigation...');
 
@@ -4673,8 +4590,9 @@ document.querySelectorAll('.nav-item').forEach((item, index) => {
   });
 });
 
-console.log('Calling initPage and setupSearch...');
-initPage();
+// Start after every script on the page has loaded (loadDashboard and the bill pay
+// loaders are defined further down) and after sidebar.js has built the layout.
+document.addEventListener('DOMContentLoaded', function() { setTimeout(manageStart, 0); });
 setupSearch();
 
 // ============================================
@@ -7628,7 +7546,6 @@ function rcPrintChecks() {
 
 // ── Dashboard / Home ──────────────────────────────────────────────
 async function loadDashboard() {
-  var tb=document.querySelector('.top-bar');if(tb)tb.style.display='none';
   var loc = window.currentLocation || 'dennis';
   var fmt = function(n) { return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0}); };
   var chg = function(cur, prev) {
@@ -9171,16 +9088,9 @@ async function maRecalcCosts() {
 (function(){
   var pid = new URLSearchParams(window.location.search).get('product');
   if (!pid) return;
-  var tries = 0;
-  (function open(){
-    tries++;
-    if (typeof showView === 'function' && typeof editProduct === 'function') {
-      showView('prodsetup');
-      setTimeout(function(){ try { editProduct(parseInt(pid)); } catch(e){} }, 400);
-    } else if (tries < 30) {
-      setTimeout(open, 150);
-    }
-  })();
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function(){ try { editProduct(parseInt(pid)); } catch(e){} }, 400);
+  });
 })();
 </script>
 

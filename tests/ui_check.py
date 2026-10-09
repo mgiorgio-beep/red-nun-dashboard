@@ -10,6 +10,10 @@ item the way a person would, then checks:
     ALLOWED_WRITES lists the known, harmless ones)
 Also opens the standalone pages directly and checks they load.
 
+Tab addresses (UI plan Phase 3): every /manage and /invoices item in the role's menu is
+opened by its address (/manage?tab=...) as a bookmark and refreshed; Back/Forward is
+walked across views; old #view links and a bare /manage land on the right view.
+
 Read-only: every POST/PUT/PATCH/DELETE is blocked. Run after every UI change:
 
   venv/bin/python3 tests/ui_check.py                 # admin; prints a table, exit 1 on failure
@@ -92,7 +96,8 @@ def run(role='admin'):
         p.goto(BASE + '/manage', wait_until='domcontentloaded')
         p.wait_for_timeout(1500)
         items = p.evaluate("""() => [...document.querySelectorAll('.rn-sb-child')].map(e => ({
-            id: e.id, label: e.innerText.trim(), visible: !!e.offsetParent || getComputedStyle(e).display !== 'none' && e.closest('.rn-sb-group') && getComputedStyle(e.closest('.rn-sb-group')).display !== 'none'
+            id: e.id, label: e.innerText.trim(), page: e.dataset.page, tab: e.dataset.tab,
+            mobile: e.classList.contains('mobile-nav-item'), visible: !!e.offsetParent || getComputedStyle(e).display !== 'none' && e.closest('.rn-sb-group') && getComputedStyle(e.closest('.rn-sb-group')).display !== 'none'
           }))""")
         p.close()
         for it in items:
@@ -133,6 +138,7 @@ def run(role='admin'):
             pg.close()
             info['problems'] = problems(info, sidebar_page=False)
             out['standalone'].append(info)
+        out['tabs'] = tab_checks(ctx, [it for it in items if it['visible']])
         out['refused'] = []
         for path in REFUSED.get(role, []):
             r = ctx.request.get(BASE + path, max_redirects=0)
@@ -146,6 +152,89 @@ def run(role='admin'):
             out['refused'].append({'id': 'home bill card', 'label': 'home bill card hidden', 'problems': []
                                    if out['home_bill_card_hidden'] else ['bill pay card shows on Home for a manager']})
         b.close()
+    return out
+
+
+STATE_JS = """() => {
+    const act = document.querySelector('.rn-sb-child.active');
+    const v = document.querySelector('.view.active');
+    return {url: location.pathname + location.search + location.hash, active: act ? act.id : null,
+            view: v ? v.id.replace('view-', '') : null};
+}"""
+
+
+def tab_checks(ctx, items):
+    """Bookmark + Refresh for each /manage and /invoices tab, Back/Forward, old links."""
+    out = []
+    tabs = [it for it in items if it.get('page') in ('/manage', '/invoices') and it.get('tab')
+            and not it.get('mobile')]
+
+    def check(label, url, expect_url, expect_active, steps=None, expect_view=None, store=None):
+        info = {'id': 'tab ' + label, 'label': 'tab ' + label, 'console': [], 'failed': [], 'writes': []}
+        pg = ctx.new_page()
+        watch(pg, info)
+        try:
+            if store:   # what a bare address falls back to
+                pg.goto(BASE + '/login', wait_until='domcontentloaded')
+                pg.evaluate('([k, v]) => localStorage.setItem(k, v)', list(store))
+            pg.goto(BASE + url, wait_until='domcontentloaded')
+            pg.wait_for_timeout(1800)
+            for st in steps or []:
+                st(pg)
+                pg.wait_for_timeout(1500)
+            info.update(pg.evaluate(STATE_JS))
+        except Exception as e:
+            info['error'] = str(e)[:160]
+        pg.close()
+        p = problems(info, sidebar_page=False)
+        if info.get('url') != expect_url:
+            p.append(f"address {info.get('url')} (want {expect_url})")
+        if expect_active and info.get('active') != expect_active:
+            p.append(f"highlights {info.get('active')} (want {expect_active})")
+        if expect_view and info.get('view') != expect_view:
+            p.append(f"shows view {info.get('view')} (want {expect_view})")
+        info['problems'] = p
+        out.append(info)
+
+    click = lambda nid: (lambda pg: pg.evaluate(f"document.getElementById({json.dumps(nid)}).click()"))
+    for it in tabs:
+        addr = f"{it['page']}?tab={it['tab']}"
+        view = it['tab'] if it['page'] == '/manage' else None
+        check(f"{it['label']} (bookmark)", addr, addr, it['id'], expect_view=view)
+        check(f"{it['label']} (refresh)", addr, addr, it['id'], [lambda pg: pg.reload(wait_until='domcontentloaded')],
+              expect_view=view)
+    for page in ('/manage', '/invoices'):
+        t = [it for it in tabs if it['page'] == page]
+        if len(t) < 2:
+            continue
+        a, b, c = t[0], t[1], t[2 if len(t) > 2 else 0]   # /invoices on a PC has two tabs
+        start = f"{page}?tab={a['tab']}"
+        check(f"{page} back", start, f"{page}?tab={b['tab']}", b['id'],
+              [click(b['id']), click(c['id']), lambda pg: pg.go_back(wait_until='commit')])
+        check(f"{page} back x2 + fwd", start, f"{page}?tab={b['tab']}", b['id'],
+              [click(b['id']), click(c['id']), lambda pg: pg.go_back(wait_until='commit'),
+               lambda pg: pg.go_back(wait_until='commit'), lambda pg: pg.go_forward(wait_until='commit')])
+    ids = {it['id'] for it in tabs}
+    legacy = [('/manage#inventory', '/manage?tab=inv', 'nav-inventory'),
+              ('/manage#bp-payroll', '/manage?tab=bp-payroll', 'nav-bp-payroll'),
+              ('/manage?tab=no-such-view', '/manage?tab=dashboard', 'nav-dashboard'),
+              ('/invoices#list', '/invoices?tab=history', 'nav-invhistory'),
+              ('/invoices#reports', '/invoices?tab=reports', None)]
+    for old, new, nid in legacy:
+        if nid and nid not in ids | {'nav-dashboard'}:
+            continue
+        check(f"old link {old}", old, new, nid)
+    check('bare /manage (stored view)', '/manage', '/manage?tab=vendors', 'nav-vendors', store=('manageView', 'vendors'))
+    check('bare /invoices (stored view)', '/invoices', '/invoices?tab=pending', 'nav-pending',
+          store=('invoiceView', 'pending'))
+    if 'nav-recipes' in ids:
+        from integrations.toast.data_store import get_connection
+        cn = get_connection()
+        r = cn.execute('SELECT id FROM recipes ORDER BY id LIMIT 1').fetchone()
+        cn.close()
+        if r:
+            addr = f"/manage?tab=recipe-edit&id={r['id']}"
+            check('recipe editor (bookmark)', addr, addr, 'nav-recipes', expect_view='recipe-edit')
     return out
 
 
@@ -181,7 +270,7 @@ def problems(i, sidebar_page):
 def main():
     role = sys.argv[sys.argv.index('--role') + 1] if '--role' in sys.argv else 'admin'
     res = run(role)
-    rows = res['sidebar'] + res['standalone'] + res.get('refused', [])
+    rows = res['sidebar'] + res['standalone'] + res.get('tabs', []) + res.get('refused', [])
     fails = [r for r in rows if r['problems'] and r['id'] not in KNOWN]
     for r in rows:
         mark = ('known' if r['id'] in KNOWN else 'FAIL') if r['problems'] else ' ok '
@@ -191,7 +280,7 @@ def main():
     path = BASELINE.replace('.json', f'_{role}.json') if role != 'admin' else BASELINE
     if os.path.exists(path) and '--save' not in sys.argv:
         old = json.load(open(path))
-        base = {r['id']: r for r in old['sidebar'] + old['standalone'] + old.get('refused', [])}
+        base = {r['id']: r for r in old['sidebar'] + old['standalone'] + old.get('tabs', []) + old.get('refused', [])}
         now = {r['id']: r for r in rows}
         changed = []
         for k in sorted(set(base) | set(now)):

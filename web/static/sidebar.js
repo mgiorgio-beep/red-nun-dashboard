@@ -111,6 +111,13 @@ h+='</nav>';
 
 return h;
 }
+// /manage and /invoices keep their view in the address (?tab=, UI plan Phase 3); the
+// stored view is only the fallback for a bare /manage or /invoices.
+function pageTab(path){
+var t=new URLSearchParams(window.location.search).get('tab');
+if(t)return t;
+try{return localStorage.getItem(path==='/manage'?'manageView':'invoiceView')||''}catch(e){return ''}
+}
 function getActiveId(){
 var path=window.location.pathname;
 var hash=window.location.hash.replace('#','').split('.')[0];
@@ -119,11 +126,11 @@ if(path==='/'||path==='/index.html'){
   return tm[hash]||'nav-dashboard';
 }
 if(path==='/manage'){
-  var view=localStorage.getItem('manageView')||'dashboard';
+  var view=pageTab(path)||'dashboard';
   var vm={dashboard:'nav-dashboard',products:'nav-products',vendors:'nav-vendors',inv:'nav-inventory',recipes:'nav-recipes','prepared-items':'nav-prepared','recipe-analysis':'nav-menuanalysis','recipe-viewer':'nav-recipeviewer',prodsetup:'nav-prodsetup',settings:'nav-settings','recipe-edit':'nav-recipes','prepared-edit':'nav-prepared','data-export':'nav-dataexport','user-accounts':'nav-users',orderguide:'nav-orderguide','pmix-mapping':'nav-pmixmapping',billpay:'nav-bp-outstanding','bp-payments':'nav-bp-payments','bp-vendors':'nav-bp-vendors','bp-recurring':'nav-bp-recurring','bp-checksetup':'nav-bp-checksetup','bp-payroll':'nav-bp-payroll'};
   return vm[view]||'nav-dashboard';
 }
-if(path==='/invoices'){var iv=localStorage.getItem('invoiceView')||'history';var ivm={history:'nav-invhistory',scan:'nav-scan',pending:'nav-pending'};return ivm[iv]||'nav-invhistory';}
+if(path==='/invoices'){var iv=pageTab(path)||'history';var ivm={history:'nav-invhistory',scan:'nav-scan',pending:'nav-pending'};return ivm[iv]||'nav-invhistory';}
 if(path==='/recipes/fixer')return 'nav-recipefixer';
 if(path==='/order-guide')return 'nav-orderguide';
 if(path==='/profit-loss')return 'nav-acct-pl';
@@ -202,14 +209,14 @@ for(var i=0;i<sections.length;i++){
 function handleNavClick(item){
 var page=item.page;var tab=item.tab;var cur=window.location.pathname;
 var curFull=cur+window.location.search;
+// Same page: /manage and /invoices switch view in place (showView updates the address)
+if((page==='/manage'||page==='/invoices')&&cur===page&&tab&&typeof window.showView==='function'){
+  window.showView(tab);setActiveItem(item.id);closeMobile();return;
+}
 if(curFull===page||(cur===''&&page==='/')){
   if(page==='/'){
     if(typeof window.switchTab==='function')window.switchTab(tab);
     else{window.location.hash=tab;window.location.reload()}
-  }else if(page==='/manage'){
-    if(typeof window.showView==='function'){window.showView(tab);localStorage.setItem('manageView',tab)}
-  }else if(page==='/invoices'){
-    if(typeof window.showView==='function'){window.showView(tab);localStorage.setItem('invoiceView',tab)}
   }else if(page==='/sales-journal'){
     if(typeof window.backToList==='function')window.backToList();
   }
@@ -217,8 +224,7 @@ if(curFull===page||(cur===''&&page==='/')){
 }
 var url=page;
 if(page==='/'&&tab)url='/#'+tab;
-else if(page==='/manage'&&tab)localStorage.setItem('manageView',tab);
-else if(page==='/invoices'&&tab)localStorage.setItem('invoiceView',tab);
+else if((page==='/manage'||page==='/invoices')&&tab)url=page+'?tab='+encodeURIComponent(tab);
 window.location.href=url;
 }
 function init(){
@@ -267,16 +273,9 @@ document.querySelectorAll('.rn-sb-child').forEach(function(el){
 });
 setActiveItem(getActiveId());
 try{applyRoles(localStorage.getItem('rnRole'))}catch(e){}
-// Re-trigger page init after sidebar restructured the DOM
+// Re-trigger page init after sidebar restructured the DOM. /manage and /invoices open
+// the view in their address themselves (manageStart / invoicesStart).
 var path=window.location.pathname;
-if(path==='/manage'){
-  var view=localStorage.getItem('manageView')||'dashboard';
-  if(typeof window.showView==='function')setTimeout(function(){window.showView(view)},50);
-}
-if(path==='/invoices'){
-  var iv=localStorage.getItem('invoiceView')||'history';
-  if(typeof window.showView==='function')setTimeout(function(){window.showView(iv)},50);
-}
 if(path==='/'||path==='/index.html'){
   if(typeof window.switchTab==='function'){
     var hash=window.location.hash.replace('#','').split('.')[0]||'overview';
@@ -308,21 +307,8 @@ if(sel){
   });
 }
 window.addEventListener('hashchange',function(){setActiveItem(getActiveId())});
-setTimeout(function(){
-  var orig=window.showView;
-  var curPath=window.location.pathname;
-  if(typeof orig==='function'){window.showView=function(v){orig(v);
-    if(curPath==='/manage'){
-      localStorage.setItem('manageView',v);
-      var vm={dashboard:'nav-dashboard',products:'nav-products',vendors:'nav-vendors',inv:'nav-inventory',recipes:'nav-recipes','prepared-items':'nav-prepared','recipe-analysis':'nav-menuanalysis','recipe-viewer':'nav-recipeviewer',prodsetup:'nav-prodsetup',settings:'nav-settings','recipe-edit':'nav-recipes','prepared-edit':'nav-prepared','data-export':'nav-dataexport','user-accounts':'nav-users',orderguide:'nav-orderguide','pmix-mapping':'nav-pmixmapping',billpay:'nav-bp-outstanding','bp-payments':'nav-bp-payments','bp-vendors':'nav-bp-vendors','bp-recurring':'nav-bp-recurring','bp-checksetup':'nav-bp-checksetup','bp-payroll':'nav-bp-payroll'};
-      setActiveItem(vm[v]||'nav-dashboard');
-    } else if(curPath==='/invoices'){
-      localStorage.setItem('invoiceView',v);
-      var ivm={history:'nav-invhistory',scan:'nav-scan',pending:'nav-pending'};
-      setActiveItem(ivm[v]||'nav-invhistory');
-    }
-  }}
-},100);
+// /manage and /invoices call this after every view change (and on Back/Forward).
+window.rnSyncNav=function(){setActiveItem(getActiveId())};
 
 // User avatar in topbar + admin sidebar section
 fetch('/api/auth/check').then(function(r){return r.json()}).then(function(u){

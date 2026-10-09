@@ -12,7 +12,7 @@
     "403 /api/billpay/invoices?payment_status=unpaid"
    ],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=dashboard",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-dashboard",
@@ -57,12 +57,12 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=inv",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-inventory",
    "title": "Inventory",
-   "text": 7613,
+   "text": 7623,
    "problems": []
   },
   {
@@ -156,7 +156,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/invoices#history",
+   "url": "/invoices?tab=history",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-invhistory",
@@ -171,7 +171,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/invoices#pending",
+   "url": "/invoices?tab=pending",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-pending",
@@ -186,10 +186,10 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/invoices#history",
+   "url": "/invoices?tab=history",
    "sidebar": true,
    "sidebar_ok": true,
-   "active": "nav-scan",
+   "active": "nav-invhistory",
    "title": "",
    "text": 32621,
    "problems": []
@@ -219,21 +219,21 @@
    "visible": false,
    "console": [
     "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
-    "Aging load error: TypeError: Cannot read properties of undefined (reading 'current')\n    at bpLoadAging (http://127.0.0.1:8080/manage:5779:3",
+    "Aging load error: TypeError: Cannot read properties of undefined (reading 'current')\n    at bpLoadAging (http://127.0.0.1:8080/manage:5697:3",
     "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
     "Vendor load error: TypeError: Cannot read properties of undefined (reading 'filter')\n    at bpRenderVendorList (http://127.0.0.1:8080/manage",
     "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
-    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
-    "BP invoices error: TypeError: Cannot read properties of undefined (reading 'length')\n    at bpRenderSorted (http://127.0.0.1:8080/manage:602"
+    "BP invoices error: TypeError: Cannot read properties of undefined (reading 'length')\n    at bpRenderSorted (http://127.0.0.1:8080/manage:594",
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
    ],
    "failed": [
     "403 /api/billpay/aging-summary?location=dennis",
     "403 /api/billpay/vendors",
-    "403 /api/billpay/vendors?location=dennis",
-    "403 /api/billpay/invoices?payment_status=unpaid&location=dennis"
+    "403 /api/billpay/invoices?payment_status=unpaid&location=dennis",
+    "403 /api/billpay/vendors?location=dennis"
    ],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=billpay",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-outstanding",
@@ -292,7 +292,7 @@
     "403 /api/payroll/orphan-checks?location=chatham"
    ],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=bp-payroll",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-payroll",
@@ -543,7 +543,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=recipes",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-recipes",
@@ -558,7 +558,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=prepared-items",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-prepared",
@@ -573,7 +573,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=recipe-analysis",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-menuanalysis",
@@ -588,7 +588,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=recipe-viewer",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-recipeviewer",
@@ -633,7 +633,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=pmix-mapping",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-pmixmapping",
@@ -648,7 +648,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=products",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-products",
@@ -663,7 +663,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=prodsetup",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-prodsetup",
@@ -678,7 +678,7 @@
    "console": [],
    "failed": [],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=vendors",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-vendors",
@@ -698,7 +698,7 @@
     "403 /api/billpay/vendors"
    ],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=bp-vendors",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-vendors",
@@ -742,13 +742,13 @@
    "visible": false,
    "console": [
     "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
-    "rcLoadQueue error: Error: Server error 403\n    at rcLoadQueue (http://127.0.0.1:8080/manage:7232:22)"
+    "rcLoadQueue error: Error: Server error 403\n    at rcLoadQueue (http://127.0.0.1:8080/manage:7150:22)"
    ],
    "failed": [
     "403 /api/billpay/recurring/due?date=2026-10-09&days=14"
    ],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=bp-recurring",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-recurring",
@@ -767,7 +767,7 @@
     "403 /api/billpay/check-config?location=chatham"
    ],
    "writes": [],
-   "url": "/manage",
+   "url": "/manage?tab=bp-checksetup",
    "sidebar": true,
    "sidebar_ok": true,
    "active": "nav-bp-checksetup",
@@ -959,8 +959,8 @@
     "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: net::ERR_FAILED",
     "Failed to load resource: net::ERR_FAILED",
-    "Failed to load resource: the server responded with a status of 404 ()",
     "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: the server responded with a status of 404 ()",
     "Failed to load resource: the server responded with a status of 404 ()"
    ],
    "failed": [],
@@ -1029,6 +1029,417 @@
    "writes": [],
    "status": 200,
    "text": 816,
+   "problems": []
+  }
+ ],
+ "tabs": [
+  {
+   "id": "tab Dashboard (bookmark)",
+   "label": "tab Dashboard (bookmark)",
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/billpay/invoices?payment_status=unpaid"
+   ],
+   "writes": [],
+   "url": "/manage?tab=dashboard",
+   "active": "nav-dashboard",
+   "view": "dashboard",
+   "problems": []
+  },
+  {
+   "id": "tab Dashboard (refresh)",
+   "label": "tab Dashboard (refresh)",
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/billpay/invoices?payment_status=unpaid",
+    "403 /api/billpay/invoices?payment_status=unpaid"
+   ],
+   "writes": [],
+   "url": "/manage?tab=dashboard",
+   "active": "nav-dashboard",
+   "view": "dashboard",
+   "problems": []
+  },
+  {
+   "id": "tab Inventory (bookmark)",
+   "label": "tab Inventory (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=inv",
+   "active": "nav-inventory",
+   "view": "inv",
+   "problems": []
+  },
+  {
+   "id": "tab Inventory (refresh)",
+   "label": "tab Inventory (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=inv",
+   "active": "nav-inventory",
+   "view": "inv",
+   "problems": []
+  },
+  {
+   "id": "tab Invoices (bookmark)",
+   "label": "tab Invoices (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=history",
+   "active": "nav-invhistory",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab Invoices (refresh)",
+   "label": "tab Invoices (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=history",
+   "active": "nav-invhistory",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab Pending Review (bookmark)",
+   "label": "tab Pending Review (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=pending",
+   "active": "nav-pending",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab Pending Review (refresh)",
+   "label": "tab Pending Review (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=pending",
+   "active": "nav-pending",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab Recipes (bookmark)",
+   "label": "tab Recipes (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=recipes",
+   "active": "nav-recipes",
+   "view": "recipes",
+   "problems": []
+  },
+  {
+   "id": "tab Recipes (refresh)",
+   "label": "tab Recipes (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=recipes",
+   "active": "nav-recipes",
+   "view": "recipes",
+   "problems": []
+  },
+  {
+   "id": "tab Prepared Items (bookmark)",
+   "label": "tab Prepared Items (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=prepared-items",
+   "active": "nav-prepared",
+   "view": "prepared-items",
+   "problems": []
+  },
+  {
+   "id": "tab Prepared Items (refresh)",
+   "label": "tab Prepared Items (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=prepared-items",
+   "active": "nav-prepared",
+   "view": "prepared-items",
+   "problems": []
+  },
+  {
+   "id": "tab Menu Analysis (bookmark)",
+   "label": "tab Menu Analysis (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=recipe-analysis",
+   "active": "nav-menuanalysis",
+   "view": "recipe-analysis",
+   "problems": []
+  },
+  {
+   "id": "tab Menu Analysis (refresh)",
+   "label": "tab Menu Analysis (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=recipe-analysis",
+   "active": "nav-menuanalysis",
+   "view": "recipe-analysis",
+   "problems": []
+  },
+  {
+   "id": "tab Recipe Viewer (bookmark)",
+   "label": "tab Recipe Viewer (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=recipe-viewer",
+   "active": "nav-recipeviewer",
+   "view": "recipe-viewer",
+   "problems": []
+  },
+  {
+   "id": "tab Recipe Viewer (refresh)",
+   "label": "tab Recipe Viewer (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=recipe-viewer",
+   "active": "nav-recipeviewer",
+   "view": "recipe-viewer",
+   "problems": []
+  },
+  {
+   "id": "tab PMIX Mapping (bookmark)",
+   "label": "tab PMIX Mapping (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=pmix-mapping",
+   "active": "nav-pmixmapping",
+   "view": "pmix-mapping",
+   "problems": []
+  },
+  {
+   "id": "tab PMIX Mapping (refresh)",
+   "label": "tab PMIX Mapping (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=pmix-mapping",
+   "active": "nav-pmixmapping",
+   "view": "pmix-mapping",
+   "problems": []
+  },
+  {
+   "id": "tab Products (bookmark)",
+   "label": "tab Products (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=products",
+   "active": "nav-products",
+   "view": "products",
+   "problems": []
+  },
+  {
+   "id": "tab Products (refresh)",
+   "label": "tab Products (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=products",
+   "active": "nav-products",
+   "view": "products",
+   "problems": []
+  },
+  {
+   "id": "tab Product Setup (bookmark)",
+   "label": "tab Product Setup (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=prodsetup",
+   "active": "nav-prodsetup",
+   "view": "prodsetup",
+   "problems": []
+  },
+  {
+   "id": "tab Product Setup (refresh)",
+   "label": "tab Product Setup (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=prodsetup",
+   "active": "nav-prodsetup",
+   "view": "prodsetup",
+   "problems": []
+  },
+  {
+   "id": "tab Vendors (bookmark)",
+   "label": "tab Vendors (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=vendors",
+   "active": "nav-vendors",
+   "view": "vendors",
+   "problems": []
+  },
+  {
+   "id": "tab Vendors (refresh)",
+   "label": "tab Vendors (refresh)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=vendors",
+   "active": "nav-vendors",
+   "view": "vendors",
+   "problems": []
+  },
+  {
+   "id": "tab /manage back",
+   "label": "tab /manage back",
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/billpay/invoices?payment_status=unpaid"
+   ],
+   "writes": [],
+   "url": "/manage?tab=inv",
+   "active": "nav-inventory",
+   "view": "inv",
+   "problems": []
+  },
+  {
+   "id": "tab /manage back x2 + fwd",
+   "label": "tab /manage back x2 + fwd",
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)",
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/billpay/invoices?payment_status=unpaid",
+    "403 /api/billpay/invoices?payment_status=unpaid"
+   ],
+   "writes": [],
+   "url": "/manage?tab=inv",
+   "active": "nav-inventory",
+   "view": "inv",
+   "problems": []
+  },
+  {
+   "id": "tab /invoices back",
+   "label": "tab /invoices back",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=pending",
+   "active": "nav-pending",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab /invoices back x2 + fwd",
+   "label": "tab /invoices back x2 + fwd",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=pending",
+   "active": "nav-pending",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab old link /manage#inventory",
+   "label": "tab old link /manage#inventory",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=inv",
+   "active": "nav-inventory",
+   "view": "inv",
+   "problems": []
+  },
+  {
+   "id": "tab old link /manage?tab=no-such-view",
+   "label": "tab old link /manage?tab=no-such-view",
+   "console": [
+    "Failed to load resource: the server responded with a status of 403 (FORBIDDEN)"
+   ],
+   "failed": [
+    "403 /api/billpay/invoices?payment_status=unpaid"
+   ],
+   "writes": [],
+   "url": "/manage?tab=dashboard",
+   "active": "nav-dashboard",
+   "view": "dashboard",
+   "problems": []
+  },
+  {
+   "id": "tab old link /invoices#list",
+   "label": "tab old link /invoices#list",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=history",
+   "active": "nav-invhistory",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab old link /invoices#reports",
+   "label": "tab old link /invoices#reports",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=reports",
+   "active": "nav-invhistory",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab bare /manage (stored view)",
+   "label": "tab bare /manage (stored view)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=vendors",
+   "active": "nav-vendors",
+   "view": "vendors",
+   "problems": []
+  },
+  {
+   "id": "tab bare /invoices (stored view)",
+   "label": "tab bare /invoices (stored view)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/invoices?tab=pending",
+   "active": "nav-pending",
+   "view": null,
+   "problems": []
+  },
+  {
+   "id": "tab recipe editor (bookmark)",
+   "label": "tab recipe editor (bookmark)",
+   "console": [],
+   "failed": [],
+   "writes": [],
+   "url": "/manage?tab=recipe-edit&id=79",
+   "active": "nav-recipes",
+   "view": "recipe-edit",
    "problems": []
   }
  ],

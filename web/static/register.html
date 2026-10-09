@@ -831,7 +831,7 @@ function renderAcctSelect(r) {
   }
   if (r.source === 'payroll') {
     const link = r.payroll_run_id
-      ? `<a class="src-link" href="/manage#bp-payroll" onclick="event.stopPropagation()" title="Open payroll run">→ Payroll Run #${r.payroll_run_id}</a>`
+      ? `<a class="src-link" href="/manage?tab=bp-payroll" onclick="event.stopPropagation()" title="Open payroll run">→ Payroll Run #${r.payroll_run_id}</a>`
       : `<span class="src-muted">→ Payroll</span>`;
     return link;
   }

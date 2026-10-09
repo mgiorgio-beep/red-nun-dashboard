@@ -1114,7 +1114,7 @@ function confirmAll() {
       document.getElementById('reviewSummary').textContent = '✓ Count confirmed — ' + d.confirmed_count + ' items saved';
       // Replace confirm bar with navigation buttons
       document.getElementById('confirmBar').innerHTML =
-        '<a href="/manage#inventory" style="flex:1;padding:14px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-size:15px;font-weight:700;font-family:var(--font);text-align:center;text-decoration:none;">View Inventory</a>' +
+        '<a href="/manage?tab=inv" style="flex:1;padding:14px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-size:15px;font-weight:700;font-family:var(--font);text-align:center;text-decoration:none;">View Inventory</a>' +
         '<button onclick="resetToStart()" style="padding:14px 20px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;">New Count</button>';
       document.getElementById('confirmBar').classList.add('show');
       // Clear session from localStorage so next visit starts fresh
