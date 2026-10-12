@@ -409,39 +409,58 @@ async function loadLabor(){
 }
 
 // ══════════════ BEV COST ══════════════
+// Bev Cost and Food Cost share one call (reports/cost_of_sales.py): sales from the
+// daily sales journal, cost from confirmed invoices — the P&L's own two sources.
+const pctOrDash=n=>n==null?'—':fmtPct(n);
+const esc=v=>String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const CAT_WORD={BEER:'Beer',LIQUOR:'Liquor',WINE:'Wine',NA_BEVERAGES:'NA Beverages',TAKEOUT_SUPPLIES:'To-Go Supplies'};
+const catWord=c=>(window.rnCatLabel&&rnCatLabel(c))||CAT_WORD[c]||c;
+function vendorTable(vs){
+  if(!vs||!vs.length)return '';
+  let t='<table class="dt"><thead><tr><th>Vendor</th><th class="n">Spent</th><th class="n">Invoices</th></tr></thead><tbody>';
+  for(const v of vs.slice(0,10))t+=`<tr><td>${esc(v.vendor_name||'—')}</td><td class="n b">${fmt(v.total_spent)}</td><td class="n d">${v.invoice_count}</td></tr>`;
+  return t+'</tbody></table>';
+}
+function noJournal(cs){return !cs||!Object.values(cs.journal_days||{}).some(n=>n>0)}
+const vendorsWord=n=>n+' vendor'+(n===1?'':'s');
+// Cost lands on the invoice date, so a day or two swings with delivery days.
+function shortRangeNote(cs){
+  const d=(new Date(cs.period.end)-new Date(cs.period.start))/86400000+1;
+  return d<7?'<div style="font-size:12px;color:var(--text3);margin:10px 4px 0">Invoices count on their invoice date, so a range under a week swings with delivery days. Try Last Wk or 30d.</div>':'';
+}
 async function loadPourCost(){
-  const pc=await api('cogs/pourcost');let h='';
-  if(pc&&pc.total_bev_cost>0){
-    let catD='';const cats=pc.categories||[];
-    if(cats.length){catD='<table class="dt"><thead><tr><th>Category</th><th class="n">Cost</th><th class="n">% Bev Rev</th></tr></thead><tbody>';for(const c of cats){catD+=`<tr><td><span class="cb cb-${c.type.toLowerCase()}">${c.type}</span></td><td class="n b">${fmt(c.cost)}</td><td class="n ${c.pct_of_bev_rev>30?'r':''}">${fmtPct(c.pct_of_bev_rev)}</td></tr>`}catD+='</tbody></table>'}
+  const cs=await api('cost-of-sales');let h='';
+  if(noJournal(cs)){h='<div class="empty">No sales journal days in this period, so there are no beverage sales to compare against.</div>'}
+  else{
+    const b=cs.bev,hi=b.pct!=null&&b.pct>25;
+    let typeD='<table class="dt"><thead><tr><th>Type</th><th class="n">Sales</th><th class="n">Cost</th><th class="n">Cost %</th></tr></thead><tbody>';
+    for(const t of b.by_type)typeD+=`<tr><td><span class="cb cb-${t.type.toLowerCase()}">${catWord(t.type)}</span></td><td class="n">${fmt(t.sales)}</td><td class="n b">${fmt(t.cost)}</td><td class="n ${t.pct>30?'r':''}">${pctOrDash(t.pct)}</td></tr>`;
+    typeD+='</tbody></table>';
     h+='<div class="k-grid">';
-    h+=K('pc-pct','Bev Cost %',fmtPct(pc.pour_cost_pct),'bev cost / bev rev',pc.pour_cost_pct>25?'High':'Good',pc.pour_cost_pct>25?'tb':'tg',pc.pour_cost_pct,pc.pour_cost_pct>25?'var(--red)':'var(--green)',catD);
-    h+=K('pc-cost','Total Bev Cost',fmt(pc.total_bev_cost),cats.length+' categories',null,null,null,null,null);
-    h+=K('pc-rev','Total Revenue',fmt(pc.total_revenue),'all categories',null,null,null,null,null);
-    h+=K('pc-brev','Est. Bev Revenue',fmt(pc.est_bev_revenue),'~30% of total',null,null,null,null,null);
-    h+='</div>';
-  }else{h='<div class="empty">No bev cost data for selected period.</div>'}
+    h+=K('pc-pct','Bev Cost %',pctOrDash(b.pct),'beer, liquor & wine cost ÷ their sales',b.pct==null?null:(hi?'High':'Good'),hi?'tb':'tg',b.pct,hi?'var(--red)':'var(--green)',typeD);
+    h+=K('pc-cost','Bev Cost',fmt(b.cost),'confirmed invoices, at invoice date',null,null,null,null,null);
+    h+=K('pc-brev','Bev Sales',fmt(b.sales),'from the sales journal, before discounts',null,null,null,null,null);
+    h+=K('pc-vend','Bev Vendors',vendorsWord(b.vendors.length),'by spend',null,null,null,null,vendorTable(b.vendors));
+    h+='</div>'+shortRangeNote(cs);
+  }
   $('#panel-pourcost').innerHTML=h;
 }
 
 // ══════════════ FOOD COST ══════════════
 async function loadCOGS(){
-  const[summary,vendors]=await Promise.all([api('cogs/summary'),api('cogs/vendors')]);let h='';
-  if(summary){
-    const cats=summary.categories||[];const total=summary.total_cost||0;
-    let catD='';
-    if(cats.length){catD='<table class="dt"><thead><tr><th>Category</th><th class="n">Cost</th><th class="n">%</th></tr></thead><tbody>';for(const c of cats){catD+=`<tr><td style="font-weight:600">${c.category_type}</td><td class="n b">${fmt(c.total_cost)}</td><td class="n d">${fmtPct(c.pct_of_total)}</td></tr>`}catD+='</tbody></table>'}
-    let venD='';
-    if(vendors&&vendors.length){venD='<table class="dt"><thead><tr><th>Vendor</th><th class="n">Spent</th><th class="n">#</th></tr></thead><tbody>';for(const v of vendors.slice(0,10)){venD+=`<tr><td>${v.vendor_name}</td><td class="n b">${fmt(v.total_spent)}</td><td class="n d">${v.invoice_count}</td></tr>`}venD+='</tbody></table>'}
-
-    const food=cats.find(c=>c.category_type==='FOOD');
+  const cs=await api('cost-of-sales');let h='';
+  if(noJournal(cs)){h='<div class="empty">No sales journal days in this period, so there are no food sales to compare against.</div>'}
+  else{
+    const f=cs.food,hi=f.pct!=null&&f.pct>32;
+    let otherD='';
+    const other=[{category:'NA_BEVERAGES',cost:cs.na_bev.cost}].concat(cs.other_cogs).filter(o=>o.cost);
+    if(other.length){otherD='<div style="font-size:12px;color:var(--text3);margin:4px 0 6px">Other cost of goods, not in food cost %:</div><table class="dt"><thead><tr><th>Category</th><th class="n">Cost</th></tr></thead><tbody>';for(const o of other)otherD+=`<tr><td>${catWord(o.category)}</td><td class="n b">${fmt(o.cost)}</td></tr>`;otherD+='</tbody></table>'}
     h+='<div class="k-grid">';
-    h+=K('cg-tot','Total COGS',fmt(total),(summary.period_start||'')+' – '+(summary.period_end||''),null,null,null,null,catD);
-    h+=K('cg-food','Food',fmt(food?food.total_cost:0),food?fmtPct(food.pct_of_total)+' of total':'',null,null,null,null,null);
-    const rem=cats.filter(c=>c.category_type!=='FOOD');
-    for(const c of rem.slice(0,1)){h+=K('cg-'+c.category_type.toLowerCase(),c.category_type,fmt(c.total_cost),fmtPct(c.pct_of_total)+' of total',null,null,null,null,null)}
-    h+=K('cg-vend','Top Vendors',vendors?vendors.length+' vendors':'','by spend',null,null,null,null,venD);
-    h+='</div>';
+    h+=K('cg-pct','Food Cost %',pctOrDash(f.pct),'food cost ÷ food sales',f.pct==null?null:(hi?'High':'Good'),hi?'tb':'tg',f.pct,hi?'var(--red)':'var(--green)',otherD);
+    h+=K('cg-food','Food Cost',fmt(f.cost),'confirmed invoices, at invoice date',null,null,null,null,null);
+    h+=K('cg-sales','Food Sales',fmt(f.sales),'from the sales journal, before discounts',null,null,null,null,null);
+    h+=K('cg-vend','Food Vendors',vendorsWord(f.vendors.length),'by spend',null,null,null,null,vendorTable(f.vendors));
+    h+='</div>'+shortRangeNote(cs);
   }
   $('#panel-cogs').innerHTML=h;
 }
@@ -451,8 +470,8 @@ const TAB_HEAD={
   overview:['Sales Overview','Sales, orders, tips and labor for the dates you pick.'],
   today:['Today','Sales so far today.'],
   labor:['Labor','Hours and labor cost, by day and by role, for the dates you pick.'],
-  pourcost:['Bev Cost','Pour cost by category for the dates you pick.'],
-  cogs:['Food Cost','Food cost and top vendors for the dates you pick.']
+  pourcost:['Bev Cost','Beer, liquor and wine cost against their sales, for the dates you pick.'],
+  cogs:['Food Cost','Food cost against food sales, for the dates you pick.']
 };
 function setHead(t){const h=TAB_HEAD[t]||TAB_HEAD.overview;$('#anTitle').textContent=h[0];$('#anSub').textContent=h[1]}
 function switchTab(t){
