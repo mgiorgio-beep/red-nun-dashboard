@@ -559,6 +559,17 @@ def api_pour_cost_category():
     return jsonify(data)
 
 
+@app.route("/api/cost-of-sales")
+@login_required
+def api_cost_of_sales():
+    """Food cost and bev cost for the Analytics tabs: sales from the daily sales
+    journal, cost from confirmed invoices (reports/cost_of_sales.py). Not under
+    /api/reports, so managers see it (UI plan Phase 2)."""
+    location, start, end = parse_filters()
+    from reports.cost_of_sales import cost_of_sales
+    return jsonify(cost_of_sales(location, start, end))
+
+
 @app.route("/api/pourcost/bartender")
 def api_pour_cost_bartender():
     location, start, end = parse_filters()

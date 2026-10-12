@@ -35,9 +35,9 @@ BASE = os.getenv('UI_CHECK_BASE', 'http://127.0.0.1:8080')
 BASELINE = os.path.join(ROOT, 'tests', 'ui_baseline.json')
 # Known writes on page load that are harmless (documented in the UI plan).
 ALLOWED_WRITES = {'POST /staff/api/tvs/sync'}
-# Known broken, tracked in the UI plan (not a regression): Analytics Bev/Food Cost lost
-# their /api/cogs/* endpoints in the MarginEdge removal (bac5bf6, 2026-04-16).
-KNOWN = {'nav-bevcost', 'nav-foodcost'}
+# Known broken, tracked in the UI plan (not a regression). Empty: Analytics Bev/Food
+# Cost were rebuilt on /api/cost-of-sales on 2026-10-12.
+KNOWN = set()
 # Standalone pages (no dashboard sidebar by design) that must still load.
 STANDALONE = ['/count', '/count/list', '/week', '/storage', '/unit-setup', '/voice-recipe', '/transfer', '/waste',
               '/staff', '/staff/specials', '/staff/specials/edit', '/staff/specials/tv', '/login', '/hiring', '/availability']
