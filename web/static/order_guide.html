@@ -26,9 +26,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .main-content { flex: 1; overflow-y: auto; padding: 24px; max-width: 900px; }
 
 /* Page header */
-.page-header { margin-bottom: 24px; }
-.page-title { font-size: 22px; font-weight: 700; color: var(--text); }
-.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
 
 /* Search panel */
 .search-panel {
@@ -140,11 +137,13 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <body>
 <div class="layout">
   <div class="sidebar-container" id="sidebar-mount"></div>
-  <div class="main-content">
+  <div class="main-content rn-page">
 
-    <div class="page-header">
-      <div class="page-title">&#128722; Order Guide</div>
-      <div class="page-sub">Search purchase history for all vendor options and prices. All options shown — not just cheapest.</div>
+    <div class="rn-page-header">
+      <div>
+        <h1 class="rn-page-title">Order Guide</h1>
+        <div class="rn-page-sub">Search purchase history for every vendor option and price, not just the cheapest.</div>
+      </div>
     </div>
 
     <div class="search-panel">

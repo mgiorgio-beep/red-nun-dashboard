@@ -37,9 +37,6 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 .page-tab.active { background: rgba(255,69,58,0.1); border-color: rgba(255,69,58,0.3); color: var(--red); }
 
 /* Top Bar */
-.top-bar { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--sidebar-bg); }
-.page-title { font-size: 24px; font-weight: 700; }
-.top-actions { display: flex; gap: 12px; }
 .btn { padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
 .btn-primary { background: var(--red); color: #fff; }
 .btn-primary:hover { background: #ff5a50; }
@@ -49,6 +46,12 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 
 /* Content Area */
 .content-area { padding: 24px; max-width: 1600px; margin: 0 auto; }
+/* Page header + views share one column. Most views sit outside .content-area (they
+   end up straight under .rn-main), so they get its padding here; a view's own narrower
+   .content-area lines up on the left under the header. */
+#manageHeader { padding: 24px 24px 0; margin: 0 auto; max-width: 1600px; }
+.rn-main > .view { padding: 24px; max-width: 1600px; margin: 0 auto; }
+.view > .content-area { padding: 0; margin: 0; }
 .view { display: none; }
 .view.active { display: block; }
 
@@ -109,12 +112,11 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
   .page-tabs::-webkit-scrollbar{display:none}
   .page-tab{font-size:12px;padding:6px 12px}
 
-  .top-bar{padding:12px 16px;flex-wrap:wrap}
-  .page-title{font-size:20px}
-  .top-actions{width:100%;justify-content:flex-start;margin-top:8px}
   .btn{padding:8px 12px;font-size:12px}
 
   .content-area{padding:16px}
+  #manageHeader{padding:16px 16px 0}
+  .rn-main > .view{padding:16px}
   .card{padding:16px}
   .form-grid{grid-template-columns:1fr}
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:12px}
@@ -338,10 +340,10 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
       </select>
     </nav>
 
-    <!-- Top Bar -->
-    <div class="top-bar">
-      <div class="page-title" id="pageTitle">Dashboard</div>
-      <div class="top-actions">
+    <!-- Page header: title + one line per view (VIEW_TITLES / VIEW_SUBS) -->
+    <div class="rn-page-header" id="manageHeader">
+      <div><h1 class="rn-page-title" id="pageTitle">Dashboard</h1><div class="rn-page-sub" id="pageSub"></div></div>
+      <div class="rn-page-actions">
         <input type="text" class="search-bar" placeholder="Search..." id="globalSearch">
       </div>
     </div>
@@ -350,9 +352,8 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
     <div class="content-area">
       <!-- Dashboard / Home View -->
       <div class="view active" id="view-dashboard">
-        <div style="margin-bottom:20px">
-          <div style="font-size:22px;font-weight:700;color:var(--text)">Home</div>
-          <div style="font-size:13px;color:var(--text3);margin-top:2px" id="dash-home-date"></div>
+        <div class="rn-page-header">
+          <div><h1 class="rn-page-title">Home</h1><div class="rn-page-sub" id="dash-home-date"></div></div>
         </div>
 
         <!-- Row 1: Sales Today + Pending Invoices -->
@@ -786,7 +787,6 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
         <div class="card">
           <div class="card-header">
             <div class="card-title">Prepared Items</div>
-            <div style="font-size:12px;color:var(--text3);margin-bottom:0">Sauces, dressings, marinades, and prep items used as ingredients in recipes</div>
           </div>
           <div style="padding:0 20px 12px">
             <button class="btn btn-primary" onclick="openPrepItemModal()" style="margin-top:12px">+ Add Prepared Item</button>
@@ -2483,6 +2483,25 @@ const VIEW_TITLES = {
   'bp-payroll': 'Payroll',
   'bp-recurring': 'Recurring Bills'
 };
+// One line under the title; a view without one shows the title alone.
+const VIEW_SUBS = {
+  products: 'Everything you buy: names, categories, units and costs.',
+  vendors: 'Vendor contacts and categories.',
+  inv: 'Completed inventory counts and the food and beverage cost they give.',
+  settings: 'Toast menu sync and product categories.',
+  recipes: 'Food and bar recipes and what they cost.',
+  'prepared-items': 'Sauces, dressings, marinades and prep used as ingredients in recipes.',
+  'recipe-viewer': 'A recipe\'s ingredients, unit prices and cost at its menu price.',
+  'recipe-analysis': 'What each menu item sold and earned over the period you pick.',
+  prodsetup: 'Products that still need a vendor link, pack size or recipe unit.',
+  'pmix-mapping': 'Link each Toast menu item to its recipe.',
+  billpay: 'Unpaid bills, what is due soon, and the vendor portal tie-out.',
+  'bp-payments': 'Bill pay payments by date.',
+  'bp-vendors': 'Remit addresses and bill pay details for each vendor.',
+  'bp-checksetup': 'Bank and account details printed on each location\'s checks.',
+  'bp-payroll': 'Payroll runs from the 7shifts journal, per location.',
+  'bp-recurring': 'Recurring bills and their check queue.'
+};
 // Views whose list is a plain .data-table the top-bar Search box can filter.
 const SEARCH_VIEWS = ['products', 'vendors', 'recipes', 'prepared-items'];
 
@@ -2506,10 +2525,17 @@ function showView(view, opts) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + view).classList.add('active');
 
-  const topBar = document.querySelector('.top-bar');
-  if (topBar) topBar.style.display = view === 'dashboard' ? 'none' : '';   // Home has its own header
+  // Home/Products/Vendors sit inside the first .content-area; hide it (and its padding)
+  // when the view on screen is one of the others.
+  const homeArea = document.getElementById('view-dashboard').parentElement;
+  homeArea.style.display = document.getElementById('view-' + view).parentElement === homeArea ? '' : 'none';
+  const header = document.getElementById('manageHeader');
+  if (header) header.style.display = view === 'dashboard' ? 'none' : '';   // Home has its own header
   if (search) search.style.display = SEARCH_VIEWS.indexOf(view) >= 0 ? '' : 'none';
   document.getElementById('pageTitle').textContent = VIEW_TITLES[view] || view;
+  const sub = document.getElementById('pageSub');
+  sub.textContent = VIEW_SUBS[view] || '';
+  sub.style.display = VIEW_SUBS[view] ? '' : 'none';
 
   try { localStorage.setItem('manageView', view === 'recipe-edit' ? 'recipes' : view === 'prepared-edit' ? 'prepared-items' : view); } catch (e) {}
   if (!opts.fromHistory) {

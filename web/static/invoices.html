@@ -526,7 +526,7 @@ input[type="file"] { display: none; }
 
 /* ── Desktop ── */
 @media (min-width: 768px) {
-  .content { max-width: 1100px; margin: 0 auto; }
+  .content { max-width: 1100px; margin: 0 auto; padding-top: 8px; }   /* no fixed header above it on a PC */
   .bottom-nav {display:none !important; max-width: 600px; left: 50%; transform: translateX(-50%); border-radius: 16px 16px 0 0; }
   .header { backdrop-filter: blur(40px); }
   .processing { backdrop-filter: blur(30px); }
@@ -1063,9 +1063,9 @@ input[type="file"] { display: none; }
   <!-- ── History View (default on desktop) ── -->
   <script>if(window.innerWidth>=768)document.write('<style>.history-view{display:block!important}</style>');</script>
   <div class="history-view" id="historyView">
-    <div class="add-inv-header" style="display:none;justify-content:space-between;align-items:center;padding:16px 20px 0">
-      <h2 style="font-size:20px;font-weight:700;color:var(--text);margin:0">Invoice History</h2>
-      <div style="position:relative" id="addInvoiceDropdown">
+    <div class="add-inv-header rn-page-header" style="display:none;padding:16px 20px 0">
+      <div><h1 class="rn-page-title" id="invPageTitle">Invoice History</h1><div class="rn-page-sub" id="invPageSub">Every confirmed invoice, newest first.</div></div>
+      <div class="rn-page-actions" style="position:relative" id="addInvoiceDropdown">
         <button onclick="toggleAddInvoiceMenu()" style="display:flex;align-items:center;gap:8px;padding:10px 18px;background:var(--red);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer">
           + Add Invoice <span style="font-size:10px;opacity:0.8">&#9662;</span>
         </button>
@@ -1198,8 +1198,10 @@ function showView(view, btn, opts) {
     histFilter = 'confirmed';
   }
   // Update page title
-  const pageTitle = document.querySelector('.history-view h2');
+  const pageTitle = document.getElementById('invPageTitle');
   if (pageTitle) pageTitle.textContent = view === 'pending' ? 'Pending Review' : 'Invoice History';
+  const pageSub = document.getElementById('invPageSub');
+  if (pageSub) pageSub.textContent = view === 'pending' ? 'Invoices waiting for a look before they are confirmed.' : 'Every confirmed invoice, newest first.';
   // Hide ALL views first (covers review, meReview, scan, history, reports, reconcile)
   document.querySelectorAll('.scan-view,.history-view,.reports-view,.review-view,.reconcile-view').forEach(function(el){
     el.style.display = 'none';

@@ -474,3 +474,24 @@ input[type="date"]:focus { border-color: #9ca3af !important; outline: none !impo
 .recon-footer { background: #ffffff !important; border-top: 1px solid #e5e7eb !important; }
 .recon-add-item { border-color: #e5e7eb !important; color: #6b7280 !important; }
 .recon-add-item:hover { border-color: #9ca3af !important; color: #111827 !important; }
+
+/* Standard page header (UI plan Phase 4): title, one-line description, actions on the
+   right. Markup:
+   <div class="rn-page-header">
+     <div><h1 class="rn-page-title">Payments</h1><div class="rn-page-sub">One line.</div></div>
+     <div class="rn-page-actions">…buttons…</div>
+   </div>
+   .rn-page pads a page whose own wrapper sidebar.js unwrapped (.layout/.main-content). */
+.rn-main .rn-page{padding:24px 28px}
+.rn-page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 20px;flex-wrap:wrap;margin:0 0 20px}
+.rn-page-header>div:first-child{min-width:0;flex:1 1 320px}
+.rn-main .rn-page-title{font-family:var(--sb-font);font-size:22px;font-weight:700;line-height:1.25;letter-spacing:-0.2px;margin:0;color:#111827!important}
+.rn-main .rn-page-sub{font-size:13px;line-height:1.45;margin-top:4px;max-width:760px;color:#6b7280!important}
+.rn-page-sub a{color:#2563eb;text-decoration:none}
+.rn-page-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:768px){
+  .rn-main .rn-page{padding:16px}
+  .rn-page-header{align-items:flex-start;margin-bottom:16px}
+  .rn-main .rn-page-title{font-size:19px}
+  .rn-page-actions{width:100%}
+}

@@ -7,8 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/sidebar.css">
 <style>
-.au-wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px; }
-.au-title { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 24px; }
+.au-wrap { max-width: 900px; }
 .au-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 28px; }
 .au-card-title { font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 16px; }
 .au-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
@@ -70,8 +69,11 @@
 </style>
 </head>
 <body>
-<div class="au-wrap" id="app">
-  <div class="au-title">Users & Invites</div>
+<div class="au-wrap rn-page" id="app">
+  <div class="rn-page-header">
+    <div><h1 class="rn-page-title">User Accounts</h1>
+    <div class="rn-page-sub">Invite people with a role and location; deactivate anyone who no longer needs access.</div></div>
+  </div>
 
   <!-- Send invite -->
   <div class="au-card">

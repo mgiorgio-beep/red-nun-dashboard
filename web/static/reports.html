@@ -7,9 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/sidebar.css">
 <style>
-.rp-wrap { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
-.rp-title { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 6px; }
-.rp-sub { font-size: 13px; color: #9ca3af; margin-bottom: 24px; }
+.rp-wrap { max-width: 1100px; }
 
 .rp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .rp-card {
@@ -66,9 +64,11 @@
 </style>
 </head>
 <body>
-<div class="rp-wrap">
-  <div class="rp-title">Reports</div>
-  <div class="rp-sub">Select a report, choose your parameters, and export as CSV or PDF.</div>
+<div class="rp-wrap rn-page">
+  <div class="rn-page-header">
+    <div><h1 class="rn-page-title">Reports</h1>
+    <div class="rn-page-sub">Pick a report, choose its settings, and export it as CSV or PDF.</div></div>
+  </div>
 
   <!-- Config panel (appears when a report is selected) -->
   <div class="rp-config" id="configPanel">

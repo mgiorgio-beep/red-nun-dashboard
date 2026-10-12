@@ -26,9 +26,6 @@ select.gl.chosen { border-color: var(--accent, #2563eb); }
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
 .main-content { padding: 24px; overflow-y: auto; }
 .content-wrap { max-width: 1400px; }
-.page-header { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-.page-title { font-size: 22px; font-weight: 700; }
-.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
 
 /* Account tiles — one per bank account, pending count in the corner */
 .tiles { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -112,10 +109,10 @@ select.gl.review { border-color: var(--amber); }
 <div class="main-content">
 <div class="content-wrap">
 
-  <div class="page-header">
+  <div class="rn-page-header">
     <div>
-      <div class="page-title">Bank Transactions</div>
-      <div class="page-sub">Statement lines that still need an account. The machine's guess is marked; nothing is booked until you press Post. Posting a line teaches a rule for that payee.</div>
+      <h1 class="rn-page-title">Bank Transactions</h1>
+      <div class="rn-page-sub">Statement lines that still need an account. Guesses are marked; nothing is booked until you press Post, and posting teaches a rule for that payee.</div>
     </div>
     <div class="hint" id="hdr-hint"></div>
   </div>

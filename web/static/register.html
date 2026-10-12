@@ -26,10 +26,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .content-wrap { max-width: 1280px; }
 
 /* Header */
-.page-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-.page-title { font-size: 22px; font-weight: 700; }
-.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
-.header-buttons { display: flex; gap: 8px; align-items: center; }
 
 /* Account picker */
 .account-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
@@ -253,7 +249,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 /* Mobile */
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
-  .page-title { font-size: 18px; }
   .summary-bar { grid-template-columns: 1fr 1fr; }
   .summary-value { font-size: 18px; }
   .reg-table .col-memo, .reg-table .col-type, .reg-table .col-acct { display: none; }
@@ -267,12 +262,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="main-content">
   <div class="content-wrap">
 
-    <div class="page-header">
+    <div class="rn-page-header">
       <div>
-        <div class="page-title">Bank Register</div>
-        <div class="page-sub">QBO-style per-account register — payments, payroll, deposits, and manual entries</div>
+        <h1 class="rn-page-title">Bank Register</h1>
+        <div class="rn-page-sub">QBO-style per-account register — payments, payroll, deposits, and manual entries</div>
       </div>
-      <div class="header-buttons">
+      <div class="rn-page-actions">
         <button class="btn-action" id="btn-sync">Sync Toast Deposits</button>
         <button class="btn-action" onclick="addGlAccountPrompt()">+ GL Account</button>
         <button class="btn-action btn-primary" id="btn-add">+ Manual Entry</button>
@@ -390,7 +385,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="modal-overlay" id="modal-reassign">
   <div class="modal-box">
     <div class="modal-title">Reassign to Bank Account</div>
-    <div class="page-sub" id="reassign-sub" style="margin-bottom:14px"></div>
+    <div class="rn-page-sub" id="reassign-sub" style="margin-bottom:14px"></div>
     <div class="form-row">
       <label>Bank Account</label>
       <select id="r-account"></select>

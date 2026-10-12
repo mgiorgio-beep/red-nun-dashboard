@@ -222,6 +222,9 @@ input[type="date"]:focus{outline:none;border-color:var(--border2)}
     </div>
 
     <!-- Analytics Dashboard Content -->
+    <div class="rn-page-header" style="padding:20px 16px 12px;margin:0">
+      <div><h1 class="rn-page-title" id="anTitle">Sales Overview</h1><div class="rn-page-sub" id="anSub"></div></div>
+    </div>
     <div class="controls">
   <div class="pg"><button class="p la" data-loc="">Both</button><button class="p" data-loc="dennis">Dennis</button><button class="p" data-loc="chatham">Chatham</button></div>
   <div class="sp"></div>
@@ -444,9 +447,18 @@ async function loadCOGS(){
 }
 
 // ══════════════ ROUTING ══════════════
+const TAB_HEAD={
+  overview:['Sales Overview','Sales, orders, tips and labor for the dates you pick.'],
+  today:['Today','Sales so far today.'],
+  labor:['Labor','Hours and labor cost, by day and by role, for the dates you pick.'],
+  pourcost:['Bev Cost','Pour cost by category for the dates you pick.'],
+  cogs:['Food Cost','Food cost and top vendors for the dates you pick.']
+};
+function setHead(t){const h=TAB_HEAD[t]||TAB_HEAD.overview;$('#anTitle').textContent=h[0];$('#anSub').textContent=h[1]}
 function switchTab(t){
   window.location.hash=t+(S.location?'.'+S.location:'');
   S.tab=t;
+  setHead(t);
   $$('#tg .nav-item').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
   $$('.panel').forEach(x=>x.classList.toggle('active',x.id==='panel-'+t));
 
@@ -460,7 +472,7 @@ function switchTab(t){
   loadTab(t);
 }
 function loadTab(t){switch(t){case'today':loadToday();break;case'overview':loadOverview();break;case'labor':loadLabor();break;case'pourcost':loadPourCost();break;case'cogs':loadCOGS();break;}}
-function refreshAll(){S.start=($('#startDate').value||'').replace(/-/g,'');S.end=($('#endDate').value||'').replace(/-/g,'');S.cache={};$$('#tg .nav-item').forEach(x=>x.classList.toggle('active',x.dataset.tab===S.tab));$$('.panel').forEach(x=>x.classList.toggle('active',x.id==='panel-'+S.tab));loadTab(S.tab)}
+function refreshAll(){setHead(S.tab);S.start=($('#startDate').value||'').replace(/-/g,'');S.end=($('#endDate').value||'').replace(/-/g,'');S.cache={};$$('#tg .nav-item').forEach(x=>x.classList.toggle('active',x.dataset.tab===S.tab));$$('.panel').forEach(x=>x.classList.toggle('active',x.id==='panel-'+S.tab));loadTab(S.tab)}
 async function syncToast(){showToast('Syncing...');try{const r=await fetch('/api/sync/daily',{method:'POST'});const d=await r.json();showToast(d.message||'Done!');S.cache={};refreshAll()}catch(e){showToast('Failed')}}
 function exportWeekly(){const p=new URLSearchParams();if(S.location)p.set('location',S.location);if(S.start)p.set('start',S.start);if(S.end)p.set('end',S.end);window.open('/api/export/weekly?'+p,'_blank')}
 document.addEventListener('DOMContentLoaded',()=>{$$('#tg .nav-item').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));$$('[data-loc]').forEach(b=>b.addEventListener('click',()=>{$$('[data-loc]').forEach(x=>{x.classList.remove('la')});b.classList.add('la');S.location=b.dataset.loc;S.cache={};window.location.hash=S.tab+(S.location?'.'+S.location:'');loadTab(S.tab)}));const h=window.location.hash.replace('#','');if(h){const parts=h.split('.');if(parts[0])S.tab=parts[0];if(parts[1]){S.location=parts[1];$$('[data-loc]').forEach(x=>{x.classList.remove('la');if(x.dataset.loc===S.location)x.classList.add('la')})}}setToday()});

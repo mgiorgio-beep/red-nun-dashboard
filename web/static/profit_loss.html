@@ -25,9 +25,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .main-content { padding: 24px; overflow-y: auto; }
 .content-wrap { max-width: 1100px; }
 
-.page-header { margin-bottom: 20px; }
-.page-title { font-size: 22px; font-weight: 700; }
-.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
 
 /* Controls */
 .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
@@ -160,7 +157,6 @@ table.dd tfoot td {
 
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
-  .page-title { font-size: 18px; }
   .content-wrap { max-width: 100%; }
   table.pl td { padding: 7px 10px; }
   .pct { width: 62px; }
@@ -174,9 +170,11 @@ table.dd tfoot td {
 <div class="main-content">
   <div class="content-wrap">
 
-    <div class="page-header">
-      <div class="page-title">Profit &amp; Loss</div>
-      <div class="page-sub">Management basis — cost recognised at invoice date, revenue from the daily sales journal.</div>
+    <div class="rn-page-header">
+      <div>
+        <h1 class="rn-page-title">Profit &amp; Loss</h1>
+        <div class="rn-page-sub">Management basis — cost recognised at invoice date, revenue from the daily sales journal.</div>
+      </div>
     </div>
 
     <div class="controls">

@@ -22,9 +22,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .main-content { padding: 24px; overflow-y: auto; }
 .content-wrap { max-width: 1280px; }
 
-.page-header { margin-bottom: 18px; }
-.page-title { font-size: 22px; font-weight: 700; }
-.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
 
 .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); margin-bottom: 12px; font-weight: 700; }
@@ -154,7 +151,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
-  .page-title { font-size: 18px; }
   .summary-bar { grid-template-columns: 1fr 1fr; }
   .summary-value { font-size: 16px; }
   .tx-table thead th, .tx-table tbody td { padding: 7px 6px; font-size: 11px; }
@@ -167,12 +163,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="main-content">
 <div class="content-wrap">
 
-  <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap">
+  <div class="rn-page-header">
     <div>
-      <div class="page-title">Import Statement</div>
-      <div class="page-sub">Upload a Cape Cod Five PDF statement, parse it, and import transactions that aren't in the register. Signing off the period lives on <a href="/bank-reconcile" style="color:var(--blue);text-decoration:none">Bank Reconcile</a>.</div>
+      <h1 class="rn-page-title">Import Statement</h1>
+      <div class="rn-page-sub">Upload a Cape Cod Five PDF statement and import the transactions not yet in the register. Signing off the period lives on <a href="/bank-reconcile">Bank Reconcile</a>.</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="rn-page-actions">
       <button id="btn-import-all" title="Import every uploaded-but-unimported statement for the selected account, in order, with the continuity check" style="padding:9px 14px;border-radius:8px;border:1px solid var(--blue);background:var(--bg-card);color:var(--blue);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Import all pending</button>
       <button id="btn-dedupe" style="padding:9px 14px;border-radius:8px;border:1px solid var(--amber);background:var(--bg-card);color:var(--amber);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Dedupe Existing Register</button>
     </div>

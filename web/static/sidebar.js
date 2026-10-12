@@ -253,7 +253,12 @@ var oldSb=main.querySelectorAll('.sidebar');for(var s=0;s<oldSb.length;s++)oldSb
 var oldLay=main.querySelectorAll('.layout');
 for(var l=0;l<oldLay.length;l++){
   var mc=oldLay[l].querySelector('.main-content');
-  if(mc){while(mc.firstChild)oldLay[l].parentNode.insertBefore(mc.firstChild,oldLay[l])}
+  // A .main-content marked rn-page keeps its padding: its contents move into a .rn-page.
+  if(mc){
+    var dest=oldLay[l].parentNode,ref=oldLay[l];
+    if(mc.classList.contains('rn-page')){var pg=document.createElement('div');pg.className='rn-page';dest.insertBefore(pg,ref);dest=pg;ref=null}
+    while(mc.firstChild)dest.insertBefore(mc.firstChild,ref);
+  }
   oldLay[l].remove();
 }
 // Bind parent section toggles

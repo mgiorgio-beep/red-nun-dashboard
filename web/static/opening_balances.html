@@ -26,9 +26,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .content-wrap { max-width: 1100px; }
 
 /* Header */
-.page-header { margin-bottom: 20px; }
-.page-title { font-size: 22px; font-weight: 700; }
-.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
 
 /* Location toggle */
 .loc-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
@@ -136,7 +133,6 @@ tr.imp-skip td   { color: var(--text3); }
 
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
-  .page-title { font-size: 18px; }
   .col-type { display: none; }
 }
 </style>
@@ -146,12 +142,12 @@ tr.imp-skip td   { color: var(--text3); }
 <div class="main-content">
   <div class="content-wrap">
 
-    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap">
+    <div class="rn-page-header">
       <div>
-        <div class="page-title">Opening Balances</div>
-        <div class="page-sub">Set starting balances as of a given date for the bank account and balance-sheet GL accounts (liabilities, equity, assets). Going-forward register activity layers on top of these.</div>
+        <h1 class="rn-page-title">Opening Balances</h1>
+        <div class="rn-page-sub">Starting balances, as of a date, for the bank account and balance-sheet accounts. Register activity builds on top of them.</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="rn-page-actions">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
           As of <input type="date" id="cb-asof" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono)">
         </label>

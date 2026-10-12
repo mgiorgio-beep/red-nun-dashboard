@@ -12,8 +12,6 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
 .wrap{padding:16px;max-width:1100px;margin:0 auto}
-h1{font-size:20px;font-weight:800}
-.sub{font-size:12px;color:var(--text3);margin-top:2px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0}
 .tabs button{padding:9px 13px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text2);font:600 13px Inter,sans-serif;cursor:pointer}
 .tabs button.sel{color:var(--blue);border-color:var(--blue);background:rgba(37,99,235,.08)}
@@ -54,9 +52,9 @@ input,select{padding:9px 10px;border-radius:9px;background:var(--bg);border:1px 
 </head>
 <body>
 <div class="wrap">
-  <div class="row" style="justify-content:space-between">
-    <div><h1>Transfer & Waste — Admin</h1><div class="sub">People, the words Siri listens for, product links, settings</div></div>
-    <div class="row"><a class="btn" href="/transfer">Transfers</a><a class="btn" href="/waste">Waste</a><a class="btn" href="/transfer/statement">Statement</a></div>
+  <div class="rn-page-header">
+    <div><h1 class="rn-page-title">Transfer & Waste — Admin</h1><div class="rn-page-sub">People, the words Siri listens for, product links, settings</div></div>
+    <div class="rn-page-actions"><a class="btn" href="/transfer">Transfers</a><a class="btn" href="/waste">Waste</a><a class="btn" href="/transfer/statement">Statement</a></div>
   </div>
   <div class="tabs" id="tabs"></div>
   <div id="out"></div>

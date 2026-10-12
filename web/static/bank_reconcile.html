@@ -22,10 +22,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .main-content { padding: 24px; overflow-y: auto; }
 .content-wrap { max-width: 1400px; }
 
-.page-header { margin-bottom: 18px; }
-.page-title { font-size: 22px; font-weight: 700; }
-.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; max-width: 900px; }
-.page-sub a { color: var(--blue); text-decoration: none; }
 
 .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); margin-bottom: 12px; font-weight: 700; }
@@ -205,7 +201,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 /* Mobile */
 @media (max-width: 767px) {
   .main-content { padding: 14px; }
-  .page-title { font-size: 18px; }
   .tiles { grid-template-columns: 1fr 1fr; }
   .tile .val { font-size: 15px; }
   .txrow { grid-template-columns: 20px 70px 1fr 80px 18px; padding: 7px 8px; font-size: 11px; }
@@ -223,12 +218,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="main-content">
 <div class="content-wrap">
 
-  <div class="page-header">
-    <div class="page-title">Bank Reconcile</div>
-    <div class="page-sub">
-      Sign off a statement period. Pick a period; tick uncleared items until the delta hits zero; finish to lock those rows into R.
-      Statement PDFs live on <a href="/import-statement">Import Statement</a>. Reads the statement beginning/ending balances straight
-      off the upload — never a text input.
+  <div class="rn-page-header">
+    <div>
+      <h1 class="rn-page-title">Bank Reconcile</h1>
+      <div class="rn-page-sub">Sign off a statement period: tick uncleared items until the difference is zero, then finish. Balances come from the uploaded statement on <a href="/import-statement">Import Statement</a>.</div>
     </div>
   </div>
 

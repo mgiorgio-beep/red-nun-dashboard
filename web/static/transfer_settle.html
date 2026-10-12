@@ -11,9 +11,6 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
 .wrap{padding:16px 16px 120px;max-width:1100px;margin:0 auto}
-h1{font-size:20px;font-weight:800}
-.sub{font-size:12px;color:var(--text3);margin-top:2px}
-.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .btn{padding:9px 12px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text);font:600 13px Inter,sans-serif;text-decoration:none;cursor:pointer}
 .btn.go{background:var(--green);color:#000;border:none}
 .btn:disabled{opacity:.4}
@@ -54,9 +51,9 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 </head>
 <body>
 <div class="wrap">
-  <div class="top">
-    <div><h1>Reconcile Transfers</h1><div class="sub">What Red Buoy (Chatham) and Red Nun Public House (Dennis) still owe each other, by product</div></div>
-    <div class="row"><a class="btn" href="/transfer/statement">Month statement</a> <a class="btn" href="/transfer">Transfers</a> <a class="btn" href="/transfer/admin">Admin</a></div>
+  <div class="rn-page-header">
+    <div><h1 class="rn-page-title">Reconcile Transfers</h1><div class="rn-page-sub">What Red Buoy (Chatham) and Red Nun Public House (Dennis) still owe each other, by product</div></div>
+    <div class="rn-page-actions"><a class="btn" href="/transfer/statement">Month statement</a> <a class="btn" href="/transfer">Transfers</a> <a class="btn" href="/transfer/admin">Admin</a></div>
   </div>
   <div id="tie"></div>
   <div id="items"><div class="card">Loading…</div></div>

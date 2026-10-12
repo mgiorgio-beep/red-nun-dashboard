@@ -12,8 +12,6 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
 .wrap{padding:16px;max-width:1100px;margin:0 auto}
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-h1{font-size:20px;font-weight:800;letter-spacing:-.3px}
 .sub{font-size:12px;color:var(--text3);margin-top:2px}
 .ctl{display:flex;gap:8px;align-items:center}
 .btn{padding:9px 12px;border-radius:10px;background:var(--card);border:1px solid var(--border2);color:var(--text);
@@ -54,9 +52,9 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 </head>
 <body>
 <div class="wrap">
-  <div class="top">
-    <div><h1>Transfer Statement</h1><div class="sub">Red Buoy Inc. (Chatham) ⇄ Red Nun Public House Inc. (Dennis) — netted by item, at the cost logged</div></div>
-    <div class="ctl">
+  <div class="rn-page-header">
+    <div><h1 class="rn-page-title">Transfer Statement</h1><div class="rn-page-sub">Red Buoy Inc. (Chatham) ⇄ Red Nun Public House Inc. (Dennis) — netted by item, at the cost logged</div></div>
+    <div class="ctl rn-page-actions">
       <button class="btn" onclick="shift(-1)">‹</button>
       <div class="month" id="month"></div>
       <button class="btn" onclick="shift(1)">›</button>
