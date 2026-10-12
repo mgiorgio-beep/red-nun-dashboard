@@ -1539,6 +1539,13 @@ function showReview(data) {
     banner.style.background = 'rgba(245,158,11,0.12)';
     banner.style.border = '1px solid rgba(245,158,11,0.3)';
     banner.style.color = '#f59e0b';
+  } else if (data.status === 'pending') {
+    // Held for review with no recorded reason: say so rather than look finished.
+    banner.innerHTML = 'Waiting for review. No problem was recorded on this invoice — check it against the paper copy and confirm if it matches.';
+    banner.style.display = 'block';
+    banner.style.background = 'rgba(56,189,248,0.10)';
+    banner.style.border = '1px solid rgba(56,189,248,0.3)';
+    banner.style.color = '#0369a1';
   } else {
     banner.style.display = 'none';
   }
@@ -2116,7 +2123,11 @@ function resetScan() {
 }
 
 // ── History ──
+// Only the newest request may draw the list: opening ?tab=pending used to start a
+// 500-row "confirmed" load first, and that slower answer overwrote the pending list.
+let _histSeq = 0;
 async function loadHistory() {
+  const seq = ++_histSeq;
   let url = '/api/invoices?limit=500';
   if (histFilter !== 'all') url += '&status=' + histFilter;
   const loc = window.currentLocation || localStorage.getItem('globalLocation');
@@ -2124,7 +2135,9 @@ async function loadHistory() {
 
   try {
     const resp = await fetch(url);
-    allInvoices = await resp.json();
+    const rows = await resp.json();
+    if (seq !== _histSeq) return;   // a newer load (other tab/filter) is on its way
+    allInvoices = rows;
 
     // Populate vendor filter
     const vendors = [...new Set(allInvoices.map(inv => inv.vendor_name).filter(Boolean))].sort();
@@ -2580,7 +2593,7 @@ function generateItemsReport() {
 window.currentLocation = localStorage.getItem("globalLocation") || "dennis";
 var glSel = document.getElementById("global-location");
 if (glSel) glSel.value = window.currentLocation;
-loadHistory();
+// The list loads from invoicesStart(), once the tab in the address is known.
 
 // Drag & drop
 const zone = $('scanZone');

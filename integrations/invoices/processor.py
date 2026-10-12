@@ -2909,6 +2909,13 @@ def get_invoice(invoice_id):
             li["math_error"] = False
     result["line_items"] = line_items
     result["line_item_errors"] = line_item_errors
+    # The review screen shows validation.issues — why it was held (ingest guard
+    # rule, OCR check). Only a fresh scan returned it; an invoice opened from the
+    # list showed no reason and looked good to go.
+    try:
+        result["validation"] = json.loads(result["validation_json"]) if result.get("validation_json") else None
+    except (ValueError, TypeError):
+        result["validation"] = None
     return result
 
 
