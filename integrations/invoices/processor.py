@@ -882,6 +882,15 @@ def _vendor_omits_invoice_numbers(vendor_name):
     return omits
 
 
+_CHARGE_LINE_WORDS = ("deposit", "fuel", "freight", "surcharge", "delivery charge")
+
+
+def _is_charge_line(item):
+    """A deposit / fuel / freight line split out by the extraction, not a product."""
+    text = ((item.get("product_name") or "") + " " + (item.get("description") or "")).lower()
+    return any(w in text for w in _CHARGE_LINE_WORDS)
+
+
 def validate_invoice_extraction(data):
     """
     Validate extracted invoice data for auto-confirm eligibility.
@@ -909,24 +918,8 @@ def validate_invoice_extraction(data):
     line_items = data.get("line_items", [])
     extracted_count = len(line_items)
     result["item_count_extracted"] = extracted_count
-    
-    # CHECK 1: Item count validation
-    invoice_count = data.get("total_line_items")
-    if invoice_count is not None:
-        result["item_count_invoice"] = invoice_count
-        if abs(invoice_count - extracted_count) <= 2:
-            result["item_count_match"] = True
-        else:
-            result["item_count_match"] = False
-            diff = abs(invoice_count - extracted_count)
-            result["issues"].append(
-                f"{extracted_count} of {invoice_count} items extracted — {diff} item(s) may be missing"
-            )
-    else:
-        # No item count on invoice — can't validate, mark as null (pass)
-        result["item_count_match"] = None
-    
-    # CHECK 2: Total validation
+
+    # CHECK 2 (computed first; CHECK 1 needs it): Total validation
     extracted_total = sum(
         float(item.get("total_price", 0) or 0) 
         for item in line_items
@@ -963,7 +956,35 @@ def validate_invoice_extraction(data):
     else:
         # No total on invoice — can't validate, mark as null (pass)
         result["total_match"] = None
-    
+
+    # CHECK 1: Item count validation. The invoice's count is of PRODUCTS; the
+    # extraction often splits container deposits / fuel / freight onto their own
+    # lines (Colonial: 3 beers -> 6 lines), so those don't count. More lines than
+    # the invoice lists is only a problem when they don't add up to the total.
+    invoice_count = data.get("total_line_items")
+    if invoice_count is not None:
+        result["item_count_invoice"] = invoice_count
+        product_count = sum(1 for li in line_items if not _is_charge_line(li))
+        if abs(invoice_count - product_count) <= 2:
+            result["item_count_match"] = True
+        elif product_count > invoice_count and result["total_match"] is True:
+            result["item_count_match"] = True
+        else:
+            result["item_count_match"] = False
+            if product_count < invoice_count:
+                result["issues"].append(
+                    f"{product_count} of {invoice_count} items extracted — "
+                    f"{invoice_count - product_count} item(s) may be missing"
+                )
+            else:
+                result["issues"].append(
+                    f"{product_count} items extracted but the invoice lists {invoice_count} — "
+                    f"check for duplicated lines"
+                )
+    else:
+        # No item count on invoice — can't validate, mark as null (pass)
+        result["item_count_match"] = None
+
     # Determine auto_confirm eligibility
     # Both checks must be True or None (pass), and at least one must be True (actually validated)
     item_check_ok = result["item_count_match"] in [True, None]
