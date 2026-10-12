@@ -251,9 +251,38 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   .main-content { padding: 14px; }
   .summary-bar { grid-template-columns: 1fr 1fr; }
   .summary-value { font-size: 18px; }
-  .reg-table .col-memo, .reg-table .col-type, .reg-table .col-acct { display: none; }
-  .reg-table thead th { font-size: 9px; padding: 8px 6px; }
-  .reg-table tbody td { padding: 8px 6px; font-size: 12px; }
+  /* Phone: each register line is a card (payee + amount, date/ref/type + balance,
+     memo, then the account to code it and the cleared pill). No sideways scroll.
+     !important where sidebar.css forces every td's size and border. */
+  .reg-wrap { overflow-x: visible; }
+  .reg-table, .reg-table tbody { display: block; min-width: 0; }
+  .reg-table thead { display: none; }
+  .reg-table tbody tr { display: block; }
+  .reg-table tbody tr.detail-row { display: none; }
+  .reg-table tbody tr.detail-row.open { display: block; }
+  .reg-table tbody tr.reg-row {
+    display: grid; grid-template-columns: auto auto 1fr auto;
+    grid-template-areas: "payee payee payee amt" "date ref type bal" "memo memo memo memo" "acct acct acct chk";
+    gap: 4px 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border);
+  }
+  .rn-main .reg-table tbody tr td { display: block; padding: 0; border: 0 !important; width: auto; min-width: 0; max-width: none; background: none !important; }
+  .reg-table tbody tr.reg-row.unassigned { background: rgba(245,158,11,0.06); }
+  .reg-table td.col-payee { grid-area: payee; font-size: 14px !important; font-weight: 600; white-space: normal; }
+  .reg-table td.amt-out, .reg-table td.amt-in { grid-area: amt; font-size: 15px !important; font-weight: 600; text-align: right; }
+  .reg-table td.amt-out:not(:empty)::before { content: '\2212'; }
+  .reg-table td.amt-in:not(:empty)::before { content: '+'; }
+  .reg-table td.col-date, .reg-table td.col-ref { font-size: 12px !important; color: var(--text3) !important; }
+  .reg-table td.col-date { grid-area: date; }
+  .reg-table td.col-ref { grid-area: ref; }
+  .reg-table td.col-type { grid-area: type; }
+  .reg-table td.col-bal { grid-area: bal; font-size: 12px !important; font-weight: 500; color: var(--text3) !important; }
+  .reg-table td.col-bal::before { content: 'Bal '; }
+  .reg-table td.col-memo { grid-area: memo; font-size: 12px !important; color: var(--text2) !important; white-space: normal; }
+  .reg-table td.col-memo:empty { display: none; }
+  .reg-table td.col-acct { grid-area: acct; margin-top: 4px; }
+  .reg-table td.col-acct .acct-select { width: 100%; max-width: none; min-height: 40px; font-size: 14px; }
+  .reg-table td.col-chk { grid-area: chk; margin-top: 4px; }
+  .reg-table .recon-pill { min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; }
 }
 </style>
 </head>
@@ -784,7 +813,7 @@ function renderRows() {
         <td class="col-date">${esc(r.date)}</td>
         <td class="col-type"><span class="type-pill type-${esc(r.type)}">${esc(r.type_label)}</span></td>
         <td class="col-ref">${esc(r.ref)}</td>
-        <td>${esc(r.payee)}${statusPill}${unassignedPill}</td>
+        <td class="col-payee">${esc(r.payee)}${statusPill}${unassignedPill}</td>
         <td class="col-acct" onclick="event.stopPropagation()">${renderAcctSelect(r)}</td>
         <td class="col-memo" title="${esc(r.memo || '')}">${esc(r.memo || '')}</td>
         <td class="col-amt amt-out">${fmt(r.outflow)}</td>

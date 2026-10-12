@@ -176,6 +176,24 @@ html.rn-framed .sl-layout{height:calc(100vh - 122px)}
 /* Badge for unassigned count */
 .unassigned-badge{display:inline-block;background:var(--red);color:#fff;font-size:10px;
   font-weight:800;padding:2px 7px;border-radius:8px;margin-left:6px}
+/* Phone: areas stacked above the products instead of a squeezed two-column layout. */
+@media(max-width:767px){
+  .hdr{padding:12px 14px;gap:10px}
+  .hdr-sub{display:none}
+  .hdr-right{gap:6px}
+  .hdr-right .btn{padding:8px 10px;font-size:12px}
+  .sl-layout{display:block;height:auto}
+  .sl-side{width:auto;border-right:0;border-bottom:1px solid var(--border);overflow:visible}
+  .main{padding:16px 14px 40px;overflow:visible;scroll-margin-top:64px}
+  .main-header{flex-wrap:wrap;gap:10px}
+  .search-bar{width:100%}
+  .product-card{flex-wrap:wrap}
+  .pc-info{flex:1 1 calc(100% - 90px)}
+  .pc-name{white-space:normal}
+  .shelf-select{order:5;flex:1 1 auto;max-width:none;min-height:40px;font-size:14px}
+  .pc-remove{order:6;min-width:40px;min-height:40px}
+  .arr-up{width:36px;height:30px}
+}
 </style>
 </head>
 <body>
@@ -256,7 +274,7 @@ html.rn-framed .sl-layout{height:calc(100vh - 122px)}
     <div class="main-header">
       <div>
         <div class="main-title" id="main-title">Select a storage area</div>
-        <div class="main-sub" id="main-sub">Click a location on the left to manage its products</div>
+        <div class="main-sub" id="main-sub">Pick a storage area to manage its products</div>
       </div>
       <input class="search-bar" id="search" placeholder="Search products..." oninput="renderMain()">
     </div>
@@ -381,7 +399,7 @@ async function loadLocations() {
     const list = document.getElementById('loc-list');
     
     // Unassigned item at top
-    let html = '<div class="loc-item unassigned' + (S.selectedLoc === 'unassigned' ? ' active' : '') + '" onclick="selectUnassigned()">' +
+    let html = '<div class="loc-item unassigned' + (S.selectedLoc === 'unassigned' ? ' active' : '') + '" onclick="selectUnassigned();showAreaOnPhone()">' +
       '<div class="loc-name">⚠️ Unassigned' + (S.unassignedCount > 0 ? '<span class="unassigned-badge">' + S.unassignedCount + '</span>' : '') + '</div>' +
       '<div class="loc-count' + (S.unassignedCount > 0 ? ' warn' : '') + '">' + S.unassignedCount + '</div>' +
     '</div>';
@@ -389,7 +407,7 @@ async function loadLocations() {
     S.locations.forEach((loc, i) => {
       const cnt = counts[i].length;
       const safeName = esc(loc.name).replace(/'/g, "\\'");
-      html += '<div class="loc-item' + (S.selectedLoc === loc.id ? ' active' : '') + '" onclick="selectLoc(' + loc.id + ',\'' + safeName + '\')">' +
+      html += '<div class="loc-item' + (S.selectedLoc === loc.id ? ' active' : '') + '" onclick="selectLoc(' + loc.id + ',\'' + safeName + '\');showAreaOnPhone()">' +
         '<div class="loc-name">' + esc(loc.name) + '</div>' +
         '<div class="loc-right">' +
           '<div class="loc-count">' + cnt + '</div>' +
@@ -412,6 +430,11 @@ async function loadLocations() {
   } catch(e) {
     console.error('Failed to load locations:', e);
   }
+}
+
+// Phone: the area list sits above the products, so a tap on an area scrolls to them.
+function showAreaOnPhone() {
+  if (window.matchMedia('(max-width: 767px)').matches) document.querySelector('.main').scrollIntoView({behavior: 'smooth'});
 }
 
 // ============================================

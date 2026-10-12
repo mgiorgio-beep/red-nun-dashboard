@@ -118,6 +118,9 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
   #manageHeader{padding:16px 16px 0}
   .rn-main > .view{padding:16px}
   .card{padding:16px}
+  /* Card headers and control rows wrap instead of running off the screen. */
+  .card-header, .card-header > div, .recipe-controls{flex-wrap:wrap;gap:8px}
+  .card-header > div input{max-width:none!important;flex:1 1 160px}
   .form-grid{grid-template-columns:1fr}
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:12px}
 
@@ -419,7 +422,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             </div>
           </div>
           <div id="products-count" style="padding:4px 16px;font-size:12px;color:var(--text3)"></div>
-          <table class="data-table">
+          <table class="data-table rn-cards">
             <thead>
               <tr>
                 <th>Name</th>
@@ -591,7 +594,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
       <!-- Recipes View -->
       <div class="view" id="view-recipes">
         <!-- Location filter -->
-        <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
+        <div class="recipe-controls" style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
           <span style="font-size:13px;color:var(--text3);margin-right:4px">Location:</span>
           <button class="btn btn-secondary recipe-loc-btn" data-loc="all" onclick="setRecipeLoc('all')" style="padding:6px 14px;font-size:12px">All</button>
           <button class="btn btn-secondary recipe-loc-btn" data-loc="dennis" onclick="setRecipeLoc('dennis')" style="padding:6px 14px;font-size:12px">Dennis</button>
@@ -609,7 +612,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 
         <!-- Food / Menu Items -->
         <div id="section-food" class="card">
-          <table class="data-table">
+          <table class="data-table rn-cards">
             <thead>
               <tr>
                 <th>Name</th>
@@ -627,7 +630,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 
         <!-- Bar Items -->
         <div id="section-bar" class="card" style="display:none">
-          <table class="data-table">
+          <table class="data-table rn-cards">
             <thead>
               <tr>
                 <th>Name</th>
@@ -1992,7 +1995,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 
           <!-- Runs table -->
           <div class="card" style="padding:0;overflow:hidden">
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <table class="rn-cards" style="width:100%;border-collapse:collapse;font-size:13px">
               <thead>
                 <tr style="border-bottom:1px solid var(--border);background:#f8fafc">
                   <th style="padding:10px 14px;text-align:left;color:var(--text3);font-weight:500">Pay Date</th>
@@ -2019,7 +2022,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
               <button onclick="prImportLegacy()" style="padding:4px 12px;border-radius:6px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:11px;font-weight:600;cursor:pointer">Convert to Run</button>
             </div>
             <div class="card" style="padding:0;overflow:hidden">
-              <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <table class="rn-cards" style="width:100%;border-collapse:collapse;font-size:12px">
                 <thead>
                   <tr style="border-bottom:1px solid var(--border);background:#f8fafc">
                     <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:500">Date</th>
@@ -3018,7 +3021,7 @@ function renderRecipes() {
     <td style="font-size:12px;color:var(--text3)">${r.ingredient_count || 0}</td>
     <td>${r.total_cost ? fmt(r.total_cost) : '--'}</td>
     <td>${r.food_cost_pct ? r.food_cost_pct.toFixed(1) + '%' : '--'}</td>
-    <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();openRecipePage(${r.id})">Edit</button></td>
+    <td class="rn-card-hide"><button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();openRecipePage(${r.id})">Edit</button></td>
   </tr>`;
 
   document.getElementById('food-recipes-table').innerHTML = food.map(row).join('');
@@ -6762,7 +6765,7 @@ async function prLoadRuns() {
         '<td style="padding:10px 8px;text-align:center;color:#111827">' + (run.check_count || 0) + '</td>' +
         '<td style="padding:10px 8px;text-align:right;color:#111827">' + gross + '</td>' +
         '<td style="padding:10px 8px;text-align:right;color:#22c55e;font-weight:600">' + net + '</td>' +
-        '<td style="padding:10px 14px;text-align:right">' + dls + '</td>';
+        '<td class="rn-card-full" style="padding:10px 14px;text-align:right">' + dls + '</td>';
 
       // Detail row (hidden, spans full width)
       var detailTr = tbody.insertRow();
@@ -6776,7 +6779,7 @@ async function prLoadRuns() {
         '<a href="/api/payroll/runs/' + run.id + '/summary-csv" style="padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none">Summary CSV</a>' +
         '<a href="/api/payroll/runs/' + run.id + '/ytd-csv" style="padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:#fff;color:#374151;font-size:11px;font-weight:600;text-decoration:none">YTD CSV</a>' +
         '</div>' +
-        '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+        '<table class="rn-cards" style="width:100%;border-collapse:collapse;font-size:12px">' +
         '<thead><tr style="background:#f1f5f9">' +
         '<th style="padding:7px 14px;text-align:left;color:var(--text3);font-weight:500">Employee</th>' +
         '<th style="padding:7px 8px;text-align:left;color:var(--text3);font-weight:500">Method</th>' +
@@ -6826,7 +6829,7 @@ async function prToggleRun(runId) {
   var arrow  = document.getElementById('pr-arrow-' + runId);
   if (!detail) return;
   var open = detail.style.display !== 'none';
-  detail.style.display = open ? 'none' : 'table-row';
+  detail.style.display = open ? 'none' : '';   // '' = table row on a PC, card on a phone
   if (arrow) arrow.innerHTML = open ? '&#9660;' : '&#9650;';
   if (!open) {
     await prLoadRunEmployees(runId);

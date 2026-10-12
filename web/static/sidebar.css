@@ -495,3 +495,32 @@ input[type="date"]:focus { border-color: #9ca3af !important; outline: none !impo
   .rn-main .rn-page-title{font-size:19px}
   .rn-page-actions{width:100%}
 }
+
+/* Phone cards for wide tables (UI plan Phase 4). Add class rn-cards to a <table>: under
+   768px each row becomes a card, the first cell is its title and every other cell is a
+   "label  value" line, labelled from its column header by sidebar.js (data-label).
+   Cell classes: rn-card-hide (not on a phone), rn-card-full (value on its own line,
+   e.g. a select). A page can lay a card out itself (see register.html) on top of this. */
+@media(max-width:768px){
+  table.rn-cards, table.rn-cards tbody{display:block;width:100%;min-width:0!important}
+  table.rn-cards thead{display:none}
+  table.rn-cards tbody tr{display:block;padding:12px 14px;border-bottom:1px solid #e5e7eb}
+  table.rn-cards tbody tr:last-child{border-bottom:0}
+  table.rn-cards tbody tr:hover td{background:none!important}
+  table.rn-cards tbody td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:3px 0!important;border:0!important;text-align:right!important;width:auto!important;min-width:0!important;max-width:none!important;white-space:normal!important}
+  table.rn-cards tbody td::before{content:attr(data-label);flex-shrink:0;text-align:left;font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:#9ca3af}
+  table.rn-cards tbody td:first-child{display:block;text-align:left!important;font-size:15px!important;font-weight:600;padding-bottom:6px!important}
+  table.rn-cards tbody td:first-child::before, table.rn-cards tbody td[colspan]::before{content:none}
+  table.rn-cards tbody td[colspan]{display:block}
+  table.rn-cards tbody td.rn-card-full > a, table.rn-cards tbody td.rn-card-full > button, table.rn-cards tbody td.rn-card-full > label{display:inline-flex;align-items:center;min-height:34px;margin:2px 4px 2px 0!important}
+  table.rn-cards tbody td:empty, table.rn-cards tbody td.rn-card-hide{display:none}
+  table.rn-cards tbody td.rn-card-full{display:block;text-align:left!important}
+  table.rn-cards tbody td.rn-card-full::before{display:block;margin-bottom:4px}
+  table.rn-cards tbody td.rn-card-full select, table.rn-cards tbody td.rn-card-full input{width:100%;min-height:40px}
+  table.rn-cards tbody td button, table.rn-cards tbody td .btn{min-height:36px}
+}
+@media(max-width:768px){
+  table.rn-cards tfoot, table.rn-cards tfoot tr{display:block}
+  table.rn-cards tfoot tr{display:flex;justify-content:space-between;padding:10px 14px}
+  table.rn-cards tfoot td{border:0!important;padding:0!important}
+}

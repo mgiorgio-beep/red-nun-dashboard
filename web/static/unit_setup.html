@@ -47,6 +47,33 @@ html.rn-framed .applybar{background:rgba(255,255,255,0.95)}
 .cat-pill{font-size:10px;color:var(--text3)}
 .pname-link{cursor:pointer}
 .pname-link:hover{color:var(--blue);text-decoration:underline}
+/* Phone: each product is a card — tick + name, pack facts on one line, then the count
+   unit and conversion side by side with big tap targets. */
+@media(max-width:767px){
+  .wrap{padding:14px 14px 120px}
+  .search{margin-left:0;width:100%}
+  table,tbody{display:block}
+  thead{display:none}
+  tbody tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:12px 0;border-bottom:1px solid var(--border)}
+  tbody td{display:block;padding:0;border:0}
+  tr:hover td{background:none}
+  td.c-chk{order:1;width:28px}
+  td.c-chk input{width:22px;height:22px}
+  td.c-name{order:2;flex:1 1 calc(100% - 100px);min-width:0}
+  td.c-del{order:3}
+  td.c-del button{min-width:40px;min-height:40px}
+  td.c-cat,td.c-pack,td.c-cur,td.c-conf{order:4;font-size:11px}
+  td.c-cat{margin-left:38px}
+  td.c-cur::before{content:'now ';color:var(--text3)}
+  td.c-unit,td.c-conv{order:5;flex:1 1 40%;margin-left:0}
+  td.c-unit{margin-left:38px}
+  td.c-unit::before{content:'Count unit';display:block;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+  td.c-conv::before{content:'Per purchase unit';display:block;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+  .cell-sel,.cell-num{width:100%;font-size:15px;padding:9px 10px}
+  td.c-hint{order:6;flex-basis:100%;margin-left:38px}
+  td.c-hint:empty{display:none}
+  .applybar{padding:12px 14px}
+}
 /* Product edit modal */
 .modal-ov{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:300;padding:20px}
 .modal-ov.open{display:flex}
@@ -144,7 +171,7 @@ html.rn-framed .applybar{background:rgba(255,255,255,0.95)}
 
 <div class="applybar rn-frame-bottom">
   <div class="info" id="applyinfo">—</div>
-  <button class="btn-primary" id="applybtn" onclick="applyChecked()" disabled>Apply checked</button>
+  <button class="btn btn-primary" id="applybtn" onclick="applyChecked()" disabled>Apply checked</button>
 </div>
 
 <script>
@@ -234,16 +261,16 @@ function render(){
     const packTxt=[d.parsed.packs?d.parsed.packs+'×'+(d.parsed.eachQty||'')+(d.parsed.eachUnit||''):'',
       d.parsed.count?d.parsed.count+' ct':'', d.rec.pcontains?d.rec.pcontains+' '+(d.rec.cunit||''):''].filter(Boolean).join(' · ');
     return '<tr>'+
-      '<td><input type="checkbox" '+(d.checked?'checked':'')+' onchange="DATA['+i+'].checked=this.checked;upd()"></td>'+
-      '<td><div class="pname pname-link" onclick="openProductEditor('+d.prod.id+',{onSaved:rnpeSaved})" title="Edit product">'+esc(d.prod.display_name||d.prod.name)+' <span style="color:var(--text3);font-size:11px">✎</span></div><div class="pdesc">'+esc(d.rec.vdesc||'')+'</div></td>'+
-      '<td><span class="cat-pill">'+esc(rnCatLabel(d.prod.category))+'</span></td>'+
-      '<td style="font-size:11px;color:var(--text2)">'+esc(packTxt||'—')+'</td>'+
-      '<td style="font-size:11px;color:var(--text3)">'+esc(d.prod.inventory_unit||'(none)')+'</td>'+
-      '<td><select class="cell-sel" onchange="DATA['+i+'].unit=this.value">'+opts+'</select></td>'+
-      '<td><input class="cell-num" type="number" step="0.01" value="'+(d.conv!==''&&d.conv!=null?d.conv:'')+'" onchange="DATA['+i+'].conv=this.value"></td>'+
-      '<td class="hint">'+esc(d.sug.hint||'')+'</td>'+
-      '<td class="conf-'+d.conf+'" style="font-size:11px;font-weight:700">'+d.conf.toUpperCase()+'</td>'+
-      '<td><button title="Archive (hide from inventory)" onclick="archive('+d.prod.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px 7px;border-radius:6px" onmouseover="this.style.color=\'#FF453A\';this.style.background=\'rgba(255,69,58,0.12)\'" onmouseout="this.style.color=\'\';this.style.background=\'none\'">🗑</button></td>'+
+      '<td class="c-chk"><input type="checkbox" '+(d.checked?'checked':'')+' onchange="DATA['+i+'].checked=this.checked;upd()"></td>'+
+      '<td class="c-name"><div class="pname pname-link" onclick="openProductEditor('+d.prod.id+',{onSaved:rnpeSaved})" title="Edit product">'+esc(d.prod.display_name||d.prod.name)+' <span style="color:var(--text3);font-size:11px">✎</span></div><div class="pdesc">'+esc(d.rec.vdesc||'')+'</div></td>'+
+      '<td class="c-cat"><span class="cat-pill">'+esc(rnCatLabel(d.prod.category))+'</span></td>'+
+      '<td class="c-pack" style="font-size:11px;color:var(--text2)">'+esc(packTxt||'—')+'</td>'+
+      '<td class="c-cur" style="font-size:11px;color:var(--text3)">'+esc(d.prod.inventory_unit||'(none)')+'</td>'+
+      '<td class="c-unit"><select class="cell-sel" onchange="DATA['+i+'].unit=this.value">'+opts+'</select></td>'+
+      '<td class="c-conv"><input class="cell-num" type="number" step="0.01" value="'+(d.conv!==''&&d.conv!=null?d.conv:'')+'" onchange="DATA['+i+'].conv=this.value"></td>'+
+      '<td class="hint c-hint">'+esc(d.sug.hint||'')+'</td>'+
+      '<td class="c-conf conf-'+d.conf+'" style="font-size:11px;font-weight:700">'+d.conf.toUpperCase()+'</td>'+
+      '<td class="c-del"><button title="Archive (hide from inventory)" onclick="archive('+d.prod.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px 7px;border-radius:6px" onmouseover="this.style.color=\'#FF453A\';this.style.background=\'rgba(255,69,58,0.12)\'" onmouseout="this.style.color=\'\';this.style.background=\'none\'">🗑</button></td>'+
     '</tr>';
   }).join('');
   document.getElementById('summary').textContent=rows.length+' shown · '+DATA.length+' total · '+DATA.filter(d=>d.checked).length+' checked';

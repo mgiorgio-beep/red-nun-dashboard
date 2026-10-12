@@ -161,7 +161,11 @@ table.dd tfoot td {
   table.pl td { padding: 7px 10px; }
   .pct { width: 62px; }
   tr.item td:first-child { padding-left: 18px; }
-  tr.item td.cat { display: none; }
+  /* Phone: name, amount, % — the category column goes, so every total fits. */
+  table.pl { min-width: 0; }
+  table.pl td.cat { display: none; }
+  table.pl td.num { white-space: nowrap; }
+  .dd-wrap { padding: 4px 0 8px 12px; overflow-x: visible; }
 }
 </style>
 </head>
@@ -249,7 +253,7 @@ function currentRange(){ return periodRange(); }
 function detailTable(d){
   if (!d.rows.length) return '<div class="dd-empty">No underlying rows found.</div>';
   var cols = d.columns;
-  var h = '<table class="dd"><thead><tr>' +
+  var h = '<table class="dd rn-cards"><thead><tr>' +
     cols.map(function(c){
       return '<th' + (c === 'amount' || c === 'qty' ? ' class="num"' : '') + '>' + esc(c) + '</th>';
     }).join('') + '</tr></thead><tbody>';

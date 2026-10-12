@@ -315,6 +315,27 @@ if(sel){
   });
 }
 window.addEventListener('hashchange',function(){setActiveItem(getActiveId())});
+// Phone cards (sidebar.css table.rn-cards): label each cell from its column header so
+// the card can show "Label  value". Tables re-render their rows, so watch for that.
+function labelCards(t){
+  // Only this table's own header and rows: a table nested in a cell labels itself.
+  var hr=t.tHead&&t.tHead.rows[t.tHead.rows.length-1];if(!hr)return;
+  var heads=[].map.call(hr.cells,function(th){return (th.getAttribute('data-label')||th.textContent).replace(/[\u25B2\u25BC\u2191\u2193]/g,'').trim()});
+  [].forEach.call(t.tBodies,function(tb){[].forEach.call(tb.rows,function(tr){
+    var i=0;[].forEach.call(tr.children,function(td){
+      if(!td.hasAttribute('data-label')&&heads[i])td.setAttribute('data-label',heads[i]);
+      i+=td.colSpan||1;
+    });
+  });});
+}
+function watchCards(){
+  [].forEach.call(document.querySelectorAll('table.rn-cards'),function(t){
+    if(t._rnCards)return;t._rnCards=1;labelCards(t);
+    new MutationObserver(function(){labelCards(t)}).observe(t,{childList:true,subtree:true});
+  });
+}
+watchCards();
+new MutationObserver(watchCards).observe(document.body,{childList:true,subtree:true});
 // /manage and /invoices call this after every view change (and on Back/Forward).
 window.rnSyncNav=function(){setActiveItem(getActiveId())};
 
