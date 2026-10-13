@@ -335,8 +335,8 @@ async function addArea(kind) {
   if (!name) return;
 
   // Guard against a duplicate name already shown for this restaurant
-  if (S.locations.some(l => l.name.toLowerCase() === name.toLowerCase())) {
-    showToast('"' + name + '" already exists', true);
+  if (S.locations.some(l => (l.kind || 'food') === kind && l.name.toLowerCase() === name.toLowerCase())) {
+    showToast('"' + name + '" is already a ' + kind + ' area', true);
     return;
   }
 

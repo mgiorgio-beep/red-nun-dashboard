@@ -78,10 +78,10 @@ def add_location():
     conn = get_connection()
     ensure_area_kind(conn)
 
-    # Check if location already exists
+    # Check if location already exists -- per kind: a food Walk-in and a bar Walk-in are two areas
     existing = conn.execute(
-        "SELECT id FROM storage_locations WHERE name = ? AND location = ?",
-        (name, restaurant)
+        "SELECT id FROM storage_locations WHERE name = ? AND location = ? AND kind = ?",
+        (name, restaurant, kind)
     ).fetchone()
 
     if existing:

@@ -635,9 +635,10 @@ async function startCount() {
     setTimeout(() => { location.href = '/count/list?loc=' + S.location; }, 1500);
     return;
   }
-  if (S.sections.length === 0) {
-    const what = COUNT_TYPE !== 'all' ? TYPE_LABEL.toLowerCase() + ' ' : '';
-    showToast('No ' + what + 'products assigned to storage areas. Go to Storage Layout to set up.', true);
+  // No areas of this kind yet (e.g. Chatham's first food count): open the count anyway so
+  // "+ Add area" can build the layout from the phone.
+  if (S.sections.length === 0 && (COUNT_TYPE === 'all' || LIST === 'weekly')) {
+    showToast('No products assigned to storage areas. Go to Storage Layout to set up.', true);
     return;
   }
 
@@ -1312,7 +1313,7 @@ async function addShelf(ai){
 async function addArea(){
   const name = (prompt('Name of the new area at ' + (S.location === 'dennis' ? 'Dennis' : 'Chatham') + '?\n(a room or station, e.g. "Back Bar", "Basement")') || '').trim();
   if (!name) return;
-  if (S.sections.some(x => (x.location_name || '').toLowerCase() === name.toLowerCase())) { showToast(name + ' already exists', true); return; }
+  if (S.sections.some(x => areaInCountType(x) && (x.location_name || '').toLowerCase() === name.toLowerCase())) { showToast(name + ' already exists', true); return; }
   if (!navigator.onLine) { showToast('Adding an area needs a connection', true); return; }
   try {
     const r = await fetch('/api/storage/locations', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
