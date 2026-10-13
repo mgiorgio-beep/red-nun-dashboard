@@ -61,6 +61,13 @@ html.rn-framed .sl-layout{height:calc(100vh - 122px)}
 .loc-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;
   padding:2px 7px;border-radius:6px;line-height:1;opacity:0.45;transition:all 0.15s}
 .loc-del:hover{color:var(--red);background:rgba(255,69,58,0.12);opacity:1}
+.kind-head{padding:12px 16px 8px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
+  letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid var(--border);background:var(--card2)}
+.kind-empty{padding:12px 16px;font-size:12px;color:var(--text3);border-bottom:1px solid var(--border)}
+.loc-kind{background:none;border:1px solid var(--border);color:var(--text3);cursor:pointer;font-size:11px;
+  font-weight:600;padding:3px 7px;border-radius:6px;line-height:1;transition:all 0.15s}
+.loc-kind:hover{color:var(--blue);border-color:rgba(10,132,255,0.4)}
 
 /* Restaurant toggle */
 .rest-toggle{display:flex;gap:4px;padding:12px 16px;border-bottom:1px solid var(--border)}
@@ -265,7 +272,7 @@ html.rn-framed .sl-layout{height:calc(100vh - 122px)}
       <button class="rest-btn sel" data-loc="dennis" onclick="pickRest(this)">Dennis Port</button>
       <button class="rest-btn" data-loc="chatham" onclick="pickRest(this)">Chatham</button>
     </div>
-    <div class="loc-header"><span>Storage Areas</span><button class="add-area-btn" onclick="addArea()">+ Add Area</button></div>
+    <div class="loc-header"><span>Storage Areas</span></div>
     <div id="loc-list"></div>
   </div>
 
@@ -321,9 +328,10 @@ function pickRest(el) {
 // ============================================
 // ADD AREA
 // ============================================
-async function addArea() {
+async function addArea(kind) {
   const restLabel = S.restaurant === 'dennis' ? 'Dennis Port' : 'Chatham';
-  const name = (prompt('New storage area name for ' + restLabel + ':\n(e.g. Back Freezer, Shed Freezer, Back Shelves)') || '').trim();
+  const eg = kind === 'bar' ? 'Back Bar, Server Well, Beer Cooler' : 'Back Freezer, Shed Freezer, Back Shelves';
+  const name = (prompt('New ' + kind + ' area for ' + restLabel + ':\n(e.g. ' + eg + ')') || '').trim();
   if (!name) return;
 
   // Guard against a duplicate name already shown for this restaurant
@@ -336,7 +344,7 @@ async function addArea() {
     const res = await fetch(API + '/locations', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ name, location: S.restaurant })
+      body: JSON.stringify({ name, location: S.restaurant, kind })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -349,6 +357,25 @@ async function addArea() {
     await loadLocations();
   } catch(e) {
     showToast('Error adding area', true);
+  }
+}
+
+// ============================================
+// FOOD AREA <-> BAR AREA
+// ============================================
+async function setAreaKind(locId, locName, kind) {
+  try {
+    const res = await fetch(API + '/locations/' + locId, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ kind })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(data.error || 'Could not move area', true); return; }
+    showToast('"' + locName + '" is now a ' + kind + ' area');
+    await loadLocations();
+  } catch(e) {
+    showToast('Error moving area', true);
   }
 }
 
@@ -404,18 +431,27 @@ async function loadLocations() {
       '<div class="loc-count' + (S.unassignedCount > 0 ? ' warn' : '') + '">' + S.unassignedCount + '</div>' +
     '</div>';
     
-    S.locations.forEach((loc, i) => {
-      const cnt = counts[i].length;
-      const safeName = esc(loc.name).replace(/'/g, "\\'");
-      html += '<div class="loc-item' + (S.selectedLoc === loc.id ? ' active' : '') + '" onclick="selectLoc(' + loc.id + ',\'' + safeName + '\');showAreaOnPhone()">' +
-        '<div class="loc-name">' + esc(loc.name) + '</div>' +
-        '<div class="loc-right">' +
-          '<div class="loc-count">' + cnt + '</div>' +
-          '<button class="loc-del" title="Delete area" onclick="event.stopPropagation();deleteArea(' + loc.id + ',\'' + safeName + '\',' + cnt + ')">✕</button>' +
-        '</div>' +
-      '</div>';
+    // Food areas, then bar areas: a food count walks only the first, a booze count only the second.
+    const KINDS = [['food', '🍴 Food areas', '→ Bar'], ['bar', '🍸 Bar areas', '→ Food']];
+    KINDS.forEach(([kind, label, flip]) => {
+      html += '<div class="kind-head"><span>' + label + '</span><button class="add-area-btn" onclick="addArea(\'' + kind + '\')">+ Add</button></div>';
+      const mine = S.locations.map((loc, i) => [loc, i]).filter(([loc]) => (loc.kind || 'food') === kind);
+      if (!mine.length) html += '<div class="kind-empty">None yet</div>';
+      mine.forEach(([loc, i]) => {
+        const cnt = counts[i].length;
+        const safeName = esc(loc.name).replace(/'/g, "\\'");
+        const other = kind === 'bar' ? 'food' : 'bar';
+        html += '<div class="loc-item' + (S.selectedLoc === loc.id ? ' active' : '') + '" onclick="selectLoc(' + loc.id + ',\'' + safeName + '\');showAreaOnPhone()">' +
+          '<div class="loc-name">' + esc(loc.name) + '</div>' +
+          '<div class="loc-right">' +
+            '<button class="loc-kind" title="Move to ' + other + ' areas" onclick="event.stopPropagation();setAreaKind(' + loc.id + ',\'' + safeName + '\',\'' + other + '\')">' + flip + '</button>' +
+            '<div class="loc-count">' + cnt + '</div>' +
+            '<button class="loc-del" title="Delete area" onclick="event.stopPropagation();deleteArea(' + loc.id + ',\'' + safeName + '\',' + cnt + ')">✕</button>' +
+          '</div>' +
+        '</div>';
+      });
     });
-    
+
     list.innerHTML = html;
     
     // Auto-show unassigned if nothing selected and there are unassigned items

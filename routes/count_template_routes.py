@@ -12,6 +12,7 @@ Weekly key-item count list routes, plus "Say items" matching for the count page.
 from flask import Blueprint, jsonify, request, session, current_app
 from integrations.toast.data_store import get_connection
 from routes.auth_routes import login_required
+from routes.storage_routes import ensure_area_kind
 from reports.key_items import (ensure_tables, rank_by_sales, weekly_product_ids,
                                last_weekly_count, group_of, LOCATIONS)
 
@@ -45,6 +46,7 @@ def weekly_sheet():
         return jsonify({'error': 'location required'}), 400
     conn = get_connection()
     try:
+        ensure_area_kind(conn)
         ids = weekly_product_ids(conn, location)
         if not ids:
             return jsonify([])
@@ -65,7 +67,7 @@ def weekly_sheet():
                 WHERE storage_location_id = ? ORDER BY sort_order, name
             """, (loc['id'],)).fetchall()
             placed.update(p['id'] for p in products)
-            result.append({'location_id': loc['id'], 'location_name': loc['name'],
+            result.append({'location_id': loc['id'], 'location_name': loc['name'], 'kind': loc['kind'],
                            'sections': [dict(s) for s in sections], 'products': [dict(p) for p in products]})
 
         loose = [i for i in ids if i not in placed]
@@ -76,7 +78,7 @@ def weekly_sheet():
                 FROM products p LEFT JOIN inventory inv ON inv.product_id = p.id AND inv.location = ?
                 WHERE p.id IN ({','.join('?' * len(loose))})
             """, (location, *loose))}
-            result.append({'location_id': None, 'location_name': NOT_ON_SHELF, 'sections': [],
+            result.append({'location_id': None, 'location_name': NOT_ON_SHELF, 'kind': None, 'sections': [],
                            'products': [dict(rows[i]) for i in loose if i in rows]})
         return jsonify(result)
     finally:

@@ -3,11 +3,50 @@ Storage Location Routes
 Handles storage location management and product-location assignments.
 """
 
+import re
+import sqlite3
+
 from flask import Blueprint, jsonify, request, session
 from integrations.toast.data_store import get_connection
 from routes.auth_routes import login_required
 
 storage_bp = Blueprint('storage', __name__)
+
+# Every storage area is a food area or a bar area (Mike, 2026-10-13): a food count walks
+# only the food areas, a booze count only the bar areas, same area -> shelf layout on both.
+AREA_KINDS = ('food', 'bar')
+_BOOZE_CATS = ('BEER', 'LIQUOR', 'WINE')
+_BAR_WORDS = re.compile(r'\b(bar|well|keg|kegs|liquor|beer|wine|draft|draught|taps?)\b', re.I)
+
+
+def guess_kind(name):
+    return 'bar' if _BAR_WORDS.search(name or '') else 'food'
+
+
+def ensure_area_kind(conn):
+    """Add storage_locations.kind if missing and tag any untagged area: by what sits on its
+    shelves (mostly beer/liquor/wine = bar), or by its name when it's empty or a tie."""
+    cols = [r['name'] for r in conn.execute("PRAGMA table_info(storage_locations)").fetchall()]
+    if 'kind' not in cols:
+        try:
+            conn.execute("ALTER TABLE storage_locations ADD COLUMN kind TEXT")
+        except sqlite3.OperationalError:
+            pass   # the other gunicorn worker added it first
+    rows = conn.execute("SELECT id, name FROM storage_locations WHERE kind IS NULL").fetchall()
+    for r in rows:
+        mix = conn.execute(f"""
+            SELECT SUM(UPPER(IFNULL(p.category, '')) IN ({','.join('?' * len(_BOOZE_CATS))})) AS booze, COUNT(*) AS n
+            FROM product_storage_locations psl JOIN products p ON p.id = psl.product_id
+            WHERE psl.storage_location_id = ?
+        """, (*_BOOZE_CATS, r['id'])).fetchone()
+        booze, n = mix['booze'] or 0, mix['n']
+        if n and booze * 2 != n:
+            kind = 'bar' if booze * 2 > n else 'food'
+        else:
+            kind = guess_kind(r['name'])
+        conn.execute("UPDATE storage_locations SET kind = ? WHERE id = ? AND kind IS NULL", (kind, r['id']))
+    if rows:
+        conn.commit()
 
 
 @storage_bp.route('/api/storage/locations', methods=['GET'])
@@ -15,6 +54,7 @@ storage_bp = Blueprint('storage', __name__)
 def get_locations():
     """Get all storage locations."""
     conn = get_connection()
+    ensure_area_kind(conn)
     locations = conn.execute("""
         SELECT * FROM storage_locations
         ORDER BY name
@@ -34,7 +74,9 @@ def add_location():
         return jsonify({'error': 'Location name is required'}), 400
 
     restaurant = data.get("location", "dennis")
+    kind = data.get('kind') if data.get('kind') in AREA_KINDS else guess_kind(name)
     conn = get_connection()
+    ensure_area_kind(conn)
 
     # Check if location already exists
     existing = conn.execute(
@@ -48,14 +90,31 @@ def add_location():
 
     # Insert new location
     cursor = conn.execute(
-        "INSERT INTO storage_locations (name, location) VALUES (?, ?)",
-        (name, restaurant)
+        "INSERT INTO storage_locations (name, location, kind) VALUES (?, ?, ?)",
+        (name, restaurant, kind)
     )
     conn.commit()
     location_id = cursor.lastrowid
     conn.close()
 
-    return jsonify({'id': location_id, 'name': name})
+    return jsonify({'id': location_id, 'name': name, 'kind': kind})
+
+
+@storage_bp.route('/api/storage/locations/<int:loc_id>', methods=['PATCH'])
+@login_required
+def set_location_kind(loc_id):
+    """{kind: 'food'|'bar'} -- move an area between the food count and the bar count."""
+    kind = (request.json or {}).get('kind')
+    if kind not in AREA_KINDS:
+        return jsonify({'error': "kind must be 'food' or 'bar'"}), 400
+    conn = get_connection()
+    try:
+        ensure_area_kind(conn)
+        conn.execute("UPDATE storage_locations SET kind = ? WHERE id = ?", (kind, loc_id))
+        conn.commit()
+        return jsonify({'success': True, 'id': loc_id, 'kind': kind})
+    finally:
+        conn.close()
 
 
 @storage_bp.route('/api/storage/locations/<int:loc_id>', methods=['DELETE'])
@@ -452,7 +511,8 @@ def get_count_sheet():
     include_empty = request.args.get('include_empty') == '1'
 
     conn = get_connection()
-    
+    ensure_area_kind(conn)
+
     # Get storage locations for this restaurant
     locs = conn.execute(
         "SELECT * FROM storage_locations WHERE location = ? ORDER BY id", (location,)
@@ -481,6 +541,7 @@ def get_count_sheet():
             result.append({
                 'location_id': loc['id'],
                 'location_name': loc['name'],
+                'kind': loc['kind'],
                 'sections': [dict(s) for s in sections],
                 'products': [dict(p) for p in products]
             })

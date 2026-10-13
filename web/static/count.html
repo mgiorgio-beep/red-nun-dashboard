@@ -475,6 +475,12 @@ function inCountType(cat) {
   const isBooze = BOOZE_CATS.includes((cat || '').toUpperCase());
   return COUNT_TYPE === 'booze' ? isBooze : !isBooze;
 }
+// Every area is a food area or a bar area: a food count shows only food areas, a booze
+// count only bar areas. An area of the other kind still shows if it holds this count's items.
+function areaInCountType(sec) {
+  if (COUNT_TYPE === 'all' || !sec.kind) return true;
+  return sec.kind === (COUNT_TYPE === 'booze' ? 'bar' : 'food');
+}
 
 // Booze names without proof, pack and bottle-size noise: "GOSLING BLACK SEAL RUM 80'" -> "Gosling Black Seal Rum".
 function cleanBoozeName(n){
@@ -617,12 +623,12 @@ async function startCount() {
   }
 
   // Filter to the selected count type (food / booze).
-  // Empty areas stay so any shelf can be opened and filled with "+ Add product".
+  // Empty areas of this kind (food / bar) stay so any shelf can be opened and filled with "+ Add product".
   S.sections = sheet;
   if (COUNT_TYPE !== 'all') {
     S.sections = S.sections
       .map(sec => Object.assign({}, sec, { products: (sec.products || []).filter(p => inCountType(p.category)) }))
-      .filter(sec => sec.products.length > 0 || sec.location_id);
+      .filter(sec => sec.products.length > 0 || (sec.location_id && areaInCountType(sec)));
   }
   if (LIST === 'weekly' && !S.sections.some(sec => sec.products.length)) {
     showToast('The weekly list is empty — set it up first', true);
@@ -1310,10 +1316,11 @@ async function addArea(){
   if (!navigator.onLine) { showToast('Adding an area needs a connection', true); return; }
   try {
     const r = await fetch('/api/storage/locations', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
-      body: JSON.stringify({ name: name, location: S.location })});
+      body: JSON.stringify({ name: name, location: S.location,
+        kind: COUNT_TYPE === 'booze' ? 'bar' : COUNT_TYPE === 'food' ? 'food' : undefined })});
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.id) { showToast(d.error || 'Could not add the area', true); return; }
-    const area = { location_id: d.id, location_name: name, sections: [], products: [] };
+    const area = { location_id: d.id, location_name: name, kind: d.kind, sections: [], products: [] };
     const loose = S.sections.findIndex(x => !x.location_id);       // keep "Not on a shelf yet" last
     if (loose >= 0) S.sections.splice(loose, 0, area); else S.sections.push(area);
     saveLocal();
