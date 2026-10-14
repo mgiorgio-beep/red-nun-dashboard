@@ -1794,6 +1794,27 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
             .bp-group-header{background:#f8fafc;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;font-weight:700;font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:#475569}
             .bp-group-header.overdue{background:rgba(239,68,68,.08);color:#b91c1c}
             .bp-group-header.today{background:rgba(245,158,11,.1);color:#b45309}
+            /* Phone: each bill is a card — tick + vendor + balance, invoice # and due date,
+               then invoice date, total and the pay link. !important beats sidebar.css's td rules. */
+            @media(max-width:768px){
+              #bp-thead-row{display:none}
+              #bp-action-bar{flex-wrap:wrap}
+              #bp-invoices-table{display:block}
+              #bp-invoices-table tr{display:block}
+              #bp-invoices-table tr.bp-row{display:grid;grid-template-columns:30px 1fr auto;grid-template-areas:"chk vendor bal" ". num due" ". date age" ". total pay";gap:3px 10px;align-items:center;padding:10px 6px}
+              #bp-invoices-table tr.bp-row td{display:block;padding:0!important;border:0!important;background:none!important;text-align:left!important;white-space:normal!important}
+              #bp-invoices-table td[colspan]{display:block}
+              .bp-c-chk{grid-area:chk}.bp-c-chk input{width:20px;height:20px}
+              .bp-c-vendor{grid-area:vendor;font-size:15px!important;font-weight:600!important}
+              .bp-c-bal{grid-area:bal;font-size:15px!important;text-align:right!important}
+              .bp-c-num{grid-area:num;font-size:12px!important}.bp-c-num::before{content:'Inv '}
+              .bp-c-due{grid-area:due;font-size:12px!important;text-align:right!important}.bp-c-due::before{content:'Due '}
+              .bp-c-date{grid-area:date;font-size:12px!important}.bp-c-date::before{content:'Dated '}
+              .bp-c-age{grid-area:age;text-align:right!important}
+              .bp-c-total{grid-area:total;font-size:12px!important}.bp-c-total::before{content:'Total '}
+              .bp-c-pay{grid-area:pay;text-align:right!important}
+              .bp-c-nopay{visibility:hidden}
+            }
             .bp-group-header.week{background:rgba(56,189,248,.08);color:#0369a1}
             .bp-group-header.next-week{background:rgba(100,116,139,.08);color:#475569}
           </style>
@@ -5886,10 +5907,10 @@ function _bpRowHtml(inv, effectiveDays) {
   var payCell;
   if (isCredit) {
     // Credits are "unused" until applied — they net down the amount due, nothing to pay.
-    payCell = '<td style="padding:8px;text-align:center;white-space:nowrap">' +
+    payCell = '<td class="bp-c-pay" style="padding:8px;text-align:center;white-space:nowrap">' +
       '<span style="display:inline-block;padding:3px 10px;border-radius:12px;background:#22c55e15;color:#16a34a;font-size:11px;font-weight:600">Unused</span></td>';
   } else if (inv.payment_url) {
-    payCell = '<td style="padding:8px;text-align:center;white-space:nowrap">' +
+    payCell = '<td class="bp-c-pay" style="padding:8px;text-align:center;white-space:nowrap">' +
       '<a href="' + inv.payment_url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" ' +
         'title="Open payment link" ' +
         'style="display:inline-block;padding:3px 10px;border-radius:12px;background:#22c55e15;color:#16a34a;font-size:11px;font-weight:600;text-decoration:none">Pay ↗</a>' +
@@ -5900,18 +5921,18 @@ function _bpRowHtml(inv, effectiveDays) {
         'style="color:#16a34a;font-size:11px;margin-left:4px;text-decoration:none;font-weight:600">✓ Paid</a>' +
       '</td>';
   } else {
-    payCell = '<td style="padding:8px;text-align:center;color:var(--text3)">—</td>';
+    payCell = '<td class="bp-c-pay bp-c-nopay" style="padding:8px;text-align:center;color:var(--text3)">—</td>';
   }
-  return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'rgba(0,0,0,0.03)\'" onmouseout="this.style.background=\'\'">' +
-    '<td style="padding:8px"><input type="checkbox" data-id="' + inv.id + '" onchange="bpToggleSelect(this,' + inv.id + ')"' + (_bpSelected.has(inv.id) ? ' checked' : '') + '></td>' +
-    '<td style="padding:8px;color:#111827;font-weight:500">' + (inv.vendor_name||'—') +
+  return '<tr class="bp-row" style="border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'rgba(0,0,0,0.03)\'" onmouseout="this.style.background=\'\'">' +
+    '<td class="bp-c-chk" style="padding:8px"><input type="checkbox" data-id="' + inv.id + '" onchange="bpToggleSelect(this,' + inv.id + ')"' + (_bpSelected.has(inv.id) ? ' checked' : '') + '></td>' +
+    '<td class="bp-c-vendor" style="padding:8px;color:#111827;font-weight:500">' + (inv.vendor_name||'—') +
       (isCredit ? ' <span style="display:inline-block;padding:1px 7px;border-radius:10px;background:var(--red-soft,#ef444415);color:var(--red);font-size:10px;font-weight:700;vertical-align:middle">CREDIT</span>' : '') + '</td>' +
-    '<td style="padding:8px;color:var(--text3)">' + invNumLink(inv.id, inv.invoice_number) + '</td>' +
-    '<td style="padding:8px;color:var(--text3)">' + (inv.invoice_date||'—') + '</td>' +
-    '<td style="padding:8px;color:' + dueColor + '">' + (inv.due_date||'—') + dueSuffix + '</td>' +
-    '<td style="padding:8px;text-align:right;color:' + (isCredit ? 'var(--red)' : '#111827') + '">' + _bpMoney(inv.total||0) + '</td>' +
-    '<td style="padding:8px;text-align:right;color:' + (isCredit ? 'var(--red)' : '#111827') + ';font-weight:600">' + _bpMoney(bal) + '</td>' +
-    '<td style="padding:8px;text-align:center" title="Days since invoice date"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;color:' + ageColor + ';background:' + ageColor + '15">' + ageLabel + '</span></td>' +
+    '<td class="bp-c-num" style="padding:8px;color:var(--text3)">' + invNumLink(inv.id, inv.invoice_number) + '</td>' +
+    '<td class="bp-c-date" style="padding:8px;color:var(--text3)">' + (inv.invoice_date||'—') + '</td>' +
+    '<td class="bp-c-due" style="padding:8px;color:' + dueColor + '">' + (inv.due_date||'—') + dueSuffix + '</td>' +
+    '<td class="bp-c-total" style="padding:8px;text-align:right;color:' + (isCredit ? 'var(--red)' : '#111827') + '">' + _bpMoney(inv.total||0) + '</td>' +
+    '<td class="bp-c-bal" style="padding:8px;text-align:right;color:' + (isCredit ? 'var(--red)' : '#111827') + ';font-weight:600">' + _bpMoney(bal) + '</td>' +
+    '<td class="bp-c-age" style="padding:8px;text-align:center" title="Days since invoice date"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;color:' + ageColor + ';background:' + ageColor + '15">' + ageLabel + '</span></td>' +
     payCell +
     '</tr>';
 }
