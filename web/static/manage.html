@@ -467,125 +467,75 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
       <!-- Inventory View (Consolidated) -->
       <div class="view" id="view-inv">
 
-        <!-- ── SECTION A: Completed Inventories ─────────────────────── -->
-        <div style="margin-bottom:24px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-            <div style="font-size:18px;font-weight:700">Completed Inventories</div>
-            <select id="fc-loc-filter" onchange="loadCompletedCounts()" style="background:var(--card-bg);border:1px solid var(--border);color:var(--text1);padding:6px 10px;border-radius:8px;font-size:13px">
-              <option value="">Both Locations</option>
-              <option value="chatham">Chatham</option>
-              <option value="dennis">Dennis Port</option>
-            </select>
-          </div>
-          <div id="fc-counts-table" style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden">
-            <div style="padding:40px;text-align:center;color:var(--text3)">Loading...</div>
-          </div>
+        <!-- ── Completed counts, Food and Booze together (2026-10-14) ─────────
+             The live counts (inventory_counts, from /count). Cost between two counts
+             of the same house + type, actual vs theoretical: reports/count_cost.py -->
+        <style>
+          .cc-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+          .cc-sel{background:var(--card-bg);border:1px solid var(--border);color:var(--text1);padding:6px 10px;border-radius:8px;font-size:13px}
+          .cc-costs{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:22px}
+          .cc-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+          .cc-card h3{font-size:15px;font-weight:700;margin:0 0 2px}
+          .cc-card .cc-sub{font-size:12px;color:var(--text3);margin-bottom:12px}
+          .cc-line{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px}
+          .cc-line span:first-child{color:var(--text2)}
+          .cc-line span:last-child{font-variant-numeric:tabular-nums;font-weight:600}
+          .cc-line.tot{border-top:1px solid var(--border);margin-top:4px;padding-top:8px}
+          .cc-line.tot span{color:var(--text1);font-weight:700}
+          .cc-pcts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+          .cc-pct{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center}
+          .cc-pct .k{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
+          .cc-pct .v{font-size:22px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+          .cc-pct .n{font-size:11px;color:var(--text3);margin-top:2px}
+          .cc-note{font-size:12px;color:var(--text3);margin-top:10px;line-height:1.45}
+          .cc-wait{font-size:13px;color:var(--text2);line-height:1.5}
+          .cc-tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+          .cc-tag.food{background:rgba(48,209,88,.14);color:#1f8f3e}
+          .cc-tag.booze{background:rgba(10,132,255,.12);color:#0a63c2}
+          .cc-tag.other{background:rgba(0,0,0,.06);color:var(--text2)}
+          #cc-list tbody tr{cursor:pointer}
+          .cc-warn{color:#c2410c}
+          .cc-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;overflow-y:auto;padding:16px}
+          .cc-modal-box{max-width:860px;margin:24px auto;background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:20px}
+          .cc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+          .cc-chip{padding:4px 10px;border-radius:999px;background:var(--card-bg);border:1px solid var(--border);font-size:12px}
+          .cc-area{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:14px 0 4px;display:flex;justify-content:space-between}
+          .cc-items{width:100%;font-size:13px;border-collapse:collapse}
+          .cc-items td,.cc-items th{padding:5px 8px;border-bottom:1px solid var(--border)}
+          .cc-items th{text-align:left;color:var(--text3);font-weight:600;font-size:12px}
+          .cc-items .r{text-align:right;font-variant-numeric:tabular-nums}
+        </style>
+
+        <div class="cc-head">
+          <div style="font-size:18px;font-weight:700">Cost Between Counts</div>
+          <select id="cc-loc" class="cc-sel" onchange="ccLoad()">
+            <option value="">Both Locations</option>
+            <option value="chatham">Chatham</option>
+            <option value="dennis">Dennis Port</option>
+          </select>
+        </div>
+        <div id="cc-costs" class="cc-costs"></div>
+
+        <div class="cc-head"><div style="font-size:18px;font-weight:700">Completed Counts</div></div>
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px">
+          <table class="data-table rn-cards" style="width:100%">
+            <thead><tr><th>Date</th><th>Location</th><th>Type</th><th>Items</th><th style="text-align:right">Value</th><th>Counted by</th><th></th></tr></thead>
+            <tbody id="cc-list"><tr><td colspan="7" style="padding:30px;text-align:center;color:var(--text3)">Loading…</td></tr></tbody>
+          </table>
         </div>
 
-        <!-- ── SECTION B: Food Cost Calculator ──────────────────────── -->
-        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px">
-          <div style="font-size:16px;font-weight:700;margin-bottom:16px">Food Cost Calculator</div>
-
-          <!-- Type toggle -->
-          <div style="display:flex;gap:6px;margin-bottom:16px">
-            <button class="btn fc-type-btn active" data-type="food" onclick="fcSetType(this)" style="flex:1;padding:8px 0;font-size:13px">Food</button>
-            <button class="btn fc-type-btn" data-type="beverage" onclick="fcSetType(this)" style="flex:1;padding:8px 0;font-size:13px">Beverage</button>
-            <button class="btn fc-type-btn" data-type="all" onclick="fcSetType(this)" style="flex:1;padding:8px 0;font-size:13px">All</button>
-          </div>
-
-          <!-- Inventory selectors -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-            <div>
-              <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Beginning Inventory</div>
-              <select id="fc-begin" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text1);padding:8px 10px;border-radius:8px;font-size:13px">
-                <option value="">-- Select --</option>
-              </select>
+        <div id="cc-modal" class="cc-modal" onclick="if(event.target===this)ccClose()">
+          <div class="cc-modal-box">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+              <div>
+                <div style="font-size:17px;font-weight:700" id="cc-m-title">Count</div>
+                <div style="font-size:13px;color:var(--text3);margin-top:2px" id="cc-m-sub"></div>
+              </div>
+              <button onclick="ccClose()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:24px;line-height:1">×</button>
             </div>
-            <div>
-              <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Ending Inventory</div>
-              <select id="fc-end" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text1);padding:8px 10px;border-radius:8px;font-size:13px">
-                <option value="">-- Select --</option>
-              </select>
-            </div>
-          </div>
-
-          <div id="fc-input-error" style="display:none;padding:8px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;font-size:13px;color:#ef4444;margin-bottom:12px"></div>
-
-          <button class="btn btn-primary" onclick="calculateFoodCost()" style="width:100%;padding:10px;font-size:14px;font-weight:600">Calculate Food Cost</button>
-        </div>
-
-        <!-- ── SECTION C: Results ────────────────────────────────────── -->
-        <div id="fc-results" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px">
-          <div style="font-size:14px;color:var(--text3);margin-bottom:16px" id="fc-period-label"></div>
-
-          <!-- Calculation lines -->
-          <div style="font-family:monospace;font-size:14px">
-            <div onclick="fcDrillDown('begin')" style="display:flex;justify-content:space-between;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(0,0,0,0.04)'" onmouseout="this.style.background='transparent'">
-              <span style="color:var(--text2)">Beginning Inventory</span>
-              <span id="fc-begin-val" style="color:var(--text1);font-weight:600"></span>
-            </div>
-            <div onclick="fcDrillDown('purchases')" style="display:flex;justify-content:space-between;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(0,0,0,0.04)'" onmouseout="this.style.background='transparent'">
-              <span style="color:var(--text2)">+ Purchases <span id="fc-invoice-count" style="color:var(--text3);font-size:12px"></span></span>
-              <span id="fc-purchases-val" style="color:var(--text1);font-weight:600"></span>
-            </div>
-            <div onclick="fcDrillDown('end')" style="display:flex;justify-content:space-between;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(0,0,0,0.04)'" onmouseout="this.style.background='transparent'">
-              <span style="color:var(--text2)">− Ending Inventory</span>
-              <span id="fc-end-val" style="color:var(--text1);font-weight:600"></span>
-            </div>
-            <div style="height:1px;background:var(--border);margin:4px 0"></div>
-            <div style="display:flex;justify-content:space-between;padding:10px 12px">
-              <span style="color:var(--text2)">= Cost of Goods</span>
-              <span id="fc-cogs-val" style="color:var(--text1);font-weight:700"></span>
-            </div>
-            <div onclick="fcDrillDown('sales')" style="display:flex;justify-content:space-between;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(0,0,0,0.04)'" onmouseout="this.style.background='transparent'">
-              <span style="color:var(--text2)">÷ Net Sales <span id="fc-days-label" style="color:var(--text3);font-size:12px"></span></span>
-              <span id="fc-sales-val" style="color:var(--text1);font-weight:600"></span>
-            </div>
-            <div style="height:1px;background:var(--border);margin:4px 0"></div>
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 12px">
-              <span style="color:var(--text2);font-size:15px;font-weight:700" id="fc-type-label">FOOD COST %</span>
-              <span id="fc-pct-val" style="font-size:32px;font-weight:900"></span>
-            </div>
-          </div>
-          <div id="fc-sales-note" style="font-size:11px;color:var(--text3);margin-top:8px;padding:0 4px"></div>
-        </div>
-
-        <!-- ── SECTION D: Drill-down panels ─────────────────────────── -->
-        <!-- Inventory drill-down (begin/end) -->
-        <div id="fc-drill-inv" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-            <div style="font-size:15px;font-weight:700" id="fc-drill-inv-title">Inventory Detail</div>
-            <button onclick="document.getElementById('fc-drill-inv').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">×</button>
-          </div>
-          <div id="fc-drill-inv-body"></div>
-        </div>
-
-        <!-- Purchases drill-down -->
-        <div id="fc-drill-purchases" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-            <div style="font-size:15px;font-weight:700">Purchases — Invoice List</div>
-            <button onclick="document.getElementById('fc-drill-purchases').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">×</button>
-          </div>
-          <div id="fc-drill-purchases-body"></div>
-        </div>
-
-        <!-- Sales drill-down -->
-        <div id="fc-drill-sales" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-            <div style="font-size:15px;font-weight:700">Daily Sales Breakdown</div>
-            <button onclick="document.getElementById('fc-drill-sales').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">×</button>
-          </div>
-          <div id="fc-drill-sales-body"></div>
-        </div>
-
-        <!-- Inventory detail modal -->
-        <div id="fc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;overflow-y:auto">
-          <div style="max-width:640px;margin:40px auto;background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:24px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-              <div style="font-size:16px;font-weight:700" id="fc-modal-title">Inventory Detail</div>
-              <button onclick="document.getElementById('fc-modal').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:22px">×</button>
-            </div>
-            <div id="fc-modal-body"></div>
+            <div id="cc-m-chips" class="cc-chips"></div>
+            <input id="cc-m-q" class="cc-sel" style="width:100%;padding:9px 12px;font-size:14px" placeholder="Find a product…" oninput="ccRenderItems()">
+            <div id="cc-m-body"></div>
           </div>
         </div>
 
@@ -4906,47 +4856,12 @@ async function csLoadHistory() {
 // ============================================
 // INVENTORY TAB SWITCHER
 // ============================================
+// /manage?tab=inv&count=32 (the count page's history links) opens that count. Read at
+// load: showView rewrites the address before invInit runs.
+var _ccStartCount = parseInt(new URLSearchParams(location.search).get('count'), 10) || 0;
 function invInit() {
-  loadCompletedCounts();
-}
-
-// ============================================
-// FOOD COST CALCULATOR
-// ============================================
-
-var _fcData = null;       // last food-cost API response
-var _fcCounts = [];       // last completed-counts list
-var _fcType = 'food';     // current cost type
-
-function fcSetType(btn) {
-  document.querySelectorAll('.fc-type-btn').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  _fcType = btn.dataset.type;
-  var lbl = document.getElementById('fc-type-label');
-  if (lbl) lbl.textContent = _fcType === 'food' ? 'FOOD COST %' : _fcType === 'beverage' ? 'BEV COST %' : 'TOTAL COST %';
-  // Re-run calculation if we already have sessions selected
-  var b = document.getElementById('fc-begin').value;
-  var e = document.getElementById('fc-end').value;
-  if (b && e) calculateFoodCost();
-}
-
-async function loadCompletedCounts() {
-  var loc = document.getElementById('fc-loc-filter') ? document.getElementById('fc-loc-filter').value : '';
-  var url = '/api/inventory/completed-counts';
-  if (loc) url += '?location=' + encodeURIComponent(loc);
-
-  var tableEl = document.getElementById('fc-counts-table');
-  if (tableEl) tableEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">Loading...</div>';
-
-  try {
-    var resp = await fetch(url);
-    var counts = await resp.json();
-    _fcCounts = counts;
-    renderCompletedCounts(counts);
-    populateCountDropdowns(counts);
-  } catch(e) {
-    if (tableEl) tableEl.innerHTML = '<div style="padding:30px;text-align:center;color:#ef4444">Failed to load counts</div>';
-  }
+  ccLoad();
+  if (_ccStartCount) { ccOpen(_ccStartCount); _ccStartCount = 0; }
 }
 
 function _fmtDate(iso) {
@@ -4968,284 +4883,184 @@ function _fmtMoney(n) {
   return '$' + n.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
-function renderCompletedCounts(counts) {
-  var el = document.getElementById('fc-counts-table');
-  if (!el) return;
-  if (!counts || counts.length === 0) {
-    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">' +
-      'No completed inventories yet.<br><span style="font-size:13px">Use Smart Count on mobile to run your first inventory.</span></div>';
+// ============================================
+// COMPLETED COUNTS + COST BETWEEN COUNTS
+// ============================================
+// Food and Booze counts on one list (/api/count-sessions/completed). Two counts of
+// the same house and type give actual cost; food also shows theoretical (recipes).
+var _cc = { counts: [], detail: null };
+var CC_TYPE = { food: 'Food', booze: 'Booze', weekly: 'Weekly', full: 'Full' };
+var CC_CATS = { FOOD:'Food', BEER:'Beer', LIQUOR:'Liquor', WINE:'Wine', NA_BEVERAGES:'NA Bev',
+  TOGO_SUPPLIES:'To-go supplies', DR_SUPPLIES:'Dining room supplies', KITCHEN_SUPPLIES:'Kitchen supplies' };
+
+function ccEsc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+function ccLoc(l) { return l === 'dennis' ? 'Dennis Port' : 'Chatham'; }
+function ccShort(iso) { var p = (iso || '').split('-'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1]) - 1] + ' ' + parseInt(p[2]); }
+function ccMoney0(n) { return '$' + Math.round(n || 0).toLocaleString(); }
+function ccTag(t) { return '<span class="cc-tag ' + (t === 'food' || t === 'booze' ? t : 'other') + '">' + (CC_TYPE[t] || t) + '</span>'; }
+
+async function ccLoad() {
+  var loc = document.getElementById('cc-loc').value;
+  var list = document.getElementById('cc-list');
+  try {
+    var r = await fetch('/api/count-sessions/completed' + (loc ? '?location=' + loc : ''), { credentials: 'include' });
+    _cc.counts = await r.json();
+    if (!Array.isArray(_cc.counts)) throw new Error();
+  } catch (e) {
+    list.innerHTML = '<tr><td colspan="7" style="padding:30px;text-align:center;color:#ef4444">Could not load counts</td></tr>';
     return;
   }
-  var h = '<table class="data-table" style="width:100%"><thead><tr>' +
-    '<th>Date</th><th>Location</th><th>Items</th><th>Total Value</th><th>Source</th><th></th>' +
-    '</tr></thead><tbody>';
-  counts.forEach(function(c) {
-    var src = c.ai_session_id ? '<span style="color:#22c55e;font-size:12px;font-weight:600">Smart Count</span>'
-                              : '<span style="color:var(--text3);font-size:12px">Manual</span>';
-    h += '<tr>' +
-      '<td>' + _fmtDate(c.completed_at) + '</td>' +
-      '<td style="text-transform:capitalize">' + (c.location === 'dennis' ? 'Dennis Port' : c.location) + '</td>' +
-      '<td>' + (c.item_count || 0) + '</td>' +
-      '<td style="font-family:monospace">' + _fmtMoney(c.total_value) + '</td>' +
-      '<td>' + src + '</td>' +
-      '<td><button class="btn" onclick="loadCountDetail(' + c.id + ')" style="padding:4px 10px;font-size:12px">View</button></td>' +
-      '</tr>';
-  });
-  h += '</tbody></table>';
-  el.innerHTML = h;
+  ccRenderList();
+  ccRenderCosts();
 }
 
-function populateCountDropdowns(counts) {
-  var beginSel = document.getElementById('fc-begin');
-  var endSel   = document.getElementById('fc-end');
-  if (!beginSel || !endSel) return;
-  var opts = '<option value="">-- Select --</option>';
-  counts.forEach(function(c) {
-    var loc = c.location === 'dennis' ? 'Dennis Port' : c.location.charAt(0).toUpperCase() + c.location.slice(1);
-    var label = _fmtDate(c.completed_at) + ' — ' + loc + ' (' + (c.item_count || 0) + ' items, ' + _fmtMoney(c.total_value) + ')';
-    opts += '<option value="' + c.id + '">' + label + '</option>';
-  });
-  beginSel.innerHTML = opts;
-  endSel.innerHTML   = opts;
-  // Auto-select most recent as end, second most recent as begin
-  if (counts.length >= 2) {
-    endSel.value   = counts[0].id;
-    beginSel.value = counts[1].id;
-  } else if (counts.length === 1) {
-    endSel.value = counts[0].id;
+function ccRenderList() {
+  var list = document.getElementById('cc-list');
+  if (!_cc.counts.length) {
+    list.innerHTML = '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--text3)">No completed counts yet. Run a Food or Booze count from the Count page.</td></tr>';
+    return;
   }
+  list.innerHTML = _cc.counts.map(function(c) {
+    return '<tr onclick="ccOpen(' + c.id + ')">' +
+      '<td data-label="Date">' + _fmtDate(c.count_date) + '</td>' +
+      '<td data-label="Location">' + ccLoc(c.location) + '</td>' +
+      '<td data-label="Type">' + ccTag(c.type) + '</td>' +
+      '<td data-label="Items">' + c.products + (c.unpriced ? ' <span class="cc-warn" style="font-size:12px">· ' + c.unpriced + ' need a price</span>' : '') + '</td>' +
+      '<td data-label="Value" style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">' + _fmtMoney(c.total_value) + '</td>' +
+      '<td data-label="Counted by" style="color:var(--text3)">' + ccEsc(c.created_by || '') + '</td>' +
+      '<td><button class="btn" style="padding:4px 12px;font-size:12px" onclick="event.stopPropagation();ccOpen(' + c.id + ')">Open</button></td></tr>';
+  }).join('');
 }
 
-async function loadCountDetail(sessionId) {
-  var modal = document.getElementById('fc-modal');
-  var title = document.getElementById('fc-modal-title');
-  var body  = document.getElementById('fc-modal-body');
-  if (!modal) return;
-  title.textContent = 'Loading...';
-  body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Loading...</div>';
-  modal.style.display = 'block';
+// One cost card per house + type (Food, Booze), newest two counts by default.
+function ccRenderCosts() {
+  var el = document.getElementById('cc-costs');
+  var groups = {};
+  _cc.counts.forEach(function(c) {
+    if (c.type !== 'food' && c.type !== 'booze') return;
+    (groups[c.location + ':' + c.type] = groups[c.location + ':' + c.type] || []).push(c);
+  });
+  var keys = Object.keys(groups).sort(function(a, b) {
+    var A = a.split(':'), B = b.split(':');
+    return A[0] === B[0] ? (A[1] === 'food' ? -1 : 1) : (A[0] < B[0] ? -1 : 1);
+  });
+  if (!keys.length) { el.innerHTML = '<div class="cc-card cc-wait">Cost appears here once there are Food or Booze counts.</div>'; return; }
+  el.innerHTML = keys.map(function(k) {
+    var g = groups[k], c0 = g[0], label = (c0.type === 'food' ? 'Food' : 'Booze') + ' cost · ' + ccLoc(c0.location);
+    if (g.length < 2) {
+      return '<div class="cc-card"><h3>' + label + '</h3><div class="cc-sub">1 count so far</div>' +
+        '<div class="cc-wait">' + (c0.type === 'food' ? 'Food' : 'Booze') + ' count on <b>' + _fmtDate(c0.count_date) + '</b>: ' +
+        _fmtMoney(c0.cost_value) + ' on hand.<br>The next ' + (c0.type === 'food' ? 'Food' : 'Booze') +
+        ' count closes the period and gives the actual cost' + (c0.type === 'food' ? ', next to theoretical (what the recipes say it should have been).' : '.') + '</div></div>';
+    }
+    var opts = function(sel) {
+      return g.map(function(c) { return '<option value="' + c.id + '"' + (c.id === sel ? ' selected' : '') + '>' + _fmtDate(c.count_date) + '</option>'; }).join('');
+    };
+    return '<div class="cc-card" id="cc-card-' + k.replace(':', '-') + '"><h3>' + label + '</h3>' +
+      '<div class="cc-sub">From <select class="cc-sel" style="padding:3px 6px;font-size:12px" onchange="ccCost(\'' + k + '\')" data-role="b">' + opts(g[1].id) + '</select>' +
+      ' to <select class="cc-sel" style="padding:3px 6px;font-size:12px" onchange="ccCost(\'' + k + '\')" data-role="e">' + opts(g[0].id) + '</select></div>' +
+      '<div class="cc-body"><div class="cc-wait">Calculating…</div></div></div>';
+  }).join('');
+  keys.forEach(function(k) { if (groups[k].length >= 2) ccCost(k); });
+}
 
+function ccPctColor(p, type) {
+  if (p == null) return 'var(--text3)';
+  var t = type === 'booze' ? [22, 26] : [30, 34];
+  return p < t[0] ? '#1f8f3e' : p < t[1] ? '#b45309' : '#dc2626';
+}
+
+async function ccCost(k) {
+  var card = document.getElementById('cc-card-' + k.replace(':', '-'));
+  if (!card) return;
+  var b = card.querySelector('[data-role=b]').value, e = card.querySelector('[data-role=e]').value;
+  var body = card.querySelector('.cc-body');
+  if (b === e) { body.innerHTML = '<div class="cc-wait">Pick two different counts.</div>'; return; }
+  body.innerHTML = '<div class="cc-wait">Calculating…</div>';
+  var d;
   try {
-    var resp = await fetch('/api/inventory/completed-counts/' + sessionId);
-    var data = await resp.json();
-    var sess = data.session;
-    var loc = sess.location === 'dennis' ? 'Dennis Port' : sess.location.charAt(0).toUpperCase() + sess.location.slice(1);
-    title.textContent = loc + ' — ' + _fmtDate(sess.completed_at);
-
-    var h = '<div style="text-align:right;font-size:13px;color:var(--text3);margin-bottom:12px">Total: <strong style="color:var(--text1)">' + _fmtMoney(data.total_value) + '</strong></div>';
-    var byLoc = data.by_location || {};
-    Object.keys(byLoc).sort().forEach(function(sloc) {
-      var items = byLoc[sloc];
-      var subtotal = items.reduce(function(s, i) { return s + (i.line_value || 0); }, 0);
-      h += '<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;padding:8px 0 4px">' + sloc + ' — ' + _fmtMoney(subtotal) + '</div>';
-      h += '<table style="width:100%;font-size:13px;margin-bottom:12px"><thead><tr>' +
-        '<th style="text-align:left;padding:4px 8px;color:var(--text3);font-weight:600">Product</th>' +
-        '<th style="text-align:right;padding:4px 8px;color:var(--text3);font-weight:600">Qty</th>' +
-        '<th style="text-align:right;padding:4px 8px;color:var(--text3);font-weight:600">Unit Price</th>' +
-        '<th style="text-align:right;padding:4px 8px;color:var(--text3);font-weight:600">Value</th>' +
-        '</tr></thead><tbody>';
-      items.forEach(function(item) {
-        h += '<tr>' +
-          '<td style="padding:4px 8px">' + (item.product || '—') + '</td>' +
-          '<td style="text-align:right;padding:4px 8px">' + (item.qty || 0) + (item.unit ? ' ' + item.unit : '') + '</td>' +
-          '<td style="text-align:right;padding:4px 8px;font-family:monospace">' + _fmtMoney(item.unit_price) + '</td>' +
-          '<td style="text-align:right;padding:4px 8px;font-family:monospace">' + _fmtMoney(item.line_value) + '</td>' +
-          '</tr>';
-      });
-      h += '</tbody></table>';
-    });
-    body.innerHTML = h;
-  } catch(e) {
-    body.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444">Failed to load detail</div>';
-  }
+    var r = await fetch('/api/count-sessions/cost?begin=' + b + '&end=' + e, { credentials: 'include' });
+    d = await r.json();
+  } catch (err) { d = { error: 'Could not calculate' }; }
+  if (d.error) { body.innerHTML = '<div class="cc-wait cc-warn">' + ccEsc(d.error) + '</div>'; return; }
+  var food = d.type === 'food', word = food ? 'Food' : 'Beer, liquor & wine';
+  var th = d.theoretical || {};
+  var h =
+    '<div class="cc-line"><span>Beginning count, ' + ccShort(d.begin.date) + '</span><span>' + _fmtMoney(d.begin.cost_value) + '</span></div>' +
+    '<div class="cc-line"><span>+ Purchases, ' + ccShort(d.purchase_dates[0]) + '–' + ccShort(d.purchase_dates[1]) + '</span><span>' + _fmtMoney(d.purchases) + '</span></div>' +
+    '<div class="cc-line"><span>− Ending count, ' + ccShort(d.end.date) + '</span><span>' + _fmtMoney(d.end.cost_value) + '</span></div>' +
+    '<div class="cc-line tot"><span>= ' + word + ' used</span><span>' + _fmtMoney(d.actual_cost) + '</span></div>' +
+    '<div class="cc-line"><span>' + word + ' sales, ' + ccShort(d.sales_dates[0]) + '–' + ccShort(d.sales_dates[1]) + ' (' + d.sales_days + ' days)</span><span>' + _fmtMoney(d.sales) + '</span></div>' +
+    '<div class="cc-pcts">' +
+      '<div class="cc-pct"><div class="k">Actual</div><div class="v" style="color:' + ccPctColor(d.actual_pct, d.type) + '">' + (d.actual_pct == null ? '—' : d.actual_pct + '%') + '</div><div class="n">counts + invoices</div></div>' +
+      (food
+        ? '<div class="cc-pct"><div class="k">Theoretical</div><div class="v">' + (th.pct == null ? '—' : th.pct + '%') + '</div><div class="n">' + (th.coverage_pct == null ? 'recipes' : 'recipes cover ' + Math.round(th.coverage_pct) + '% of sales') + '</div></div>' +
+          '<div class="cc-pct"><div class="k">Variance</div><div class="v" style="color:' + (d.variance_pct == null ? 'var(--text3)' : d.variance_pct > 3 ? '#dc2626' : d.variance_pct > 1.5 ? '#b45309' : '#1f8f3e') + '">' +
+            (d.variance_pct == null ? '—' : (d.variance_pct > 0 ? '+' : '') + d.variance_pct + ' pts') + '</div><div class="n">' + (d.variance_pct == null ? '' : '≈ ' + ccMoney0(d.variance_pct / 100 * d.sales)) + '</div></div>'
+        : '<div class="cc-pct" style="grid-column:span 2"><div class="k">Theoretical</div><div class="v" style="font-size:14px;color:var(--text3);padding:6px 0">not yet</div><div class="n">bar recipes aren’t costed reliably yet</div></div>') +
+    '</div>';
+  var notes = [];
+  if (d.begin.unpriced || d.end.unpriced) notes.push((d.begin.unpriced + d.end.unpriced) + ' counted lines have no price yet and count as $0 (open the count to see which).');
+  if (food) notes.push('Food only: supplies, NA beverages and beer a food count walks are left out, the same as the P&L.');
+  if (food && d.variance_pct != null) notes.push('Variance is the gap between what was used and what the recipes say sold: waste, portions, comps, theft, or items without a recipe.');
+  if (d.sales_days < 3) notes.push('A short period swings a lot; a week or more reads better.');
+  h += '<div class="cc-note">' + notes.join('<br>') + '</div>';
+  body.innerHTML = h;
 }
 
-async function calculateFoodCost() {
-  var beginId = document.getElementById('fc-begin').value;
-  var endId   = document.getElementById('fc-end').value;
-  var errEl   = document.getElementById('fc-input-error');
-
-  if (!beginId || !endId) { errEl.textContent = 'Select both a beginning and ending inventory.'; errEl.style.display = 'block'; return; }
-  if (beginId === endId)  { errEl.textContent = 'Beginning and ending inventories must be different.'; errEl.style.display = 'block'; return; }
-  errEl.style.display = 'none';
-
-  // Warn if different locations
-  var bCount = _fcCounts.find(function(c) { return c.id == beginId; });
-  var eCount = _fcCounts.find(function(c) { return c.id == endId; });
-  if (bCount && eCount && bCount.location !== eCount.location) {
-    if (!confirm('These inventories are from different locations (' + bCount.location + ' vs ' + eCount.location + '). Continue?')) return;
-  }
-
-  var btn = document.querySelector('#view-inv .btn-primary[onclick="calculateFoodCost()"]');
-  if (btn) { btn.disabled = true; btn.textContent = 'Calculating...'; }
-
+// ── One count, opened ─────────────────────────────────────────────────────
+async function ccOpen(id) {
+  var m = document.getElementById('cc-modal');
+  document.getElementById('cc-m-title').textContent = 'Loading…';
+  document.getElementById('cc-m-sub').textContent = '';
+  document.getElementById('cc-m-chips').innerHTML = '';
+  document.getElementById('cc-m-body').innerHTML = '';
+  document.getElementById('cc-m-q').value = '';
+  m.style.display = 'block';
   try {
-    var loc = (bCount && bCount.location) || '';
-    var url = '/api/inventory/food-cost?begin=' + beginId + '&end=' + endId + '&type=' + _fcType;
-    if (loc) url += '&location=' + encodeURIComponent(loc);
-
-    var resp = await fetch(url);
-    var data = await resp.json();
-    if (data.error) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
-    _fcData = data;
-    renderFoodCostResults(data);
-  } catch(e) {
-    errEl.textContent = 'Calculation failed. Please try again.'; errEl.style.display = 'block';
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Calculate Food Cost'; }
+    var r = await fetch('/api/count-sessions/' + id, { credentials: 'include' });
+    _cc.detail = await r.json();
+    if (_cc.detail.error) throw new Error(_cc.detail.error);
+  } catch (e) {
+    document.getElementById('cc-m-title').textContent = 'Could not open this count';
+    return;
   }
+  var d = _cc.detail;
+  document.getElementById('cc-m-title').innerHTML = (CC_TYPE[d.type] || 'Full') + ' count · ' + ccLoc(d.location) + ' · ' + _fmtDate(d.count_date);
+  document.getElementById('cc-m-sub').innerHTML = d.products + ' products · <b style="color:var(--text1)">' + _fmtMoney(d.total_value) + '</b>' +
+    (d.created_by ? ' · counted by ' + ccEsc(d.created_by) : '') +
+    (d.unpriced ? ' · <span class="cc-warn">' + d.unpriced + ' need a price</span>' : '');
+  document.getElementById('cc-m-chips').innerHTML = d.by_category.map(function(c) {
+    return '<span class="cc-chip">' + ccEsc(CC_CATS[c.category] || c.category) + ' ' + _fmtMoney(c.value) + '</span>';
+  }).join('');
+  ccRenderItems();
 }
 
-function renderFoodCostResults(data) {
-  var el = document.getElementById('fc-results');
-  if (!el) return;
-
-  // Period label
-  var locLabel = data.location === 'dennis' ? 'Dennis Port' : (data.location || '');
-  locLabel = locLabel.charAt(0).toUpperCase() + locLabel.slice(1);
-  document.getElementById('fc-period-label').textContent =
-    _fmtDate(data.period_start) + ' \u2013 ' + _fmtDate(data.period_end) + ' \u2022 ' + locLabel;
-
-  document.getElementById('fc-begin-val').textContent     = _fmtMoney(data.beginning_inventory.value);
-  // Purchases are netted for stock moved between the houses (transfers page)
-  var _adj = data.purchases.adjusted_total != null ? data.purchases.adjusted_total : data.purchases.total;
-  document.getElementById('fc-purchases-val').textContent = _fmtMoney(_adj);
-  document.getElementById('fc-invoice-count').textContent = '(' + data.purchases.invoice_count + ' invoices' +
-    (data.purchases.transfers_count ? ' ' + _fmtMoney(data.purchases.total) + ', transfers +' + _fmtMoney(data.purchases.transfers_in) +
-      ' / \u2212' + _fmtMoney(data.purchases.transfers_out) + ' = adjusted' : '') +
-    (data.waste && data.waste.loss ? '; logged waste ' + _fmtMoney(data.waste.loss) + ' (already inside)' : '') + ')';
-  document.getElementById('fc-end-val').textContent       = _fmtMoney(data.ending_inventory.value);
-  document.getElementById('fc-cogs-val').textContent      = _fmtMoney(data.food_cost);
-  document.getElementById('fc-sales-val').textContent     = _fmtMoney(data.net_sales);
-  document.getElementById('fc-days-label').textContent    = '(' + (data.num_days || 0) + ' days)';
-
-  var pctEl = document.getElementById('fc-pct-val');
-  var pct   = parseFloat(data.food_cost_pct) || 0;
-  var thresholds = _fcType === 'beverage'
-    ? [[20,'#22c55e'],[25,'#f59e0b'],[30,'#f97316'],[Infinity,'#ef4444']]
-    : [[28,'#22c55e'],[32,'#f59e0b'],[35,'#f97316'],[Infinity,'#ef4444']];
-  var color = thresholds.find(function(t) { return pct < t[0]; })[1];
-  pctEl.textContent = pct.toFixed(1) + '%';
-  pctEl.style.color = color;
-
-  var typeLabel = document.getElementById('fc-type-label');
-  if (typeLabel) typeLabel.textContent = _fcType === 'food' ? 'FOOD COST %' : _fcType === 'beverage' ? 'BEV COST %' : 'TOTAL COST %';
-
-  var noteEl = document.getElementById('fc-sales-note');
-  if (noteEl) noteEl.textContent = data.sales_note || '';
-
-  el.style.display = 'block';
-  // Hide old drill-downs
-  ['fc-drill-inv','fc-drill-purchases','fc-drill-sales'].forEach(function(id) {
-    var d = document.getElementById(id); if (d) d.style.display = 'none';
-  });
-  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+function ccRenderItems() {
+  var d = _cc.detail; if (!d || !d.items) return;
+  var q = document.getElementById('cc-m-q').value.trim().toLowerCase();
+  var items = q ? d.items.filter(function(i) { return (i.product || '').toLowerCase().indexOf(q) !== -1; }) : d.items;
+  var byArea = {}, order = [];
+  items.forEach(function(i) { if (!byArea[i.area]) { byArea[i.area] = []; order.push(i.area); } byArea[i.area].push(i); });
+  var h = order.map(function(a) {
+    var rows = byArea[a], sub = rows.reduce(function(s, i) { return s + (i.value || 0); }, 0);
+    return '<div class="cc-area"><span>' + ccEsc(a) + '</span><span>' + _fmtMoney(sub) + '</span></div>' +
+      '<table class="cc-items rn-cards"><thead><tr><th>Product</th><th>Shelf</th><th class="r">Qty</th><th class="r">Unit cost</th><th class="r">Value</th></tr></thead><tbody>' +
+      rows.map(function(i) {
+        return '<tr><td data-label="Product">' + ccEsc(i.product) + '</td>' +
+          '<td data-label="Shelf" style="color:var(--text3)">' + ccEsc(i.shelf || '') + '</td>' +
+          '<td data-label="Qty" class="r">' + (+i.qty.toFixed(2)) + ' ' + ccEsc(i.unit || '') + '</td>' +
+          '<td data-label="Unit cost" class="r"' + (i.unit_cost == null ? '' : ' title="' + ccEsc(i.basis) + '"') + '>' + (i.unit_cost == null ? '<span class="cc-warn">price needed</span>' : _fmtMoney(i.unit_cost)) + '</td>' +
+          '<td data-label="Value" class="r" style="font-weight:600">' + (i.value == null ? '—' : _fmtMoney(i.value)) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }).join('');
+  document.getElementById('cc-m-body').innerHTML = h || '<div style="padding:20px;text-align:center;color:var(--text3)">No match.</div>';
 }
 
-async function fcDrillDown(type) {
-  if (!_fcData) return;
-  if (type === 'begin' || type === 'end') {
-    var isBegin = type === 'begin';
-    var sessId  = isBegin ? _fcData.beginning_inventory.session_id : _fcData.ending_inventory.session_id;
-    var panel   = document.getElementById('fc-drill-inv');
-    var title   = document.getElementById('fc-drill-inv-title');
-    var body    = document.getElementById('fc-drill-inv-body');
-    title.textContent = (isBegin ? 'Beginning' : 'Ending') + ' Inventory — ' + _fmtDate(isBegin ? _fcData.period_start : _fcData.period_end);
-    body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Loading...</div>';
-    panel.style.display = 'block';
-    try {
-      var resp = await fetch('/api/inventory/completed-counts/' + sessId);
-      var data = await resp.json();
-      var h = '<div style="text-align:right;font-size:13px;color:var(--text3);margin-bottom:12px">Total: <strong>' + _fmtMoney(data.total_value) + '</strong></div>';
-      var byLoc = data.by_location || {};
-      Object.keys(byLoc).sort().forEach(function(sloc) {
-        var items = byLoc[sloc];
-        var subtotal = items.reduce(function(s, i) { return s + (i.line_value || 0); }, 0);
-        h += '<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;padding:8px 0 4px">' + sloc + ' — ' + _fmtMoney(subtotal) + '</div>';
-        h += '<table style="width:100%;font-size:13px;margin-bottom:8px"><thead><tr>' +
-          '<th style="text-align:left;padding:4px 6px;color:var(--text3)">Product</th>' +
-          '<th style="text-align:right;padding:4px 6px;color:var(--text3)">Qty</th>' +
-          '<th style="text-align:right;padding:4px 6px;color:var(--text3)">Price</th>' +
-          '<th style="text-align:right;padding:4px 6px;color:var(--text3)">Value</th>' +
-          '</tr></thead><tbody>';
-        items.forEach(function(item) {
-          h += '<tr><td style="padding:3px 6px">' + (item.product||'—') + '</td>' +
-            '<td style="text-align:right;padding:3px 6px">' + (item.qty||0) + '</td>' +
-            '<td style="text-align:right;padding:3px 6px;font-family:monospace">' + _fmtMoney(item.unit_price) + '</td>' +
-            '<td style="text-align:right;padding:3px 6px;font-family:monospace">' + _fmtMoney(item.line_value) + '</td></tr>';
-        });
-        h += '</tbody></table>';
-      });
-      body.innerHTML = h;
-    } catch(e) {
-      body.innerHTML = '<div style="color:#ef4444">Failed to load</div>';
-    }
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  } else if (type === 'purchases') {
-    var panel = document.getElementById('fc-drill-purchases');
-    var body  = document.getElementById('fc-drill-purchases-body');
-    var invoices = _fcData.purchases.invoices || [];
-    if (invoices.length === 0) {
-      body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">No invoices found for this period.</div>';
-    } else {
-      var h = '<table style="width:100%;font-size:13px"><thead><tr>' +
-        '<th style="text-align:left;padding:4px 8px;color:var(--text3)">Date</th>' +
-        '<th style="text-align:left;padding:4px 8px;color:var(--text3)">Vendor</th>' +
-        '<th style="text-align:left;padding:4px 8px;color:var(--text3)">Invoice #</th>' +
-        '<th style="text-align:right;padding:4px 8px;color:var(--text3)">Total</th>' +
-        '</tr></thead><tbody>';
-      invoices.forEach(function(inv) {
-        h += '<tr><td style="padding:4px 8px">' + (inv.date||'—') + '</td>' +
-          '<td style="padding:4px 8px">' + (inv.vendor||'—') + '</td>' +
-          '<td style="padding:4px 8px">' + invNumLink(inv.id, inv.invoice_number) + '</td>' +
-          '<td style="text-align:right;padding:4px 8px;font-family:monospace">' + _fmtMoney(inv.total) + '</td></tr>';
-      });
-      h += '<tr style="border-top:1px solid var(--border)"><td colspan="3" style="padding:8px;font-weight:700">Total</td>' +
-        '<td style="text-align:right;padding:8px;font-family:monospace;font-weight:700">' + _fmtMoney(_fcData.purchases.total) + '</td></tr>';
-      if (_fcData.purchases.transfers_count) {
-        h += '<tr><td colspan="3" style="padding:4px 8px">Transfers in from the other house</td><td style="text-align:right;padding:4px 8px;font-family:monospace">+' + _fmtMoney(_fcData.purchases.transfers_in) + '</td></tr>' +
-          '<tr><td colspan="3" style="padding:4px 8px">Transfers out to the other house</td><td style="text-align:right;padding:4px 8px;font-family:monospace">\u2212' + _fmtMoney(_fcData.purchases.transfers_out) + '</td></tr>' +
-          '<tr style="border-top:1px solid var(--border)"><td colspan="3" style="padding:8px;font-weight:700">Adjusted purchases</td><td style="text-align:right;padding:8px;font-family:monospace;font-weight:700">' + _fmtMoney(_fcData.purchases.adjusted_total) + '</td></tr>';
-      }
-      h += '</tbody></table>';
-      body.innerHTML = h;
-    }
-    panel.style.display = 'block';
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  } else if (type === 'sales') {
-    var panel = document.getElementById('fc-drill-sales');
-    var body  = document.getElementById('fc-drill-sales-body');
-    body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Loading...</div>';
-    panel.style.display = 'block';
-    try {
-      var startBiz = (_fcData.period_start || '').replace(/-/g, '');
-      var endBiz   = (_fcData.period_end   || '').replace(/-/g, '');
-      var resp = await fetch('/api/inventory/food-cost/daily-sales?start=' + startBiz + '&end=' + endBiz + '&location=' + encodeURIComponent(_fcData.location || ''));
-      var days = await resp.json();
-      var h = '<table style="width:100%;font-size:13px"><thead><tr>' +
-        '<th style="text-align:left;padding:4px 8px;color:var(--text3)">Date</th>' +
-        '<th style="text-align:right;padding:4px 8px;color:var(--text3)">Orders</th>' +
-        '<th style="text-align:right;padding:4px 8px;color:var(--text3)">Net Sales</th>' +
-        '</tr></thead><tbody>';
-      var grandTotal = 0;
-      days.forEach(function(d) {
-        grandTotal += d.net_sales || 0;
-        h += '<tr><td style="padding:4px 8px">' + _fmtDate(d.date) + '</td>' +
-          '<td style="text-align:right;padding:4px 8px">' + (d.order_count||0) + '</td>' +
-          '<td style="text-align:right;padding:4px 8px;font-family:monospace">' + _fmtMoney(d.net_sales) + '</td></tr>';
-      });
-      h += '<tr style="border-top:1px solid var(--border)"><td style="padding:8px;font-weight:700" colspan="2">Total</td>' +
-        '<td style="text-align:right;padding:8px;font-family:monospace;font-weight:700">' + _fmtMoney(grandTotal) + '</td></tr>';
-      h += '</tbody></table>';
-      body.innerHTML = h;
-    } catch(e) {
-      body.innerHTML = '<div style="color:#ef4444">Failed to load daily sales</div>';
-    }
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-}
+function ccClose() { document.getElementById('cc-modal').style.display = 'none'; }
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('cc-modal') && document.getElementById('cc-modal').style.display === 'block') ccClose();
+});
 
 // ============================================
 // PRODUCT SETUP TRACKING

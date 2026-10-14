@@ -370,7 +370,7 @@ html.rn-framed #md-rail{top:75px;max-height:calc(100dvh - 190px)}
   <button class="start-btn" id="start-btn" disabled onclick="startCount()">Start Count</button>
 
   <div style="margin-top:32px">
-    <div class="setup-label" style="padding:0 4px">Recent Counts</div>
+    <div class="setup-label" style="padding:0 4px;display:flex;justify-content:space-between;align-items:center">Recent Counts<a href="/manage?tab=inv" style="color:var(--blue);text-transform:none;letter-spacing:0;font-size:13px;text-decoration:none">All counts &amp; cost ›</a></div>
     <div id="history-list">
       <div class="empty" style="padding:30px 0"><div class="empty-icon">📋</div><div class="empty-text">No counts yet</div></div>
     </div>
@@ -1576,6 +1576,8 @@ function countTypeOf(c) {
   return 'Full';
 }
 
+function openCount(id) { location.href = '/manage?tab=inv&count=' + id; }
+
 async function loadHistory() {
   try {
     const res = await fetch('/api/inventory/counts/history');
@@ -1596,11 +1598,13 @@ async function loadHistory() {
       const timeStr = d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
       const loc = c.location === 'dennis' ? 'Dennis' : 'Chatham';
       const typ = countTypeOf(c);
-      return '<div class="history-card"><div class="history-top">' +
+      // A completed count opens on Manage > Inventory (lines, values, cost between counts).
+      const open = c.status === 'completed' ? ' onclick="openCount(' + c.id + ')" style="cursor:pointer"' : '';
+      return '<div class="history-card"' + open + '><div class="history-top">' +
         '<div class="history-date">' + dateStr + ' · ' + timeStr + '</div>' +
         (c.status === 'completed' ? '<span class="history-badge badge-complete">Complete</span>'
                                   : '<span class="history-badge badge-open">Open — Save, then Complete</span>') +
-        '</div><div class="history-meta">' + loc + ' · ' + typ + ' · ' + (c.item_count || 0) + ' items</div></div>';
+        '</div><div class="history-meta">' + loc + ' · ' + typ + ' · ' + (c.item_count || 0) + ' items' + (open ? ' · <span style="color:var(--blue)">Open ›</span>' : '') + '</div></div>';
     }).join('');
   } catch(e) {}
 }

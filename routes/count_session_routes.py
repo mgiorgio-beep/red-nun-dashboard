@@ -187,3 +187,53 @@ def complete_count():
         return jsonify({'success': True, 'count_id': c['id'], 'items': len(rows)})
     finally:
         conn.close()
+
+
+# ── Completed counts: list, open one, cost between two (2026-10-14) ──────────
+# Food and Booze side by side on Manage > Inventory. Values and cost math live
+# in reports.count_cost.
+
+@count_session_bp.route('/api/count-sessions/completed', methods=['GET'])
+@login_required
+def completed_list():
+    from reports.count_cost import completed_counts
+    location = (request.args.get('location') or '').strip().lower()
+    conn = get_connection()
+    try:
+        return jsonify(completed_counts(conn, location if location in LOCATIONS else None))
+    finally:
+        conn.close()
+
+
+@count_session_bp.route('/api/count-sessions/<int:count_id>', methods=['GET'])
+@login_required
+def count_detail(count_id):
+    from reports.count_cost import count_lines, summarize, count_type
+    conn = get_connection()
+    try:
+        c = conn.execute("SELECT * FROM inventory_counts WHERE id = ?", (count_id,)).fetchone()
+        if not c:
+            return jsonify({'error': 'Count not found'}), 404
+        ctype = count_type(c['notes'])
+        lines = count_lines(conn, count_id)
+        return jsonify({'id': c['id'], 'location': c['location'], 'count_date': c['count_date'],
+                        'completed_at': c['completed_at'], 'status': c['status'], 'type': ctype,
+                        'notes': c['notes'], 'created_by': c['created_by'],
+                        **summarize(lines, ctype), 'items': lines})
+    finally:
+        conn.close()
+
+
+@count_session_bp.route('/api/count-sessions/cost', methods=['GET'])
+@login_required
+def count_cost():
+    from reports.count_cost import cost_between
+    begin, end = request.args.get('begin', type=int), request.args.get('end', type=int)
+    if not begin or not end or begin == end:
+        return jsonify({'error': 'Pick two different counts'}), 400
+    conn = get_connection()
+    try:
+        out = cost_between(conn, begin, end)
+        return jsonify(out), (400 if 'error' in out else 200)
+    finally:
+        conn.close()
