@@ -358,6 +358,11 @@ def get_billpay_vendors():
     # Get bill pay settings
     bp_rows = conn.execute("SELECT * FROM vendor_bill_pay").fetchall()
     bp_map = {r["vendor_name"]: dict(r) for r in bp_rows}
+    # Settings saved under another capitalisation / punctuation still belong to the
+    # vendor ("TIGER EXCHANGE INC." settings -> "Tiger Exchange Inc.").
+    bp_norm = {}
+    for r in bp_rows:
+        bp_norm.setdefault(_norm(r["vendor_name"]), dict(r))
 
     # Get outstanding totals per vendor (filtered by location if provided)
     location = request.args.get("location")
@@ -392,7 +397,7 @@ def get_billpay_vendors():
 
     vendors = []
     for name in sorted(vendor_names):
-        bp = bp_map.get(name, {})
+        bp = bp_map.get(name) or bp_norm.get(_norm(name), {})
         outs = outstanding_map.get(name, {"count": 0, "total": 0})
         vendors.append({
             "vendor_name": name,
@@ -552,7 +557,9 @@ def delete_billpay_vendor(vendor_name):
 @admin_required
 def rename_billpay_vendor(vendor_name):
     """Rename a vendor everywhere it is keyed by name so invoices stay linked:
-    vendor_bill_pay, scanned_invoices, vendor_items, vendor_session_status."""
+    vendor_bill_pay, scanned_invoices, vendor_items, vendor_session_status — and the
+    vendors table's own row (2026-10-15: the one vendor screen edits both, and a
+    rename that skipped it left the contact record behind under the old name)."""
     data = request.get_json() or {}
     new_name = (data.get("new_name") or "").strip()
     if not new_name:
@@ -565,6 +572,11 @@ def rename_billpay_vendor(vendor_name):
             "SELECT 1 FROM vendor_bill_pay WHERE vendor_name = ? COLLATE NOCASE "
             "AND vendor_name <> ? COLLATE NOCASE", (new_name, vendor_name)
         ).fetchone()
+        if not clash:
+            clash = conn.execute(
+                "SELECT 1 FROM vendors WHERE name = ? COLLATE NOCASE AND name <> ? COLLATE NOCASE",
+                (new_name, vendor_name)
+            ).fetchone()
         if clash:
             return jsonify({"error": f"A vendor named '{new_name}' already exists. "
                             "Renaming would merge them, which isn't allowed here."}), 409
@@ -579,6 +591,11 @@ def rename_billpay_vendor(vendor_name):
                     (new_name, vendor_name)
                 )
                 counts[tbl] = cur.rowcount
+            cur = conn.execute(
+                "UPDATE vendors SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ? COLLATE NOCASE",
+                (new_name, vendor_name)
+            )
+            counts["vendors"] = cur.rowcount
             conn.commit()
         except Exception as e:
             conn.rollback()

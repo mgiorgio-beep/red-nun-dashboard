@@ -443,18 +443,23 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
         <div class="card">
           <div class="card-header">
             <div class="card-title">Vendors</div>
-            <span class="rn-role-ac" style="margin-left:auto;margin-right:12px;font-size:13px"><a href="javascript:void(0)" onclick="showView('bp-vendors')" style="color:var(--blue,#0a84ff)">Remit addresses &amp; bill pay settings &rsaquo;</a></span>
-            <button class="btn btn-primary" onclick="openVendorModal()">Add Vendor</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" class="form-control" id="vd-search" placeholder="Search vendors..." oninput="vdRender()" style="max-width:240px">
+              <label style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="vd-inactive" onchange="vdRender()"> Inactive</label>
+              <button class="btn btn-primary" onclick="vdNew()">Add Vendor</button>
+            </div>
           </div>
-          <table class="data-table">
+          <div id="vd-count" style="padding:0 0 8px;font-size:12px;color:var(--text3)"></div>
+          <table class="data-table rn-cards">
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Category</th>
                 <th>Contact</th>
-                <th>Email</th>
                 <th>Phone</th>
-                <th>Actions</th>
+                <th class="rn-role-ac">Remit to</th>
+                <th class="rn-role-ac">Open</th>
+                <th class="rn-role-ac">Bill Pay</th>
               </tr>
             </thead>
             <tbody id="vendors-table"></tbody>
@@ -1177,48 +1182,6 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
   </div>
 </div>
 
-<div class="modal" id="modal-vendor">
-  <div class="modal-content">
-    <div class="modal-header">
-      <div class="modal-title">Add Vendor</div>
-      <button class="modal-close" onclick="closeModal('modal-vendor')">&times;</button>
-    </div>
-    <form id="form-vendor" onsubmit="saveVendor(event)">
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Vendor Name</label>
-          <input class="form-input" name="name" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Category</label>
-          <select class="form-select" name="category">
-            <option value="FOOD">Food</option>
-            <option value="BEVERAGE">Beverage</option>
-            <option value="SUPPLIES">Supplies</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Contact Name</label>
-          <input class="form-input" name="contact_name">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Email</label>
-          <input class="form-input" type="email" name="email">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Phone</label>
-          <input class="form-input" name="phone">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Payment Terms</label>
-          <input class="form-input" name="payment_terms" placeholder="NET30">
-        </div>
-      </div>
-      <button type="submit" class="btn btn-primary" style="margin-top:16px;width:100%;">Save Vendor</button>
-    </form>
-  </div>
-</div>
-
 <!-- Portal Tie-Out Modal (Bill Pay) -->
 <div class="modal" id="modal-tieout">
   <div class="modal-content" style="max-width:640px">
@@ -1711,7 +1674,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
               <select id="bp-vendor-filter" onchange="bpLoadInvoices()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
                 <option value="">All Vendors</option>
               </select>
-              <div id="bp-horizon-wrap" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)" title="Default horizon. Override per vendor in Vendor Setup → Pay Lead Days.">
+              <div id="bp-horizon-wrap" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)" title="Default horizon. Override per vendor in Setup → Vendors → Pay Lead Days.">
                 <label for="bp-horizon">Default lead:</label>
                 <select id="bp-horizon" onchange="bpRenderSorted()" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:12px">
                   <option value="3">3 days</option>
@@ -2288,10 +2251,36 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
         <div style="background:#ffffff;border:1px solid var(--border);border-radius:12px;padding:24px;width:95%;max-width:1100px;max-height:90vh;overflow-y:auto">
           <h3 style="color:#111827;margin:0 0 16px 0;font-size:15px" id="bp-veditor-title">Vendor Setup</h3>
           <div style="margin-bottom:14px">
-            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Vendor Name <span style="color:#94a3b8;font-weight:normal">— editing this renames the vendor across all its invoices</span></label>
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Vendor Name <span class="rn-role-ac" style="color:#94a3b8;font-weight:normal">— editing this renames the vendor across all its invoices (admin)</span></label>
             <input type="text" id="bp-ve-name-edit" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px;font-weight:600">
           </div>
-          <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <!-- Contact & category (vendors table) — everyone who can see Vendors -->
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+            <div>
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Category</label>
+              <select id="vd-category" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
+                <option value="">—</option><option value="FOOD">Food</option><option value="BEVERAGE">Beverage</option>
+                <option value="SUPPLIES">Supplies</option><option value="SERVICES">Services</option><option value="UTILITIES">Utilities</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Contact name</label>
+              <input type="text" id="vd-contact" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Email</label>
+              <input type="text" id="vd-email" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Phone</label>
+              <input type="text" id="vd-phone" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:6px;padding-bottom:8px">
+              <label style="font-size:13px;color:#111827;display:flex;align-items:center;gap:6px"><input type="checkbox" id="vd-active"> Active</label>
+            </div>
+          </div>
+          <div class="rn-role-ac" style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Bill Pay</div>
+          <div class="rn-role-ac" style="display:flex;gap:20px;flex-wrap:wrap">
           <!-- Left: Invoice Image -->
           <div style="flex:1;min-width:300px;max-width:500px">
             <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Most recent invoice (for remittance address reference)</div>
@@ -2357,13 +2346,13 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
                 <input type="text" id="bp-ve-acct" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
               </div>
               <div>
-                <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Contact Email</label>
+                <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Remittance / billing email</label>
                 <input type="text" id="bp-ve-email" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
               </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div>
-                <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Phone</label>
+                <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Billing phone</label>
                 <input type="text" id="bp-ve-phone" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#FFFFFF;color:#111827;font-size:13px">
               </div>
               <div>
@@ -2407,8 +2396,8 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
           </div><!-- /form column -->
           </div><!-- /flex container -->
           <div style="display:flex;gap:8px;margin-top:16px">
-            <button onclick="bpSaveVendor()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Save</button>
-            <button onclick="bpDeleteVendor()" style="padding:10px 16px;border-radius:8px;border:1px solid #dc3545;background:transparent;color:#dc3545;font-weight:600;font-size:13px;cursor:pointer">Delete</button>
+            <button onclick="vdSave()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Save</button>
+            <button class="rn-role-ac" onclick="bpDeleteVendor()" title="Un-enroll from Bill Pay (invoices and contact are kept)" style="padding:10px 16px;border-radius:8px;border:1px solid #dc3545;background:transparent;color:#dc3545;font-weight:600;font-size:13px;cursor:pointer">Remove from Bill Pay</button>
             <button onclick="bpCloseVendorModal()" style="padding:10px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text3);font-size:13px;cursor:pointer">Cancel</button>
           </div>
         </div>
@@ -2460,7 +2449,7 @@ const VIEW_TITLES = {
 // One line under the title; a view without one shows the title alone.
 const VIEW_SUBS = {
   products: 'Everything you buy: names, categories, units and costs.',
-  vendors: 'Vendor contacts and categories.',
+  vendors: 'Every vendor: contact and category, and for the books, remit address, terms and bill pay.',
   inv: 'Completed inventory counts and the food and beverage cost they give.',
   settings: 'Toast menu sync and product categories.',
   recipes: 'Food and bar recipes and what they cost.',
@@ -2488,6 +2477,7 @@ function viewUrl(view) {
 // address without adding a Back step (first load, old links).
 function showView(view, opts) {
   opts = opts || {};
+  if (view === 'bp-vendors') view = 'vendors';   // one vendor screen (UI plan Phase 5)
   if (!document.getElementById('view-' + view)) view = 'dashboard';
   console.log('showView called with:', view);
   currentView = view;
@@ -2811,41 +2801,113 @@ async function saveProduct(e) {
 }
 
 // Vendors
+// ── Vendors: one screen (UI plan Phase 5) ──
+// The vendors table (contact, category) and Bill Pay settings in one list and one
+// editor. /api/vendor-directory sends Bill Pay data only to admin / accountant.
+let _vdRows = [], _vdBP = false, _vdCurrent = null;
 async function loadVendors() {
   try {
-    const vendors = await fetch('/api/inventory/vendors').then(r => r.json());
-    document.getElementById('vendors-table').innerHTML = vendors.map(v => `
-      <tr>
-        <td>${v.name}</td>
-        <td>${v.category||'--'}</td>
-        <td>${v.contact_name||'--'}</td>
-        <td>${v.email||'--'}</td>
-        <td>${v.phone||'--'}</td>
-        <td><button class="btn btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="editVendor(${v.id})">Edit</button></td>
-      </tr>
-    `).join('');
+    const d = await fetch('/api/vendor-directory').then(r => r.json());
+    _vdRows = d.vendors || [];
+    _vdBP = !!d.bill_pay_visible;
+    vdRender();
   } catch(e) {
     console.error('Error loading vendors:', e);
   }
 }
-
-async function saveVendor(e) {
-  e.preventDefault();
-  const form = e.target;
-  const data = Object.fromEntries(new FormData(form));
-  
-  try {
-    await fetch('/api/inventory/vendors', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(data)
-    });
-    closeModal('modal-vendor');
-    form.reset();
-    loadVendors();
-  } catch(e) {
-    alert('Error saving vendor');
+function vdEsc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function vdRender() {
+  const q = ((document.getElementById('vd-search') || {}).value || '').toLowerCase();
+  const showInactive = (document.getElementById('vd-inactive') || {}).checked;
+  const rows = _vdRows.filter(v => (showInactive || v.active) &&
+    (!q || v.name.toLowerCase().includes(q) || (v.spellings || []).some(n => n.toLowerCase().includes(q))));
+  document.getElementById('vd-count').textContent = rows.length + ' vendor' + (rows.length === 1 ? '' : 's');
+  document.getElementById('vendors-table').innerHTML = rows.map((v, i) => {
+    const bp = v.bill_pay || {};
+    const others = (v.spellings || []).filter(n => n !== v.name);
+    return `<tr style="cursor:pointer${v.active ? '' : ';opacity:.55'}" onclick="vdOpen(${_vdRows.indexOf(v)})">
+      <td><strong>${vdEsc(v.name)}</strong>${others.length ? `<div style="font-size:11px;color:var(--text3)">also ${vdEsc(others.join(', '))}</div>` : ''}${v.active ? '' : ' <span style="font-size:11px;color:var(--text3)">(inactive)</span>'}</td>
+      <td>${vdEsc(rnCatLabel(v.category) || v.category || '—')}</td>
+      <td>${vdEsc(v.contact_name || '—')}</td>
+      <td>${vdEsc(v.phone || '—')}</td>` +
+      (_vdBP ? `<td style="font-size:12px;color:var(--text3)">${vdEsc(bp.remit || '—')}</td>
+      <td>${bp.open_total ? '$' + Number(bp.open_total).toFixed(2) : '—'}</td>
+      <td><span style="font-size:12px;font-weight:600;color:${bp.enabled ? '#16a34a' : 'var(--text3)'}">${bp.enabled ? 'ON' : 'off'}</span>${bp.portal ? ' <span style="font-size:11px;color:#a855f7">portal</span>' : ''}</td>` : '') +
+    `</tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">No vendors match.</td></tr>';
+}
+function vdFillContact(v) {
+  document.getElementById('vd-category').value = (v && v.category) || '';
+  document.getElementById('vd-contact').value = (v && v.contact_name) || '';
+  document.getElementById('vd-email').value = (v && v.email) || '';
+  document.getElementById('vd-phone').value = (v && v.phone) || '';
+  document.getElementById('vd-active').checked = !v || v.active !== false;
+}
+// Open the one editor: contact on top; Bill Pay settings below for admin / accountant
+// (bpEditVendor fills those and shows the modal).
+async function vdOpen(idx) {
+  const v = _vdRows[idx];
+  _vdCurrent = v;
+  vdFillContact(v);
+  const nameEdit = document.getElementById('bp-ve-name-edit');
+  nameEdit.disabled = !_vdBP;
+  if (_vdBP) {
+    await bpEditVendor((v.bill_pay && v.bill_pay.settings_name) || v.name);
+    nameEdit.value = v.name;
+  } else {
+    document.getElementById('bp-ve-name').value = v.name;
+    nameEdit.value = v.name;
+    document.getElementById('bp-vendor-modal').style.display = 'flex';
   }
+  document.getElementById('bp-veditor-title').textContent = v.name;
+}
+function vdNew() {
+  _vdCurrent = null;
+  vdFillContact(null);
+  ['bp-ve-name', 'bp-ve-name-edit', 'bp-ve-recipient', 'bp-ve-addr1', 'bp-ve-addr2', 'bp-ve-city', 'bp-ve-state',
+   'bp-ve-zip', 'bp-ve-acct', 'bp-ve-email', 'bp-ve-phone', 'bp-ve-leaddays', 'bp-ve-notes'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['bp-ve-enabled', 'bp-ve-portal', 'bp-ve-autopay'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+  document.getElementById('bp-ve-name-edit').disabled = false;
+  if (document.getElementById('bp-ve-terms')) { document.getElementById('bp-ve-terms').value = 'not_specified'; bpTermsChanged(); }
+  const img = document.getElementById('bp-ve-invoice-img');
+  if (img) img.innerHTML = '<span style="color:var(--text3);font-size:12px;padding:40px">New vendor — no invoices yet</span>';
+  document.getElementById('bp-veditor-title').textContent = 'Add Vendor';
+  document.getElementById('bp-vendor-modal').style.display = 'flex';
+}
+async function vdSave() {
+  const v = _vdCurrent;
+  const typed = (document.getElementById('bp-ve-name-edit').value || '').trim();
+  const name = v ? v.name : typed;
+  if (!name) { alert('Vendor name is required'); return; }
+  // 1. Contact & category -> vendors table (creates the row if this vendor only
+  //    existed on invoices / in Bill Pay). Saved under the current name; a rename
+  //    below then renames this row along with the invoices.
+  const r = await fetch('/api/vendor-directory/contact', {
+    method: 'PUT', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      vendor_id: v ? v.vendor_id : null, name: name,
+      category: document.getElementById('vd-category').value,
+      contact_name: document.getElementById('vd-contact').value,
+      email: document.getElementById('vd-email').value,
+      phone: document.getElementById('vd-phone').value,
+      active: document.getElementById('vd-active').checked,
+    })
+  });
+  if (!r.ok) { alert('Could not save the contact details'); return; }
+  // 2. Bill Pay settings (admin / accountant). A new vendor only gets a Bill Pay
+  //    record once something Bill Pay is filled in.
+  if (_vdBP) {
+    const hasSettings = v && v.bill_pay && v.bill_pay.settings_name;
+    const touched = document.getElementById('bp-ve-enabled').checked || document.getElementById('bp-ve-addr1').value;
+    if (hasSettings || touched) {
+      if (!v) document.getElementById('bp-ve-name').value = name;
+      await bpSaveVendor();   // also handles a rename, and closes the editor
+    }
+  }
+  bpCloseVendorModal();
+  loadVendors();
 }
 
 // Inventory
@@ -4355,7 +4417,7 @@ async function openProductModal() {
   await loadStorageLocationCheckboxes(null);
   document.getElementById('modal-product').classList.add('active');
 }
-function openVendorModal() { document.getElementById('modal-vendor').classList.add('active'); }
+function openVendorModal() { vdNew(); }
 async function autoPopulateIngredients() {
   const btn = document.getElementById('btn-auto-populate');
   btn.disabled = true;

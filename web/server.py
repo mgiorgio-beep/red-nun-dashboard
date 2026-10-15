@@ -40,6 +40,7 @@ from routes.catalog_routes import catalog_bp
 from routes.inventory_routes import inventory_bp
 from routes.product_mapping_routes import mapping_bp
 from ai.inventory_ai_routes import ai_inventory_bp
+from routes.vendor_directory_routes import vendor_directory_bp
 from routes.auth_routes import auth_bp, login_required, admin_required
 from routes.storage_routes import storage_bp
 from routes.order_guide_routes import order_guide_bp
@@ -132,6 +133,7 @@ app.register_blueprint(count_template_bp)
 app.register_blueprint(count_session_bp)
 app.register_blueprint(transfer_bp)
 app.register_blueprint(waste_bp)
+app.register_blueprint(vendor_directory_bp)
 app.register_blueprint(transfer_admin_bp)
 
 @app.before_request

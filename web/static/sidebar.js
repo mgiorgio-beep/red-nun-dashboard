@@ -81,7 +81,6 @@ var sections=[
   {id:'nav-products',label:'Products',page:'/manage',tab:'products',roles:[A,M]},
   {id:'nav-prodsetup',label:'Product Setup',page:'/manage',tab:'prodsetup',roles:[A,M]},
   {id:'nav-vendors',label:'Vendors',page:'/manage',tab:'vendors'},
-  {id:'nav-bp-vendors',label:'Vendor Bill Pay Setup',page:'/manage',tab:'bp-vendors',roles:[A,C]},
   {id:'nav-storage',label:'Storage Layout',page:'/storage',roles:[A,M]},
   {id:'nav-unitsetup',label:'Unit Setup',page:'/unit-setup',roles:[A]},
   {id:'nav-bp-recurring',label:'Recurring Bills',page:'/manage',tab:'bp-recurring',roles:[A,C]},
@@ -129,7 +128,7 @@ if(path==='/'||path==='/index.html'){
 }
 if(path==='/manage'){
   var view=pageTab(path)||'dashboard';
-  var vm={dashboard:'nav-dashboard',products:'nav-products',vendors:'nav-vendors',inv:'nav-inventory',recipes:'nav-recipes','prepared-items':'nav-prepared','recipe-analysis':'nav-menuanalysis','recipe-viewer':'nav-recipeviewer',prodsetup:'nav-prodsetup',settings:'nav-settings','recipe-edit':'nav-recipes','prepared-edit':'nav-prepared','data-export':'nav-dataexport','user-accounts':'nav-users',orderguide:'nav-orderguide','pmix-mapping':'nav-pmixmapping',billpay:'nav-bp-outstanding','bp-payments':'nav-bp-payments','bp-vendors':'nav-bp-vendors','bp-recurring':'nav-bp-recurring','bp-checksetup':'nav-bp-checksetup','bp-payroll':'nav-bp-payroll'};
+  var vm={dashboard:'nav-dashboard',products:'nav-products',vendors:'nav-vendors',inv:'nav-inventory',recipes:'nav-recipes','prepared-items':'nav-prepared','recipe-analysis':'nav-menuanalysis','recipe-viewer':'nav-recipeviewer',prodsetup:'nav-prodsetup',settings:'nav-settings','recipe-edit':'nav-recipes','prepared-edit':'nav-prepared','data-export':'nav-dataexport','user-accounts':'nav-users',orderguide:'nav-orderguide','pmix-mapping':'nav-pmixmapping',billpay:'nav-bp-outstanding','bp-payments':'nav-bp-payments','bp-vendors':'nav-vendors','bp-recurring':'nav-bp-recurring','bp-checksetup':'nav-bp-checksetup','bp-payroll':'nav-bp-payroll'};
   return vm[view]||'nav-dashboard';
 }
 if(path==='/invoices'){var iv=pageTab(path)||'history';var ivm={history:'nav-invhistory',scan:'nav-scan',pending:'nav-pending'};return ivm[iv]||'nav-invhistory';}
