@@ -155,14 +155,31 @@ def _under(path, prefixes):
     return any(path == p or path.startswith(p + '/') for p in prefixes)
 
 
+# Routes defined in this file with no @login_required that read business data or
+# start work (found 2026-10-14): sales, labor, forecasts, invoice images, the Toast
+# sync triggers. Left open on purpose: /api/health (monitoring) and /api/thermostats*
+# (the Staff page, which has no login, uses them).
+_NEED_LOGIN = ('/api/revenue', '/api/labor', '/api/servers', '/api/pourcost', '/api/price-movers',
+               '/api/forecast', '/api/summary', '/api/sync', '/api/dashboard',
+               '/api/invoices/pending-count', '/invoice_thumbnails')
+
+
+def _on_box():
+    """On-box automation: 127.0.0.1 with no X-Forwarded-For (nginx and the Cloudflare
+    tunnel always add one to real web traffic)."""
+    return request.remote_addr == '127.0.0.1' and not request.headers.get('X-Forwarded-For')
+
+
 @app.before_request
 def _role_gate():
     # payment_routes.py had no login check at all (found 2026-10-09). Same rule as the
     # invoice blueprint: a session, or on-box automation (import_payments.py posts to
     # 127.0.0.1 with no X-Forwarded-For; real web traffic always carries one).
     if request.blueprint == payment_bp.name and 'user_id' not in session:
-        if request.remote_addr == '127.0.0.1' and not request.headers.get('X-Forwarded-For'):
+        if _on_box():
             return None
+        return jsonify({"error": "Authentication required"}), 401
+    if _under(request.path, _NEED_LOGIN) and 'user_id' not in session and not _on_box():
         return jsonify({"error": "Authentication required"}), 401
     if session.get('role') == 'manager' and _under(request.path, _NO_MANAGER):
         if request.path.startswith('/api/'):
