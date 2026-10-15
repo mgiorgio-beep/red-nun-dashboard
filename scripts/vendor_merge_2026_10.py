@@ -46,7 +46,9 @@ RENAMES = [   # vendors-table name -> the spelling invoices / Bill Pay use
     ("Affirmed Medical Service", "Affirmed Medical"),
 ]
 BP_FOLD = ("Bay State Sewage Disposal Inc", "Bay State Sewage Disposal, LLC")
-INACTIVE = ["MarginEdge, Inc", "Red Nun Bar & Grill- Internal Transfer"]
+# "*" = any characters (the internal-transfer row's dash / spacing didn't match exactly);
+# a pattern must match exactly one vendors row.
+INACTIVE = ["MarginEdge, Inc", "Red Nun Bar & Grill*Internal Transfer*"]
 BP_FIELDS = ("payment_recipient", "remit_address_1", "remit_address_2", "remit_city", "remit_state",
              "remit_zip", "account_number", "contact_email", "phone", "notes")
 
@@ -106,7 +108,15 @@ def plan(conn):
         steps.append(("skip", f"no Bill Pay setting named '{old}'", None))
 
     for name in INACTIVE:
-        r = vnames.get(name.lower())
+        if "*" in name:
+            hits = conn.execute("SELECT * FROM vendors WHERE name LIKE ?", (name.replace("*", "%"),)).fetchall()
+            if len(hits) != 1:
+                problems.append(f"inactive: '{name}' matches {len(hits)} vendors — expected exactly one")
+                continue
+            r = hits[0]
+            name = r["name"]
+        else:
+            r = vnames.get(name.lower())
         if not r:
             problems.append(f"inactive: '{name}' isn't in the vendors table")
         elif not r["active"]:
