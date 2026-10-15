@@ -1535,6 +1535,12 @@ def parse_csv_invoice(csv_data, location=None):
         get(first, 'ShipToZip'),
     ]
     ship_to_address = ', '.join(p for p in ship_to_parts if p)
+    # Bill-to is who pays. Kept for the record only (2026-10-14): US Foods sometimes
+    # delivers a Red Nun order to a nearby restaurant (Capt Parker's, Lanyard) to make
+    # the delivery minimum, so the ship-to alone can't say whose bill it is.
+    bill_to_address = ', '.join(p for p in (
+        get(first, 'BillToName'), get(first, 'BillToStreet'), get(first, 'BillToCity'),
+        get(first, 'BillToState'), get(first, 'BillToZip')) if p)
 
     # Auto-detect location if not explicitly provided
     if not location:
@@ -1678,6 +1684,8 @@ def parse_csv_invoice(csv_data, location=None):
         'tax': 0.0,
         'total': total,
         'ship_to_address': ship_to_address,
+        'bill_to_address': bill_to_address,
+        'customer_name': customer_name,
         'line_items': line_items,
         'notes': f"Parsed from CSV Full — {len(line_items)} items, {'credit memo' if is_credit else 'invoice'}",
         'total_line_items': len(line_items),
