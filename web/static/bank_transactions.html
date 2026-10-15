@@ -111,7 +111,7 @@ select.gl.review { border-color: var(--amber); }
 
   <div class="rn-page-header">
     <div>
-      <h1 class="rn-page-title">Bank Transactions</h1>
+      <h1 class="rn-page-title">Bank Transactions<span class="rn-loc-badge"></span></h1>
       <div class="rn-page-sub">Statement lines that still need an account. Guesses are marked; nothing is booked until you press Post, and posting teaches a rule for that payee.</div>
     </div>
     <div class="hint" id="hdr-hint"></div>
@@ -182,7 +182,7 @@ async function loadTiles() {
     </div>`).join('');
   document.querySelectorAll('.tile').forEach(t => t.addEventListener('click', () => selectAccount(parseInt(t.dataset.id, 10))));
   if (!S.acct) {
-    const loc = localStorage.getItem('globalLocation');
+    const loc = localStorage.getItem('globalLocation') || 'dennis';   // the top-bar picker
     const pick = S.accounts.find(a => a.location === loc) || S.accounts[0];
     if (pick) selectAccount(pick.id);
   } else {
@@ -207,8 +207,22 @@ function glOptions(selectedId) {
   return h;
 }
 
+// Top bar changed house -> that house's account; picking an account moves the top bar.
+// Ticked lines aren't saved until Post, so ask before leaving them.
+window.rnBeforeLocationChange = () => {
+  const n = Object.values(S.picked || {}).filter(Boolean).length;
+  return !n || confirm(n + ' ticked line' + (n === 1 ? '' : 's') + ' not posted yet. Switch house and drop them?');
+};
+window.addEventListener('rn-location', e => {
+  if (e.detail.from === 'account' || !(S.accounts || []).length) return;
+  if (S.acct && S.acct.location === e.detail.loc) return;
+  const m = S.accounts.find(a => a.location === e.detail.loc);
+  if (m) selectAccount(m.id);
+});
+
 async function selectAccount(id) {
   S.acct = S.accounts.find(a => a.id === id); S.chosen = {}; S.picked = {};
+  if (S.acct && window.rnSetLocation) window.rnSetLocation(S.acct.location, 'account');
   document.querySelectorAll('.tile').forEach(t => t.classList.toggle('active', parseInt(t.dataset.id, 10) === id));
   $('n-pending').textContent = '(' + S.acct.pending_count + ')';
   $('n-suggested').textContent = '(' + S.acct.suggested_count + ')';

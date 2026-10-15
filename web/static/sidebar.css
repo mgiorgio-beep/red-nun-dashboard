@@ -526,3 +526,10 @@ input[type="date"]:focus { border-color: #9ca3af !important; outline: none !impo
   table.rn-cards tfoot tr{display:flex;justify-content:space-between;padding:10px 14px}
   table.rn-cards tfoot td{border:0!important;padding:0!important}
 }
+
+/* One location picker (UI plan Phase 4). The house a books page is working on, by its
+   title; a page's own Chatham/Dennis buttons (.rn-loc-local) give way to the top bar. */
+.rn-loc-badge{display:inline-block;margin-left:10px;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.2px;vertical-align:middle;line-height:1.4}
+.rn-loc-badge[data-loc="chatham"]{background:#dbeafe;color:#1d4ed8!important}
+.rn-loc-badge[data-loc="dennis"]{background:#d1fae5;color:#047857!important}
+.rn-loc-local{display:none!important}

@@ -67,11 +67,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div class="page-wrap">
 
   <div class="rn-page-header">
-    <div><h1 class="rn-page-title">Sales Mapping</h1>
+    <div><h1 class="rn-page-title">Sales Mapping<span class="rn-loc-badge"></span></h1>
     <div class="rn-page-sub">Map each journal line to a QuickBooks account. Saved mappings apply to all future journal entries.</div></div>
   </div>
 
-  <div class="loc-bar">
+  <div class="loc-bar rn-loc-local">
     <label>Location:</label>
     <button class="loc-btn active" id="locChatham" onclick="switchLoc('chatham')">Chatham</button>
     <button class="loc-btn" id="locDennis" onclick="switchLoc('dennis')">Dennis Port</button>
@@ -98,7 +98,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <script src="/static/sidebar.js"></script>
 <script>
-var loc = 'chatham';
+var loc = localStorage.getItem('globalLocation') || 'dennis';   // the top-bar picker
+window.addEventListener('rn-location', function(e){ switchLoc(e.detail.loc); });
 var accounts = [];
 var lines = [];
 

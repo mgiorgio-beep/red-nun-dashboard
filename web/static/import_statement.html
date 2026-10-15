@@ -165,7 +165,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
   <div class="rn-page-header">
     <div>
-      <h1 class="rn-page-title">Import Statement</h1>
+      <h1 class="rn-page-title">Import Statement<span class="rn-loc-badge"></span></h1>
       <div class="rn-page-sub">Upload a Cape Cod Five PDF statement and import the transactions not yet in the register. Signing off the period lives on <a href="/bank-reconcile">Bank Reconcile</a>.</div>
     </div>
     <div class="rn-page-actions">
@@ -340,8 +340,8 @@ async function loadAccounts() {
       return;
     }
     renderAccountBar();
-    // Auto-select based on global location
-    const loc = (window.currentLocation || localStorage.getItem('globalLocation') || 'chatham');
+    // The account of the house in the top-bar picker (UI plan Phase 4)
+    const loc = localStorage.getItem('globalLocation') || 'dennis';
     const match = STATE.accounts.find(a => a.location === loc) || STATE.accounts[0];
     selectAccount(match.id);
   } catch (e) {
@@ -360,8 +360,16 @@ function renderAccountBar() {
   `).join('');
 }
 
+window.addEventListener('rn-location', e => {
+  if (e.detail.from === 'account' || !STATE.accounts.length) return;
+  if (STATE.currentAcct && STATE.currentAcct.location === e.detail.loc) return;
+  const m = STATE.accounts.find(a => a.location === e.detail.loc);
+  if (m) selectAccount(m.id);
+});
+
 function selectAccount(id) {
   STATE.currentAcct = STATE.accounts.find(a => a.id === id);
+  if (STATE.currentAcct && window.rnSetLocation) window.rnSetLocation(STATE.currentAcct.location, 'account');
   document.querySelectorAll('.account-pill').forEach(el => {
     el.classList.toggle('active', Number(el.dataset.acct) === id);
   });

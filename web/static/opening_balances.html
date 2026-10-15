@@ -144,7 +144,7 @@ tr.imp-skip td   { color: var(--text3); }
 
     <div class="rn-page-header">
       <div>
-        <h1 class="rn-page-title">Opening Balances</h1>
+        <h1 class="rn-page-title">Opening Balances<span class="rn-loc-badge"></span></h1>
         <div class="rn-page-sub">Starting balances, as of a date, for the bank account and balance-sheet accounts. Register activity builds on top of them.</div>
       </div>
       <div class="rn-page-actions">
@@ -160,7 +160,7 @@ tr.imp-skip td   { color: var(--text3); }
       Tip: enter signed amounts. For liability accounts (e.g. Sales Tax Payable, Loan to RNPH, Gift Certs), a positive number means you owe that amount. For asset accounts, positive means you hold that value.
     </div>
 
-    <div class="loc-bar" id="loc-bar">
+    <div class="loc-bar rn-loc-local" id="loc-bar">
       <div class="loc-pill" data-loc="chatham">Chatham</div>
       <div class="loc-pill" data-loc="dennis">Dennis</div>
     </div>
@@ -265,7 +265,7 @@ tr.imp-skip td   { color: var(--text3); }
 // State
 // ─────────────────────────────────────────────────────────────────────────────
 const STATE = {
-  location: localStorage.getItem('openingBalances.loc') || (window.currentLocation || localStorage.getItem('globalLocation') || 'chatham'),
+  location: localStorage.getItem('globalLocation') || 'dennis',   // the top-bar picker (UI plan Phase 4)
   banks: [],
   glAccounts: [],
   // Current-balance overlay. When showCurrent is true, we fetch
@@ -329,6 +329,12 @@ function renderLocationBar() {
     };
   });
 }
+
+window.addEventListener('rn-location', e => {
+  STATE.location = e.detail.loc;
+  renderLocationBar();
+  loadAll();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Load

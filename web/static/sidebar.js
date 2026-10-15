@@ -20,6 +20,7 @@ invoices:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strok
 accounting:'<svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/></svg>',
 billpay:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>'
 };
+window.rnLocation=function(){try{return localStorage.getItem('globalLocation')||'dennis'}catch(e){return 'dennis'}};
 var chevron='<svg class="rn-chevron" viewBox="0 0 20 20" fill="currentColor"><path d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"/></svg>';
 // Grouped by the job someone is doing (UI plan Phase 2, 2026-10-09). roles = who sees
 // the item: A admin, M manager, C accountant (default: everyone). Hiding here is only
@@ -290,16 +291,37 @@ if(path==='/'||path==='/index.html'){
     setTimeout(function(){window.switchTab(hash)},50);
   }
 }
-// Location sync
+// Location sync. One location for the whole dashboard: the top-bar picker (UI plan
+// Phase 4). Pages listen for 'rn-location' (detail.loc) and switch themselves; a page
+// that changes house itself (e.g. picking the other house's bank account) calls
+// rnSetLocation so the top bar follows. .rn-loc-badge shows the house by a title.
 var sel=document.getElementById('rn-location');
+var LOC_LABEL={dennis:'Dennis Port',chatham:'Chatham'};
+function paintLocBadges(v){
+  document.querySelectorAll('.rn-loc-badge').forEach(function(b){b.textContent=LOC_LABEL[v]||v;b.setAttribute('data-loc',v)});
+}
+window.rnSetLocation=function(v,from){
+  if(v!=='dennis'&&v!=='chatham')return;
+  var cur=window.rnLocation();
+  if(sel)sel.value=v;
+  try{localStorage.setItem('globalLocation',v)}catch(e){}
+  window.currentLocation=v;
+  paintLocBadges(v);
+  if(cur!==v||from==='topbar')window.dispatchEvent(new CustomEvent('rn-location',{detail:{loc:v,from:from||'page'}}));
+};
 if(sel){
-  var saved=localStorage.getItem('globalLocation')||'dennis';
+  var saved=window.rnLocation();
   sel.value=saved;
   window.currentLocation=saved;
+  paintLocBadges(saved);
   sel.addEventListener('change',function(){
     var v=sel.value;
-    localStorage.setItem('globalLocation',v);
-    window.currentLocation=v;
+    // A page with unsaved work (picked but not posted) can ask first: rnBeforeLocationChange
+    // returns false to stay put.
+    if(typeof window.rnBeforeLocationChange==='function'&&window.rnBeforeLocationChange(v)===false){
+      sel.value=window.rnLocation();return;
+    }
+    window.rnSetLocation(v,'topbar');
     if(typeof window.setGlobalLocation==='function')window.setGlobalLocation(v);
     if(typeof window.setLoc==='function'){
       var fakeBtn={dataset:{loc:v}};
@@ -307,11 +329,6 @@ if(sel){
     }
     var oldSel=document.getElementById('global-location');
     if(oldSel&&oldSel!==sel){oldSel.value=v;oldSel.dispatchEvent(new Event('change'))}
-    document.querySelectorAll('.loc-pill,.loc-btn,[data-loc]').forEach(function(b){
-      if(b.dataset&&b.dataset.loc!==undefined){
-        b.classList.toggle('active',b.dataset.loc===v);
-      }
-    });
   });
 }
 window.addEventListener('hashchange',function(){setActiveItem(getActiveId())});

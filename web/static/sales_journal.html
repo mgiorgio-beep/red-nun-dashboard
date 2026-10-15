@@ -320,11 +320,11 @@ input[type="checkbox"] { width:16px; height:16px; cursor:pointer; accent-color:v
     <!-- Top bar -->
     <div class="top-bar rn-page-header">
       <div>
-        <h1 class="rn-page-title">Sales Journal</h1>
+        <h1 class="rn-page-title">Sales Journal<span class="rn-loc-badge"></span></h1>
         <div class="rn-page-sub">Daily sales entries from Toast, balanced and sent to QuickBooks · <span id="lastRunLabel">Last run: checking…</span></div>
       </div>
       <div class="rn-page-actions">
-        <div class="loc-switcher">
+        <div class="loc-switcher rn-loc-local">
           <button class="loc-btn" id="locDennis" onclick="switchLocation('dennis')">Dennis Port</button>
           <button class="loc-btn active" id="locChatham" onclick="switchLocation('chatham')">Chatham</button>
         </div>
@@ -564,9 +564,14 @@ async function initSalesJournal() {
   state.dateLabel = def.label;
   document.getElementById('datePillText').textContent = def.label;
 
-  // Restore saved location
-  const saved = localStorage.getItem('sj_location');
-  if (saved) switchLocation(saved, false);
+  // The house comes from the top-bar picker (UI plan Phase 4), and follows it.
+  switchLocation(localStorage.getItem('globalLocation') || 'dennis', false);
+  window.addEventListener('rn-location', e => {
+    if (e.detail.from === 'entry') return;   // openEntry already switched
+    // An open entry belongs to the house it was opened in: back to that house's list.
+    if (document.getElementById('detailView').classList.contains('active')) backToList();
+    switchLocation(e.detail.loc);
+  });
 
   await loadLastRun();
   await loadAccounts();
@@ -581,7 +586,6 @@ function switchLocation(loc, reload = true) {
   state.location = loc;
   state.page = 1;
   state.selectedIds.clear();
-  localStorage.setItem('sj_location', loc);
   document.getElementById('locDennis').classList.toggle('active', loc === 'dennis');
   document.getElementById('locChatham').classList.toggle('active', loc === 'chatham');
   if (reload) loadEntries();
@@ -931,6 +935,11 @@ async function pushAllReady() {
 async function openEntry(id) {
   try {
     const entry = await fetch(`/api/sales-journal/entries/${id}`).then(r => r.json());
+    // A direct link can open the other house's entry: the top bar and badge follow it.
+    if (entry.location && entry.location !== state.location) {
+      switchLocation(entry.location);   // list reloads behind, ready for Back
+      if (window.rnSetLocation) window.rnSetLocation(entry.location, 'entry');
+    }
     state.currentEntry = entry;
     state.editMode = false;
     document.getElementById('listView').classList.add('hidden');

@@ -176,14 +176,14 @@ table.dd tfoot td {
 
     <div class="rn-page-header">
       <div>
-        <h1 class="rn-page-title">Profit &amp; Loss</h1>
+        <h1 class="rn-page-title">Profit &amp; Loss<span class="rn-loc-badge"></span></h1>
         <div class="rn-page-sub">Management basis — cost recognised at invoice date, revenue from the daily sales journal.</div>
       </div>
     </div>
 
     <div class="controls">
-      <div class="loc-pill" data-loc="dennis">Dennis Port</div>
-      <div class="loc-pill" data-loc="chatham">Chatham</div>
+      <div class="loc-pill rn-loc-local" data-loc="dennis">Dennis Port</div>
+      <div class="loc-pill rn-loc-local" data-loc="chatham">Chatham</div>
       <div class="spacer"></div>
       <div class="period-ctl">
         <select id="ptype" aria-label="Period">
@@ -549,14 +549,23 @@ document.querySelectorAll('#export-menu a').forEach(function(a){
 });
 
 (function init(){
-  var savedLoc = null, savedMonth = null, saved = {};
+  var savedMonth = null, saved = {};
   try {
-    savedLoc = localStorage.getItem('pl_loc'); savedMonth = localStorage.getItem('pl_month');
+    savedMonth = localStorage.getItem('pl_month');
     ['ptype','quarter','year','from','to'].forEach(function(id){ saved[id] = localStorage.getItem('pl_' + id); });
   } catch(e){}
   var q = new URLSearchParams(location.search);
-  LOC = q.get('location') || savedLoc || 'dennis';
+  // The top-bar picker sets the house (UI plan Phase 4); a ?location= link wins and
+  // moves the top bar with it.
+  LOC = q.get('location') || localStorage.getItem('globalLocation') || 'dennis';
   if (LOC !== 'chatham' && LOC !== 'dennis') LOC = 'dennis';
+  window.addEventListener('load', function(){ if (window.rnSetLocation) window.rnSetLocation(LOC, 'page'); });
+  window.addEventListener('rn-location', function(e){
+    if (e.detail.loc === LOC) return;
+    LOC = e.detail.loc;
+    document.querySelectorAll('.loc-pill').forEach(function(x){ x.classList.toggle('active', x.dataset.loc === LOC); });
+    load();
+  });
   document.querySelector('.loc-pill[data-loc="' + LOC + '"]').classList.add('active');
 
   var now = new Date();

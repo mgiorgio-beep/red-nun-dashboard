@@ -220,7 +220,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
   <div class="rn-page-header">
     <div>
-      <h1 class="rn-page-title">Bank Reconcile</h1>
+      <h1 class="rn-page-title">Bank Reconcile<span class="rn-loc-badge"></span></h1>
       <div class="rn-page-sub">Sign off a statement period: tick uncleared items until the difference is zero, then finish. Balances come from the uploaded statement on <a href="/import-statement">Import Statement</a>.</div>
     </div>
   </div>
@@ -348,10 +348,13 @@ async function loadAccounts() {
     const j = await api('/api/register/accounts');
     STATE.accounts = j.accounts || [];
     renderAccounts();
-    // Auto-pick a query-string account if present, else the first
+    // A query-string account if present, else the house in the top-bar picker (UI plan
+    // Phase 4) — this used to open the first account whatever house was picked.
     const q = new URLSearchParams(window.location.search);
     const wantAcct = q.get('account_id');
-    const pick = STATE.accounts.find(a => String(a.id) === wantAcct) || STATE.accounts[0];
+    const loc = localStorage.getItem('globalLocation') || 'dennis';
+    const pick = STATE.accounts.find(a => String(a.id) === wantAcct)
+      || STATE.accounts.find(a => a.location === loc) || STATE.accounts[0];
     if (pick) selectAccount(pick.id);
   } catch (e) { showErr('Could not load accounts: ' + e.message); }
 }
@@ -368,8 +371,16 @@ function renderAccounts() {
   `).join('');
 }
 
+window.addEventListener('rn-location', e => {
+  if (e.detail.from === 'account' || !STATE.accounts.length) return;
+  if (STATE.currentAcct && STATE.currentAcct.location === e.detail.loc) return;
+  const m = STATE.accounts.find(a => a.location === e.detail.loc);
+  if (m) selectAccount(m.id);
+});
+
 async function selectAccount(id) {
   STATE.currentAcct = STATE.accounts.find(a => a.id === id) || null;
+  if (STATE.currentAcct && window.rnSetLocation) window.rnSetLocation(STATE.currentAcct.location, 'account');
   STATE.currentUpload = null;
   STATE.currentRec = null;
   STATE.register = null;

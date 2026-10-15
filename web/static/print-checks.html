@@ -120,10 +120,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
       <div class="rn-page-header">
         <div>
-          <h1 class="rn-page-title">Print Checks</h1>
+          <h1 class="rn-page-title">Print Checks<span class="rn-loc-badge"></span></h1>
           <div class="rn-page-sub">All checks pending print — vendor, payroll, manual, and recurring bills due now.</div>
         </div>
-        <div class="rn-page-actions"><div class="loc-toggle">
+        <div class="rn-page-actions rn-loc-local"><div class="loc-toggle">
           <button id="locChatham" class="active" onclick="setLocation('chatham')">Chatham</button>
           <button id="locDennis" onclick="setLocation('dennis')">Dennis Port</button>
         </div></div>
@@ -195,7 +195,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <script>
   /* global buildSidebar */
   let state = {
-    location: 'chatham',
+    location: localStorage.getItem('globalLocation') || 'dennis',   // the top-bar picker
     items: [],            // queue items from /api/print-queue
     nextCheckNumber: 1001,
     selected: new Set(),  // keys: `${source}:${id}` (id may be string for recurring)
@@ -619,9 +619,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     box.innerHTML = `<div class="status-msg ${type || ''}">${escapeHtml(msg)}</div>`;
   }
 
-  // Init
+  // Init — the house follows the top-bar picker (UI plan Phase 4)
   if (typeof buildSidebar === 'function') buildSidebar();
-  loadQueue();
+  setLocation(state.location);
+  window.addEventListener('rn-location', e => setLocation(e.detail.loc));
 </script>
 </body>
 </html>

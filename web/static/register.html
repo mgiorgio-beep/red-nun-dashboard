@@ -293,7 +293,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
     <div class="rn-page-header">
       <div>
-        <h1 class="rn-page-title">Bank Register</h1>
+        <h1 class="rn-page-title">Bank Register<span class="rn-loc-badge"></span></h1>
         <div class="rn-page-sub">QBO-style per-account register — payments, payroll, deposits, and manual entries</div>
       </div>
       <div class="rn-page-actions">
@@ -682,11 +682,18 @@ async function loadAccounts() {
     return;
   }
   renderAccountBar();
-  // Auto-pick first account, or the one matching the global location selector
-  const loc = (window.currentLocation || localStorage.getItem('globalLocation') || 'chatham');
+  // The account of the house in the top-bar picker (UI plan Phase 4)
+  const loc = localStorage.getItem('globalLocation') || 'dennis';
   const match = STATE.accounts.find(a => a.location === loc) || STATE.accounts[0];
   selectAccount(match.id);
 }
+// Top bar changed house -> that house's account; picking an account moves the top bar.
+window.addEventListener('rn-location', e => {
+  if (e.detail.from === 'account' || !STATE.accounts.length) return;
+  if (STATE.currentAcct && STATE.currentAcct.location === e.detail.loc) return;
+  const m = STATE.accounts.find(a => a.location === e.detail.loc);
+  if (m) selectAccount(m.id);
+});
 
 function renderAccountBar() {
   $('account-bar').innerHTML = STATE.accounts.map(a => `
@@ -701,6 +708,7 @@ function renderAccountBar() {
 
 async function selectAccount(id) {
   STATE.currentAcct = STATE.accounts.find(a => a.id === id);
+  if (STATE.currentAcct && window.rnSetLocation) window.rnSetLocation(STATE.currentAcct.location, 'account');
   document.querySelectorAll('.account-pill').forEach(el => {
     el.classList.toggle('active', Number(el.dataset.acct) === id);
   });
